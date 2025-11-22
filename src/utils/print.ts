@@ -881,9 +881,6 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
         </div>
       ` : ''}
       
-      ${summaryHTML}
-      ${companySummaryHTML}
-      
       <table class="print-table">
         <thead>
           <tr>${tableHeaders}</tr>
@@ -892,6 +889,9 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
           ${tableRows}
         </tbody>
       </table>
+      
+      ${summaryHTML}
+      ${companySummaryHTML}
       
       ${includeFooter ? `
         <div class="print-footer">

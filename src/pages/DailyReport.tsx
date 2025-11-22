@@ -233,35 +233,60 @@ const DailyReport: React.FC = () => {
 
       console.log(`📈 Final filtered entries: ${filteredEntries.length}`);
 
-      // Calculate opening balance as yesterday's closing balance (sum of ALL companies' closing balances up to yesterday)
-      // This is the net balance shown in the Dashboard - always calculated from ALL companies regardless of filters
+      // Calculate opening balance
+      // If a company is selected, calculate opening balance only for that company
+      // Otherwise, calculate opening balance for all companies
       const prevDate = format(subDays(new Date(selectedDate), 1), 'yyyy-MM-dd');
       let openingBalance = 0;
       try {
-        // Get ALL companies' closing balances up to and including the previous date
-        // This gives us the net balance (same as Dashboard) which is the opening balance
-        const companyBalances = await supabaseDB.getCompanyClosingBalancesByDate(prevDate);
-        
-        // Always sum ALL companies' closing balances for opening balance (Dashboard net balance)
-        // This ensures opening balance matches the Dashboard net balance shown
-        openingBalance = companyBalances.reduce(
-          (sum, company) => sum + company.closingBalance,
-          0
-        );
-        
-        console.log(`💰 Opening balance (Dashboard net balance - sum of all companies up to ${prevDate}): ${openingBalance.toLocaleString()}`);
-      } catch (e) {
-        console.warn('Error calculating opening balance from company balances, using fallback:', e);
-        // Fallback: calculate from individual entries (sum of all companies)
-        try {
+        if (selectedCompany) {
+          // Calculate opening balance for the selected company only
           const { data: previousEntries, error: prevError } = await supabase
             .from(getTableName('cash_book'))
             .select('credit, debit, company_name, c_date')
+            .eq('company_name', selectedCompany)
             .lte('c_date', prevDate);
 
           if (prevError) throw prevError;
 
-          // Always sum ALL entries (all companies) for opening balance
+          // Sum entries only for the selected company up to previous date
+          openingBalance = (previousEntries || []).reduce(
+            (sum, entry) => sum + (Number(entry.credit) - Number(entry.debit)),
+            0
+          );
+          
+          console.log(`💰 Opening balance for ${selectedCompany} (up to ${prevDate}): ${openingBalance.toLocaleString()}`);
+        } else {
+          // Calculate opening balance for all companies (Dashboard net balance)
+          const companyBalances = await supabaseDB.getCompanyClosingBalancesByDate(prevDate);
+          
+          // Sum ALL companies' closing balances for opening balance (Dashboard net balance)
+          openingBalance = companyBalances.reduce(
+            (sum, company) => sum + company.closingBalance,
+            0
+          );
+          
+          console.log(`💰 Opening balance (Dashboard net balance - sum of all companies up to ${prevDate}): ${openingBalance.toLocaleString()}`);
+        }
+      } catch (e) {
+        console.warn('Error calculating opening balance from company balances, using fallback:', e);
+        // Fallback: calculate from individual entries
+        try {
+          const query = supabase
+            .from(getTableName('cash_book'))
+            .select('credit, debit, company_name, c_date')
+            .lte('c_date', prevDate);
+          
+          // Add company filter if a company is selected
+          if (selectedCompany) {
+            query.eq('company_name', selectedCompany);
+          }
+          
+          const { data: previousEntries, error: prevError } = await query;
+
+          if (prevError) throw prevError;
+
+          // Sum entries (filtered by company if selected)
           openingBalance = (previousEntries || []).reduce(
             (sum, entry) => sum + (Number(entry.credit) - Number(entry.debit)),
             0
