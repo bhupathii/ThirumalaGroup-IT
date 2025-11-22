@@ -381,6 +381,37 @@ const DailyReport: React.FC = () => {
         approved: entry.approved ? 'Approved' : 'Pending',
       }));
 
+      // Get company balances for preview when "All Companies" is selected
+      let companyBalancesData: Array<{companyName: string, openingBalance: number, closingBalance: number}> = [];
+      if (!selectedCompany) {
+        try {
+          const prevDate = format(subDays(new Date(selectedDate), 1), 'yyyy-MM-dd');
+          const companyBalances = await supabaseDB.getCompanyClosingBalancesByDate(prevDate);
+          
+          // Calculate closing balance for each company (opening + today's transactions)
+          const companyTotals: Record<string, { credit: number; debit: number }> = {};
+          reportData.entries.forEach(entry => {
+            const name = entry.company_name;
+            if (!name) return;
+            if (!companyTotals[name]) companyTotals[name] = { credit: 0, debit: 0 };
+            companyTotals[name].credit += parseFloat(entry.credit) || 0;
+            companyTotals[name].debit += parseFloat(entry.debit) || 0;
+          });
+
+          companyBalancesData = companyBalances.map(company => {
+            const todayTotals = companyTotals[company.companyName] || { credit: 0, debit: 0 };
+            const closingBalance = company.closingBalance + (todayTotals.credit - todayTotals.debit);
+            return {
+              companyName: company.companyName,
+              openingBalance: company.closingBalance,
+              closingBalance: closingBalance,
+            };
+          });
+        } catch (error) {
+          console.warn('Error fetching company balances for preview:', error);
+        }
+      }
+
       printDailyReport(printData, {
         title: `Daily Report - ${displayDate}`,
         subtitle: selectedCompany
@@ -389,6 +420,8 @@ const DailyReport: React.FC = () => {
         headerText: 'Thirumala Group - Daily Transaction Report',
         openingBalance: reportData.openingBalance,
         closingBalance: reportData.closingBalance,
+        companyBalances: companyBalancesData,
+        isPrintMode: false, // Preview mode - show summary tables
       });
     } catch (error) {
       console.error('Print error:', error);

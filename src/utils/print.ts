@@ -17,6 +17,8 @@ export interface PrintOptions {
   footerText?: string;
   openingBalance?: number;
   closingBalance?: number;
+  companyBalances?: Array<{companyName: string, openingBalance: number, closingBalance: number}>;
+  isPrintMode?: boolean;
 }
 
 export const printTable = (
@@ -443,6 +445,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     footerText = `Generated on ${format(new Date(), 'dd/MM/yyyy HH:mm')}`,
     openingBalance = 0,
     closingBalance = 0,
+    companyBalances = [],
+    isPrintMode = false,
   } = options;
 
   // Create print window
@@ -742,13 +746,14 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     .map(col => `<th style="width: ${col.width || 'auto'}">${col.label}</th>`)
     .join('');
 
-  // Generate summary with opening and closing balance table
-  let summaryHTML = '';
-  if (data.length > 0) {
-    const creditTotal = data.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0);
-    const debitTotal = data.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0);
-    const balance = creditTotal - debitTotal;
+  // Calculate totals for the table footer
+  const creditTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0) : 0;
+  const debitTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0) : 0;
+  const balance = creditTotal - debitTotal;
 
+  // Generate summary tables - only show in preview mode, not in actual print
+  let summaryHTML = '';
+  if (data.length > 0 && !isPrintMode) {
     summaryHTML = `
       <div class="print-summary">
         <table class="boxed-table">
@@ -793,12 +798,42 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     `;
   }
 
-  // Company-wise closing balance for the filtered data - only show when a specific company is selected
+  // Company-wise closing balance for the filtered data
   let companySummaryHTML = '';
-  // Check if subtitle indicates "All Companies" - if so, don't show company-wise closing balance
+  // Check if subtitle indicates "All Companies"
   const isAllCompanies = !subtitle || subtitle.toLowerCase().includes('all companies') || subtitle === '';
   
-  if (data.length > 0 && !isAllCompanies) {
+  // In preview mode: Show all companies with opening/closing balances when "All Companies" is selected
+  if (!isPrintMode && isAllCompanies && companyBalances && companyBalances.length > 0) {
+    companySummaryHTML = `
+      <div class="print-summary">
+        <table class="boxed-table">
+          <thead>
+            <tr><th colspan="3">Company-wise Opening and Closing Balances</th></tr>
+            <tr>
+              <th>Company</th>
+              <th>Opening Balance</th>
+              <th>Closing Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${companyBalances.map(company => {
+              const openingText = `${Math.abs(company.openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${company.openingBalance >= 0 ? 'CR' : 'DR'}`;
+              const closingText = `${Math.abs(company.closingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${company.closingBalance >= 0 ? 'CR' : 'DR'}`;
+              return `
+                <tr>
+                  <td><strong>${company.companyName}</strong></td>
+                  <td class="${company.openingBalance >= 0 ? 'text-green' : 'text-red'}">${openingText}</td>
+                  <td class="${company.closingBalance >= 0 ? 'text-green' : 'text-red'}">${closingText}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } else if (data.length > 0 && !isAllCompanies && !isPrintMode) {
+    // Show company-wise closing balance when a specific company is selected (preview only)
     const companyTotals: Record<string, { credit: number; debit: number }> = {};
     data.forEach(row => {
       const name = String(row.companyName || row.company_name || '').trim();
@@ -855,6 +890,192 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
         : `<span class="text-bold">${subtitle}</span>`)
     : '';
 
+  // Generate print mode HTML function (to be called when print button is clicked)
+  const generatePrintModeHTML = () => {
+    const creditTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0) : 0;
+    const debitTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0) : 0;
+    
+    const printModeTableRows = data
+      .map(row => {
+        const cells = filteredColumns
+          .map(col => {
+            const value = row[col.key];
+            let displayValue = value;
+
+            if (typeof value === 'number') {
+              if (
+                col.key.toLowerCase().includes('amount') ||
+                col.key.toLowerCase().includes('credit') ||
+                col.key.toLowerCase().includes('debit') ||
+                col.key.toLowerCase().includes('balance')
+              ) {
+                displayValue = `${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+              } else {
+                displayValue = value.toLocaleString('en-IN');
+              }
+            }
+
+            if (col.key.toLowerCase().includes('date') && value) {
+              try {
+                displayValue = format(new Date(value), 'dd/MM/yyyy');
+              } catch (e) {
+                displayValue = value;
+              }
+            }
+
+            return `<td>${displayValue || ''}</td>`;
+          })
+          .join('');
+
+        return `<tr>${cells}</tr>`;
+      })
+      .join('');
+
+    // Calculate colspan: number of columns before credit column
+    const creditColIndex = filteredColumns.findIndex(col => col.key.toLowerCase().includes('credit'));
+    const totalColspan = creditColIndex >= 0 ? creditColIndex : filteredColumns.length - 2;
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${title} - Thirumala Group</title>
+        <style>${css}</style>
+      </head>
+      <body>
+        ${includeHeader ? `
+          <div class="print-header">
+            <div class="header-left">
+              <h2 class="print-title">${title}</h2>
+            </div>
+            <div class="header-center">
+              <h1 class="company-name">Thirumala Group</h1>
+              <p class="company-subtitle">Business Management System</p>
+            </div>
+            <div class="header-right">
+              ${subtitleHTML ? `<p class="print-subtitle">${subtitleHTML}</p>` : ''}
+            </div>
+          </div>
+        ` : ''}
+        
+        <table class="print-table">
+          <thead>
+            <tr>${tableHeaders}</tr>
+          </thead>
+          <tbody>
+            ${printModeTableRows}
+            <tr style="background-color: #f0f0f0; font-weight: bold;">
+              <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db;">TOTAL:</td>
+              <td class="text-green" style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td class="text-red" style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        ${includeFooter ? `
+          <div class="print-footer">
+            <p>${footerText}</p>
+          </div>
+        ` : ''}
+      </body>
+      </html>
+    `;
+  };
+
+  // Generate print mode HTML as a string for embedding in script
+  const generatePrintModeHTMLString = () => {
+    const creditTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0) : 0;
+    const debitTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0) : 0;
+    
+    const printModeTableRows = data
+      .map(row => {
+        const cells = filteredColumns
+          .map(col => {
+            const value = row[col.key];
+            let displayValue = value;
+
+            if (typeof value === 'number') {
+              if (
+                col.key.toLowerCase().includes('amount') ||
+                col.key.toLowerCase().includes('credit') ||
+                col.key.toLowerCase().includes('debit') ||
+                col.key.toLowerCase().includes('balance')
+              ) {
+                displayValue = `${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+              } else {
+                displayValue = value.toLocaleString('en-IN');
+              }
+            }
+
+            if (col.key.toLowerCase().includes('date') && value) {
+              try {
+                displayValue = format(new Date(value), 'dd/MM/yyyy');
+              } catch (e) {
+                displayValue = value;
+              }
+            }
+
+            return '<td>' + (displayValue || '') + '</td>';
+          })
+          .join('');
+
+        return '<tr>' + cells + '</tr>';
+      })
+      .join('');
+
+    const creditColIndex = filteredColumns.findIndex(col => col.key.toLowerCase().includes('credit'));
+    const totalColspan = creditColIndex >= 0 ? creditColIndex : filteredColumns.length - 2;
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${title} - Thirumala Group</title>
+        <style>${css.replace(/`/g, '\\`').replace(/\${/g, '\\${')}</style>
+      </head>
+      <body>
+        ${includeHeader ? `
+          <div class="print-header">
+            <div class="header-left">
+              <h2 class="print-title">${title}</h2>
+            </div>
+            <div class="header-center">
+              <h1 class="company-name">Thirumala Group</h1>
+              <p class="company-subtitle">Business Management System</p>
+            </div>
+            <div class="header-right">
+              ${subtitleHTML ? `<p class="print-subtitle">${subtitleHTML}</p>` : ''}
+            </div>
+          </div>
+        ` : ''}
+        
+        <table class="print-table">
+          <thead>
+            <tr>${tableHeaders}</tr>
+          </thead>
+          <tbody>
+            ${printModeTableRows}
+            <tr style="background-color: #f0f0f0; font-weight: bold;">
+              <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db;">TOTAL:</td>
+              <td class="text-green" style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td class="text-red" style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        ${includeFooter ? `
+          <div class="print-footer">
+            <p>${footerText}</p>
+          </div>
+        ` : ''}
+      </body>
+      </html>
+    `;
+  };
+
+  // Escape the print mode HTML for embedding in script tag using JSON.stringify
+  const printModeHTMLString = JSON.stringify(generatePrintModeHTMLString());
+
   // Complete HTML with basic Thirumala Group branding
   const html = `
     <!DOCTYPE html>
@@ -862,9 +1083,23 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     <head>
       <title>${title} - Thirumala Group</title>
       <style>${css}</style>
+      <script>
+        function handlePrint() {
+          const printModeHTML = ${printModeHTMLString};
+          const actualPrintWindow = window.open('', '_blank');
+          if (actualPrintWindow) {
+            actualPrintWindow.document.write(printModeHTML);
+            actualPrintWindow.document.close();
+            setTimeout(() => {
+              actualPrintWindow.print();
+              actualPrintWindow.close();
+            }, 250);
+          }
+        }
+      </script>
     </head>
     <body>
-      <button class="print-button" onclick="window.print()">Print</button>
+      <button class="print-button" onclick="handlePrint()">Print</button>
       
       ${includeHeader ? `
         <div class="print-header">
