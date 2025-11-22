@@ -822,25 +822,25 @@ const DetailedLedger: React.FC = () => {
     entriesToPrint.forEach((entry, index) => {
       allRows += `
         <tr>
-            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${index + 1}</td>
-            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${format(new Date(entry.date), 'dd/MM/yyyy')}</td>
+            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${index + 1}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${format(new Date(entry.date), 'dd/MM/yyyy')}</td>
             <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">${entry.companyName}</td>
-            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.accountName}</td>
-            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.subAccount || '-'}</td>
-            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; word-wrap: break-word; line-height: 1.1;">${entry.particulars}</td>
-            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}</td>
-            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}</td>
-            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}</td>
-            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${entry.accountName}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${entry.subAccount || '-'}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; word-wrap: break-word; line-height: 1.1; font-weight: bold;">${entry.particulars}</td>
+            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}</td>
+            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}</td>
+            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}</td>
+            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}</td>
         </tr>
       `;
     });
 
     const totalsRow = `
       <tr style="background-color: #f0f0f0; font-weight: bold;">
-          <td colspan="6" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">TOTAL:</td>
-          <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}</td>
-          <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}</td>
+          <td colspan="6" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">TOTAL:</td>
+          <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}</td>
+          <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}</td>
           <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">${printTotals.totalCredit.toLocaleString()}</td>
           <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">${printTotals.totalDebit.toLocaleString()}</td>
         </tr>
@@ -888,8 +888,8 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
               <th style="width: 9%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Account</th>
               <th style="width: 9%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Sub Account</th>
               <th style="width: 20%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Particulars</th>
-              <th style="width: 7.5%; text-align: center; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Sale Qty</th>
-              <th style="width: 7.5%; text-align: center; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Purchase Qty</th>
+              <th style="width: 7.5%; text-align: center; padding: 2px 1px; font-size: 9px; line-height: 1.1; font-weight: bold;">Purchase Qty</th>
+              <th style="width: 7.5%; text-align: center; padding: 2px 1px; font-size: 9px; line-height: 1.1; font-weight: bold;">Sale Qty</th>
               <th style="width: 8.5%; text-align: right; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Credit</th>
               <th style="width: 8.5%; text-align: right; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Debit</th>
             </tr>
@@ -995,6 +995,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
               word-wrap: break-word;
               line-height: 1.1;
               box-sizing: border-box;
+              font-weight: bold;
             }
             th {
               background-color: #e5e5e5;
@@ -2894,8 +2895,8 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                                 <th className='col-account text-left'>Account</th>
                                 <th className='col-subaccount text-left'>Sub Account</th>
                                 <th className='col-particulars text-left'>Particulars</th>
-                                <th className='col-saleqty text-center'>Sale Qty</th>
-                                <th className='col-purchaseqty text-center'>Purchase Qty</th>
+                                <th className='col-purchaseqty text-center font-bold'>Purchase Qty</th>
+                                <th className='col-saleqty text-center font-bold'>Sale Qty</th>
                                 <th className='col-credit text-right'>Credit</th>
                                 <th className='col-debit text-right'>Debit</th>
                               </tr>
@@ -2960,22 +2961,22 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                                 const globalIndex = startIndex + localIndex;
                                 return (
                                   <tr key={entry.id}>
-                                    <td className='col-sno'>{globalIndex + 1}</td>
-                                    <td className='col-date'>{format(new Date(entry.date), 'dd/MM/yyyy')}</td>
+                                    <td className='col-sno font-bold'>{globalIndex + 1}</td>
+                                    <td className='col-date font-bold'>{format(new Date(entry.date), 'dd/MM/yyyy')}</td>
                                     <td className='col-company font-bold'>{entry.companyName}</td>
-                                    <td className='col-account'>{entry.accountName}</td>
-                                    <td className='col-subaccount'>{entry.subAccount || '-'}</td>
-                                    <td className='col-particulars' title={entry.particulars}>{entry.particulars}</td>
-                                    <td className='col-saleqty text-center'>
-                                      {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
-                                    </td>
-                                    <td className='col-purchaseqty text-center'>
+                                    <td className='col-account font-bold'>{entry.accountName}</td>
+                                    <td className='col-subaccount font-bold'>{entry.subAccount || '-'}</td>
+                                    <td className='col-particulars font-bold' title={entry.particulars}>{entry.particulars}</td>
+                                    <td className='col-purchaseqty text-center font-bold'>
                                       {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
                                     </td>
-                                    <td className='col-credit text-right'>
+                                    <td className='col-saleqty text-center font-bold'>
+                                      {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
+                                    </td>
+                                    <td className='col-credit text-right font-bold'>
                                       {entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}
                                     </td>
-                                    <td className='col-debit text-right'>
+                                    <td className='col-debit text-right font-bold'>
                                       {entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}
                                     </td>
                                   </tr>
@@ -2984,12 +2985,12 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                               {isLastPage && (
                                 <>
                                   <tr className='bg-gray-200 font-bold'>
-                                    <td colSpan={6} className='text-right' style={{ padding: '4px' }}>TOTAL:</td>
-                                    <td className='text-center' style={{ padding: '4px' }}>
-                                      {printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}
-                                    </td>
-                                    <td className='text-center' style={{ padding: '4px' }}>
+                                    <td colSpan={6} className='text-right font-bold' style={{ padding: '4px' }}>TOTAL:</td>
+                                    <td className='text-center font-bold' style={{ padding: '4px' }}>
                                       {printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}
+                                    </td>
+                                    <td className='text-center font-bold' style={{ padding: '4px' }}>
+                                      {printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}
                                     </td>
                                     <td className='text-right font-bold' style={{ padding: '4px' }}>
 {printTotals.totalCredit.toLocaleString()}
