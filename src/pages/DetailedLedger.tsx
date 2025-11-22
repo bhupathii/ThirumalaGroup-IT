@@ -1605,11 +1605,11 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                   <th className='px-0.5 py-0.5 text-right font-medium text-gray-700 w-[6%]'>
                     Debit
                   </th>
-                  <th className='px-0.5 py-0.5 text-center font-medium text-gray-700 w-[5%]'>
-                    Sale Qty
-                  </th>
                   <th className='px-0.5 py-0.5 text-center font-medium text-gray-700 w-[6%]'>
                     Purchase Qty
+                  </th>
+                  <th className='px-0.5 py-0.5 text-center font-medium text-gray-700 w-[5%]'>
+                    Sale Qty
                   </th>
                   <th className='px-0.5 py-0.5 text-left font-medium text-gray-700 w-[9%]'>
                     Staff
@@ -1660,10 +1660,10 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                         : '-'}
                     </td>
                     <td className='px-0.5 py-0.5 text-center text-xs'>
-                      {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
+                      {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
                     </td>
                     <td className='px-0.5 py-0.5 text-center text-xs'>
-                      {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
+                      {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
                     </td>
                     <td className='px-0.5 py-0.5 text-xs truncate' title={entry.staff}>
                       {entry.staff}

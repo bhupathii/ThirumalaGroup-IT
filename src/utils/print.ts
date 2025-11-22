@@ -619,6 +619,46 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       padding: 4px 6px;
       border: 1px solid #d1d5db;
     }
+    
+    /* Summary table for Total, Opening Balance, Closing Balance, Grand Total */
+    .summary-balance-table {
+      width: 100%;
+      max-width: 620px;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .summary-balance-table th,
+    .summary-balance-table td {
+      padding: 6px 8px;
+      border: 1px solid #000;
+      text-align: right;
+      font-weight: bold;
+    }
+    .summary-balance-table th {
+      background-color: #f3f4f6;
+      font-weight: bold;
+    }
+    .summary-balance-table td:first-child {
+      text-align: right;
+      font-weight: bold;
+    }
+    
+    @media print {
+      .print-table th,
+      .print-table td {
+        border: 1px solid #000 !important;
+      }
+      .boxed-table th,
+      .boxed-table td {
+        border: 1px solid #000 !important;
+      }
+      .summary-balance-table th,
+      .summary-balance-table td {
+        border: 1px solid #000 !important;
+      }
+    }
     .balance-row {
       display: flex;
       gap: 20px;
@@ -761,7 +801,44 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
   // Generate summary tables - only show in preview mode, not in actual print
   let summaryHTML = '';
   if (data.length > 0 && !isPrintMode) {
+    // Calculate grand totals
+    const grandTotalCredit = creditTotal + Math.abs(openingBalance);
+    const grandTotalDebit = debitTotal + Math.abs(closingBalance);
+    
     summaryHTML = `
+      <div class="print-summary">
+        <table class="summary-balance-table">
+          <thead>
+            <tr>
+              <th style="text-align: right;">Description</th>
+              <th style="text-align: right;">Credit</th>
+              <th style="text-align: right;">Debit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="text-align: right; font-weight: bold;">Total</td>
+              <td style="text-align: right; font-weight: bold;">${creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align: right; font-weight: bold;">${debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr>
+              <td style="text-align: right; font-weight: bold;">Opening Balance</td>
+              <td style="text-align: right; font-weight: bold;">${Math.abs(openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align: right; font-weight: bold;"></td>
+            </tr>
+            <tr>
+              <td style="text-align: right; font-weight: bold;">Closing Balance</td>
+              <td style="text-align: right; font-weight: bold;"></td>
+              <td style="text-align: right; font-weight: bold;">${Math.abs(closingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr>
+              <td style="text-align: right; font-weight: bold;">Grand Total</td>
+              <td style="text-align: right; font-weight: bold;">${grandTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align: right; font-weight: bold;">${grandTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <div class="print-summary">
         <table class="boxed-table">
           <thead>
@@ -812,7 +889,64 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
   
   // In preview mode: Show all companies with opening/closing balances when "All Companies" is selected
   if (!isPrintMode && isAllCompanies && companyBalances && companyBalances.length > 0) {
+    // Calculate totals for all companies
+    const allCompaniesCreditTotal = companyBalances.reduce((sum, company) => {
+      const companyData = data.filter(row => {
+        const rowCompany = String(row.companyName || row.company_name || '').trim();
+        return rowCompany === company.companyName;
+      });
+      const companyCredit = companyData.reduce((s, r) => s + (parseFloat(r.credit) || 0), 0);
+      return sum + companyCredit;
+    }, 0);
+    
+    const allCompaniesDebitTotal = companyBalances.reduce((sum, company) => {
+      const companyData = data.filter(row => {
+        const rowCompany = String(row.companyName || row.company_name || '').trim();
+        return rowCompany === company.companyName;
+      });
+      const companyDebit = companyData.reduce((s, r) => s + (parseFloat(r.debit) || 0), 0);
+      return sum + companyDebit;
+    }, 0);
+    
+    const allCompaniesOpeningTotal = companyBalances.reduce((sum, company) => sum + Math.abs(company.openingBalance), 0);
+    const allCompaniesClosingTotal = companyBalances.reduce((sum, company) => sum + Math.abs(company.closingBalance), 0);
+    const allCompaniesGrandTotalCredit = allCompaniesCreditTotal + allCompaniesOpeningTotal;
+    const allCompaniesGrandTotalDebit = allCompaniesDebitTotal + allCompaniesClosingTotal;
+    
     companySummaryHTML = `
+      <div class="print-summary">
+        <table class="summary-balance-table">
+          <thead>
+            <tr>
+              <th style="text-align: right;">Description</th>
+              <th style="text-align: right;">Credit</th>
+              <th style="text-align: right;">Debit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="text-align: right; font-weight: bold;">Total</td>
+              <td style="text-align: right; font-weight: bold;">${allCompaniesCreditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align: right; font-weight: bold;">${allCompaniesDebitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr>
+              <td style="text-align: right; font-weight: bold;">Opening Balance</td>
+              <td style="text-align: right; font-weight: bold;">${allCompaniesOpeningTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align: right; font-weight: bold;"></td>
+            </tr>
+            <tr>
+              <td style="text-align: right; font-weight: bold;">Closing Balance</td>
+              <td style="text-align: right; font-weight: bold;"></td>
+              <td style="text-align: right; font-weight: bold;">${allCompaniesClosingTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr>
+              <td style="text-align: right; font-weight: bold;">Grand Total</td>
+              <td style="text-align: right; font-weight: bold;">${allCompaniesGrandTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align: right; font-weight: bold;">${allCompaniesGrandTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <div class="print-summary">
         <table class="boxed-table">
           <thead>
@@ -840,7 +974,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       </div>
     `;
   } else if (data.length > 0 && !isAllCompanies && !isPrintMode) {
-    // Show company-wise closing balance when a specific company is selected (preview only)
+    // Show company-wise summary table when a specific company is selected (preview only)
     const companyTotals: Record<string, { credit: number; debit: number }> = {};
     data.forEach(row => {
       const name = String(row.companyName || row.company_name || '').trim();
@@ -850,22 +984,49 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       companyTotals[name].debit += parseFloat(row.debit) || 0;
     });
 
-    const rows = Object.entries(companyTotals)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([company, totals]) => {
-        const closing = totals.credit - totals.debit;
-        const closingText = `${Math.abs(closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${closing >= 0 ? 'CR' : 'DR'}`;
-        return `
-          <div class="print-summary-row">
-            <span class="print-summary-label">${company}</span>
-            <span class="print-summary-value ${closing >= 0 ? 'text-green' : 'text-red'}">${closingText}</span>
-          </div>
-        `;
-      })
-      .join('');
+    // Calculate company-specific totals
+    const companyCreditTotal = Object.values(companyTotals).reduce((sum, totals) => sum + totals.credit, 0);
+    const companyDebitTotal = Object.values(companyTotals).reduce((sum, totals) => sum + totals.debit, 0);
+    const companyOpeningTotal = Math.abs(openingBalance);
+    const companyClosingTotal = Math.abs(closingBalance);
+    const companyGrandTotalCredit = companyCreditTotal + companyOpeningTotal;
+    const companyGrandTotalDebit = companyDebitTotal + companyClosingTotal;
 
-    if (rows) {
+    if (Object.keys(companyTotals).length > 0) {
       companySummaryHTML = `
+        <div class="print-summary">
+        <table class="summary-balance-table">
+          <thead>
+            <tr>
+              <th style="text-align: right;">Description</th>
+              <th style="text-align: right;">Credit</th>
+              <th style="text-align: right;">Debit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="text-align: right; font-weight: bold;">Total</td>
+              <td style="text-align: right; font-weight: bold;">${companyCreditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align: right; font-weight: bold;">${companyDebitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr>
+              <td style="text-align: right; font-weight: bold;">Opening Balance</td>
+              <td style="text-align: right; font-weight: bold;">${companyOpeningTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align: right; font-weight: bold;"></td>
+            </tr>
+            <tr>
+              <td style="text-align: right; font-weight: bold;">Closing Balance</td>
+              <td style="text-align: right; font-weight: bold;"></td>
+              <td style="text-align: right; font-weight: bold;">${companyClosingTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr>
+              <td style="text-align: right; font-weight: bold;">Grand Total</td>
+              <td style="text-align: right; font-weight: bold;">${companyGrandTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align: right; font-weight: bold;">${companyGrandTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
         <div class="print-summary">
           <table class="boxed-table">
             <thead>
