@@ -2275,6 +2275,29 @@ class SupabaseDatabase {
     }
   }
 
+  // Distinct user names from cash_book users column for user selection
+  async getDistinctUserNames(): Promise<{ value: string; label: string }[]> {
+    try {
+      const { data, error } = await supabase
+        .from(getTableName('cash_book'))
+        .select('users')
+        .not('users', 'is', null)
+        .neq('users', '')
+        .order('users', { ascending: true });
+      if (error) {
+        console.error('Error fetching distinct user names:', error);
+        return [];
+      }
+      const unique = Array.from(new Set((data || []).map((r: any) => (r.users || '').trim())))
+        .filter(Boolean)
+        .map(name => ({ value: name, label: name }));
+      return unique;
+    } catch (err) {
+      console.error('Error in getDistinctUserNames:', err);
+      return [];
+    }
+  }
+
   // Get active staff members count
   async getActiveStaffCount(): Promise<number> {
     try {

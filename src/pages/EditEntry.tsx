@@ -197,6 +197,7 @@ const EditEntry: React.FC = () => {
   const [filterCompanies, setFilterCompanies] = useState<
     { value: string; label: string }[]
   >([]);
+  const [staff, setStaff] = useState<{ value: string; label: string }[]>([]);
   const [users, setUsers] = useState<{ value: string; label: string }[]>([]);
 
   // Add dropdown data for edit form
@@ -424,18 +425,40 @@ const EditEntry: React.FC = () => {
         console.log('📊 Cash_book company names:', uniqueCashBookCompanies);
       }
 
-      // Load staff names from existing cash_book entries (like NewEntry does)
-      // This ensures all staff members who have entries are available, not just active users
+      // Load staff names from existing cash_book entries (staff column)
+      // This gets distinct values from the 'staff' column in cash_book table
       try {
         const staffOptions = await supabaseDB.getDistinctStaffNames();
-        console.log('👥 Staff options loaded from cash_book:', staffOptions.length);
-        setUsers(staffOptions);
+        console.log('👥 Staff dropdown: Loaded from cash_book "staff" column:', staffOptions.length, 'options');
+        console.log('👥 Staff options:', staffOptions.map(s => s.label).slice(0, 10));
+        setStaff(staffOptions);
       } catch (error) {
-        console.error('❌ Error loading staff from cash_book, falling back to users table:', error);
+        console.error('❌ Error loading staff from cash_book "staff" column, falling back to users table:', error);
         // Fallback to users table if cash_book query fails
-        const users = await supabaseDB.getUsers();
-        console.log('👥 Users loaded from users table:', users.length);
-        const usersData = users
+        const usersFromTable = await supabaseDB.getUsers();
+        console.log('👥 Staff dropdown (fallback): Loaded from users table:', usersFromTable.length);
+        const staffData = usersFromTable
+          .filter(u => u.is_active)
+          .map(user => ({
+            value: user.username,
+            label: user.username,
+          }));
+        setStaff(staffData);
+      }
+
+      // Load user names from existing cash_book entries (users column) - separate from staff
+      // This gets distinct values from the 'users' column in cash_book table
+      try {
+        const userOptions = await supabaseDB.getDistinctUserNames();
+        console.log('👤 User dropdown: Loaded from cash_book "users" column:', userOptions.length, 'options');
+        console.log('👤 User options:', userOptions.map(u => u.label).slice(0, 10));
+        setUsers(userOptions);
+      } catch (error) {
+        console.error('❌ Error loading users from cash_book "users" column, falling back to users table:', error);
+        // Fallback to users table if cash_book query fails
+        const usersFromTable = await supabaseDB.getUsers();
+        console.log('👤 User dropdown (fallback): Loaded from users table:', usersFromTable.length);
+        const usersData = usersFromTable
           .filter(u => u.is_active)
           .map(user => ({
             value: user.username,
@@ -2130,7 +2153,7 @@ const EditEntry: React.FC = () => {
               label='Staff'
               value={filterStaff}
               onChange={setFilterStaff}
-              options={users}
+              options={staff}
               placeholder='Select staff...'
             />
           </div>
@@ -2823,8 +2846,17 @@ const EditEntry: React.FC = () => {
                         label='Staff'
                         value={selectedEntry?.staff || ''}
                         onChange={value => editMode ? handleInputChange('staff', value) : undefined}
+                        options={staff}
+                        disabled={!editMode}
+                        placeholder='Select staff...'
+                      />
+                      <SearchableSelect
+                        label='User'
+                        value={selectedEntry?.users || ''}
+                        onChange={value => editMode ? handleInputChange('users', value) : undefined}
                         options={users}
                         disabled={!editMode}
+                        placeholder='Select user...'
                       />
                     </div>
 
