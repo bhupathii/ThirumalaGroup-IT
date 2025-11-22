@@ -815,7 +815,7 @@ const DetailedLedger: React.FC = () => {
     };
     printTotals.balance = printTotals.totalCredit - printTotals.totalDebit;
 
-    const rowsPerPage = 20;
+    const rowsPerPage = 25;
     const totalPages = Math.ceil(entriesToPrint.length / rowsPerPage);
 
     const filterInfo = !isAllEntries && (filters.subAccount || filters.staffwise || filters.user || filters.paymentMode) 
@@ -944,7 +944,7 @@ const DetailedLedger: React.FC = () => {
           <title>Detailed Ledger Report</title>
           <style>
             @page {
-              size: A4 landscape;
+              size: A4 portrait;
               margin: 0.02cm 0.3cm 0.3cm 0.3cm;
             }
             * {
@@ -1802,7 +1802,7 @@ const DetailedLedger: React.FC = () => {
               <style>{`
                 @media print {
                   @page {
-                    size: A4 landscape;
+                    size: A4 portrait;
                     margin: 0.02cm 0.3cm 0.3cm 0.3cm;
                   }
                   * {
@@ -2804,7 +2804,7 @@ const DetailedLedger: React.FC = () => {
 
               {/* Print Content */}
               <div className='print-content print:block'>
-                {/* Transactions Table - Split into pages of 20 rows */}
+                {/* Transactions Table - Split into pages of 25 rows */}
                 {(() => {
                   // Use all entries if printAllEntries is true, otherwise use filtered entries
                   const entriesToPrint = printAllEntries ? ledgerEntries : filteredEntries;
@@ -2818,7 +2818,7 @@ const DetailedLedger: React.FC = () => {
                   };
                   printTotals.balance = printTotals.totalCredit - printTotals.totalDebit;
                   
-                  const rowsPerPage = 20;
+                  const rowsPerPage = 25;
                   const totalPages = Math.ceil(entriesToPrint.length / rowsPerPage);
                   const pages = [];
                   

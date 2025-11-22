@@ -4,6 +4,8 @@ import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import Select from '../components/UI/Select';
 import { supabaseDB } from '../lib/supabaseDatabase';
+import { supabase } from '../lib/supabase';
+import { getTableName } from '../lib/tableNames';
 import { exportToExcel, formatDataForExcel } from '../utils/excel';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -34,6 +36,7 @@ interface ExportOptions {
   toDate: string;
   companyFilter: string;
   accountFilter: string;
+  paymentModeFilter: string;
   includeHeaders: boolean;
   includeTotals: boolean;
   format: 'xlsx' | 'csv' | 'pdf';
@@ -48,6 +51,7 @@ const ExportExcel: React.FC = () => {
     toDate: format(new Date(), 'yyyy-MM-dd'),
     companyFilter: '',
     accountFilter: '',
+    paymentModeFilter: '',
     includeHeaders: true,
     includeTotals: true,
     format: 'xlsx',
@@ -59,9 +63,13 @@ const ExportExcel: React.FC = () => {
   const [accounts, setAccounts] = useState<{ value: string; label: string }[]>(
     []
   );
+  const [paymentModeOptions, setPaymentModeOptions] = useState<
+    { value: string; label: string }[]
+  >([]);
   const [loading, setLoading] = useState(false);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [exportMode, setExportMode] = useState<'normal' | 'edited' | 'deleted'>('normal');
 
   useEffect(() => {
     loadDropdownData();
@@ -92,6 +100,28 @@ const ExportExcel: React.FC = () => {
         label: accountName,
       }));
       setAccounts([{ value: '', label: 'All Accounts' }, ...accountsData]);
+
+      // Load payment mode options from cash_book entries
+      const { data: paymentModeData, error: paymentModeError } = await supabase
+        .from(getTableName('cash_book'))
+        .select('payment_mode')
+        .not('payment_mode', 'is', null)
+        .neq('payment_mode', '');
+      
+      if (!paymentModeError && paymentModeData) {
+        const uniquePaymentModes = [...new Set(
+          paymentModeData
+            .map(entry => entry.payment_mode)
+            .filter(mode => mode && String(mode).trim() !== '')
+            .map(mode => String(mode).trim())
+        )].sort();
+        
+        const paymentModeDataOptions = uniquePaymentModes.map(mode => ({
+          value: mode,
+          label: mode,
+        }));
+        setPaymentModeOptions([{ value: '', label: 'All Payment Modes' }, ...paymentModeDataOptions]);
+      }
     } catch (error) {
       console.error('Error loading dropdown data:', error);
       toast.error('Failed to load dropdown data');
@@ -157,6 +187,65 @@ const ExportExcel: React.FC = () => {
   };
 
   const getDataForExport = async () => {
+    // Handle edited and deleted records export
+    if (exportMode === 'edited') {
+      const editedRecords = await supabaseDB.getEditAuditLog();
+      const formattedData = editedRecords.map((log: any, idx: number) => {
+        const oldObj = log.old_values ? (typeof log.old_values === 'string' ? JSON.parse(log.old_values) : log.old_values) : {};
+        const newObj = log.new_values ? (typeof log.new_values === 'string' ? JSON.parse(log.new_values) : log.new_values) : {};
+        return {
+          'S.No': idx + 1,
+          'Entry ID': log.cash_book_id || log.id || '',
+          'Action': log.action || 'EDIT',
+          'Date (Old)': oldObj.c_date ? format(new Date(oldObj.c_date), 'dd/MM/yyyy') : '',
+          'Company (Old)': oldObj.company_name || '',
+          'Account (Old)': oldObj.acc_name || '',
+          'Sub Account (Old)': oldObj.sub_acc_name || '',
+          'Particulars (Old)': oldObj.particulars || '',
+          'Credit (Old)': oldObj.credit || 0,
+          'Debit (Old)': oldObj.debit || 0,
+          'Staff (Old)': oldObj.staff || '',
+          'User (Old)': oldObj.users || '',
+          'Date (New)': newObj.c_date ? format(new Date(newObj.c_date), 'dd/MM/yyyy') : '',
+          'Company (New)': newObj.company_name || '',
+          'Account (New)': newObj.acc_name || '',
+          'Sub Account (New)': newObj.sub_acc_name || '',
+          'Particulars (New)': newObj.particulars || '',
+          'Credit (New)': newObj.credit || 0,
+          'Debit (New)': newObj.debit || 0,
+          'Staff (New)': newObj.staff || '',
+          'User (New)': newObj.users || '',
+          'Edited By': log.edited_by || '',
+          'Edited At': log.edited_at ? format(new Date(log.edited_at), 'dd/MM/yyyy HH:mm') : '',
+        };
+      });
+      return formattedData;
+    }
+
+    if (exportMode === 'deleted') {
+      const deletedRecords = await supabaseDB.getDeletedCashBook();
+      const formattedData = deletedRecords.map((record: any, idx: number) => ({
+        'S.No': idx + 1,
+        'Entry ID': record.id || '',
+        'S.No (Original)': record.sno || '',
+        'Date': record.c_date ? format(new Date(record.c_date), 'dd/MM/yyyy') : '',
+        'Company': record.company_name || '',
+        'Main Account': record.acc_name || '',
+        'Sub Account': record.sub_acc_name || '',
+        'Particulars': record.particulars || '',
+        'Credit': record.credit || 0,
+        'Debit': record.debit || 0,
+        'Staff': record.staff || '',
+        'User': record.users || '',
+        'Payment Mode': record.payment_mode || '',
+        'Sale Quantity': record.sale_qty || 0,
+        'Purchase Quantity': record.purchase_qty || 0,
+        'Deleted By': record.deleted_by || record.users || record.staff || 'Unknown',
+        'Deleted At': record.deleted_at ? format(new Date(record.deleted_at), 'dd/MM/yyyy HH:mm') : '',
+      }));
+      return formattedData;
+    }
+
     const dateRange = getDateRange();
 
     switch (exportOptions.reportType) {
@@ -177,15 +266,27 @@ const ExportExcel: React.FC = () => {
             entry => entry.acc_name === exportOptions.accountFilter
           );
         }
+        if (exportOptions.paymentModeFilter) {
+          entries = entries.filter(entry => {
+            const entryPaymentMode = entry.payment_mode ? String(entry.payment_mode).trim() : '';
+            return entryPaymentMode === exportOptions.paymentModeFilter;
+          });
+        }
 
         return formatDataForExcel(entries, 'cashbook');
 
       case 'ledger':
         const ledgerData = await supabaseDB.getAllCashBookEntries();
-        const filteredLedgerData = ledgerData.filter(
+        let filteredLedgerData = ledgerData.filter(
           entry =>
             entry.c_date >= dateRange.from && entry.c_date <= dateRange.to
         );
+        if (exportOptions.paymentModeFilter) {
+          filteredLedgerData = filteredLedgerData.filter(entry => {
+            const entryPaymentMode = entry.payment_mode ? String(entry.payment_mode).trim() : '';
+            return entryPaymentMode === exportOptions.paymentModeFilter;
+          });
+        }
         return formatDataForExcel(filteredLedgerData, 'ledger');
 
       case 'balancesheet':
@@ -251,7 +352,14 @@ const ExportExcel: React.FC = () => {
         return;
       }
       const dateRange = getDateRange();
-      const filename = `${exportOptions.reportType}-${dateRange.from}-to-${dateRange.to}`;
+      let filename = '';
+      if (exportMode === 'edited') {
+        filename = `edited-records-${format(new Date(), 'yyyy-MM-dd')}`;
+      } else if (exportMode === 'deleted') {
+        filename = `deleted-records-${format(new Date(), 'yyyy-MM-dd')}`;
+      } else {
+        filename = `${exportOptions.reportType}-${dateRange.from}-to-${dateRange.to}`;
+      }
       if (exportOptions.format === 'pdf') {
         exportToPDF(data, filename, exportOptions.reportType);
       } else if (exportOptions.format === 'csv') {
@@ -492,6 +600,20 @@ const ExportExcel: React.FC = () => {
             />
           </div>
 
+          {/* Payment Mode Filter */}
+          {(exportOptions.reportType === 'cashbook' || exportOptions.reportType === 'ledger') && (
+            <div className='flex-1'>
+              <label className='block text-sm font-medium text-gray-700 mb-2'>
+                Payment Mode Filter
+              </label>
+              <Select
+                value={exportOptions.paymentModeFilter}
+                onChange={value => handleOptionChange('paymentModeFilter', value)}
+                options={paymentModeOptions}
+              />
+            </div>
+          )}
+
           {/* Export Format */}
           <div className='flex-1'>
             <label className='block text-sm font-medium text-gray-700 mb-2'>
@@ -537,12 +659,52 @@ const ExportExcel: React.FC = () => {
           </div>
         </div>
 
+        {/* Special Export Buttons */}
+        <div className='flex flex-col md:flex-row gap-4 items-center'>
+          <Button
+            variant={exportMode === 'edited' ? 'default' : 'secondary'}
+            onClick={() => {
+              setExportMode('edited');
+              toast.success('Edited records mode activated. Click Export to export all edited records.');
+            }}
+            disabled={loading}
+            className='flex-1'
+          >
+            {exportMode === 'edited' ? '✓ Edited Records Mode' : 'Load Edited Records'}
+          </Button>
+          <Button
+            variant={exportMode === 'deleted' ? 'default' : 'secondary'}
+            onClick={() => {
+              setExportMode('deleted');
+              toast.success('Deleted records mode activated. Click Export to export all deleted records.');
+            }}
+            disabled={loading}
+            className='flex-1'
+          >
+            {exportMode === 'deleted' ? '✓ Deleted Records Mode' : 'Load Deleted Records'}
+          </Button>
+          <Button
+            variant='secondary'
+            onClick={() => {
+              setExportMode('normal');
+              toast.success('Normal export mode activated.');
+            }}
+            disabled={loading}
+          >
+            Normal Export
+          </Button>
+        </div>
+
         {/* Action Buttons */}
         <div className='flex flex-col md:flex-row gap-4 items-center'>
           <Button onClick={handleExport} disabled={loading} className='flex-1'>
             {loading
               ? 'Exporting...'
-              : `Export to ${exportOptions.format.toUpperCase()}`}
+              : exportMode === 'edited'
+                ? `Export Edited Records to ${exportOptions.format.toUpperCase()}`
+                : exportMode === 'deleted'
+                  ? `Export Deleted Records to ${exportOptions.format.toUpperCase()}`
+                  : `Export to ${exportOptions.format.toUpperCase()}`}
           </Button>
           <Button
             variant='secondary'
