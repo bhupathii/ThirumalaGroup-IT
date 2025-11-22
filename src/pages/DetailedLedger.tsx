@@ -822,31 +822,31 @@ const DetailedLedger: React.FC = () => {
     entriesToPrint.forEach((entry, index) => {
       allRows += `
         <tr>
-          <td style="text-align: center; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${index + 1}</td>
-          <td style="padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${format(new Date(entry.date), 'dd/MM/yyyy')}</td>
-          <td style="padding: 2px 2px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">${entry.companyName}</td>
-          <td style="padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.accountName}</td>
-          <td style="padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.subAccount || '-'}</td>
-          <td style="padding: 2px 2px; border: 1px solid #000; font-size: 9px; word-wrap: break-word; line-height: 1.1;">${entry.particulars}</td>
-          <td style="text-align: center; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}</td>
-          <td style="text-align: center; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}</td>
-          <td style="text-align: right; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}</td>
-          <td style="text-align: right; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}</td>
+            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${index + 1}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${format(new Date(entry.date), 'dd/MM/yyyy')}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">${entry.companyName}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.accountName}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.subAccount || '-'}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; word-wrap: break-word; line-height: 1.1;">${entry.particulars}</td>
+            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}</td>
+            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}</td>
+            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}</td>
+            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}</td>
         </tr>
       `;
     });
 
     const totalsRow = `
       <tr style="background-color: #f0f0f0; font-weight: bold;">
-        <td colspan="6" style="text-align: right; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">TOTAL:</td>
-        <td style="text-align: center; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}</td>
-        <td style="text-align: center; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}</td>
-        <td style="text-align: right; padding: 2px 2px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">₹${printTotals.totalCredit.toLocaleString()}</td>
-        <td style="text-align: right; padding: 2px 2px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">₹${printTotals.totalDebit.toLocaleString()}</td>
-      </tr>
-      <tr style="background-color: #e8e8e8;">
-        <td colspan="8" style="text-align: right; padding: 2px 2px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">BALANCE:</td>
-        <td colspan="2" style="text-align: center; padding: 2px 2px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1; color: ${printTotals.balance >= 0 ? '#059669' : '#dc2626'};">
+          <td colspan="6" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">TOTAL:</td>
+          <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}</td>
+          <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}</td>
+          <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">₹${printTotals.totalCredit.toLocaleString()}</td>
+          <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">₹${printTotals.totalDebit.toLocaleString()}</td>
+        </tr>
+        <tr style="background-color: #e8e8e8;">
+          <td colspan="8" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">BALANCE:</td>
+          <td colspan="2" style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1; color: ${printTotals.balance >= 0 ? '#059669' : '#dc2626'};">
           ₹${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? 'CR' : 'DR'}
         </td>
       </tr>
@@ -882,16 +882,16 @@ const DetailedLedger: React.FC = () => {
         <table class="no-repeat-header" style="margin: 0; padding: 0; border-top: 1px solid #000;">
           <thead>
             <tr>
-              <th style="width: 4%; padding: 2px 2px; font-size: 9px; line-height: 1.1;">S.No</th>
-              <th style="width: 8%; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Date</th>
-              <th style="width: 12%; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Company</th>
-              <th style="width: 10%; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Account</th>
-              <th style="width: 10%; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Sub Account</th>
-              <th style="width: 22%; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Particulars</th>
-              <th style="width: 8%; text-align: center; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Sale Qty</th>
-              <th style="width: 8%; text-align: center; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Purchase Qty</th>
-              <th style="width: 9%; text-align: right; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Credit</th>
-              <th style="width: 9%; text-align: right; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Debit</th>
+              <th style="width: 3.5%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">S.No</th>
+              <th style="width: 7%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Date</th>
+              <th style="width: 11%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Company</th>
+              <th style="width: 9%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Account</th>
+              <th style="width: 9%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Sub Account</th>
+              <th style="width: 20%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Particulars</th>
+              <th style="width: 7.5%; text-align: center; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Sale Qty</th>
+              <th style="width: 7.5%; text-align: center; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Purchase Qty</th>
+              <th style="width: 8.5%; text-align: right; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Credit</th>
+              <th style="width: 8.5%; text-align: right; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Debit</th>
             </tr>
           </thead>
           <tbody>
@@ -910,7 +910,7 @@ const DetailedLedger: React.FC = () => {
           <style>
             @page {
               size: A4 portrait;
-              margin: 0.5cm 0.7cm 0.5cm 0.7cm;
+              margin: 0.5cm 0.8cm 0.5cm 0.8cm;
             }
             * {
               margin: 0;
@@ -991,9 +991,10 @@ const DetailedLedger: React.FC = () => {
             }
             th, td {
               border: 1px solid #000;
-              padding: 2px 2px;
+              padding: 2px 1px;
               word-wrap: break-word;
               line-height: 1.1;
+              box-sizing: border-box;
             }
             th {
               background-color: #e5e5e5;
