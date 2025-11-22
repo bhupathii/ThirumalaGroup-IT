@@ -2421,6 +2421,79 @@ class SupabaseDatabase {
     return true;
   }
 
+  // Save user credentials to database for dashboard display
+  async saveUserCredentials(credentials: {
+    username: string;
+    password: string;
+    is_admin: boolean;
+    features: string[];
+    featuresByMode?: Record<string, string[]>;
+    created_at: string;
+  }): Promise<boolean> {
+    try {
+      // Try to insert into user_credentials_log table
+      // If table doesn't exist, it will fail gracefully and we'll fall back to localStorage
+      const { error } = await supabase
+        .from('user_credentials_log')
+        .insert({
+          username: credentials.username,
+          password: credentials.password, // Store temporarily (will be cleaned up)
+          is_admin: credentials.is_admin,
+          features: credentials.features,
+          features_by_mode: credentials.featuresByMode || {},
+          created_at: credentials.created_at,
+        });
+
+      if (error) {
+        // Table might not exist, that's okay - we'll use localStorage as fallback
+        console.log('⚠️ Could not save credentials to database (table may not exist):', error.message);
+        return false;
+      }
+
+      // Clean up old entries (older than 7 days)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      await supabase
+        .from('user_credentials_log')
+        .delete()
+        .lt('created_at', sevenDaysAgo.toISOString());
+
+      return true;
+    } catch (error) {
+      console.error('Error saving credentials to database:', error);
+      return false;
+    }
+  }
+
+  // Get recently created user credentials from database
+  async getRecentUserCredentials(limit: number = 10): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('user_credentials_log')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        // Table might not exist, return empty array
+        console.log('⚠️ Could not fetch credentials from database (table may not exist):', error.message);
+        return [];
+      }
+
+      return (data || []).map(cred => ({
+        username: cred.username,
+        password: cred.password,
+        is_admin: cred.is_admin,
+        features: cred.features || [],
+        featuresByMode: cred.features_by_mode || {},
+        created_at: cred.created_at,
+      }));
+    } catch (error) {
+      console.error('Error fetching credentials from database:', error);
+      return [];
+    }
+  }
+
   // Bank Guarantee operations
   async getBankGuarantees(): Promise<BankGuarantee[]> {
     const { data, error } = await supabase

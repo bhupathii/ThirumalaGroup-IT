@@ -83,10 +83,28 @@ const Dashboard: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only check on mount
 
-  // Load credentials on mount
+  // Load credentials on mount - from database first, then localStorage as fallback
   useEffect(() => {
-    const credentials = JSON.parse(localStorage.getItem('user_credentials') || '[]');
-    setUserCredentials(credentials.reverse()); // Show newest first
+    const loadCredentials = async () => {
+      try {
+        // Try to fetch from database first
+        const dbCredentials = await supabaseDB.getRecentUserCredentials(10);
+        if (dbCredentials && dbCredentials.length > 0) {
+          setUserCredentials(dbCredentials.reverse()); // Show newest first
+          // Also sync to localStorage for offline access
+          localStorage.setItem('user_credentials', JSON.stringify(dbCredentials));
+          return;
+        }
+      } catch (error) {
+        console.log('Could not load credentials from database, using localStorage:', error);
+      }
+      
+      // Fallback to localStorage if database fetch fails or returns empty
+      const credentials = JSON.parse(localStorage.getItem('user_credentials') || '[]');
+      setUserCredentials(credentials.reverse()); // Show newest first
+    };
+    
+    loadCredentials();
   }, []); // Only run on mount
 
   // Listen for table mode changes and refresh all data
@@ -97,9 +115,22 @@ const Dashboard: React.FC = () => {
 
   // Listen for custom events to refresh dashboard
   useEffect(() => {
-    const handleDashboardRefresh = () => {
+    const handleDashboardRefresh = async () => {
       invalidateAll();
-      // Also reload credentials when dashboard refreshes
+      // Also reload credentials when dashboard refreshes - from database first
+      try {
+        const dbCredentials = await supabaseDB.getRecentUserCredentials(10);
+        if (dbCredentials && dbCredentials.length > 0) {
+          setUserCredentials(dbCredentials.reverse()); // Show newest first
+          // Also sync to localStorage
+          localStorage.setItem('user_credentials', JSON.stringify(dbCredentials));
+          return;
+        }
+      } catch (error) {
+        console.log('Could not load credentials from database, using localStorage:', error);
+      }
+      
+      // Fallback to localStorage
       const credentials = JSON.parse(localStorage.getItem('user_credentials') || '[]');
       setUserCredentials(credentials.reverse()); // Show newest first
     };

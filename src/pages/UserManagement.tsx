@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { supabaseDB } from '../lib/supabaseDatabase';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import Card from '../components/UI/Card';
@@ -921,7 +922,7 @@ const upsertUserAccess = async (
         toast.error('User created but no features were selected. User will only see Dashboard.');
       }
 
-      // Save credentials to localStorage for Dashboard display
+      // Save credentials to database and localStorage for Dashboard display
       const combinedFeatureList = normalizeFeatures(
         MODE_VALUES.flatMap(modeKey => newUser.featuresByMode[modeKey] || [])
       );
@@ -934,7 +935,10 @@ const upsertUserAccess = async (
         created_at: new Date().toISOString(),
       };
       
-      // Get existing credentials list
+      // Save to database (will work if table exists, otherwise falls back to localStorage only)
+      await supabaseDB.saveUserCredentials(credentialsData);
+      
+      // Also save to localStorage as fallback
       const existingCredentials = JSON.parse(localStorage.getItem('user_credentials') || '[]');
       existingCredentials.push(credentialsData);
       // Keep only last 10 credentials

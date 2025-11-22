@@ -106,21 +106,6 @@ const Login: React.FC = () => {
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
-
-          {/* Login Credentials */}
-          <div className='mt-6 p-4 bg-gradient-to-r from-orange-50 to-red-50 rounded-lg border border-orange-200'>
-            <h3 className='text-sm font-medium text-gray-900 mb-3'>
-              Login Credentials:
-            </h3>
-            <div className='text-xs text-gray-700 space-y-2'>
-              <div className='flex justify-between'>
-                <span className='font-medium'>Main Admin:</span>
-                <code className='bg-white px-2 py-1 rounded border'>
-                  Bukka Ramesh / ramesh@1976
-                </code>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
