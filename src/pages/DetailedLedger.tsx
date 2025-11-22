@@ -910,7 +910,7 @@ const DetailedLedger: React.FC = () => {
           <style>
             @page {
               size: A4 portrait;
-              margin: 0.5cm 0.5cm 0.5cm 0.5cm;
+              margin: 0.5cm 0.7cm 0.5cm 0.7cm;
             }
             * {
               margin: 0;
@@ -981,11 +981,13 @@ const DetailedLedger: React.FC = () => {
             }
             table {
               width: 100%;
+              max-width: 100%;
               border-collapse: collapse;
               font-size: 9px;
               table-layout: fixed;
               margin: 0;
               padding: 0;
+              box-sizing: border-box;
             }
             th, td {
               border: 1px solid #000;
@@ -1033,6 +1035,22 @@ const DetailedLedger: React.FC = () => {
                 margin: 0 !important;
                 padding: 0 !important;
                 border-spacing: 0;
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+              }
+              td, th {
+                box-sizing: border-box !important;
+                overflow: hidden;
+                word-wrap: break-word;
+              }
+              /* Hide thead on all pages by default - prevent browser from repeating it */
+              thead {
+                display: none !important;
+              }
+              /* Show thead only on the first page */
+              .print-page:first-child table thead {
+                display: table-header-group !important;
               }
               .header {
                 margin: 0 !important;
@@ -1065,9 +1083,6 @@ const DetailedLedger: React.FC = () => {
         </head>
         <body>
           ${pagesContent}
-          <div class="footer">
-            Generated on ${format(new Date(), 'dd/MM/yyyy HH:mm')} by ${user?.username} | Total Records: ${entriesToPrint.length}
-          </div>
         </body>
       </html>
     `;
