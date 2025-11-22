@@ -424,15 +424,25 @@ const EditEntry: React.FC = () => {
         console.log('📊 Cash_book company names:', uniqueCashBookCompanies);
       }
 
-      const users = await supabaseDB.getUsers();
-      console.log('👥 Users loaded:', users.length);
-      const usersData = users
-        .filter(u => u.is_active)
-        .map(user => ({
-          value: user.username,
-          label: user.username,
-        }));
-      setUsers(usersData);
+      // Load staff names from existing cash_book entries (like NewEntry does)
+      // This ensures all staff members who have entries are available, not just active users
+      try {
+        const staffOptions = await supabaseDB.getDistinctStaffNames();
+        console.log('👥 Staff options loaded from cash_book:', staffOptions.length);
+        setUsers(staffOptions);
+      } catch (error) {
+        console.error('❌ Error loading staff from cash_book, falling back to users table:', error);
+        // Fallback to users table if cash_book query fails
+        const users = await supabaseDB.getUsers();
+        console.log('👥 Users loaded from users table:', users.length);
+        const usersData = users
+          .filter(u => u.is_active)
+          .map(user => ({
+            value: user.username,
+            label: user.username,
+          }));
+        setUsers(usersData);
+      }
 
       // Load all account names initially for display
       await loadDistinctAccountNames();
