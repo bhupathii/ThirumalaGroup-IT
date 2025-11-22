@@ -470,6 +470,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       line-height: 1.4;
       margin: 0;
       padding: 0;
+      font-weight: bold;
     }
     
     .print-header {
@@ -705,10 +706,16 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
   });
 
   const tableRows = data
-    .map(row => {
+    .map((row, index) => {
       const cells = filteredColumns
         .map(col => {
-          const value = row[col.key];
+          let value = row[col.key];
+          
+          // Fix S.No to start from 1
+          if (col.key === 'sno') {
+            value = index + 1;
+          }
+          
           let displayValue = value;
 
           // Format numbers
@@ -734,7 +741,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
             }
           }
 
-          return `<td>${displayValue || ''}</td>`;
+          return `<td style="font-weight: bold;">${displayValue || ''}</td>`;
         })
         .join('');
 
@@ -743,7 +750,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     .join('');
 
   const tableHeaders = filteredColumns
-    .map(col => `<th style="width: ${col.width || 'auto'}">${col.label}</th>`)
+    .map(col => `<th style="width: ${col.width || 'auto'}; font-weight: bold;">${col.label}</th>`)
     .join('');
 
   // Calculate totals for the table footer
@@ -891,15 +898,21 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     : '';
 
   // Generate print mode HTML function (to be called when print button is clicked)
-  const generatePrintModeHTML = () => {
+  const generatePrintModeHTMLString = () => {
     const creditTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0) : 0;
     const debitTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0) : 0;
     
     const printModeTableRows = data
-      .map(row => {
+      .map((row, index) => {
         const cells = filteredColumns
           .map(col => {
-            const value = row[col.key];
+            let value = row[col.key];
+            
+            // Fix S.No to start from 1
+            if (col.key === 'sno') {
+              value = index + 1;
+            }
+            
             let displayValue = value;
 
             if (typeof value === 'number') {
@@ -923,7 +936,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
               }
             }
 
-            return `<td>${displayValue || ''}</td>`;
+            return `<td style="font-weight: bold;">${displayValue || ''}</td>`;
           })
           .join('');
 
@@ -933,7 +946,16 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
 
     // Calculate colspan: number of columns before credit column
     const creditColIndex = filteredColumns.findIndex(col => col.key.toLowerCase().includes('credit'));
+    const debitColIndex = filteredColumns.findIndex(col => col.key.toLowerCase().includes('debit'));
     const totalColspan = creditColIndex >= 0 ? creditColIndex : filteredColumns.length - 2;
+
+    // Calculate grand totals
+    const grandTotalCredit = creditTotal + openingBalance;
+    const grandTotalDebit = debitTotal + closingBalance;
+    
+    // Format opening and closing balances (without CR/DR for grand total calculation)
+    const openingBalanceValue = Math.abs(openingBalance);
+    const closingBalanceValue = Math.abs(closingBalance);
 
     return `
       <!DOCTYPE html>
@@ -965,9 +987,24 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
           <tbody>
             ${printModeTableRows}
             <tr style="background-color: #f0f0f0; font-weight: bold;">
-              <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db;">TOTAL:</td>
-              <td class="text-green" style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-              <td class="text-red" style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Total</td>
+              <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr style="background-color: #e8e8e8; font-weight: bold;">
+              <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Opening Balance</td>
+              <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${openingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
+            </tr>
+            <tr style="background-color: #e8e8e8; font-weight: bold;">
+              <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Closing Balance</td>
+              <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
+              <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${closingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr style="background-color: #d0d0d0; font-weight: bold;">
+              <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Grand Total</td>
+              <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${grandTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${grandTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
             </tr>
           </tbody>
         </table>
@@ -982,99 +1019,17 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     `;
   };
 
-  // Generate print mode HTML as a string for embedding in script
-  const generatePrintModeHTMLString = () => {
-    const creditTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0) : 0;
-    const debitTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0) : 0;
-    
-    const printModeTableRows = data
-      .map(row => {
-        const cells = filteredColumns
-          .map(col => {
-            const value = row[col.key];
-            let displayValue = value;
-
-            if (typeof value === 'number') {
-              if (
-                col.key.toLowerCase().includes('amount') ||
-                col.key.toLowerCase().includes('credit') ||
-                col.key.toLowerCase().includes('debit') ||
-                col.key.toLowerCase().includes('balance')
-              ) {
-                displayValue = `${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-              } else {
-                displayValue = value.toLocaleString('en-IN');
-              }
-            }
-
-            if (col.key.toLowerCase().includes('date') && value) {
-              try {
-                displayValue = format(new Date(value), 'dd/MM/yyyy');
-              } catch (e) {
-                displayValue = value;
-              }
-            }
-
-            return '<td>' + (displayValue || '') + '</td>';
-          })
-          .join('');
-
-        return '<tr>' + cells + '</tr>';
-      })
-      .join('');
-
-    const creditColIndex = filteredColumns.findIndex(col => col.key.toLowerCase().includes('credit'));
-    const totalColspan = creditColIndex >= 0 ? creditColIndex : filteredColumns.length - 2;
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>${title} - Thirumala Group</title>
-        <style>${css.replace(/`/g, '\\`').replace(/\${/g, '\\${')}</style>
-      </head>
-      <body>
-        ${includeHeader ? `
-          <div class="print-header">
-            <div class="header-left">
-              <h2 class="print-title">${title}</h2>
-            </div>
-            <div class="header-center">
-              <h1 class="company-name">Thirumala Group</h1>
-              <p class="company-subtitle">Business Management System</p>
-            </div>
-            <div class="header-right">
-              ${subtitleHTML ? `<p class="print-subtitle">${subtitleHTML}</p>` : ''}
-            </div>
-          </div>
-        ` : ''}
-        
-        <table class="print-table">
-          <thead>
-            <tr>${tableHeaders}</tr>
-          </thead>
-          <tbody>
-            ${printModeTableRows}
-            <tr style="background-color: #f0f0f0; font-weight: bold;">
-              <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db;">TOTAL:</td>
-              <td class="text-green" style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-              <td class="text-red" style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-            </tr>
-          </tbody>
-        </table>
-        
-        ${includeFooter ? `
-          <div class="print-footer">
-            <p>${footerText}</p>
-          </div>
-        ` : ''}
-      </body>
-      </html>
-    `;
-  };
-
-  // Escape the print mode HTML for embedding in script tag using JSON.stringify
-  const printModeHTMLString = JSON.stringify(generatePrintModeHTMLString());
+  // Generate print mode HTML and escape it properly for embedding in script
+  const printModeHTML = generatePrintModeHTMLString();
+  // Escape for embedding in JavaScript string - replace backticks, template expressions, and newlines
+  const printModeHTMLString = printModeHTML
+    .replace(/\\/g, '\\\\')  // Escape backslashes first
+    .replace(/`/g, '\\`')    // Escape backticks
+    .replace(/\${/g, '\\${') // Escape template expressions
+    .replace(/\n/g, '\\n')   // Escape newlines
+    .replace(/\r/g, '')      // Remove carriage returns
+    .replace(/'/g, "\\'")    // Escape single quotes
+    .replace(/"/g, '\\"');   // Escape double quotes
 
   // Complete HTML with basic Thirumala Group branding
   const html = `
@@ -1085,15 +1040,24 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       <style>${css}</style>
       <script>
         function handlePrint() {
-          const printModeHTML = ${printModeHTMLString};
-          const actualPrintWindow = window.open('', '_blank');
-          if (actualPrintWindow) {
-            actualPrintWindow.document.write(printModeHTML);
-            actualPrintWindow.document.close();
-            setTimeout(() => {
-              actualPrintWindow.print();
-              actualPrintWindow.close();
-            }, 250);
+          try {
+            const printModeHTML = \`${printModeHTMLString}\`;
+            const actualPrintWindow = window.open('', '_blank');
+            if (actualPrintWindow) {
+              actualPrintWindow.document.write(printModeHTML);
+              actualPrintWindow.document.close();
+              setTimeout(() => {
+                actualPrintWindow.print();
+                setTimeout(() => {
+                  actualPrintWindow.close();
+                }, 100);
+              }, 250);
+            } else {
+              alert('Please allow popups for this site to print.');
+            }
+          } catch (error) {
+            console.error('Print error:', error);
+            alert('Print failed: ' + error.message);
           }
         }
       </script>
