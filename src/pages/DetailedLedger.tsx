@@ -817,8 +817,40 @@ const DetailedLedger: React.FC = () => {
       balance: totalCredit - totalDebit,
     };
 
-    const rowsPerPage = 25;
-    const totalPages = Math.ceil(entriesToPrint.length / rowsPerPage);
+    // Generate all rows - browser will handle pagination naturally
+    let allRows = '';
+    entriesToPrint.forEach((entry, index) => {
+      allRows += `
+        <tr>
+          <td style="text-align: center; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${index + 1}</td>
+          <td style="padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${format(new Date(entry.date), 'dd/MM/yyyy')}</td>
+          <td style="padding: 2px 2px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">${entry.companyName}</td>
+          <td style="padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.accountName}</td>
+          <td style="padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.subAccount || '-'}</td>
+          <td style="padding: 2px 2px; border: 1px solid #000; font-size: 9px; word-wrap: break-word; line-height: 1.1;">${entry.particulars}</td>
+          <td style="text-align: center; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}</td>
+          <td style="text-align: center; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}</td>
+          <td style="text-align: right; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}</td>
+          <td style="text-align: right; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}</td>
+        </tr>
+      `;
+    });
+
+    const totalsRow = `
+      <tr style="background-color: #f0f0f0; font-weight: bold;">
+        <td colspan="6" style="text-align: right; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">TOTAL:</td>
+        <td style="text-align: center; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}</td>
+        <td style="text-align: center; padding: 2px 2px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}</td>
+        <td style="text-align: right; padding: 2px 2px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">₹${printTotals.totalCredit.toLocaleString()}</td>
+        <td style="text-align: right; padding: 2px 2px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">₹${printTotals.totalDebit.toLocaleString()}</td>
+      </tr>
+      <tr style="background-color: #e8e8e8;">
+        <td colspan="8" style="text-align: right; padding: 2px 2px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">BALANCE:</td>
+        <td colspan="2" style="text-align: center; padding: 2px 2px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1; color: ${printTotals.balance >= 0 ? '#059669' : '#dc2626'};">
+          ₹${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? 'CR' : 'DR'}
+        </td>
+      </tr>
+    `;
 
     const filterInfo = !isAllEntries && (filters.subAccount || filters.staffwise || filters.user || filters.paymentMode) 
       ? `
@@ -830,106 +862,45 @@ const DetailedLedger: React.FC = () => {
         </div>
       ` : '';
 
-    // Generate table rows split by pages
-    let pagesContent = '';
-    for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
-      const startIndex = pageIndex * rowsPerPage;
-      const endIndex = Math.min(startIndex + rowsPerPage, entriesToPrint.length);
-      const pageEntries = entriesToPrint.slice(startIndex, endIndex);
-
-      let pageRows = '';
-      pageEntries.forEach((entry, localIndex) => {
-        const globalIndex = startIndex + localIndex;
-        pageRows += `
-          <tr>
-            <td style="text-align: center; padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${globalIndex + 1}</td>
-            <td style="padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${format(new Date(entry.date), 'dd/MM/yyyy')}</td>
-            <td style="padding: 2px 3px; border: 1px solid #000; font-size: 9px; font-weight: bold;">${entry.companyName}</td>
-            <td style="padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.accountName}</td>
-            <td style="padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.subAccount || '-'}</td>
-            <td style="padding: 2px 3px; border: 1px solid #000; font-size: 9px; word-wrap: break-word;">${entry.particulars}</td>
-            <td style="text-align: center; padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}</td>
-            <td style="text-align: center; padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}</td>
-            <td style="text-align: right; padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}</td>
-            <td style="text-align: right; padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}</td>
-          </tr>
-        `;
-      });
-
-      // Add totals row only on last page
-      const totalsRow = pageIndex === totalPages - 1 ? `
-        <tr style="background-color: #f0f0f0; font-weight: bold;">
-          <td colspan="6" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-size: 9px;">TOTAL:</td>
-          <td style="text-align: center; padding: 4px 3px; border: 1px solid #000; font-size: 9px;">${printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}</td>
-          <td style="text-align: center; padding: 4px 3px; border: 1px solid #000; font-size: 9px;">${printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}</td>
-          <td style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-size: 9px; font-weight: bold;">₹${printTotals.totalCredit.toLocaleString()}</td>
-          <td style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-size: 9px; font-weight: bold;">₹${printTotals.totalDebit.toLocaleString()}</td>
-        </tr>
-        <tr style="background-color: #e8e8e8;">
-          <td colspan="8" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-size: 9px; font-weight: bold;">BALANCE:</td>
-          <td colspan="2" style="text-align: center; padding: 4px 3px; border: 1px solid #000; font-size: 9px; font-weight: bold; color: ${printTotals.balance >= 0 ? '#059669' : '#dc2626'};">
-            ₹${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? 'CR' : 'DR'}
-          </td>
-        </tr>
-      ` : '';
-
-      // First page includes header and filter info
-      if (pageIndex === 0) {
-        pagesContent += `
-          <div class="print-page" style="page-break-after: ${pageIndex < totalPages - 1 ? 'always' : 'auto'};">
-            <div class="header">
-              <h1>Thirumala Group</h1>
-              <h2>Detailed Ledger Report ${isAllEntries ? '(All Records)' : ''}</h2>
-              <p>${isAllEntries ? 'All Records' : `From ${format(new Date(filters.fromDate), 'dd/MM/yyyy')} to ${format(new Date(filters.toDate), 'dd/MM/yyyy')}`}</p>
-              ${!isAllEntries ? `
-                <div style="font-size: 11px; margin-top: 2px;">
-                  ${filters.companyName ? `<span style="margin-right: 15px;">Company: <strong>${filters.companyName}</strong></span>` : ''}
-                  ${filters.mainAccount ? `<span>Account: <strong>${filters.mainAccount}</strong></span>` : ''}
-                </div>
-              ` : ''}
+    // Generate single page content - browser will paginate automatically
+    let pagesContent = `
+      <div class="print-page" style="margin: 0; padding: 0;">
+        <div class="header" style="margin: 0; padding: 0;">
+          <h1 style="margin: 0; padding: 0; line-height: 1;">Thirumala Group</h1>
+          <h2 style="margin: 0; padding: 0; line-height: 1;">Detailed Ledger Report ${isAllEntries ? '(All Records)' : ''}</h2>
+          <p style="margin: 0; padding: 0; line-height: 1;">${isAllEntries ? 'All Records' : `From ${format(new Date(filters.fromDate), 'dd/MM/yyyy')} to ${format(new Date(filters.toDate), 'dd/MM/yyyy')}`}</p>
+          ${!isAllEntries ? `
+            <div style="font-size: 11px; margin: 0; padding: 0; line-height: 1;">
+              ${filters.companyName ? `<span style="margin-right: 15px;">Company: <strong>${filters.companyName}</strong></span>` : ''}
+              ${filters.mainAccount ? `<span>Account: <strong>${filters.mainAccount}</strong></span>` : ''}
             </div>
+          ` : ''}
+        </div>
 
-            ${filterInfo}
+        ${filterInfo ? `<div style="margin: 0; padding: 0; line-height: 1;">${filterInfo}</div>` : ''}
 
-            <table class="no-repeat-header">
-              <thead>
-                <tr>
-                  <th style="width: 4%;">S.No</th>
-                  <th style="width: 8%;">Date</th>
-                  <th style="width: 12%;">Company</th>
-                  <th style="width: 10%;">Account</th>
-                  <th style="width: 10%;">Sub Account</th>
-                  <th style="width: 22%;">Particulars</th>
-                  <th style="width: 8%; text-align: center;">Sale Qty</th>
-                  <th style="width: 8%; text-align: center;">Purchase Qty</th>
-                  <th style="width: 9%; text-align: right;">Credit</th>
-                  <th style="width: 9%; text-align: right;">Debit</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${pageRows}
-                ${totalsRow}
-              </tbody>
-            </table>
-          </div>
-        `;
-      } else {
-        // Subsequent pages - no header, just continuation header and table
-        pagesContent += `
-          <div class="print-page" style="page-break-after: ${pageIndex < totalPages - 1 ? 'always' : 'auto'};">
-            <div style="text-align: center; font-size: 9px; color: #666; margin-bottom: 2px; font-weight: bold; padding-top: 2px;">
-              Thirumala Group - Detailed Ledger Report (Continued) - Page ${pageIndex + 1} of ${totalPages}
-            </div>
-            <table class="no-header-table">
-              <tbody>
-                ${pageRows}
-                ${totalsRow}
-              </tbody>
-            </table>
-          </div>
-        `;
-      }
-    }
+        <table class="no-repeat-header" style="margin: 0; padding: 0; border-top: 1px solid #000;">
+          <thead>
+            <tr>
+              <th style="width: 4%; padding: 2px 2px; font-size: 9px; line-height: 1.1;">S.No</th>
+              <th style="width: 8%; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Date</th>
+              <th style="width: 12%; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Company</th>
+              <th style="width: 10%; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Account</th>
+              <th style="width: 10%; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Sub Account</th>
+              <th style="width: 22%; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Particulars</th>
+              <th style="width: 8%; text-align: center; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Sale Qty</th>
+              <th style="width: 8%; text-align: center; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Purchase Qty</th>
+              <th style="width: 9%; text-align: right; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Credit</th>
+              <th style="width: 9%; text-align: right; padding: 2px 2px; font-size: 9px; line-height: 1.1;">Debit</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allRows}
+            ${totalsRow}
+          </tbody>
+        </table>
+      </div>
+    `;
 
     return `
       <!DOCTYPE html>
@@ -939,7 +910,7 @@ const DetailedLedger: React.FC = () => {
           <style>
             @page {
               size: A4 portrait;
-              margin: 0.02cm 0.3cm 0.3cm 0.3cm;
+              margin: 0.5cm 0.5cm 0.5cm 0.5cm;
             }
             * {
               margin: 0;
@@ -953,27 +924,30 @@ const DetailedLedger: React.FC = () => {
             }
             .header {
               text-align: center;
-              margin-bottom: 3px;
+              margin-bottom: 2px;
               margin-top: 0;
               padding-top: 0;
+              padding-bottom: 0;
             }
             .header h1 {
-              font-size: 20px;
-              margin: 0 0 1px 0;
-              padding-top: 0;
+              font-size: 18px;
+              margin: 0;
+              padding: 0;
               font-weight: bold;
-              line-height: 1.1;
+              line-height: 1;
             }
             .header h2 {
-              font-size: 16px;
-              margin: 1px 0;
+              font-size: 14px;
+              margin: 0;
+              padding: 0;
               font-weight: 600;
-              line-height: 1.1;
+              line-height: 1;
             }
             .header p {
-              font-size: 12px;
-              margin: 1px 0;
-              line-height: 1.2;
+              font-size: 11px;
+              margin: 0;
+              padding: 0;
+              line-height: 1;
             }
             .summary-section {
               margin-bottom: 3px;
@@ -1015,8 +989,9 @@ const DetailedLedger: React.FC = () => {
             }
             th, td {
               border: 1px solid #000;
-              padding: 2px 3px;
+              padding: 2px 2px;
               word-wrap: break-word;
+              line-height: 1.1;
             }
             th {
               background-color: #e5e5e5;
@@ -1054,7 +1029,25 @@ const DetailedLedger: React.FC = () => {
               .print-page:last-child {
                 page-break-after: auto;
               }
-              .no-repeat-header thead {
+              table {
+                margin: 0 !important;
+                padding: 0 !important;
+                border-spacing: 0;
+              }
+              .header {
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              .header h1, .header h2, .header p, .header div {
+                margin: 0 !important;
+                padding: 0 !important;
+                line-height: 1 !important;
+              }
+              * {
+                box-sizing: border-box;
+              }
+            }
+            .no-repeat-header thead {
                 display: table-header-group;
               }
               .no-header-table thead {
@@ -2814,7 +2807,7 @@ const DetailedLedger: React.FC = () => {
                     balance: totalCredit - totalDebit,
                   };
                   
-                  const rowsPerPage = 25;
+                  const rowsPerPage = 50;
                   const totalPages = Math.ceil(entriesToPrint.length / rowsPerPage);
                   const pages = [];
                   
