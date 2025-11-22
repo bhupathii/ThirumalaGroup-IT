@@ -807,13 +807,15 @@ const DetailedLedger: React.FC = () => {
 
   const generatePrintContent = (entriesToPrint: LedgerEntry[], isAllEntries: boolean) => {
     // Calculate totals
+    const totalCredit = entriesToPrint.reduce((s, e) => s + (e.credit || 0), 0);
+    const totalDebit = entriesToPrint.reduce((s, e) => s + (e.debit || 0), 0);
     const printTotals = {
-      totalCredit: entriesToPrint.reduce((s, e) => s + (e.credit || 0), 0),
-      totalDebit: entriesToPrint.reduce((s, e) => s + (e.debit || 0), 0),
+      totalCredit,
+      totalDebit,
       totalSaleQty: entriesToPrint.reduce((s, e) => s + (e.saleQuantity || 0), 0),
       totalPurchaseQty: entriesToPrint.reduce((s, e) => s + (e.purchaseQuantity || 0), 0),
+      balance: totalCredit - totalDebit,
     };
-    printTotals.balance = printTotals.totalCredit - printTotals.totalDebit;
 
     const rowsPerPage = 25;
     const totalPages = Math.ceil(entriesToPrint.length / rowsPerPage);
@@ -846,19 +848,32 @@ const DetailedLedger: React.FC = () => {
             <td style="padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.accountName}</td>
             <td style="padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.subAccount || '-'}</td>
             <td style="padding: 2px 3px; border: 1px solid #000; font-size: 9px; word-wrap: break-word;">${entry.particulars}</td>
-            <td style="text-align: right; padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}</td>
-            <td style="text-align: right; padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}</td>
             <td style="text-align: center; padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}</td>
             <td style="text-align: center; padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}</td>
-            <td style="padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.staff}</td>
-            <td style="padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.payment_mode && String(entry.payment_mode).trim() ? String(entry.payment_mode).trim() : '-'}</td>
-            <td style="padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.user}</td>
-            <td style="padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${format(new Date(entry.entryTime), 'dd/MM/yyyy HH:mm')}</td>
+            <td style="text-align: right; padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}</td>
+            <td style="text-align: right; padding: 2px 3px; border: 1px solid #000; font-size: 9px;">${entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}</td>
           </tr>
         `;
       });
 
-      // First page includes header, summary, and filter info
+      // Add totals row only on last page
+      const totalsRow = pageIndex === totalPages - 1 ? `
+        <tr style="background-color: #f0f0f0; font-weight: bold;">
+          <td colspan="6" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-size: 9px;">TOTAL:</td>
+          <td style="text-align: center; padding: 4px 3px; border: 1px solid #000; font-size: 9px;">${printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}</td>
+          <td style="text-align: center; padding: 4px 3px; border: 1px solid #000; font-size: 9px;">${printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}</td>
+          <td style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-size: 9px; font-weight: bold;">₹${printTotals.totalCredit.toLocaleString()}</td>
+          <td style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-size: 9px; font-weight: bold;">₹${printTotals.totalDebit.toLocaleString()}</td>
+        </tr>
+        <tr style="background-color: #e8e8e8;">
+          <td colspan="8" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-size: 9px; font-weight: bold;">BALANCE:</td>
+          <td colspan="2" style="text-align: center; padding: 4px 3px; border: 1px solid #000; font-size: 9px; font-weight: bold; color: ${printTotals.balance >= 0 ? '#059669' : '#dc2626'};">
+            ₹${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? 'CR' : 'DR'}
+          </td>
+        </tr>
+      ` : '';
+
+      // First page includes header and filter info
       if (pageIndex === 0) {
         pagesContent += `
           <div class="print-page" style="page-break-after: ${pageIndex < totalPages - 1 ? 'always' : 'auto'};">
@@ -874,54 +889,32 @@ const DetailedLedger: React.FC = () => {
               ` : ''}
             </div>
 
-            <div class="summary-section">
-              <div class="summary-boxes">
-                <div class="summary-box">
-                  <div class="summary-label">Total Credit</div>
-                  <div class="summary-value">₹${printTotals.totalCredit.toLocaleString()}</div>
-                </div>
-                <div class="summary-box">
-                  <div class="summary-label">Total Debit</div>
-                  <div class="summary-value">₹${printTotals.totalDebit.toLocaleString()}</div>
-                </div>
-                <div class="summary-box">
-                  <div class="summary-label">Balance</div>
-                  <div class="summary-value" style="color: ${printTotals.balance >= 0 ? '#059669' : '#dc2626'};">
-                    ₹${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? 'CR' : 'DR'}
-                  </div>
-                </div>
-              </div>
-            </div>
-
             ${filterInfo}
 
             <table class="no-repeat-header">
               <thead>
                 <tr>
-                  <th style="width: 3.5%;">S.No</th>
-                  <th style="width: 7%;">Date</th>
-                  <th style="width: 9%;">Company</th>
-                  <th style="width: 8%;">Account</th>
-                  <th style="width: 8%;">Sub Account</th>
-                  <th style="width: 18%;">Particulars</th>
-                  <th style="width: 7.5%; text-align: right;">Credit</th>
-                  <th style="width: 7.5%; text-align: right;">Debit</th>
-                  <th style="width: 5%; text-align: center;">Sale Qty</th>
-                  <th style="width: 5%; text-align: center;">Purchase Qty</th>
-                  <th style="width: 7%;">Staff</th>
-                  <th style="width: 8%;">Payment Mode</th>
-                  <th style="width: 7%;">User</th>
-                  <th style="width: 7.5%;">Entry Time</th>
+                  <th style="width: 4%;">S.No</th>
+                  <th style="width: 8%;">Date</th>
+                  <th style="width: 12%;">Company</th>
+                  <th style="width: 10%;">Account</th>
+                  <th style="width: 10%;">Sub Account</th>
+                  <th style="width: 22%;">Particulars</th>
+                  <th style="width: 8%; text-align: center;">Sale Qty</th>
+                  <th style="width: 8%; text-align: center;">Purchase Qty</th>
+                  <th style="width: 9%; text-align: right;">Credit</th>
+                  <th style="width: 9%; text-align: right;">Debit</th>
                 </tr>
               </thead>
               <tbody>
                 ${pageRows}
+                ${totalsRow}
               </tbody>
             </table>
           </div>
         `;
       } else {
-        // Subsequent pages - no header, no summary, just continuation header and table
+        // Subsequent pages - no header, just continuation header and table
         pagesContent += `
           <div class="print-page" style="page-break-after: ${pageIndex < totalPages - 1 ? 'always' : 'auto'};">
             <div style="text-align: center; font-size: 9px; color: #666; margin-bottom: 2px; font-weight: bold; padding-top: 2px;">
@@ -930,6 +923,7 @@ const DetailedLedger: React.FC = () => {
             <table class="no-header-table">
               <tbody>
                 ${pageRows}
+                ${totalsRow}
               </tbody>
             </table>
           </div>
@@ -2810,13 +2804,15 @@ const DetailedLedger: React.FC = () => {
                   const entriesToPrint = printAllEntries ? ledgerEntries : filteredEntries;
                   
                   // Calculate totals for print preview
+                  const totalCredit = entriesToPrint.reduce((s, e) => s + (e.credit || 0), 0);
+                  const totalDebit = entriesToPrint.reduce((s, e) => s + (e.debit || 0), 0);
                   const printTotals = {
-                    totalCredit: entriesToPrint.reduce((s, e) => s + (e.credit || 0), 0),
-                    totalDebit: entriesToPrint.reduce((s, e) => s + (e.debit || 0), 0),
+                    totalCredit,
+                    totalDebit,
                     totalSaleQty: entriesToPrint.reduce((s, e) => s + (e.saleQuantity || 0), 0),
                     totalPurchaseQty: entriesToPrint.reduce((s, e) => s + (e.purchaseQuantity || 0), 0),
+                    balance: totalCredit - totalDebit,
                   };
-                  printTotals.balance = printTotals.totalCredit - printTotals.totalDebit;
                   
                   const rowsPerPage = 25;
                   const totalPages = Math.ceil(entriesToPrint.length / rowsPerPage);
@@ -2859,30 +2855,6 @@ const DetailedLedger: React.FC = () => {
                               )}
                             </div>
 
-                            {/* Summary - Only on first page */}
-                            <div className='print-page-header summary-section' style={{ marginBottom: '5px', fontSize: '11px' }}>
-                              <div className='summary-boxes' style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                                <div style={{ textAlign: 'center', padding: '8px', border: '2px solid #666' }}>
-                                  <div style={{ fontSize: '11px', marginBottom: '4px' }}>Total Credit</div>
-                                  <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
-                                    ₹{printTotals.totalCredit.toLocaleString()}
-                                  </div>
-                                </div>
-                                <div style={{ textAlign: 'center', padding: '8px', border: '2px solid #666' }}>
-                                  <div style={{ fontSize: '11px', marginBottom: '4px' }}>Total Debit</div>
-                                  <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
-                                    ₹{printTotals.totalDebit.toLocaleString()}
-                                  </div>
-                                </div>
-                                <div style={{ textAlign: 'center', padding: '8px', border: '2px solid #666' }}>
-                                  <div style={{ fontSize: '11px', marginBottom: '4px' }}>Balance</div>
-                                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: printTotals.balance >= 0 ? '#059669' : '#dc2626' }}>
-                                    ₹{Math.abs(printTotals.balance).toLocaleString()}
-                                    {printTotals.balance >= 0 ? ' CR' : ' DR'}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
 
                             {/* Additional Filter Info - Only on first page */}
                             {!printAllEntries && (filters.subAccount || filters.staffwise || filters.user || filters.paymentMode) && (
@@ -2913,14 +2885,10 @@ const DetailedLedger: React.FC = () => {
                                 <th className='col-account text-left'>Account</th>
                                 <th className='col-subaccount text-left'>Sub Account</th>
                                 <th className='col-particulars text-left'>Particulars</th>
-                                <th className='col-credit text-right'>Credit</th>
-                                <th className='col-debit text-right'>Debit</th>
                                 <th className='col-saleqty text-center'>Sale Qty</th>
                                 <th className='col-purchaseqty text-center'>Purchase Qty</th>
-                                <th className='col-staff text-left'>Staff</th>
-                                <th className='col-payment text-left'>Payment Mode</th>
-                                <th className='col-user text-left'>User</th>
-                                <th className='col-entrytime text-left'>Entry Time</th>
+                                <th className='col-credit text-right'>Credit</th>
+                                <th className='col-debit text-right'>Debit</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -2934,27 +2902,46 @@ const DetailedLedger: React.FC = () => {
                                     <td className='col-account'>{entry.accountName}</td>
                                     <td className='col-subaccount'>{entry.subAccount || '-'}</td>
                                     <td className='col-particulars' title={entry.particulars}>{entry.particulars}</td>
-                                    <td className='col-credit text-right'>
-                                      {entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}
-                                    </td>
-                                    <td className='col-debit text-right'>
-                                      {entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}
-                                    </td>
                                     <td className='col-saleqty text-center'>
                                       {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
                                     </td>
                                     <td className='col-purchaseqty text-center'>
                                       {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
                                     </td>
-                                    <td className='col-staff'>{entry.staff}</td>
-                                    <td className='col-payment'>
-                                      {entry.payment_mode && String(entry.payment_mode).trim() ? String(entry.payment_mode).trim() : '-'}
+                                    <td className='col-credit text-right'>
+                                      {entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}
                                     </td>
-                                    <td className='col-user'>{entry.user}</td>
-                                    <td className='col-entrytime'>{format(new Date(entry.entryTime), 'dd/MM/yyyy HH:mm')}</td>
+                                    <td className='col-debit text-right'>
+                                      {entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}
+                                    </td>
                                   </tr>
                                 );
                               })}
+                              {isLastPage && (
+                                <>
+                                  <tr className='bg-gray-200 font-bold'>
+                                    <td colSpan={6} className='text-right' style={{ padding: '4px' }}>TOTAL:</td>
+                                    <td className='text-center' style={{ padding: '4px' }}>
+                                      {printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}
+                                    </td>
+                                    <td className='text-center' style={{ padding: '4px' }}>
+                                      {printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}
+                                    </td>
+                                    <td className='text-right font-bold' style={{ padding: '4px' }}>
+                                      ₹{printTotals.totalCredit.toLocaleString()}
+                                    </td>
+                                    <td className='text-right font-bold' style={{ padding: '4px' }}>
+                                      ₹{printTotals.totalDebit.toLocaleString()}
+                                    </td>
+                                  </tr>
+                                  <tr className='bg-gray-300'>
+                                    <td colSpan={8} className='text-right font-bold' style={{ padding: '4px' }}>BALANCE:</td>
+                                    <td colSpan={2} className='text-center font-bold' style={{ padding: '4px', color: printTotals.balance >= 0 ? '#059669' : '#dc2626' }}>
+                                      ₹{Math.abs(printTotals.balance).toLocaleString()} {printTotals.balance >= 0 ? 'CR' : 'DR'}
+                                    </td>
+                                  </tr>
+                                </>
+                              )}
                             </tbody>
                           </table>
                         ) : (
@@ -2970,27 +2957,46 @@ const DetailedLedger: React.FC = () => {
                                     <td className='col-account'>{entry.accountName}</td>
                                     <td className='col-subaccount'>{entry.subAccount || '-'}</td>
                                     <td className='col-particulars' title={entry.particulars}>{entry.particulars}</td>
-                                    <td className='col-credit text-right'>
-                                      {entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}
-                                    </td>
-                                    <td className='col-debit text-right'>
-                                      {entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}
-                                    </td>
                                     <td className='col-saleqty text-center'>
                                       {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
                                     </td>
                                     <td className='col-purchaseqty text-center'>
                                       {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
                                     </td>
-                                    <td className='col-staff'>{entry.staff}</td>
-                                    <td className='col-payment'>
-                                      {entry.payment_mode && String(entry.payment_mode).trim() ? String(entry.payment_mode).trim() : '-'}
+                                    <td className='col-credit text-right'>
+                                      {entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}
                                     </td>
-                                    <td className='col-user'>{entry.user}</td>
-                                    <td className='col-entrytime'>{format(new Date(entry.entryTime), 'dd/MM/yyyy HH:mm')}</td>
+                                    <td className='col-debit text-right'>
+                                      {entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}
+                                    </td>
                                   </tr>
                                 );
                               })}
+                              {isLastPage && (
+                                <>
+                                  <tr className='bg-gray-200 font-bold'>
+                                    <td colSpan={6} className='text-right' style={{ padding: '4px' }}>TOTAL:</td>
+                                    <td className='text-center' style={{ padding: '4px' }}>
+                                      {printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}
+                                    </td>
+                                    <td className='text-center' style={{ padding: '4px' }}>
+                                      {printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}
+                                    </td>
+                                    <td className='text-right font-bold' style={{ padding: '4px' }}>
+                                      ₹{printTotals.totalCredit.toLocaleString()}
+                                    </td>
+                                    <td className='text-right font-bold' style={{ padding: '4px' }}>
+                                      ₹{printTotals.totalDebit.toLocaleString()}
+                                    </td>
+                                  </tr>
+                                  <tr className='bg-gray-300'>
+                                    <td colSpan={8} className='text-right font-bold' style={{ padding: '4px' }}>BALANCE:</td>
+                                    <td colSpan={2} className='text-center font-bold' style={{ padding: '4px', color: printTotals.balance >= 0 ? '#059669' : '#dc2626' }}>
+                                      ₹{Math.abs(printTotals.balance).toLocaleString()} {printTotals.balance >= 0 ? 'CR' : 'DR'}
+                                    </td>
+                                  </tr>
+                                </>
+                              )}
                             </tbody>
                           </table>
                         )}

@@ -30,7 +30,9 @@ interface ExportOptions {
     | 'bankguarantees'
     | 'drivers'
     | 'dailyreport'
-    | 'ledgersummary';
+    | 'ledgersummary'
+    | 'editedrecords'
+    | 'deletedrecords';
   dateRange: 'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | 'custom';
   fromDate: string;
   toDate: string;
@@ -69,7 +71,6 @@ const ExportExcel: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
-  const [exportMode, setExportMode] = useState<'normal' | 'edited' | 'deleted'>('normal');
 
   useEffect(() => {
     loadDropdownData();
@@ -187,65 +188,6 @@ const ExportExcel: React.FC = () => {
   };
 
   const getDataForExport = async () => {
-    // Handle edited and deleted records export
-    if (exportMode === 'edited') {
-      const editedRecords = await supabaseDB.getEditAuditLog();
-      const formattedData = editedRecords.map((log: any, idx: number) => {
-        const oldObj = log.old_values ? (typeof log.old_values === 'string' ? JSON.parse(log.old_values) : log.old_values) : {};
-        const newObj = log.new_values ? (typeof log.new_values === 'string' ? JSON.parse(log.new_values) : log.new_values) : {};
-        return {
-          'S.No': idx + 1,
-          'Entry ID': log.cash_book_id || log.id || '',
-          'Action': log.action || 'EDIT',
-          'Date (Old)': oldObj.c_date ? format(new Date(oldObj.c_date), 'dd/MM/yyyy') : '',
-          'Company (Old)': oldObj.company_name || '',
-          'Account (Old)': oldObj.acc_name || '',
-          'Sub Account (Old)': oldObj.sub_acc_name || '',
-          'Particulars (Old)': oldObj.particulars || '',
-          'Credit (Old)': oldObj.credit || 0,
-          'Debit (Old)': oldObj.debit || 0,
-          'Staff (Old)': oldObj.staff || '',
-          'User (Old)': oldObj.users || '',
-          'Date (New)': newObj.c_date ? format(new Date(newObj.c_date), 'dd/MM/yyyy') : '',
-          'Company (New)': newObj.company_name || '',
-          'Account (New)': newObj.acc_name || '',
-          'Sub Account (New)': newObj.sub_acc_name || '',
-          'Particulars (New)': newObj.particulars || '',
-          'Credit (New)': newObj.credit || 0,
-          'Debit (New)': newObj.debit || 0,
-          'Staff (New)': newObj.staff || '',
-          'User (New)': newObj.users || '',
-          'Edited By': log.edited_by || '',
-          'Edited At': log.edited_at ? format(new Date(log.edited_at), 'dd/MM/yyyy HH:mm') : '',
-        };
-      });
-      return formattedData;
-    }
-
-    if (exportMode === 'deleted') {
-      const deletedRecords = await supabaseDB.getDeletedCashBook();
-      const formattedData = deletedRecords.map((record: any, idx: number) => ({
-        'S.No': idx + 1,
-        'Entry ID': record.id || '',
-        'S.No (Original)': record.sno || '',
-        'Date': record.c_date ? format(new Date(record.c_date), 'dd/MM/yyyy') : '',
-        'Company': record.company_name || '',
-        'Main Account': record.acc_name || '',
-        'Sub Account': record.sub_acc_name || '',
-        'Particulars': record.particulars || '',
-        'Credit': record.credit || 0,
-        'Debit': record.debit || 0,
-        'Staff': record.staff || '',
-        'User': record.users || '',
-        'Payment Mode': record.payment_mode || '',
-        'Sale Quantity': record.sale_qty || 0,
-        'Purchase Quantity': record.purchase_qty || 0,
-        'Deleted By': record.deleted_by || record.users || record.staff || 'Unknown',
-        'Deleted At': record.deleted_at ? format(new Date(record.deleted_at), 'dd/MM/yyyy HH:mm') : '',
-      }));
-      return formattedData;
-    }
-
     const dateRange = getDateRange();
 
     switch (exportOptions.reportType) {
@@ -309,6 +251,62 @@ const ExportExcel: React.FC = () => {
         const driverData = await supabaseDB.getDrivers();
         return formatDataForExcel(driverData, 'drivers');
 
+      case 'editedrecords':
+        const editedRecords = await supabaseDB.getEditAuditLog();
+        const formattedEditedData = editedRecords.map((log: any, idx: number) => {
+          const oldObj = log.old_values ? (typeof log.old_values === 'string' ? JSON.parse(log.old_values) : log.old_values) : {};
+          const newObj = log.new_values ? (typeof log.new_values === 'string' ? JSON.parse(log.new_values) : log.new_values) : {};
+          return {
+            'S.No': idx + 1,
+            'Entry ID': log.cash_book_id || log.id || '',
+            'Action': log.action || 'EDIT',
+            'Date (Old)': oldObj.c_date ? format(new Date(oldObj.c_date), 'dd/MM/yyyy') : '',
+            'Company (Old)': oldObj.company_name || '',
+            'Account (Old)': oldObj.acc_name || '',
+            'Sub Account (Old)': oldObj.sub_acc_name || '',
+            'Particulars (Old)': oldObj.particulars || '',
+            'Credit (Old)': oldObj.credit || 0,
+            'Debit (Old)': oldObj.debit || 0,
+            'Staff (Old)': oldObj.staff || '',
+            'User (Old)': oldObj.users || '',
+            'Date (New)': newObj.c_date ? format(new Date(newObj.c_date), 'dd/MM/yyyy') : '',
+            'Company (New)': newObj.company_name || '',
+            'Account (New)': newObj.acc_name || '',
+            'Sub Account (New)': newObj.sub_acc_name || '',
+            'Particulars (New)': newObj.particulars || '',
+            'Credit (New)': newObj.credit || 0,
+            'Debit (New)': newObj.debit || 0,
+            'Staff (New)': newObj.staff || '',
+            'User (New)': newObj.users || '',
+            'Edited By': log.edited_by || '',
+            'Edited At': log.edited_at ? format(new Date(log.edited_at), 'dd/MM/yyyy HH:mm') : '',
+          };
+        });
+        return formattedEditedData;
+
+      case 'deletedrecords':
+        const deletedRecords = await supabaseDB.getDeletedCashBook();
+        const formattedDeletedData = deletedRecords.map((record: any, idx: number) => ({
+          'S.No': idx + 1,
+          'Entry ID': record.id || '',
+          'S.No (Original)': record.sno || '',
+          'Date': record.c_date ? format(new Date(record.c_date), 'dd/MM/yyyy') : '',
+          'Company': record.company_name || '',
+          'Main Account': record.acc_name || '',
+          'Sub Account': record.sub_acc_name || '',
+          'Particulars': record.particulars || '',
+          'Credit': record.credit || 0,
+          'Debit': record.debit || 0,
+          'Staff': record.staff || '',
+          'User': record.users || '',
+          'Payment Mode': record.payment_mode || '',
+          'Sale Quantity': record.sale_qty || 0,
+          'Purchase Quantity': record.purchase_qty || 0,
+          'Deleted By': record.deleted_by || record.users || record.staff || 'Unknown',
+          'Deleted At': record.deleted_at ? format(new Date(record.deleted_at), 'dd/MM/yyyy HH:mm') : '',
+        }));
+        return formattedDeletedData;
+
       default:
         return [];
     }
@@ -353,9 +351,9 @@ const ExportExcel: React.FC = () => {
       }
       const dateRange = getDateRange();
       let filename = '';
-      if (exportMode === 'edited') {
+      if (exportOptions.reportType === 'editedrecords') {
         filename = `edited-records-${format(new Date(), 'yyyy-MM-dd')}`;
-      } else if (exportMode === 'deleted') {
+      } else if (exportOptions.reportType === 'deletedrecords') {
         filename = `deleted-records-${format(new Date(), 'yyyy-MM-dd')}`;
       } else {
         filename = `${exportOptions.reportType}-${dateRange.from}-to-${dateRange.to}`;
@@ -508,6 +506,8 @@ const ExportExcel: React.FC = () => {
     { value: 'drivers', label: 'Drivers', icon: undefined },
     { value: 'dailyreport', label: 'Daily Report', icon: undefined },
     { value: 'ledgersummary', label: 'Ledger Summary', icon: undefined },
+    { value: 'editedrecords', label: 'Edited Records', icon: undefined },
+    { value: 'deletedrecords', label: 'Deleted Records', icon: undefined },
   ];
 
   const dateRangeOptions = [
@@ -659,52 +659,12 @@ const ExportExcel: React.FC = () => {
           </div>
         </div>
 
-        {/* Special Export Buttons */}
-        <div className='flex flex-col md:flex-row gap-4 items-center'>
-          <Button
-            variant={exportMode === 'edited' ? 'default' : 'secondary'}
-            onClick={() => {
-              setExportMode('edited');
-              toast.success('Edited records mode activated. Click Export to export all edited records.');
-            }}
-            disabled={loading}
-            className='flex-1'
-          >
-            {exportMode === 'edited' ? '✓ Edited Records Mode' : 'Load Edited Records'}
-          </Button>
-          <Button
-            variant={exportMode === 'deleted' ? 'default' : 'secondary'}
-            onClick={() => {
-              setExportMode('deleted');
-              toast.success('Deleted records mode activated. Click Export to export all deleted records.');
-            }}
-            disabled={loading}
-            className='flex-1'
-          >
-            {exportMode === 'deleted' ? '✓ Deleted Records Mode' : 'Load Deleted Records'}
-          </Button>
-          <Button
-            variant='secondary'
-            onClick={() => {
-              setExportMode('normal');
-              toast.success('Normal export mode activated.');
-            }}
-            disabled={loading}
-          >
-            Normal Export
-          </Button>
-        </div>
-
         {/* Action Buttons */}
         <div className='flex flex-col md:flex-row gap-4 items-center'>
           <Button onClick={handleExport} disabled={loading} className='flex-1'>
             {loading
               ? 'Exporting...'
-              : exportMode === 'edited'
-                ? `Export Edited Records to ${exportOptions.format.toUpperCase()}`
-                : exportMode === 'deleted'
-                  ? `Export Deleted Records to ${exportOptions.format.toUpperCase()}`
-                  : `Export to ${exportOptions.format.toUpperCase()}`}
+              : `Export to ${exportOptions.format.toUpperCase()}`}
           </Button>
           <Button
             variant='secondary'
