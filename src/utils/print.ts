@@ -793,9 +793,12 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     `;
   }
 
-  // Company-wise closing balance for the filtered data
+  // Company-wise closing balance for the filtered data - only show when a specific company is selected
   let companySummaryHTML = '';
-  if (data.length > 0) {
+  // Check if subtitle indicates "All Companies" - if so, don't show company-wise closing balance
+  const isAllCompanies = !subtitle || subtitle.toLowerCase().includes('all companies') || subtitle === '';
+  
+  if (data.length > 0 && !isAllCompanies) {
     const companyTotals: Record<string, { credit: number; debit: number }> = {};
     data.forEach(row => {
       const name = String(row.companyName || row.company_name || '').trim();
