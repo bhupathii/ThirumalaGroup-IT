@@ -457,25 +457,25 @@ const EditedRecords = () => {
                   <React.Fragment key={log.id}>
                     {/* Before Edit Row (no background color) */}
                     <tr className='border-b border-gray-100 hover:bg-gray-50'>
-                      <td className='w-12 px-1 py-1 text-center text-xs' rowSpan={1}>
+                      <td className='w-12 px-1 py-1 text-center text-sm font-bold' rowSpan={1}>
                         {(page - 1) * PAGE_SIZE + idx + 1}
                       </td>
-                      <td className='w-16 px-1 py-1 font-semibold text-red-600 text-xs'>
+                      <td className='w-16 px-1 py-1 font-semibold text-red-600 text-sm font-bold'>
                         {log.action === 'SHOWING_RECENT_ENTRIES' ? 'Entry' : 'Before'}
                       </td>
                       {FIELDS.map(f => (
                         <td
                           key={f.key + '-before'}
-                          className='w-20 px-1 py-1 text-xs truncate'
+                          className='w-20 px-1 py-1 text-sm truncate font-bold'
                           title={getFieldDisplay(f.key, oldObj[f.key])}
                         >
                           {getFieldDisplay(f.key, oldObj[f.key])}
                         </td>
                       ))}
-                      <td className='w-20 px-1 py-1 text-xs truncate' title={userMap[log.edited_by] || log.edited_by}>
+                      <td className='w-20 px-1 py-1 text-sm truncate font-bold' title={userMap[log.edited_by] || log.edited_by}>
                         {userMap[log.edited_by] || log.edited_by}
                       </td>
-                      <td className='w-20 px-1 py-1 text-xs'>
+                      <td className='w-20 px-1 py-1 text-sm font-bold'>
                         {log.edited_at &&
                         !isNaN(new Date(log.edited_at).getTime())
                           ? format(new Date(log.edited_at), 'dd/MM/yyyy HH:mm')
@@ -484,23 +484,23 @@ const EditedRecords = () => {
                     </tr>
                     {/* After Edit Row */}
                     <tr className='border-b border-gray-100 hover:bg-gray-50'>
-                      <td className='w-12 px-1 py-1 text-center text-xs'></td>
-                      <td className='w-16 px-1 py-1 font-semibold text-green-700 text-xs'>
+                      <td className='w-12 px-1 py-1 text-center text-sm'></td>
+                      <td className='w-16 px-1 py-1 font-semibold text-green-700 text-sm font-bold'>
                         {log.action === 'SHOWING_RECENT_ENTRIES' ? 'Details' : 'After'}
                       </td>
                       {FIELDS.map(f => (
                         <td
                           key={f.key + '-after'}
-                          className={`w-20 px-1 py-1 text-xs truncate ${changed[f.key] ? highlightClass : ''}`}
+                          className={`w-20 px-1 py-1 text-sm truncate font-bold ${changed[f.key] ? highlightClass : ''}`}
                           title={getFieldDisplay(f.key, newObj[f.key])}
                         >
                           {getFieldDisplay(f.key, newObj[f.key])}
                         </td>
                       ))}
-                      <td className='w-20 px-1 py-1 text-xs truncate' title={userMap[log.edited_by] || log.edited_by}>
+                      <td className='w-20 px-1 py-1 text-sm truncate font-bold' title={userMap[log.edited_by] || log.edited_by}>
                         {userMap[log.edited_by] || log.edited_by}
                       </td>
-                      <td className='w-20 px-1 py-1 text-xs'>
+                      <td className='w-20 px-1 py-1 text-sm font-bold'>
                         {log.edited_at &&
                         !isNaN(new Date(log.edited_at).getTime())
                           ? format(new Date(log.edited_at), 'dd/MM/yyyy HH:mm')

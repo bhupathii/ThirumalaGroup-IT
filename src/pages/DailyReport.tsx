@@ -695,30 +695,30 @@ const DailyReport: React.FC = () => {
                       key={entry.sno}
                       className={idx % 2 === 0 ? 'bg-white' : 'bg-blue-50'}
                     >
-                      <td className='px-3 py-2'>{idx + 1}</td>
-                      <td className='px-3 py-2'>
+                      <td className='px-3 py-2 font-bold text-base'>{idx + 1}</td>
+                      <td className='px-3 py-2 font-bold text-base'>
                         {entry.c_date ? format(new Date(entry.c_date), 'dd/MM/yyyy') : ''}
                       </td>
-                      <td className='px-3 py-2'>{entry.company_name}</td>
-                      <td className='px-3 py-2'>{entry.acc_name}</td>
-                      <td className='px-3 py-2'>{entry.sub_acc_name || '-'}</td>
+                      <td className='px-3 py-2 font-bold text-base'>{entry.company_name}</td>
+                      <td className='px-3 py-2 font-bold text-base'>{entry.acc_name}</td>
+                      <td className='px-3 py-2 font-bold text-base'>{entry.sub_acc_name || '-'}</td>
                       <td
-                        className='px-3 py-2 max-w-xs truncate'
+                        className='px-3 py-2 max-w-xs truncate font-bold text-base'
                         title={entry.particulars}
                       >
                         {entry.particulars}
                       </td>
-                      <td className='px-3 py-2 text-right text-green-700'>
+                      <td className='px-3 py-2 text-right text-green-700 font-bold text-base'>
                         {entry.credit > 0
                           ? `${entry.credit.toLocaleString()}`
                           : '-'}
                       </td>
-                      <td className='px-3 py-2 text-right text-red-700'>
+                      <td className='px-3 py-2 text-right text-red-700 font-bold text-base'>
                         {entry.debit > 0
                           ? `${entry.debit.toLocaleString()}`
                           : '-'}
                       </td>
-                      <td className='px-3 py-2'>{entry.staff}</td>
+                      <td className='px-3 py-2 font-bold text-base'>{entry.staff}</td>
                       <td className='px-3 py-2'>
                         {entry.approved ? (
                           <div className='text-xs'>

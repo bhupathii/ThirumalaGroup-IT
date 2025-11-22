@@ -192,13 +192,14 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
             placeholder={isOpen ? searchPlaceholder : placeholder}
             disabled={disabled}
             required={required}
-            className={`w-full pr-20 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed ${
-              size === 'sm' ? 'px-2 py-1 text-xs' : size === 'lg' ? 'px-4 py-3 text-base' : 'px-3 py-2 text-sm'
-            } ${className.includes('staff-field') ? 'font-bold uppercase' : ''}`}
+            className={`w-full pr-20 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed font-bold ${
+              size === 'sm' ? 'px-2 py-1 text-sm' : size === 'lg' ? 'px-4 py-3 text-lg' : 'px-3 py-2 text-base'
+            } ${className.includes('staff-field') ? 'uppercase' : ''}`}
             style={{ 
               fontFamily: 'Times New Roman', 
-              fontSize: '12px',
-              ...(className.includes('staff-field') ? { fontWeight: 'bold', textTransform: 'uppercase' } : {})
+              fontSize: '14px',
+              fontWeight: 'bold',
+              ...(className.includes('staff-field') ? { textTransform: 'uppercase' } : {})
             }}
           />
           

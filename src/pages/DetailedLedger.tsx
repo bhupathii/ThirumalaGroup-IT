@@ -822,31 +822,31 @@ const DetailedLedger: React.FC = () => {
     entriesToPrint.forEach((entry, index) => {
       allRows += `
         <tr>
-            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${index + 1}</td>
-            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${format(new Date(entry.date), 'dd/MM/yyyy')}</td>
-            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">${entry.companyName}</td>
-            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${entry.accountName}</td>
-            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${entry.subAccount || '-'}</td>
-            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; word-wrap: break-word; line-height: 1.1; font-weight: bold;">${entry.particulars}</td>
-            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}</td>
-            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}</td>
-            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}</td>
-            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}</td>
+            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 11px; line-height: 1.1; font-weight: bold;">${index + 1}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 11px; line-height: 1.1; font-weight: bold;">${format(new Date(entry.date), 'dd/MM/yyyy')}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 11px; font-weight: bold; line-height: 1.1;">${entry.companyName}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 11px; line-height: 1.1; font-weight: bold;">${entry.accountName}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 11px; line-height: 1.1; font-weight: bold;">${entry.subAccount || '-'}</td>
+            <td style="padding: 2px 1px; border: 1px solid #000; font-size: 11px; word-wrap: break-word; line-height: 1.1; font-weight: bold;">${entry.particulars}</td>
+            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 11px; line-height: 1.1; font-weight: bold;">${entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}</td>
+            <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 11px; line-height: 1.1; font-weight: bold;">${entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}</td>
+            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 11px; line-height: 1.1; font-weight: bold;">${entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}</td>
+            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 11px; line-height: 1.1; font-weight: bold;">${entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}</td>
         </tr>
       `;
     });
 
     const totalsRow = `
       <tr style="background-color: #f0f0f0; font-weight: bold;">
-          <td colspan="6" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">TOTAL:</td>
-          <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}</td>
-          <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1; font-weight: bold;">${printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}</td>
-          <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">${printTotals.totalCredit.toLocaleString()}</td>
-          <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">${printTotals.totalDebit.toLocaleString()}</td>
+          <td colspan="6" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 11px; line-height: 1.1; font-weight: bold;">TOTAL:</td>
+          <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 11px; line-height: 1.1; font-weight: bold;">${printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}</td>
+          <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 11px; line-height: 1.1; font-weight: bold;">${printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}</td>
+          <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 11px; font-weight: bold; line-height: 1.1;">${printTotals.totalCredit.toLocaleString()}</td>
+          <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 11px; font-weight: bold; line-height: 1.1;">${printTotals.totalDebit.toLocaleString()}</td>
         </tr>
         <tr style="background-color: #e8e8e8;">
-          <td colspan="8" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">BALANCE:</td>
-          <td colspan="2" style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1; color: ${printTotals.balance >= 0 ? '#059669' : '#dc2626'};">
+          <td colspan="8" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 11px; font-weight: bold; line-height: 1.1;">BALANCE:</td>
+          <td colspan="2" style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 11px; font-weight: bold; line-height: 1.1; color: ${printTotals.balance >= 0 ? '#059669' : '#dc2626'};">
 ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? 'CR' : 'DR'}
         </td>
       </tr>
@@ -882,16 +882,16 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
         <table class="no-repeat-header" style="margin: 0; padding: 0; border-top: 1px solid #000;">
           <thead>
             <tr>
-              <th style="width: 3.5%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">S.No</th>
-              <th style="width: 7%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Date</th>
-              <th style="width: 11%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Company</th>
-              <th style="width: 9%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Account</th>
-              <th style="width: 9%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Sub Account</th>
-              <th style="width: 20%; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Particulars</th>
-              <th style="width: 7.5%; text-align: center; padding: 2px 1px; font-size: 9px; line-height: 1.1; font-weight: bold;">Purchase Qty</th>
-              <th style="width: 7.5%; text-align: center; padding: 2px 1px; font-size: 9px; line-height: 1.1; font-weight: bold;">Sale Qty</th>
-              <th style="width: 8.5%; text-align: right; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Credit</th>
-              <th style="width: 8.5%; text-align: right; padding: 2px 1px; font-size: 9px; line-height: 1.1;">Debit</th>
+              <th style="width: 3.5%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">S.No</th>
+              <th style="width: 7%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Date</th>
+              <th style="width: 11%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Company</th>
+              <th style="width: 9%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Account</th>
+              <th style="width: 9%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Sub Account</th>
+              <th style="width: 20%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Particulars</th>
+              <th style="width: 7.5%; text-align: center; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Purchase Qty</th>
+              <th style="width: 7.5%; text-align: center; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Sale Qty</th>
+              <th style="width: 8.5%; text-align: right; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Credit</th>
+              <th style="width: 8.5%; text-align: right; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Debit</th>
             </tr>
           </thead>
           <tbody>
@@ -983,7 +983,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
               width: 100%;
               max-width: 100%;
               border-collapse: collapse;
-              font-size: 9px;
+              font-size: 11px;
               table-layout: fixed;
               margin: 0;
               padding: 0;
@@ -1001,6 +1001,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
               background-color: #e5e5e5;
               font-weight: bold;
               text-align: left;
+              font-size: 11px;
             }
             .no-repeat-header thead {
               display: table-header-group;
@@ -1016,9 +1017,10 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
             }
             .footer {
               text-align: center;
-              font-size: 9px;
+              font-size: 11px;
               margin-top: 5px;
               color: #666;
+              font-weight: bold;
             }
             @media print {
               body { 
@@ -1097,24 +1099,9 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
       return;
     }
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Please allow popups to print');
-      return;
-    }
-
-    const printContent = generatePrintContent(entriesToPrint, false);
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.focus();
-
-    // Wait for content to load then print
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 500);
-
-    toast.success('Print dialog opened');
+    // Show print preview modal (background page stays visible)
+    setShowPrintPreview(true);
+    setPrintAllEntries(false);
   };
 
   const printAll = () => {
@@ -1124,26 +1111,9 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
       return;
     }
 
-    console.log('Printing all records:', entriesToPrint.length);
-    
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Please allow popups to print');
-      return;
-    }
-
-    const printContent = generatePrintContent(entriesToPrint, true);
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.focus();
-
-    // Wait for content to load then print
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 500);
-
-    toast.success(`Print dialog opened for ${entriesToPrint.length} records`);
+    // Show print preview modal (background page stays visible)
+    setShowPrintPreview(true);
+    setPrintAllEntries(true);
   };
 
   const exportToExcel = () => {
@@ -1633,48 +1603,48 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                       index % 2 === 0 ? 'bg-white' : 'bg-gray-25'
                     }`}
                   >
-                    <td className='px-0.5 py-0.5 font-medium text-xs'>{index + 1}</td>
-                    <td className='px-0.5 py-0.5 text-xs'>
+                    <td className='px-0.5 py-0.5 font-medium text-sm font-bold'>{index + 1}</td>
+                    <td className='px-0.5 py-0.5 text-sm font-bold'>
                       {format(new Date(entry.date), 'dd/MM/yyyy')}
                     </td>
-                    <td className='px-0.5 py-0.5 font-medium text-blue-600 text-xs truncate' title={entry.companyName}>
+                    <td className='px-0.5 py-0.5 font-medium text-blue-600 text-sm truncate font-bold' title={entry.companyName}>
                       {entry.companyName}
                     </td>
-                    <td className='px-0.5 py-0.5 text-xs truncate' title={entry.accountName}>
+                    <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.accountName}>
                       {entry.accountName}
                     </td>
-                    <td className='px-0.5 py-0.5 text-xs truncate' title={entry.subAccount}>
+                    <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.subAccount}>
                       {entry.subAccount || '-'}
                     </td>
-                    <td className='px-0.5 py-0.5 text-xs truncate' title={entry.particulars}>
+                    <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.particulars}>
                       {entry.particulars}
                     </td>
-                    <td className='px-0.5 py-0.5 text-right font-medium text-green-600 text-xs'>
+                    <td className='px-0.5 py-0.5 text-right font-medium text-green-600 text-sm font-bold'>
                       {entry.credit > 0
                         ? `${entry.credit.toLocaleString()}`
                         : '-'}
                     </td>
-                    <td className='px-0.5 py-0.5 text-right font-medium text-red-600 text-xs'>
+                    <td className='px-0.5 py-0.5 text-right font-medium text-red-600 text-sm font-bold'>
                       {entry.debit > 0
                         ? `${entry.debit.toLocaleString()}`
                         : '-'}
                     </td>
-                    <td className='px-0.5 py-0.5 text-center text-xs'>
+                    <td className='px-0.5 py-0.5 text-center text-sm font-bold'>
                       {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
                     </td>
-                    <td className='px-0.5 py-0.5 text-center text-xs'>
+                    <td className='px-0.5 py-0.5 text-center text-sm font-bold'>
                       {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
                     </td>
-                    <td className='px-0.5 py-0.5 text-xs truncate' title={entry.staff}>
+                    <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.staff}>
                       {entry.staff}
                     </td>
-                    <td className='px-0.5 py-0.5 text-xs truncate' title={entry.payment_mode || 'No payment mode'}>
+                    <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.payment_mode || 'No payment mode'}>
                       {entry.payment_mode && String(entry.payment_mode).trim() ? String(entry.payment_mode).trim() : '-'}
                     </td>
-                    <td className='px-0.5 py-0.5 text-xs truncate' title={entry.user}>
+                    <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.user}>
                       {entry.user}
                     </td>
-                    <td className='px-0.5 py-0.5 text-xs'>
+                    <td className='px-0.5 py-0.5 text-sm font-bold'>
                       {format(new Date(entry.entryTime), 'dd/MM/yyyy HH:mm:ss')}
                     </td>
                     
@@ -1789,7 +1759,33 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                   Print Preview - Detailed Ledger
                 </h3>
                 <div className='flex items-center gap-2'>
-                  <Button size='sm' onClick={() => window.print()}>
+                  <Button 
+                    size='sm' 
+                    onClick={() => {
+                      const entriesToPrint = printAllEntries ? ledgerEntries : filteredEntries;
+                      if (entriesToPrint.length === 0) {
+                        toast.error('No entries to print');
+                        return;
+                      }
+
+                      const printWindow = window.open('', '_blank');
+                      if (!printWindow) {
+                        toast.error('Please allow popups to print');
+                        return;
+                      }
+
+                      const printContent = generatePrintContent(entriesToPrint, printAllEntries);
+                      printWindow.document.write(printContent);
+                      printWindow.document.close();
+                      printWindow.focus();
+
+                      // Wait for content to load then print
+                      setTimeout(() => {
+                        printWindow.print();
+                        // Don't close immediately, let user see the print dialog
+                      }, 500);
+                    }}
+                  >
                     Print
                   </Button>
                   <Button
@@ -1833,51 +1829,16 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                     overflow: hidden !important;
                     position: relative !important;
                   }
-                  /* SIMPLIFIED APPROACH: Hide everything, then show print-content and its ancestors */
-                  
-                  /* Hide body's direct children except the print preview modal */
-                  body > *:not(.fixed.inset-0) {
-                    display: none !important;
-                  }
-                  
-                  /* Hide root's children except the print preview modal */
+                  /* Hide everything on the page except the modal */
+                  body > *:not(.fixed.inset-0),
                   #root > *:not(.fixed.inset-0),
                   [id^="root"] > *:not(.fixed.inset-0) {
                     display: none !important;
+                    visibility: hidden !important;
                   }
                   
-                  /* Show the print preview modal and ALL its contents */
+                  /* Make modal overlay full page for printing */
                   .fixed.inset-0 {
-                    display: block !important;
-                    visibility: visible !important;
-                    position: relative !important;
-                    top: auto !important;
-                    left: auto !important;
-                    right: auto !important;
-                    bottom: auto !important;
-                    width: 100% !important;
-                    height: auto !important;
-                    min-height: 100% !important;
-                    background: white !important;
-                    padding: 0 !important;
-                    margin: 0 !important;
-                    z-index: auto !important;
-                    overflow: visible !important;
-                  }
-                  
-                  /* Make ALL descendants of modal visible */
-                  .fixed.inset-0,
-                  .fixed.inset-0 *,
-                  .fixed.inset-0 * *,
-                  .fixed.inset-0 * * *,
-                  .fixed.inset-0 * * * *,
-                  .fixed.inset-0 * * * * * {
-                    visibility: visible !important;
-                  }
-                  
-                  /* Ensure modal has proper display */
-                  .fixed.inset-0 {
-                    display: block !important;
                     position: fixed !important;
                     top: 0 !important;
                     left: 0 !important;
@@ -1889,9 +1850,11 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                     padding: 0 !important;
                     margin: 0 !important;
                     z-index: 999999 !important;
+                    display: block !important;
+                    overflow: visible !important;
                   }
                   
-                  /* Show all containers inside modal - be very explicit */
+                  /* Show all containers inside modal */
                   .fixed.inset-0 > div {
                     display: block !important;
                     visibility: visible !important;
@@ -1901,34 +1864,37 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                     padding: 0 !important;
                     margin: 0 !important;
                   }
-                  .fixed.inset-0 .bg-white,
-                  .fixed.inset-0 .bg-white.rounded-lg,
-                  .fixed.inset-0 [class*="bg-white"] {
-                    display: block !important;
-                    visibility: visible !important;
-                    background: white !important;
+                  
+                  .fixed.inset-0 .bg-white {
+                    position: static !important;
                     width: 100% !important;
                     height: auto !important;
-                    padding: 0 !important;
                     margin: 0 !important;
+                    padding: 0 !important;
                     border-radius: 0 !important;
                     box-shadow: none !important;
-                  }
-                  .fixed.inset-0 .p-6,
-                  .fixed.inset-0 [class*="p-6"] {
+                    max-width: 100% !important;
+                    max-height: none !important;
+                    overflow: visible !important;
+                    background: white !important;
                     display: block !important;
                     visibility: visible !important;
+                  }
+                  
+                  /* Remove padding from inner div */
+                  .fixed.inset-0 .p-6 {
                     padding: 0 !important;
                     margin: 0 !important;
-                    width: 100% !important;
-                    height: auto !important;
+                    display: block !important;
+                    visibility: visible !important;
                   }
                   
                   /* Hide buttons and UI elements */
                   .no-print,
                   button,
                   .flex.items-center,
-                  .flex.items-center.justify-between {
+                  .flex.items-center.justify-between,
+                  h3 {
                     display: none !important;
                     visibility: hidden !important;
                   }
@@ -1946,7 +1912,41 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                     font-family: Arial, sans-serif !important;
                   }
                   
+                  /* Ensure all print-content children are visible */
                   .print-content * {
+                    visibility: visible !important;
+                  }
+                  
+                  /* Ensure tables are visible */
+                  .print-content table {
+                    display: table !important;
+                    visibility: visible !important;
+                    width: 100% !important;
+                  }
+                  
+                  .print-content thead {
+                    display: table-header-group !important;
+                    visibility: visible !important;
+                  }
+                  
+                  .print-content tbody {
+                    display: table-row-group !important;
+                    visibility: visible !important;
+                  }
+                  
+                  .print-content tr {
+                    display: table-row !important;
+                    visibility: visible !important;
+                  }
+                  
+                  .print-content td,
+                  .print-content th {
+                    display: table-cell !important;
+                    visibility: visible !important;
+                  }
+                  
+                  .print-content div {
+                    display: block !important;
                     visibility: visible !important;
                   }
                   
@@ -2373,7 +2373,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                   .print-table {
                     width: 100% !important;
                     max-width: 100% !important;
-                    font-size: 9px !important;
+                    font-size: 11px !important;
                     border-collapse: collapse !important;
                     border-spacing: 0 !important;
                     table-layout: fixed !important;
@@ -2611,9 +2611,13 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                   .print-table th {
                     background-color: #e5e5e5 !important;
                     font-weight: bold !important;
-                    font-size: 9px !important;
+                    font-size: 11px !important;
                     text-align: left !important;
                     position: relative !important;
+                  }
+                  .print-table td {
+                    font-weight: bold !important;
+                    font-size: 11px !important;
                   }
                   .print-table .col-particulars {
                     word-break: break-word !important;
@@ -2732,7 +2736,12 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                   }
                   .print-table {
                     width: 100%;
-                    font-size: 11px;
+                    font-size: 12px;
+                  }
+                  .print-table th,
+                  .print-table td {
+                    font-weight: bold !important;
+                    font-size: 12px !important;
                   }
                   .print-page {
                     margin-bottom: 20px;
@@ -2843,14 +2852,14 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                               <h1 style={{ fontSize: '20px', margin: '0 0 1px 0', paddingTop: '0', fontWeight: 'bold', lineHeight: '1.1' }}>
                                 Thirumala Group
                               </h1>
-                              <h2 style={{ fontSize: '16px', margin: '1px 0', fontWeight: '600', lineHeight: '1.1' }}>
+                              <h2 style={{ fontSize: '18px', margin: '1px 0', fontWeight: 'bold', lineHeight: '1.1' }}>
                                 Detailed Ledger Report {printAllEntries ? '(All Records)' : ''}
                               </h2>
-                              <p style={{ fontSize: '12px', margin: '1px 0', lineHeight: '1.2' }}>
+                              <p style={{ fontSize: '13px', margin: '1px 0', lineHeight: '1.2', fontWeight: 'bold' }}>
                                 {printAllEntries ? 'All Records' : `From ${format(new Date(filters.fromDate), 'dd/MM/yyyy')} to ${format(new Date(filters.toDate), 'dd/MM/yyyy')}`}
                               </p>
                               {!printAllEntries && (
-                                <div style={{ fontSize: '11px', marginTop: '3px' }}>
+                                <div style={{ fontSize: '12px', marginTop: '3px', fontWeight: 'bold' }}>
                                   {filters.companyName && (
                                     <span style={{ marginRight: '15px' }}>
                                       Company: <strong>{filters.companyName}</strong>
@@ -2880,25 +2889,25 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
 
                         {/* Page Header for continuation pages - minimal */}
                         {pageIndex > 0 && (
-                          <div className='print-page-header continuation-header' style={{ marginBottom: '3px', marginTop: '0', paddingTop: '0', fontSize: '9px', textAlign: 'center', color: '#666' }}>
-                            <div style={{ fontWeight: 'bold', fontSize: '11px', marginBottom: '2px' }}>Thirumala Group - Detailed Ledger Report (Continued)</div>
-                            <div style={{ fontSize: '9px' }}>Page {pageIndex + 1} of {totalPages}</div>
+                          <div className='print-page-header continuation-header' style={{ marginBottom: '3px', marginTop: '0', paddingTop: '0', fontSize: '11px', textAlign: 'center', color: '#666', fontWeight: 'bold' }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '2px' }}>Thirumala Group - Detailed Ledger Report (Continued)</div>
+                            <div style={{ fontSize: '11px', fontWeight: 'bold' }}>Page {pageIndex + 1} of {totalPages}</div>
                           </div>
                         )}
                         {pageIndex === 0 ? (
                           <table className='print-table'>
                             <thead>
                               <tr className='bg-gray-100'>
-                                <th className='col-sno text-left'>S.No</th>
-                                <th className='col-date text-left'>Date</th>
-                                <th className='col-company text-left font-bold'>Company</th>
-                                <th className='col-account text-left'>Account</th>
-                                <th className='col-subaccount text-left'>Sub Account</th>
-                                <th className='col-particulars text-left'>Particulars</th>
-                                <th className='col-purchaseqty text-center font-bold'>Purchase Qty</th>
-                                <th className='col-saleqty text-center font-bold'>Sale Qty</th>
-                                <th className='col-credit text-right'>Credit</th>
-                                <th className='col-debit text-right'>Debit</th>
+                                <th className='col-sno text-left font-bold text-sm'>S.No</th>
+                                <th className='col-date text-left font-bold text-sm'>Date</th>
+                                <th className='col-company text-left font-bold text-sm'>Company</th>
+                                <th className='col-account text-left font-bold text-sm'>Account</th>
+                                <th className='col-subaccount text-left font-bold text-sm'>Sub Account</th>
+                                <th className='col-particulars text-left font-bold text-sm'>Particulars</th>
+                                <th className='col-purchaseqty text-center font-bold text-sm'>Purchase Qty</th>
+                                <th className='col-saleqty text-center font-bold text-sm'>Sale Qty</th>
+                                <th className='col-credit text-right font-bold text-sm'>Credit</th>
+                                <th className='col-debit text-right font-bold text-sm'>Debit</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -2906,22 +2915,22 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                                 const globalIndex = startIndex + localIndex;
                                 return (
                                   <tr key={entry.id}>
-                                    <td className='col-sno'>{globalIndex + 1}</td>
-                                    <td className='col-date'>{format(new Date(entry.date), 'dd/MM/yyyy')}</td>
-                                    <td className='col-company font-bold'>{entry.companyName}</td>
-                                    <td className='col-account'>{entry.accountName}</td>
-                                    <td className='col-subaccount'>{entry.subAccount || '-'}</td>
-                                    <td className='col-particulars' title={entry.particulars}>{entry.particulars}</td>
-                                    <td className='col-saleqty text-center'>
-                                      {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
-                                    </td>
-                                    <td className='col-purchaseqty text-center'>
+                                    <td className='col-sno font-bold text-sm'>{globalIndex + 1}</td>
+                                    <td className='col-date font-bold text-sm'>{format(new Date(entry.date), 'dd/MM/yyyy')}</td>
+                                    <td className='col-company font-bold text-sm'>{entry.companyName}</td>
+                                    <td className='col-account font-bold text-sm'>{entry.accountName}</td>
+                                    <td className='col-subaccount font-bold text-sm'>{entry.subAccount || '-'}</td>
+                                    <td className='col-particulars font-bold text-sm' title={entry.particulars}>{entry.particulars}</td>
+                                    <td className='col-purchaseqty text-center font-bold text-sm'>
                                       {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
                                     </td>
-                                    <td className='col-credit text-right'>
+                                    <td className='col-saleqty text-center font-bold text-sm'>
+                                      {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
+                                    </td>
+                                    <td className='col-credit text-right font-bold text-sm'>
                                       {entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}
                                     </td>
-                                    <td className='col-debit text-right'>
+                                    <td className='col-debit text-right font-bold text-sm'>
                                       {entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}
                                     </td>
                                   </tr>
@@ -2930,23 +2939,23 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                               {isLastPage && (
                                 <>
                                   <tr className='bg-gray-200 font-bold'>
-                                    <td colSpan={6} className='text-right' style={{ padding: '4px' }}>TOTAL:</td>
-                                    <td className='text-center' style={{ padding: '4px' }}>
-                                      {printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}
-                                    </td>
-                                    <td className='text-center' style={{ padding: '4px' }}>
+                                    <td colSpan={6} className='text-right font-bold text-sm' style={{ padding: '4px' }}>TOTAL:</td>
+                                    <td className='text-center font-bold text-sm' style={{ padding: '4px' }}>
                                       {printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}
                                     </td>
-                                    <td className='text-right font-bold' style={{ padding: '4px' }}>
+                                    <td className='text-center font-bold text-sm' style={{ padding: '4px' }}>
+                                      {printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}
+                                    </td>
+                                    <td className='text-right font-bold text-sm' style={{ padding: '4px' }}>
 {printTotals.totalCredit.toLocaleString()}
                                     </td>
-                                    <td className='text-right font-bold' style={{ padding: '4px' }}>
+                                    <td className='text-right font-bold text-sm' style={{ padding: '4px' }}>
 {printTotals.totalDebit.toLocaleString()}
                                     </td>
                                   </tr>
                                   <tr className='bg-gray-300'>
-                                    <td colSpan={8} className='text-right font-bold' style={{ padding: '4px' }}>BALANCE:</td>
-                                    <td colSpan={2} className='text-center font-bold' style={{ padding: '4px', color: printTotals.balance >= 0 ? '#059669' : '#dc2626' }}>
+                                    <td colSpan={8} className='text-right font-bold text-sm' style={{ padding: '4px' }}>BALANCE:</td>
+                                    <td colSpan={2} className='text-center font-bold text-sm' style={{ padding: '4px', color: printTotals.balance >= 0 ? '#059669' : '#dc2626' }}>
 {Math.abs(printTotals.balance).toLocaleString()} {printTotals.balance >= 0 ? 'CR' : 'DR'}
                                     </td>
                                   </tr>
@@ -2961,22 +2970,22 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                                 const globalIndex = startIndex + localIndex;
                                 return (
                                   <tr key={entry.id}>
-                                    <td className='col-sno font-bold'>{globalIndex + 1}</td>
-                                    <td className='col-date font-bold'>{format(new Date(entry.date), 'dd/MM/yyyy')}</td>
-                                    <td className='col-company font-bold'>{entry.companyName}</td>
-                                    <td className='col-account font-bold'>{entry.accountName}</td>
-                                    <td className='col-subaccount font-bold'>{entry.subAccount || '-'}</td>
-                                    <td className='col-particulars font-bold' title={entry.particulars}>{entry.particulars}</td>
-                                    <td className='col-purchaseqty text-center font-bold'>
+                                    <td className='col-sno font-bold text-sm'>{globalIndex + 1}</td>
+                                    <td className='col-date font-bold text-sm'>{format(new Date(entry.date), 'dd/MM/yyyy')}</td>
+                                    <td className='col-company font-bold text-sm'>{entry.companyName}</td>
+                                    <td className='col-account font-bold text-sm'>{entry.accountName}</td>
+                                    <td className='col-subaccount font-bold text-sm'>{entry.subAccount || '-'}</td>
+                                    <td className='col-particulars font-bold text-sm' title={entry.particulars}>{entry.particulars}</td>
+                                    <td className='col-purchaseqty text-center font-bold text-sm'>
                                       {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
                                     </td>
-                                    <td className='col-saleqty text-center font-bold'>
+                                    <td className='col-saleqty text-center font-bold text-sm'>
                                       {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
                                     </td>
-                                    <td className='col-credit text-right font-bold'>
+                                    <td className='col-credit text-right font-bold text-sm'>
                                       {entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}
                                     </td>
-                                    <td className='col-debit text-right font-bold'>
+                                    <td className='col-debit text-right font-bold text-sm'>
                                       {entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}
                                     </td>
                                   </tr>
@@ -3011,10 +3020,10 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                           </table>
                         )}
                         {/* Page Footer */}
-                        <div className='print-page-footer' style={{ textAlign: 'center', fontSize: '9px', marginTop: '8px', color: '#666' }}>
+                        <div className='print-page-footer' style={{ textAlign: 'center', fontSize: '11px', marginTop: '8px', color: '#666', fontWeight: 'bold' }}>
                           Page {pageIndex + 1} of {totalPages}
                           {isLastPage && (
-                            <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px solid #ccc' }}>
+                            <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px solid #ccc', fontWeight: 'bold' }}>
                               Generated on {format(new Date(), 'dd/MM/yyyy HH:mm')} by {user?.username} | Total Records: {entriesToPrint.length}
                             </div>
                           )}

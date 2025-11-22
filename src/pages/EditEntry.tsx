@@ -2390,44 +2390,44 @@ const EditEntry: React.FC = () => {
                       }`}
                       onClick={() => setSelectedEntry(entry)}
                     >
-                      <td className='w-12 px-1 py-0 font-medium text-xs'>{index + 1}</td>
-                      <td className='w-16 px-1 py-0 text-xs'>
+                      <td className='w-12 px-1 py-0 font-medium text-sm font-bold'>{index + 1}</td>
+                      <td className='w-16 px-1 py-0 text-sm font-bold'>
                         {format(new Date(entry.c_date), 'dd/MM/yyyy')}
                       </td>
-                      <td className='w-20 px-1 py-1 font-medium text-blue-600 text-xs truncate' title={entry.company_name}>
+                      <td className='w-20 px-1 py-1 font-medium text-blue-600 text-sm truncate font-bold' title={entry.company_name}>
                         {entry.company_name}
                       </td>
                       
-                      <td className='w-20 px-1 py-1 text-xs truncate' title={entry.acc_name}>{entry.acc_name}</td>
-                      <td className='w-20 px-1 py-1 text-xs truncate' title={entry.sub_acc_name}>{entry.sub_acc_name || '-'}</td>
+                      <td className='w-20 px-1 py-1 text-sm truncate font-bold' title={entry.acc_name}>{entry.acc_name}</td>
+                      <td className='w-20 px-1 py-1 text-sm truncate font-bold' title={entry.sub_acc_name}>{entry.sub_acc_name || '-'}</td>
                       <td
-                        className='w-32 px-1 py-1 text-xs truncate'
+                        className='w-32 px-1 py-1 text-sm truncate font-bold'
                         title={entry.particulars}
                       >
                         {entry.particulars}
                       </td>
-                      <td className='w-16 px-1 py-1 text-right font-medium text-green-600 text-xs'>
+                      <td className='w-16 px-1 py-1 text-right font-medium text-green-600 text-sm font-bold'>
                         {entry.credit > 0
                           ? `${entry.credit.toLocaleString()}`
                           : '-'}
                       </td>
-                      <td className='w-16 px-1 py-1 text-right font-medium text-red-600 text-xs'>
+                      <td className='w-16 px-1 py-1 text-right font-medium text-red-600 text-sm font-bold'>
                         {entry.debit > 0
                           ? `${entry.debit.toLocaleString()}`
                           : '-'}
                       </td>
-                      <td className='w-16 px-1 py-1 text-xs truncate' title={entry.payment_mode || 'No payment mode'}>
+                      <td className='w-16 px-1 py-1 text-sm truncate font-bold' title={entry.payment_mode || 'No payment mode'}>
                         {entry.payment_mode && String(entry.payment_mode).trim() ? String(entry.payment_mode).trim() : '-'}
                       </td>
-                      <td className='w-16 px-1 py-1 text-xs truncate' title={entry.staff}>{entry.staff}</td>
-                      <td className='w-16 px-1 py-1 text-xs truncate' title={entry.users || 'No user'}>
+                      <td className='w-16 px-1 py-1 text-sm truncate font-bold' title={entry.staff}>{entry.staff}</td>
+                      <td className='w-16 px-1 py-1 text-sm truncate font-bold' title={entry.users || 'No user'}>
                         {entry.users || '-'}
                       </td>
                       <td className='w-24 px-1 py-1 text-left'>
-                        <div className='text-xs'>
+                        <div className='text-sm font-bold'>
                           {format(new Date(entry.c_date), 'dd/MM/yyyy')}
                         </div>
-                        <div className='text-[10px] text-gray-500'>
+                        <div className='text-sm text-gray-500 font-bold'>
                           {entry.entry_time ? format(new Date(entry.entry_time), 'hh:mm:ss a') : 'N/A'}
                         </div>
                       </td>
@@ -2771,7 +2771,8 @@ const EditEntry: React.FC = () => {
                             type="text"
                             value={selectedEntry?.c_date ? format(new Date(selectedEntry.c_date), 'dd/MM/yyyy') : ''}
                             readOnly
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-bold"
+                            style={{ fontWeight: 'bold' }}
                             placeholder="dd/MM/yyyy"
                           />
                           <button

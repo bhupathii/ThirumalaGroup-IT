@@ -687,23 +687,23 @@ const DeletedRecords: React.FC = () => {
                         idx % 2 === 0 ? 'bg-white' : 'bg-red-25'
                       }`}
                     >
-                      <td className='w-12 px-1 py-1 font-medium text-xs'>{record.sno}</td>
-                      <td className='w-16 px-1 py-1 text-xs'>{format(new Date(record.c_date), 'dd/MM/yyyy')}</td>
-                      <td className='w-20 px-1 py-1 text-xs truncate' title={record.company_name}>{record.company_name}</td>
-                      <td className='w-20 px-1 py-1 text-xs truncate' title={record.acc_name}>{record.acc_name}</td>
-                      <td className='w-20 px-1 py-1 text-xs truncate' title={record.sub_acc_name}>{record.sub_acc_name || '-'}</td>
-                      <td className='w-32 px-1 py-1 text-xs truncate' title={record.particulars || ''}>
+                      <td className='w-12 px-1 py-1 font-medium text-sm font-bold'>{record.sno}</td>
+                      <td className='w-16 px-1 py-1 text-sm font-bold'>{format(new Date(record.c_date), 'dd/MM/yyyy')}</td>
+                      <td className='w-20 px-1 py-1 text-sm truncate font-bold' title={record.company_name}>{record.company_name}</td>
+                      <td className='w-20 px-1 py-1 text-sm truncate font-bold' title={record.acc_name}>{record.acc_name}</td>
+                      <td className='w-20 px-1 py-1 text-sm truncate font-bold' title={record.sub_acc_name}>{record.sub_acc_name || '-'}</td>
+                      <td className='w-32 px-1 py-1 text-sm truncate font-bold' title={record.particulars || ''}>
                         {record.particulars || '-'}
                       </td>
-                      <td className='w-16 px-1 py-1 text-right text-green-700 text-xs'>
+                      <td className='w-16 px-1 py-1 text-right text-green-700 text-sm font-bold'>
                         {record.credit > 0 ? `${record.credit.toLocaleString()}` : '-'}
                       </td>
-                      <td className='w-16 px-1 py-1 text-right text-red-700 text-xs'>
+                      <td className='w-16 px-1 py-1 text-right text-red-700 text-sm font-bold'>
                         {record.debit > 0 ? `${record.debit.toLocaleString()}` : '-'}
                       </td>
-                      <td className='w-16 px-1 py-1 text-xs truncate' title={record.staff}>{record.staff || '-'}</td>
-                      <td className='w-20 px-1 py-1 font-medium text-red-700 text-xs'>{record.deleted_by || record.users || record.staff || '-'}</td>
-                      <td className='w-24 px-1 py-1 text-gray-600 text-xs'>
+                      <td className='w-16 px-1 py-1 text-sm truncate font-bold' title={record.staff}>{record.staff || '-'}</td>
+                      <td className='w-20 px-1 py-1 font-medium text-red-700 text-sm font-bold'>{record.deleted_by || record.users || record.staff || '-'}</td>
+                      <td className='w-24 px-1 py-1 text-gray-600 text-sm font-bold'>
                         {record.deleted_at ? format(new Date(record.deleted_at), 'dd/MM/yyyy HH:mm') : 
                          record.updated_at ? format(new Date(record.updated_at), 'dd/MM/yyyy HH:mm') : '-'}
                       </td>

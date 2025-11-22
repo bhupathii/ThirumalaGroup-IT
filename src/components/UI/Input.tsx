@@ -143,10 +143,10 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           min={min}
           max={max}
           step={step}
-          className={`w-full border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed ${
-            size === 'sm' ? 'px-2 py-1 text-xs' : size === 'lg' ? 'px-4 py-3 text-base' : 'px-3 py-2 text-sm'
+          className={`w-full border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed font-bold ${
+            size === 'sm' ? 'px-2 py-1 text-sm' : size === 'lg' ? 'px-4 py-3 text-lg' : 'px-3 py-2 text-base'
           }`}
-          style={{ fontFamily: 'Times New Roman', fontSize: '12px' }}
+          style={{ fontFamily: 'Times New Roman', fontSize: '14px', fontWeight: 'bold' }}
           inputMode={type === 'date' && dateMode === 'text' ? 'numeric' : undefined}
           pattern={type === 'date' && dateMode === 'text' ? '\\d{2}/\\d{2}/\\d{4}' : undefined}
           onFocus={() => {
