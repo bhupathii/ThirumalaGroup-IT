@@ -809,12 +809,15 @@ const DetailedLedger: React.FC = () => {
     // Calculate totals
     const totalCredit = entriesToPrint.reduce((s, e) => s + (e.credit || 0), 0);
     const totalDebit = entriesToPrint.reduce((s, e) => s + (e.debit || 0), 0);
+    const totalSaleQty = entriesToPrint.reduce((s, e) => s + (e.saleQuantity || 0), 0);
+    const totalPurchaseQty = entriesToPrint.reduce((s, e) => s + (e.purchaseQuantity || 0), 0);
     const printTotals = {
       totalCredit,
       totalDebit,
-      totalSaleQty: entriesToPrint.reduce((s, e) => s + (e.saleQuantity || 0), 0),
-      totalPurchaseQty: entriesToPrint.reduce((s, e) => s + (e.purchaseQuantity || 0), 0),
+      totalSaleQty,
+      totalPurchaseQty,
       balance: totalCredit - totalDebit,
+      quantityBalance: totalPurchaseQty - totalSaleQty,
     };
 
     // Generate all rows - browser will handle pagination naturally
@@ -845,8 +848,12 @@ const DetailedLedger: React.FC = () => {
           <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 11px; font-weight: bold; line-height: 1.1;">${printTotals.totalDebit.toLocaleString()}</td>
         </tr>
         <tr style="background-color: #e8e8e8;">
-          <td colspan="8" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 11px; font-weight: bold; line-height: 1.1;">BALANCE:</td>
-          <td colspan="2" style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 11px; font-weight: bold; line-height: 1.1; color: ${printTotals.balance >= 0 ? '#059669' : '#dc2626'};">
+          <td colspan="6" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 11px; font-weight: bold; line-height: 1.1;">QUANTITY BALANCE:</td>
+          <td colspan="1" style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 11px; font-weight: bold; line-height: 1.1; color: ${printTotals.quantityBalance >= 0 ? '#059669' : '#dc2626'};">
+${printTotals.quantityBalance > 0 ? printTotals.quantityBalance.toLocaleString() : printTotals.quantityBalance < 0 ? Math.abs(printTotals.quantityBalance).toLocaleString() : '-'} ${printTotals.quantityBalance >= 0 ? 'CR' : printTotals.quantityBalance < 0 ? 'DR' : ''}
+        </td>
+        <td colspan="1" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 11px; font-weight: bold; line-height: 1.1;">BALANCE:</td>
+        <td colspan="2" style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 11px; font-weight: bold; line-height: 1.1; color: ${printTotals.balance >= 0 ? '#059669' : '#dc2626'};">
 ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? 'CR' : 'DR'}
         </td>
       </tr>
@@ -2825,12 +2832,15 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                   // Calculate totals for print preview
                   const totalCredit = entriesToPrint.reduce((s, e) => s + (e.credit || 0), 0);
                   const totalDebit = entriesToPrint.reduce((s, e) => s + (e.debit || 0), 0);
+                  const totalSaleQty = entriesToPrint.reduce((s, e) => s + (e.saleQuantity || 0), 0);
+                  const totalPurchaseQty = entriesToPrint.reduce((s, e) => s + (e.purchaseQuantity || 0), 0);
                   const printTotals = {
                     totalCredit,
                     totalDebit,
-                    totalSaleQty: entriesToPrint.reduce((s, e) => s + (e.saleQuantity || 0), 0),
-                    totalPurchaseQty: entriesToPrint.reduce((s, e) => s + (e.purchaseQuantity || 0), 0),
+                    totalSaleQty,
+                    totalPurchaseQty,
                     balance: totalCredit - totalDebit,
+                    quantityBalance: totalPurchaseQty - totalSaleQty,
                   };
                   
                   const rowsPerPage = 50;
@@ -2954,7 +2964,11 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                                     </td>
                                   </tr>
                                   <tr className='bg-gray-300'>
-                                    <td colSpan={8} className='text-right font-bold text-sm' style={{ padding: '4px' }}>BALANCE:</td>
+                                    <td colSpan={6} className='text-right font-bold text-sm' style={{ padding: '4px' }}>QUANTITY BALANCE:</td>
+                                    <td colSpan={1} className='text-center font-bold text-sm' style={{ padding: '4px', color: printTotals.quantityBalance >= 0 ? '#059669' : '#dc2626' }}>
+                                      {printTotals.quantityBalance > 0 ? printTotals.quantityBalance.toLocaleString() : printTotals.quantityBalance < 0 ? Math.abs(printTotals.quantityBalance).toLocaleString() : '-'} {printTotals.quantityBalance >= 0 ? 'CR' : printTotals.quantityBalance < 0 ? 'DR' : ''}
+                                    </td>
+                                    <td colSpan={1} className='text-right font-bold text-sm' style={{ padding: '4px' }}>BALANCE:</td>
                                     <td colSpan={2} className='text-center font-bold text-sm' style={{ padding: '4px', color: printTotals.balance >= 0 ? '#059669' : '#dc2626' }}>
 {Math.abs(printTotals.balance).toLocaleString()} {printTotals.balance >= 0 ? 'CR' : 'DR'}
                                     </td>
@@ -3009,7 +3023,11 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                                     </td>
                                   </tr>
                                   <tr className='bg-gray-300'>
-                                    <td colSpan={8} className='text-right font-bold' style={{ padding: '4px' }}>BALANCE:</td>
+                                    <td colSpan={6} className='text-right font-bold' style={{ padding: '4px' }}>QUANTITY BALANCE:</td>
+                                    <td colSpan={1} className='text-center font-bold' style={{ padding: '4px', color: printTotals.quantityBalance >= 0 ? '#059669' : '#dc2626' }}>
+                                      {printTotals.quantityBalance > 0 ? printTotals.quantityBalance.toLocaleString() : printTotals.quantityBalance < 0 ? Math.abs(printTotals.quantityBalance).toLocaleString() : '-'} {printTotals.quantityBalance >= 0 ? 'CR' : printTotals.quantityBalance < 0 ? 'DR' : ''}
+                                    </td>
+                                    <td colSpan={1} className='text-right font-bold' style={{ padding: '4px' }}>BALANCE:</td>
                                     <td colSpan={2} className='text-center font-bold' style={{ padding: '4px', color: printTotals.balance >= 0 ? '#059669' : '#dc2626' }}>
 {Math.abs(printTotals.balance).toLocaleString()} {printTotals.balance >= 0 ? 'CR' : 'DR'}
                                     </td>

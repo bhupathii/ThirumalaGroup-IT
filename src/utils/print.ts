@@ -466,7 +466,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     
     body {
       font-family: 'Arial', sans-serif;
-      font-size: 12px;
+      font-size: 14px;
       line-height: 1.4;
       margin: 0;
       padding: 0;
@@ -499,7 +499,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     }
     
     .company-name {
-      font-size: 14px;
+      font-size: 18px;
       font-weight: bold;
       color: #333;
       margin: 0;
@@ -508,7 +508,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     }
     
     .company-subtitle {
-      font-size: 10px;
+      font-size: 12px;
+      font-weight: bold;
       color: #666;
       margin: 0;
       padding: 0;
@@ -516,7 +517,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     }
     
     .print-title {
-      font-size: 16px;
+      font-size: 22px;
       font-weight: bold;
       color: #333;
       margin: 0;
@@ -525,7 +526,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     }
     
     .print-subtitle {
-      font-size: 16px;
+      font-size: 18px;
       font-weight: bold;
       color: #333;
       margin: 0;
@@ -534,7 +535,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     }
     
     .print-header-text {
-      font-size: 10px;
+      font-size: 12px;
+      font-weight: bold;
       color: #333;
       margin: 0;
       padding: 0;
@@ -553,13 +555,14 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       padding: 8px;
       text-align: left;
       font-weight: bold;
-      font-size: 11px;
+      font-size: 13px;
     }
     
     .print-table td {
       border: 1px solid #d1d5db;
       padding: 6px 8px;
-      font-size: 10px;
+      font-size: 12px;
+      font-weight: bold;
     }
     
     .print-table tr:nth-child(even) {
@@ -571,7 +574,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       border-top: 1px solid #333;
       padding-top: 10px;
       margin-top: 20px;
-      font-size: 10px;
+      font-size: 12px;
+      font-weight: bold;
       color: #666;
     }
     
@@ -586,7 +590,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     
     .print-summary h3 {
       margin: 0 0 10px 0;
-      font-size: 14px;
+      font-size: 16px;
+      font-weight: bold;
       color: #333;
     }
     
@@ -595,7 +600,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       grid-template-columns: 1fr auto;
       align-items: center;
       margin: 2px 0;
-      font-size: 11px;
+      font-size: 13px;
+      font-weight: bold;
       width: 100%;
       column-gap: 16px;
     }
@@ -606,18 +612,22 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       max-width: 620px;
       border-collapse: collapse;
       margin: 4px 0 6px 0;
-      font-size: 11px;
+      font-size: 13px;
+      font-weight: bold;
     }
     .boxed-table th {
       background-color: #f3f4f6;
       text-align: left;
       padding: 4px 6px;
       border: 1px solid #d1d5db;
-      font-weight: 600;
+      font-weight: bold;
+      font-size: 13px;
     }
     .boxed-table td {
       padding: 4px 6px;
       border: 1px solid #d1d5db;
+      font-weight: bold;
+      font-size: 13px;
     }
     
     /* Summary table for Total, Opening Balance, Closing Balance, Grand Total */
@@ -626,12 +636,14 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       max-width: 620px;
       border-collapse: collapse;
       margin: 10px 0;
-      font-size: 11px;
+      font-size: 13px;
       font-weight: bold;
     }
     .summary-balance-table th,
     .summary-balance-table td {
       padding: 6px 8px;
+      font-weight: bold;
+      font-size: 13px;
       border: 1px solid #000;
       font-weight: bold;
     }
