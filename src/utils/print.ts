@@ -436,7 +436,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     subtitle = '',
     orientation = 'portrait',
     paperSize = 'A4',
-    margins = { top: '1in', right: '0.5in', bottom: '1in', left: '0.5in' },
+    margins = { top: '0.3in', right: '0.5in', bottom: '1in', left: '0.5in' },
     includeHeader = true,
     includeFooter = true,
     headerText = 'Thirumala Group - Daily Transaction Report',
@@ -469,42 +469,71 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     }
     
     .print-header {
-      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       border-bottom: 1px solid #333;
-      padding-bottom: 6px;
-      margin-bottom: 8px;
+      padding-bottom: 2px;
+      margin-bottom: 4px;
+      margin-top: 0;
+      padding-top: 0;
+    }
+    
+    .header-left {
+      flex: 1;
+    }
+    
+    .header-center {
+      flex: 1;
+      text-align: center;
+    }
+    
+    .header-right {
+      flex: 1;
+      text-align: right;
     }
     
     .company-name {
-      font-size: 18px;
+      font-size: 14px;
       font-weight: bold;
       color: #333;
       margin: 0;
+      padding: 0;
+      line-height: 1;
     }
     
     .company-subtitle {
-      font-size: 12px;
+      font-size: 10px;
       color: #666;
-      margin: 2px 0 0 0;
+      margin: 0;
+      padding: 0;
+      line-height: 1;
     }
     
     .print-title {
-      font-size: 20px;
+      font-size: 16px;
       font-weight: bold;
       color: #333;
-      margin: 6px 0 0 0;
+      margin: 0;
+      padding: 0;
+      line-height: 1;
     }
     
     .print-subtitle {
-      font-size: 14px;
+      font-size: 16px;
+      font-weight: bold;
       color: #333;
-      margin: 2px 0 0 0;
+      margin: 0;
+      padding: 0;
+      line-height: 1;
     }
     
     .print-header-text {
-      font-size: 12px;
+      font-size: 10px;
       color: #333;
-      margin: 8px 0 0 0;
+      margin: 0;
+      padding: 0;
+      line-height: 1;
     }
     
     .print-table {
@@ -571,19 +600,26 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       width: 100%;
       max-width: 620px;
       border-collapse: collapse;
-      margin: 6px 0 10px 0;
+      margin: 4px 0 6px 0;
       font-size: 11px;
     }
     .boxed-table th {
       background-color: #f3f4f6;
       text-align: left;
-      padding: 6px 8px;
+      padding: 4px 6px;
       border: 1px solid #d1d5db;
       font-weight: 600;
     }
     .boxed-table td {
-      padding: 6px 8px;
+      padding: 4px 6px;
       border: 1px solid #d1d5db;
+    }
+    .balance-row {
+      display: flex;
+      gap: 20px;
+    }
+    .balance-item {
+      flex: 1;
     }
     
     .print-summary-label {
@@ -717,14 +753,12 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       <div class="print-summary">
         <table class="boxed-table">
           <thead>
-            <tr><th colspan="2">Opening and Closing Balance</th></tr>
+            <tr><th colspan="4">Opening and Closing Balance</th></tr>
           </thead>
           <tbody>
             <tr>
               <td><strong>Opening Balance</strong></td>
               <td class="${openingBalance >= 0 ? 'text-green' : 'text-red'}"><strong>${Math.abs(openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${openingBalance >= 0 ? 'CR' : 'DR'}</strong></td>
-            </tr>
-            <tr>
               <td><strong>Closing Balance</strong></td>
               <td class="${closingBalance >= 0 ? 'text-green' : 'text-red'}"><strong>${Math.abs(closingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${closingBalance >= 0 ? 'CR' : 'DR'}</strong></td>
             </tr>
@@ -831,11 +865,16 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       
       ${includeHeader ? `
         <div class="print-header">
-          <h1 class="company-name">Thirumala Group</h1>
-          <p class="company-subtitle">Business Management System</p>
-          <h2 class="print-title">${title}</h2>
-          ${subtitleHTML ? `<p class="print-subtitle">${subtitleHTML}</p>` : ''}
-          <p class="print-header-text">${headerText}</p>
+          <div class="header-left">
+            <h2 class="print-title">${title}</h2>
+          </div>
+          <div class="header-center">
+            <h1 class="company-name">Thirumala Group</h1>
+            <p class="company-subtitle">Business Management System</p>
+          </div>
+          <div class="header-right">
+            ${subtitleHTML ? `<p class="print-subtitle">${subtitleHTML}</p>` : ''}
+          </div>
         </div>
       ` : ''}
       
@@ -853,7 +892,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       
       ${includeFooter ? `
         <div class="print-footer">
-          <p><strong>Thirumala Group</strong> - ${footerText}</p>
+          <p>${footerText}</p>
         </div>
       ` : ''}
     </body>
