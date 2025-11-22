@@ -280,7 +280,7 @@ export class FinancialCalculator {
       maximumFractionDigits: 2,
     });
 
-    const prefix = showCurrency ? '₹' : '';
+    const prefix = showCurrency ? '' : '';
     return `${prefix}${formatted}`;
   }
 

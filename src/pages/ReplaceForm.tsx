@@ -1150,7 +1150,7 @@ const ReplaceForm: React.FC = () => {
             <div>
               <p className='text-green-100 text-sm font-medium'>Total Credit</p>
               <p className='text-xl font-bold'>
-                ₹{summary.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+{summary.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <TrendingUp className='w-8 h-8 text-green-200' />
@@ -1162,7 +1162,7 @@ const ReplaceForm: React.FC = () => {
             <div>
               <p className='text-red-100 text-sm font-medium'>Total Debit</p>
               <p className='text-xl font-bold'>
-                ₹{summary.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+{summary.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <TrendingDown className='w-8 h-8 text-red-200' />
@@ -1271,12 +1271,12 @@ const ReplaceForm: React.FC = () => {
                     </td>
                     <td className='px-3 py-2 text-right font-medium text-green-600'>
                       {entry.credit && parseFloat(entry.credit) > 0
-                        ? `₹${parseFloat(entry.credit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        ? `${parseFloat(entry.credit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : '-'}
                     </td>
                     <td className='px-3 py-2 text-right font-medium text-red-600'>
                       {entry.debit && parseFloat(entry.debit) > 0
-                        ? `₹${parseFloat(entry.debit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        ? `${parseFloat(entry.debit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : '-'}
                     </td>
                   </tr>

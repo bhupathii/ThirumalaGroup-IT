@@ -647,15 +647,15 @@ const LedgerSummary: React.FC = () => {
             <div class="totals-grid">
               <div class="total-item">
                 <div class="total-label">Total Credit</div>
-                <div class="total-value credit">₹${totals.totalCredit.toLocaleString()}</div>
+                <div class="total-value credit">${totals.totalCredit.toLocaleString()}</div>
               </div>
               <div class="total-item">
                 <div class="total-label">Total Debit</div>
-                <div class="total-value debit">₹${totals.totalDebit.toLocaleString()}</div>
+                <div class="total-value debit">${totals.totalDebit.toLocaleString()}</div>
               </div>
               <div class="total-item">
                 <div class="total-label">Net Balance</div>
-                <div class="total-value balance">₹${Math.abs(totals.totalBalance).toLocaleString()} ${totals.totalBalance >= 0 ? 'CR' : 'DR'}</div>
+                <div class="total-value balance">${Math.abs(totals.totalBalance).toLocaleString()} ${totals.totalBalance >= 0 ? 'CR' : 'DR'}</div>
               </div>
               <div class="total-item">
                 <div class="total-label">Total Records</div>
@@ -701,10 +701,10 @@ const LedgerSummary: React.FC = () => {
                   ${companyCell}
                   <td>${subAccount.mainAccount || '-'}</td>
                   <td>${subAccount.subAccount}</td>
-                  <td class="text-right text-green">₹${credit.toLocaleString()}</td>
-                  <td class="text-right text-red">₹${debit.toLocaleString()}</td>
+                  <td class="text-right text-green">${credit.toLocaleString()}</td>
+                  <td class="text-right text-red">${debit.toLocaleString()}</td>
                   <td class="text-right ${balance >= 0 ? 'text-green' : 'text-red'}">
-                    ₹${Math.abs(balance).toLocaleString()}
+${Math.abs(balance).toLocaleString()}
                     ${balance >= 0 ? ' CR' : ' DR'}
                   </td>
                 </tr>
@@ -715,10 +715,10 @@ const LedgerSummary: React.FC = () => {
                         return `
                   <tr>
                     <td>${company.companyName}</td>
-                    <td class="text-right text-green">₹${credit.toLocaleString()}</td>
-                    <td class="text-right text-red">₹${debit.toLocaleString()}</td>
+                    <td class="text-right text-green">${credit.toLocaleString()}</td>
+                    <td class="text-right text-red">${debit.toLocaleString()}</td>
                     <td class="text-right ${balance >= 0 ? 'text-green' : 'text-red'}">
-                      ₹${Math.abs(balance).toLocaleString()}
+${Math.abs(balance).toLocaleString()}
                       ${balance >= 0 ? ' CR' : ' DR'}
                     </td>
                   </tr>
@@ -730,10 +730,10 @@ const LedgerSummary: React.FC = () => {
                     <tr>
                       <td>${(account as any).companyName}</td>
                       <td>${account.accountName}</td>
-                      <td class="text-right text-green">₹${credit.toLocaleString()}</td>
-                      <td class="text-right text-red">₹${debit.toLocaleString()}</td>
+                      <td class="text-right text-green">${credit.toLocaleString()}</td>
+                      <td class="text-right text-red">${debit.toLocaleString()}</td>
                       <td class="text-right ${balance >= 0 ? 'text-green' : 'text-red'}">
-                        ₹${Math.abs(balance).toLocaleString()}
+${Math.abs(balance).toLocaleString()}
                         ${balance >= 0 ? ' CR' : ' DR'}
                       </td>
                     </tr>
@@ -742,10 +742,10 @@ const LedgerSummary: React.FC = () => {
                           return `
                     <tr>
                       <td>${account.accountName}</td>
-                      <td class="text-right text-green">₹${credit.toLocaleString()}</td>
-                      <td class="text-right text-red">₹${debit.toLocaleString()}</td>
+                      <td class="text-right text-green">${credit.toLocaleString()}</td>
+                      <td class="text-right text-red">${debit.toLocaleString()}</td>
                       <td class="text-right ${balance >= 0 ? 'text-green' : 'text-red'}">
-                        ₹${Math.abs(balance).toLocaleString()}
+${Math.abs(balance).toLocaleString()}
                         ${balance >= 0 ? ' CR' : ' DR'}
                       </td>
                     </tr>
@@ -827,17 +827,17 @@ const LedgerSummary: React.FC = () => {
                     {company.companyName}
                   </td>
                   <td className='px-4 py-3 text-right font-medium text-green-600'>
-                    ₹{company.totalCredit.toLocaleString()}
+{company.totalCredit.toLocaleString()}
                   </td>
                   <td className='px-4 py-3 text-right font-medium text-red-600'>
-                    ₹{company.totalDebit.toLocaleString()}
+{company.totalDebit.toLocaleString()}
                   </td>
                   <td
                     className={`px-4 py-3 text-right font-bold ${
                       company.balance >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}
                   >
-                    ₹{Math.abs(company.balance).toLocaleString()}
+{Math.abs(company.balance).toLocaleString()}
                     {company.balance >= 0 ? ' CR' : ' DR'}
                   </td>
                 </tr>
@@ -892,17 +892,17 @@ const LedgerSummary: React.FC = () => {
                     {account.accountName}
                   </td>
                   <td className='px-4 py-3 text-right font-medium text-green-600'>
-                    ₹{account.credit.toLocaleString()}
+{account.credit.toLocaleString()}
                   </td>
                   <td className='px-4 py-3 text-right font-medium text-red-600'>
-                    ₹{account.debit.toLocaleString()}
+{account.debit.toLocaleString()}
                   </td>
                   <td
                     className={`px-4 py-3 text-right font-bold ${
                       account.balance >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}
                   >
-                    ₹{Math.abs(account.balance).toLocaleString()}
+{Math.abs(account.balance).toLocaleString()}
                     {account.balance >= 0 ? ' CR' : ' DR'}
                   </td>
                 </tr>
@@ -961,10 +961,10 @@ const LedgerSummary: React.FC = () => {
                     {subAccount.subAccount}
                   </td>
                   <td className='px-4 py-3 text-right font-medium text-green-600'>
-                    ₹{subAccount.credit.toLocaleString()}
+{subAccount.credit.toLocaleString()}
                   </td>
                   <td className='px-4 py-3 text-right font-medium text-red-600'>
-                    ₹{subAccount.debit.toLocaleString()}
+{subAccount.debit.toLocaleString()}
                   </td>
                   <td
                     className={`px-4 py-3 text-right font-bold ${
@@ -973,7 +973,7 @@ const LedgerSummary: React.FC = () => {
                         : 'text-red-600'
                     }`}
                   >
-                    ₹{Math.abs(subAccount.balance).toLocaleString()}
+{Math.abs(subAccount.balance).toLocaleString()}
                     {subAccount.balance >= 0 ? ' CR' : ' DR'}
                   </td>
                 </tr>
@@ -1282,7 +1282,7 @@ const LedgerSummary: React.FC = () => {
                     Total Credit:
                   </div>
                   <div className='text-lg font-bold text-green-900'>
-                    ₹{grandTotals.totalCredit.toLocaleString()}
+{grandTotals.totalCredit.toLocaleString()}
                   </div>
                 </div>
                 <div className='bg-red-100 p-3 rounded-lg'>
@@ -1290,7 +1290,7 @@ const LedgerSummary: React.FC = () => {
                     Total Debit:
                   </div>
                   <div className='text-lg font-bold text-red-900'>
-                    ₹{grandTotals.totalDebit.toLocaleString()}
+{grandTotals.totalDebit.toLocaleString()}
                   </div>
                 </div>
                 <div
@@ -1314,7 +1314,7 @@ const LedgerSummary: React.FC = () => {
                         : 'text-orange-900'
                     }`}
                   >
-                    ₹{Math.abs(grandTotals.balance).toLocaleString()}
+{Math.abs(grandTotals.balance).toLocaleString()}
                     {grandTotals.balance >= 0 ? ' CR' : ' DR'}
                   </div>
                 </div>

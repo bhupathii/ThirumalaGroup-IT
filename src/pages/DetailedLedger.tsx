@@ -830,8 +830,8 @@ const DetailedLedger: React.FC = () => {
             <td style="padding: 2px 1px; border: 1px solid #000; font-size: 9px; word-wrap: break-word; line-height: 1.1;">${entry.particulars}</td>
             <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}</td>
             <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}</td>
-            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}</td>
-            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}</td>
+            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}</td>
+            <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}</td>
         </tr>
       `;
     });
@@ -841,13 +841,13 @@ const DetailedLedger: React.FC = () => {
           <td colspan="6" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">TOTAL:</td>
           <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}</td>
           <td style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; line-height: 1.1;">${printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}</td>
-          <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">₹${printTotals.totalCredit.toLocaleString()}</td>
-          <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">₹${printTotals.totalDebit.toLocaleString()}</td>
+          <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">${printTotals.totalCredit.toLocaleString()}</td>
+          <td style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">${printTotals.totalDebit.toLocaleString()}</td>
         </tr>
         <tr style="background-color: #e8e8e8;">
           <td colspan="8" style="text-align: right; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1;">BALANCE:</td>
           <td colspan="2" style="text-align: center; padding: 2px 1px; border: 1px solid #000; font-size: 9px; font-weight: bold; line-height: 1.1; color: ${printTotals.balance >= 0 ? '#059669' : '#dc2626'};">
-          ₹${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? 'CR' : 'DR'}
+${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? 'CR' : 'DR'}
         </td>
       </tr>
     `;
@@ -1499,7 +1499,7 @@ const DetailedLedger: React.FC = () => {
             <div>
               <p className='text-green-100 text-sm font-medium'>Total Credit</p>
               <p className='text-2xl font-bold'>
-                ₹{totals.totalCredit.toLocaleString()}
+{totals.totalCredit.toLocaleString()}
               </p>
             </div>
             <TrendingUp className='w-8 h-8 text-green-200' />
@@ -1511,7 +1511,7 @@ const DetailedLedger: React.FC = () => {
             <div>
               <p className='text-red-100 text-sm font-medium'>Total Debit</p>
               <p className='text-2xl font-bold'>
-                ₹{totals.totalDebit.toLocaleString()}
+{totals.totalDebit.toLocaleString()}
               </p>
             </div>
             <TrendingDown className='w-8 h-8 text-red-200' />
@@ -1529,7 +1529,7 @@ const DetailedLedger: React.FC = () => {
             <div>
               <p className='text-blue-100 text-sm font-medium'>Balance</p>
               <p className='text-2xl font-bold'>
-                ₹{Math.abs(totals.balance).toLocaleString()}
+{Math.abs(totals.balance).toLocaleString()}
                 {totals.balance >= 0 ? ' CR' : ' DR'}
               </p>
             </div>
@@ -1650,12 +1650,12 @@ const DetailedLedger: React.FC = () => {
                     </td>
                     <td className='px-0.5 py-0.5 text-right font-medium text-green-600 text-xs'>
                       {entry.credit > 0
-                        ? `₹${entry.credit.toLocaleString()}`
+                        ? `${entry.credit.toLocaleString()}`
                         : '-'}
                     </td>
                     <td className='px-0.5 py-0.5 text-right font-medium text-red-600 text-xs'>
                       {entry.debit > 0
-                        ? `₹${entry.debit.toLocaleString()}`
+                        ? `${entry.debit.toLocaleString()}`
                         : '-'}
                     </td>
                     <td className='px-0.5 py-0.5 text-center text-xs'>
@@ -1689,7 +1689,7 @@ const DetailedLedger: React.FC = () => {
                   Total Credit:
                 </div>
                 <div className='text-lg font-bold text-green-900'>
-                  ₹{totals.totalCredit.toLocaleString()}
+{totals.totalCredit.toLocaleString()}
                 </div>
               </div>
               <div className='bg-red-100 p-3 rounded-lg'>
@@ -1697,7 +1697,7 @@ const DetailedLedger: React.FC = () => {
                   Total Debit:
                 </div>
                 <div className='text-lg font-bold text-red-900'>
-                  ₹{totals.totalDebit.toLocaleString()}
+{totals.totalDebit.toLocaleString()}
                 </div>
               </div>
               <div
@@ -1717,7 +1717,7 @@ const DetailedLedger: React.FC = () => {
                     totals.balance >= 0 ? 'text-blue-900' : 'text-orange-900'
                   }`}
                 >
-                  ₹{Math.abs(totals.balance).toLocaleString()}
+{Math.abs(totals.balance).toLocaleString()}
                   {totals.balance >= 0 ? ' CR' : ' DR'}
                 </div>
               </div>
@@ -2918,10 +2918,10 @@ const DetailedLedger: React.FC = () => {
                                       {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
                                     </td>
                                     <td className='col-credit text-right'>
-                                      {entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}
+                                      {entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}
                                     </td>
                                     <td className='col-debit text-right'>
-                                      {entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}
+                                      {entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}
                                     </td>
                                   </tr>
                                 );
@@ -2937,16 +2937,16 @@ const DetailedLedger: React.FC = () => {
                                       {printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}
                                     </td>
                                     <td className='text-right font-bold' style={{ padding: '4px' }}>
-                                      ₹{printTotals.totalCredit.toLocaleString()}
+{printTotals.totalCredit.toLocaleString()}
                                     </td>
                                     <td className='text-right font-bold' style={{ padding: '4px' }}>
-                                      ₹{printTotals.totalDebit.toLocaleString()}
+{printTotals.totalDebit.toLocaleString()}
                                     </td>
                                   </tr>
                                   <tr className='bg-gray-300'>
                                     <td colSpan={8} className='text-right font-bold' style={{ padding: '4px' }}>BALANCE:</td>
                                     <td colSpan={2} className='text-center font-bold' style={{ padding: '4px', color: printTotals.balance >= 0 ? '#059669' : '#dc2626' }}>
-                                      ₹{Math.abs(printTotals.balance).toLocaleString()} {printTotals.balance >= 0 ? 'CR' : 'DR'}
+{Math.abs(printTotals.balance).toLocaleString()} {printTotals.balance >= 0 ? 'CR' : 'DR'}
                                     </td>
                                   </tr>
                                 </>
@@ -2973,10 +2973,10 @@ const DetailedLedger: React.FC = () => {
                                       {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
                                     </td>
                                     <td className='col-credit text-right'>
-                                      {entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}
+                                      {entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}
                                     </td>
                                     <td className='col-debit text-right'>
-                                      {entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}
+                                      {entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}
                                     </td>
                                   </tr>
                                 );
@@ -2992,16 +2992,16 @@ const DetailedLedger: React.FC = () => {
                                       {printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}
                                     </td>
                                     <td className='text-right font-bold' style={{ padding: '4px' }}>
-                                      ₹{printTotals.totalCredit.toLocaleString()}
+{printTotals.totalCredit.toLocaleString()}
                                     </td>
                                     <td className='text-right font-bold' style={{ padding: '4px' }}>
-                                      ₹{printTotals.totalDebit.toLocaleString()}
+{printTotals.totalDebit.toLocaleString()}
                                     </td>
                                   </tr>
                                   <tr className='bg-gray-300'>
                                     <td colSpan={8} className='text-right font-bold' style={{ padding: '4px' }}>BALANCE:</td>
                                     <td colSpan={2} className='text-center font-bold' style={{ padding: '4px', color: printTotals.balance >= 0 ? '#059669' : '#dc2626' }}>
-                                      ₹{Math.abs(printTotals.balance).toLocaleString()} {printTotals.balance >= 0 ? 'CR' : 'DR'}
+{Math.abs(printTotals.balance).toLocaleString()} {printTotals.balance >= 0 ? 'CR' : 'DR'}
                                     </td>
                                   </tr>
                                 </>

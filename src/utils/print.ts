@@ -190,7 +190,7 @@ export const printTable = (
               col.key.toLowerCase().includes('debit') ||
               col.key.toLowerCase().includes('balance')
             ) {
-              displayValue = `₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+              displayValue = `${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
             } else {
               displayValue = value.toLocaleString('en-IN');
             }
@@ -245,7 +245,7 @@ export const printTable = (
               item => `
             <div class="print-summary-row">
               <span class="print-summary-label">Total ${item.label}:</span>
-              <span class="print-summary-value">₹${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              <span class="print-summary-value">${item.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
           `
             )
@@ -679,7 +679,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
               col.key.toLowerCase().includes('debit') ||
               col.key.toLowerCase().includes('balance')
             ) {
-              displayValue = `₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+              displayValue = `${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
             } else {
               displayValue = value.toLocaleString('en-IN');
             }
@@ -722,11 +722,11 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
           <tbody>
             <tr>
               <td><strong>Opening Balance</strong></td>
-              <td class="${openingBalance >= 0 ? 'text-green' : 'text-red'}"><strong>₹${Math.abs(openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${openingBalance >= 0 ? 'CR' : 'DR'}</strong></td>
+              <td class="${openingBalance >= 0 ? 'text-green' : 'text-red'}"><strong>${Math.abs(openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${openingBalance >= 0 ? 'CR' : 'DR'}</strong></td>
             </tr>
             <tr>
               <td><strong>Closing Balance</strong></td>
-              <td class="${closingBalance >= 0 ? 'text-green' : 'text-red'}"><strong>₹${Math.abs(closingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${closingBalance >= 0 ? 'CR' : 'DR'}</strong></td>
+              <td class="${closingBalance >= 0 ? 'text-green' : 'text-red'}"><strong>${Math.abs(closingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${closingBalance >= 0 ? 'CR' : 'DR'}</strong></td>
             </tr>
           </tbody>
         </table>
@@ -739,15 +739,15 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
           <tbody>
             <tr>
               <td>Total Credit</td>
-              <td class="text-green">₹${creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td class="text-green">${creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
             </tr>
             <tr>
               <td>Total Debit</td>
-              <td class="text-red">₹${debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td class="text-red">${debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
             </tr>
             <tr>
               <td>Net Balance</td>
-              <td class="${balance >= 0 ? 'text-green' : 'text-red'}">₹${Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${balance >= 0 ? 'CR' : 'DR'}</td>
+              <td class="${balance >= 0 ? 'text-green' : 'text-red'}">${Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${balance >= 0 ? 'CR' : 'DR'}</td>
             </tr>
             <tr>
               <td>Total Records</td>
@@ -775,7 +775,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([company, totals]) => {
         const closing = totals.credit - totals.debit;
-        const closingText = `₹${Math.abs(closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${closing >= 0 ? 'CR' : 'DR'}`;
+        const closingText = `${Math.abs(closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${closing >= 0 ? 'CR' : 'DR'}`;
         return `
           <div class="print-summary-row">
             <span class="print-summary-label">${company}</span>
@@ -801,7 +801,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
                 .sort(([a],[b])=>a.localeCompare(b))
                 .map(([company, totals])=>{
                   const closing = totals.credit - totals.debit;
-                  const closingText = `₹${Math.abs(closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${closing >= 0 ? 'CR' : 'DR'}`;
+                  const closingText = `${Math.abs(closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${closing >= 0 ? 'CR' : 'DR'}`;
                   return `<tr><td><strong>${company}</strong></td><td class="${closing>=0?'text-green':'text-red'}">${closingText}</td></tr>`;
                 }).join('')}
             </tbody>

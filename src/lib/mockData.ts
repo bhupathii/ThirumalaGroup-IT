@@ -444,7 +444,7 @@ export const mockBankGuarantees: BankGuarantee[] = [
     issue_date: '2024-06-01',
     exp_date: '2025-02-15',
     work_name:
-      'Cotton Supply Contract - Reliance Textiles Ltd (Contract Value: ₹50 Lakhs)',
+      'Cotton Supply Contract - Reliance Textiles Ltd (Contract Value: 50 Lakhs)',
     credit: 0,
     debit: 500000,
     department: 'Cotton Mills Division',

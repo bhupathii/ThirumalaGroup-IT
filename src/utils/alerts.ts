@@ -408,7 +408,7 @@ class AlertManager {
       const alert = this.createAlert({
         type: 'warning',
         title: 'High Amount Entries Detected',
-        message: `${highAmountEntries.length} entries with amounts over ₹10,00,000 found`,
+        message: `${highAmountEntries.length} entries with amounts over 10,00,000 found`,
         category: 'data',
         priority: 'medium',
         actionUrl: '/edit-entry',

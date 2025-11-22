@@ -2849,7 +2849,7 @@ class SupabaseDatabase {
         throw new Error('Invalid financial calculation result');
       }
 
-      console.log(`✅ SQL aggregation result: credit: ₹${totalCredit.toLocaleString()}, debit: ₹${totalDebit.toLocaleString()}`);
+      console.log(`✅ SQL aggregation result: credit: ${totalCredit.toLocaleString()}, debit: ${totalDebit.toLocaleString()}`);
 
       const balance = totalCredit - totalDebit;
       
@@ -2875,7 +2875,7 @@ class SupabaseDatabase {
       }
 
       // Final validation and logging
-      console.log(`🎉 Dashboard stats calculated: ${totalTransactions.toLocaleString()} total transactions, ₹${totalCredit.toLocaleString()} credit, ₹${totalDebit.toLocaleString()} debit, balance: ₹${balance.toLocaleString()}`);
+      console.log(`🎉 Dashboard stats calculated: ${totalTransactions.toLocaleString()} total transactions, ${totalCredit.toLocaleString()} credit, ${totalDebit.toLocaleString()} debit, balance: ${balance.toLocaleString()}`);
       
       // Additional validation checks
       if (totalCredit < 0 || totalDebit < 0) {

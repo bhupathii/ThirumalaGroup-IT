@@ -2337,12 +2337,12 @@ const NewEntry: React.FC = () => {
                             </td>
                             <td className='w-16 px-1 py-0 text-right font-medium text-green-600 text-xs'>
                               {entry.credit > 0
-                                ? `₹${entry.credit.toLocaleString()}`
+                                ? `${entry.credit.toLocaleString()}`
                                 : '-'}
                             </td>
                             <td className='w-16 px-1 py-0 text-right font-medium text-red-600 text-xs'>
                               {entry.debit > 0
-                                ? `₹${entry.debit.toLocaleString()}`
+                                ? `${entry.debit.toLocaleString()}`
                                 : '-'}
                             </td>
                             <td className='w-16 px-1 py-0 text-xs truncate' title={entry.payment_mode || 'No payment mode'}>

@@ -476,17 +476,17 @@ const BalanceSheet: React.FC = () => {
               ${allAccounts.map(acc => `
                 <tr>
                   <td>${acc.accountName}</td>
-                  <td class="text-right text-green">${acc.credit > 0 ? `₹${acc.credit.toLocaleString()}` : '-'}</td>
-                  <td class="text-right text-red">${acc.debit > 0 ? `₹${acc.debit.toLocaleString()}` : '-'}</td>
-                  <td class="text-right">${acc.balance > 0 ? `₹${acc.balance.toLocaleString()}` : '-'}</td>
+                  <td class="text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
+                  <td class="text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
+                  <td class="text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
                   <td class="text-center">${acc.result}</td>
                 </tr>
               `).join('')}
               <tr class="totals">
                 <td><strong>TOTALS</strong></td>
-                <td class="text-right text-green"><strong>₹${totals.totalCredit.toLocaleString()}</strong></td>
-                <td class="text-right text-red"><strong>₹${totals.totalDebit.toLocaleString()}</strong></td>
-                <td class="text-right"><strong>₹${totals.balance.toLocaleString()}</strong></td>
+                <td class="text-right text-green"><strong>${totals.totalCredit.toLocaleString()}</strong></td>
+                <td class="text-right text-red"><strong>${totals.totalDebit.toLocaleString()}</strong></td>
+                <td class="text-right"><strong>${totals.balance.toLocaleString()}</strong></td>
                 <td class="text-center"><strong>${totals.balance >= 0 ? 'CREDIT' : 'DEBIT'}</strong></td>
               </tr>
             </tbody>
@@ -671,17 +671,17 @@ const BalanceSheet: React.FC = () => {
                 ${plAccounts.map(acc => `
                   <tr>
                     <td>${acc.accountName}</td>
-                    <td class="text-right text-green">${acc.credit > 0 ? `₹${acc.credit.toLocaleString()}` : '-'}</td>
-                    <td class="text-right text-red">${acc.debit > 0 ? `₹${acc.debit.toLocaleString()}` : '-'}</td>
-                    <td class="text-right">${acc.balance > 0 ? `₹${acc.balance.toLocaleString()}` : '-'}</td>
+                    <td class="text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
+                    <td class="text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
+                    <td class="text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
                     <td class="text-center">${acc.result}</td>
                   </tr>
                 `).join('')}
                 <tr class="totals">
                   <td><strong>P&L TOTALS</strong></td>
-                  <td class="text-right text-green"><strong>₹${plTotals.totalCredit.toLocaleString()}</strong></td>
-                  <td class="text-right text-red"><strong>₹${plTotals.totalDebit.toLocaleString()}</strong></td>
-                  <td class="text-right"><strong>₹${plTotals.balance.toLocaleString()}</strong></td>
+                  <td class="text-right text-green"><strong>${plTotals.totalCredit.toLocaleString()}</strong></td>
+                  <td class="text-right text-red"><strong>${plTotals.totalDebit.toLocaleString()}</strong></td>
+                  <td class="text-right"><strong>${plTotals.balance.toLocaleString()}</strong></td>
                   <td class="text-center"><strong>${plTotals.balance >= 0 ? 'PROFIT' : 'LOSS'}</strong></td>
                 </tr>
               </tbody>
@@ -704,17 +704,17 @@ const BalanceSheet: React.FC = () => {
                 ${balanceSheetAccounts.map(acc => `
                   <tr>
                     <td>${acc.accountName}</td>
-                    <td class="text-right text-green">${acc.credit > 0 ? `₹${acc.credit.toLocaleString()}` : '-'}</td>
-                    <td class="text-right text-red">${acc.debit > 0 ? `₹${acc.debit.toLocaleString()}` : '-'}</td>
-                    <td class="text-right">${acc.balance > 0 ? `₹${acc.balance.toLocaleString()}` : '-'}</td>
+                    <td class="text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
+                    <td class="text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
+                    <td class="text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
                     <td class="text-center">${acc.result}</td>
                   </tr>
                 `).join('')}
                 <tr class="totals">
                   <td><strong>BALANCE SHEET TOTALS</strong></td>
-                  <td class="text-right text-green"><strong>₹${bsTotals.totalCredit.toLocaleString()}</strong></td>
-                  <td class="text-right text-red"><strong>₹${bsTotals.totalDebit.toLocaleString()}</strong></td>
-                  <td class="text-right"><strong>₹${bsTotals.balance.toLocaleString()}</strong></td>
+                  <td class="text-right text-green"><strong>${bsTotals.totalCredit.toLocaleString()}</strong></td>
+                  <td class="text-right text-red"><strong>${bsTotals.totalDebit.toLocaleString()}</strong></td>
+                  <td class="text-right"><strong>${bsTotals.balance.toLocaleString()}</strong></td>
                   <td class="text-center"><strong>${bsTotals.balance >= 0 ? 'CREDIT' : 'DEBIT'}</strong></td>
                 </tr>
               </tbody>
@@ -919,14 +919,14 @@ const BalanceSheet: React.FC = () => {
                     </td>
                     <td className='px-3 py-2'>{acc.accountName}</td>
                     <td className='px-3 py-2 text-right text-green-700'>
-                      {acc.credit > 0 ? `₹${acc.credit.toLocaleString()}` : '-'}
+                      {acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}
                     </td>
                     <td className='px-3 py-2 text-right text-red-700'>
-                      {acc.debit > 0 ? `₹${acc.debit.toLocaleString()}` : '-'}
+                      {acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}
                     </td>
                     <td className='px-3 py-2 text-right font-semibold'>
                       {acc.balance > 0
-                        ? `₹${acc.balance.toLocaleString()}`
+                        ? `${acc.balance.toLocaleString()}`
                         : '-'}
                     </td>
                     <td className='px-3 py-2 text-center font-bold'>
@@ -950,13 +950,13 @@ const BalanceSheet: React.FC = () => {
                       {customRow.accountName}
                     </td>
                     <td className='px-3 py-2 text-right text-green-700'>
-                      {customRow.credit > 0 ? `₹${customRow.credit.toLocaleString()}` : '-'}
+                      {customRow.credit > 0 ? `${customRow.credit.toLocaleString()}` : '-'}
                     </td>
                     <td className='px-3 py-2 text-right text-red-700'>
-                      {customRow.debit > 0 ? `₹${customRow.debit.toLocaleString()}` : '-'}
+                      {customRow.debit > 0 ? `${customRow.debit.toLocaleString()}` : '-'}
                     </td>
                     <td className='px-3 py-2 text-right font-semibold'>
-                      {customRow.balance > 0 ? `₹${customRow.balance.toLocaleString()}` : '-'}
+                      {customRow.balance > 0 ? `${customRow.balance.toLocaleString()}` : '-'}
                     </td>
                     <td className='px-3 py-2 text-center font-bold'>
                       {customRow.result}

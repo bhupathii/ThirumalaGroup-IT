@@ -974,8 +974,8 @@ const ApproveRecords: React.FC = () => {
                     <td>${entry.acc_name || ''}</td>
                     <td>${entry.sub_acc_name || '-'}</td>
                     <td>${entry.particulars || ''}</td>
-                    <td>${entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}</td>
-                    <td>${entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}</td>
+                    <td>${entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}</td>
+                    <td>${entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}</td>
                   </tr>
                 `
                   )
@@ -1078,8 +1078,8 @@ const ApproveRecords: React.FC = () => {
                     <td>${entry.acc_name || ''}</td>
                     <td>${entry.sub_acc_name || '-'}</td>
                     <td>${entry.particulars || ''}</td>
-                    <td>${entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}</td>
-                    <td>${entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}</td>
+                    <td>${entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}</td>
+                    <td>${entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}</td>
                   </tr>
                 `
                   )
@@ -1491,12 +1491,12 @@ const ApproveRecords: React.FC = () => {
                     </td>
                     <td className='px-3 py-2 text-right font-medium text-green-600'>
                       {entry.credit > 0
-                        ? `₹${entry.credit.toLocaleString()}`
+                        ? `${entry.credit.toLocaleString()}`
                         : '-'}
                     </td>
                     <td className='px-3 py-2 text-right font-medium text-red-600'>
                       {entry.debit > 0
-                        ? `₹${entry.debit.toLocaleString()}`
+                        ? `${entry.debit.toLocaleString()}`
                         : '-'}
                     </td>
                     <td className='px-3 py-2'>{entry.staff}</td>
@@ -1696,10 +1696,10 @@ const ApproveRecords: React.FC = () => {
                       {d.particulars?.replace(/\[DELETED\]\s*/g, '') || '-'}
                     </td>
                     <td className='w-16 px-1 py-1 text-right font-medium text-green-600 text-xs'>
-                      {d.credit ? `₹${Number(d.credit).toLocaleString()}` : '-'}
+                      {d.credit ? `${Number(d.credit).toLocaleString()}` : '-'}
                     </td>
                     <td className='w-16 px-1 py-1 text-right font-medium text-red-600 text-xs'>
-                      {d.debit ? `₹${Number(d.debit).toLocaleString()}` : '-'}
+                      {d.debit ? `${Number(d.debit).toLocaleString()}` : '-'}
                     </td>
                     <td className='w-16 px-1 py-1 text-xs truncate' title={d.staff}>
                       {d.staff}

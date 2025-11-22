@@ -421,7 +421,7 @@ const BankGuarantees: React.FC = () => {
                 Total Amount
               </p>
               <p className='text-xl font-bold'>
-                ₹{(stats.totalCredit + stats.totalDebit).toLocaleString()}
+{(stats.totalCredit + stats.totalDebit).toLocaleString()}
               </p>
             </div>
             <DollarSign className='w-8 h-8 text-purple-200' />
@@ -758,11 +758,11 @@ const BankGuarantees: React.FC = () => {
                       <td className='px-3 py-2'>{bg.department}</td>
                       <td className='px-3 py-2 text-right font-medium text-green-600'>
                         {bg.credit > 0
-                          ? ` ₹${bg.credit.toLocaleString()}`
+                          ? ` ${bg.credit.toLocaleString()}`
                           : '-'}
                       </td>
                       <td className='px-3 py-2 text-right font-medium text-red-600'>
-                        {bg.debit > 0 ? ` ₹${bg.debit.toLocaleString()}` : '-'}
+                        {bg.debit > 0 ? ` ${bg.debit.toLocaleString()}` : '-'}
                       </td>
                       <td className='px-3 py-2 text-center'>
                         {bg.cancelled ? (
@@ -884,16 +884,13 @@ const BankGuarantees: React.FC = () => {
                     </h4>
                     <div className='space-y-2 text-sm'>
                       <div>
-                        <strong>Credit Amount:</strong> ₹
-                        {selectedBG.credit.toLocaleString()}
+                        <strong>Credit Amount:</strong>                         {selectedBG.credit.toLocaleString()}
                       </div>
                       <div>
-                        <strong>Debit Amount:</strong> ₹
-                        {selectedBG.debit.toLocaleString()}
+                        <strong>Debit Amount:</strong>                         {selectedBG.debit.toLocaleString()}
                       </div>
                       <div>
-                        <strong>Net Amount:</strong> ₹
-                        {(
+                        <strong>Net Amount:</strong>                         {(
                           selectedBG.credit + selectedBG.debit
                         ).toLocaleString()}
                       </div>

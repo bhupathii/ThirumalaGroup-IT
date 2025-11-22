@@ -118,8 +118,6 @@ export default function DeletedRecordsPage() {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
       minimumFractionDigits: 2,
     }).format(amount);
   };
@@ -271,13 +269,13 @@ export default function DeletedRecordsPage() {
                     <div>
                       <label className="text-sm font-medium text-gray-500">Debit</label>
                       <p className="text-sm font-semibold text-red-600">
-                        {record.debit ? formatCurrency(record.debit) : '₹0.00'}
+                        {record.debit ? formatCurrency(record.debit) : '0.00'}
                       </p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-500">Credit</label>
                       <p className="text-sm font-semibold text-green-600">
-                        {record.credit ? formatCurrency(record.credit) : '₹0.00'}
+                        {record.credit ? formatCurrency(record.credit) : '0.00'}
                       </p>
                     </div>
                   </div>

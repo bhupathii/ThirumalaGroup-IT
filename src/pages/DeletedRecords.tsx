@@ -696,10 +696,10 @@ const DeletedRecords: React.FC = () => {
                         {record.particulars || '-'}
                       </td>
                       <td className='w-16 px-1 py-1 text-right text-green-700 text-xs'>
-                        {record.credit > 0 ? `₹${record.credit.toLocaleString()}` : '-'}
+                        {record.credit > 0 ? `${record.credit.toLocaleString()}` : '-'}
                       </td>
                       <td className='w-16 px-1 py-1 text-right text-red-700 text-xs'>
-                        {record.debit > 0 ? `₹${record.debit.toLocaleString()}` : '-'}
+                        {record.debit > 0 ? `${record.debit.toLocaleString()}` : '-'}
                       </td>
                       <td className='w-16 px-1 py-1 text-xs truncate' title={record.staff}>{record.staff || '-'}</td>
                       <td className='w-20 px-1 py-1 font-medium text-red-700 text-xs'>{record.deleted_by || record.users || record.staff || '-'}</td>

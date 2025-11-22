@@ -1829,19 +1829,19 @@ const EditEntry: React.FC = () => {
             0
           );
           doc.text(
-            `Total Credit: ₹${totalCredit.toLocaleString()}`,
+            `Total Credit: ${totalCredit.toLocaleString()}`,
             25,
             yPosition
           );
           yPosition += 4;
           doc.text(
-            `Total Debit: ₹${totalDebit.toLocaleString()}`,
+            `Total Debit: ${totalDebit.toLocaleString()}`,
             25,
             yPosition
           );
           yPosition += 4;
           doc.text(
-            `Balance: ₹${(totalCredit - totalDebit).toLocaleString()}`,
+            `Balance: ${(totalCredit - totalDebit).toLocaleString()}`,
             25,
             yPosition
           );
@@ -2008,7 +2008,7 @@ const EditEntry: React.FC = () => {
           
           <div class="amount-box">
             <div class="amount-label">${amountLabel}</div>
-            <div class="amount-value">₹${amountValue.toLocaleString('en-IN')}</div>
+            <div class="amount-value">${amountValue.toLocaleString('en-IN')}</div>
           </div>
           
           ${saleQty > 0 ? `<div class="voucher-section"><span class="voucher-label">Sale Quantity:</span><span class="voucher-value">${saleQty}</span></div>` : ''}
@@ -2408,12 +2408,12 @@ const EditEntry: React.FC = () => {
                       </td>
                       <td className='w-16 px-1 py-1 text-right font-medium text-green-600 text-xs'>
                         {entry.credit > 0
-                          ? `₹${entry.credit.toLocaleString()}`
+                          ? `${entry.credit.toLocaleString()}`
                           : '-'}
                       </td>
                       <td className='w-16 px-1 py-1 text-right font-medium text-red-600 text-xs'>
                         {entry.debit > 0
-                          ? `₹${entry.debit.toLocaleString()}`
+                          ? `${entry.debit.toLocaleString()}`
                           : '-'}
                       </td>
                       <td className='w-16 px-1 py-1 text-xs truncate' title={entry.payment_mode || 'No payment mode'}>
@@ -2720,8 +2720,8 @@ const EditEntry: React.FC = () => {
                 <div className='font-medium'>Entry #{entry.sno}</div>
                 <div className='text-gray-500'>{entry.company_name}</div>
                 <div className='text-gray-500'>{entry.acc_name}</div>
-                {entry.credit > 0 && <div className='text-green-600'>Credit: ₹{entry.credit}</div>}
-                {entry.debit > 0 && <div className='text-red-600'>Debit: ₹{entry.debit}</div>}
+                {entry.credit > 0 && <div className='text-green-600'>Credit: {entry.credit}</div>}
+                {entry.debit > 0 && <div className='text-red-600'>Debit: {entry.debit}</div>}
               </button>
             ))}
           </div>

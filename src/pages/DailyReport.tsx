@@ -249,7 +249,7 @@ const DailyReport: React.FC = () => {
           0
         );
         
-        console.log(`💰 Opening balance (Dashboard net balance - sum of all companies up to ${prevDate}): ₹${openingBalance.toLocaleString()}`);
+        console.log(`💰 Opening balance (Dashboard net balance - sum of all companies up to ${prevDate}): ${openingBalance.toLocaleString()}`);
       } catch (e) {
         console.warn('Error calculating opening balance from company balances, using fallback:', e);
         // Fallback: calculate from individual entries (sum of all companies)
@@ -558,16 +558,16 @@ const DailyReport: React.FC = () => {
                     ✓ Optimized query for {selectedDate}
                   </span>
                   <span>
-                    Total Credits: ₹{reportData.totalCredit.toLocaleString()}
+                    Total Credits: {reportData.totalCredit.toLocaleString()}
                   </span>
                   <span>
-                    Opening Balance: ₹{reportData.openingBalance.toLocaleString()}
+                    Opening Balance: {reportData.openingBalance.toLocaleString()}
                   </span>
                   <span>
-                    Total Debits: ₹{reportData.totalDebit.toLocaleString()}
+                    Total Debits: {reportData.totalDebit.toLocaleString()}
                   </span>
                   <span>
-                    Closing Balance: ₹{reportData.closingBalance.toLocaleString()}
+                    Closing Balance: {reportData.closingBalance.toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -577,7 +577,7 @@ const DailyReport: React.FC = () => {
                     Total Credit:
                   </span>
                   <span className='text-2xl font-bold text-green-900'>
-                    ₹{reportData.totalCredit.toLocaleString()}
+{reportData.totalCredit.toLocaleString()}
                   </span>
                 </div>
                 <div className='flex-1 bg-emerald-100 rounded-lg p-4 flex flex-col items-start justify-center'>
@@ -585,7 +585,7 @@ const DailyReport: React.FC = () => {
                     Opening Balance:
                   </span>
                   <span className='text-2xl font-bold text-emerald-900'>
-                    ₹{reportData.openingBalance.toLocaleString()}
+{reportData.openingBalance.toLocaleString()}
                   </span>
                 </div>
                 <div className='flex-1 bg-red-100 rounded-lg p-4 flex flex-col items-start justify-center'>
@@ -593,7 +593,7 @@ const DailyReport: React.FC = () => {
                     Total Debit:
                   </span>
                   <span className='text-2xl font-bold text-red-700'>
-                    ₹{reportData.totalDebit.toLocaleString()}
+{reportData.totalDebit.toLocaleString()}
                   </span>
                 </div>
                 <div className='flex-1 bg-purple-100 rounded-lg p-4 flex flex-col items-start justify-center'>
@@ -607,7 +607,7 @@ const DailyReport: React.FC = () => {
                       ? 'text-red-800'
                       : 'text-purple-800'
                   }`}>
-                    ₹{reportData.closingBalance.toLocaleString()}
+{reportData.closingBalance.toLocaleString()}
                   </span>
                   <span className='text-xs text-purple-600 mt-1'>
                     (Opening + Credit - Debit)
@@ -652,12 +652,12 @@ const DailyReport: React.FC = () => {
                       </td>
                       <td className='px-3 py-2 text-right text-green-700'>
                         {entry.credit > 0
-                          ? `₹${entry.credit.toLocaleString()}`
+                          ? `${entry.credit.toLocaleString()}`
                           : '-'}
                       </td>
                       <td className='px-3 py-2 text-right text-red-700'>
                         {entry.debit > 0
-                          ? `₹${entry.debit.toLocaleString()}`
+                          ? `${entry.debit.toLocaleString()}`
                           : '-'}
                       </td>
                       <td className='px-3 py-2'>{entry.staff}</td>
@@ -734,10 +734,10 @@ const DailyReport: React.FC = () => {
                             {companyName}
                           </td>
                           <td className='py-3 px-4 text-right text-green-600 font-medium'>
-                            ₹{totalCredit.toLocaleString()}
+{totalCredit.toLocaleString()}
                           </td>
                           <td className='py-3 px-4 text-right text-red-600 font-medium'>
-                            ₹{totalDebit.toLocaleString()}
+{totalDebit.toLocaleString()}
                           </td>
                           <td className='py-3 px-4 text-right font-semibold'>
                             <span
@@ -749,7 +749,7 @@ const DailyReport: React.FC = () => {
                                   : 'bg-gray-100 text-gray-800'
                               }`}
                             >
-                              ₹{balance.toLocaleString()}
+{balance.toLocaleString()}
                             </span>
                           </td>
                         </tr>
@@ -765,10 +765,10 @@ const DailyReport: React.FC = () => {
                     Total Companies: {Object.keys(reportData.companyBalances).length}
                   </div>
                   <div className='text-right text-green-600 font-semibold'>
-                    ₹{reportData.totalCredit.toLocaleString()}
+{reportData.totalCredit.toLocaleString()}
                   </div>
                   <div className='text-right text-red-600 font-semibold'>
-                    ₹{reportData.totalDebit.toLocaleString()}
+{reportData.totalDebit.toLocaleString()}
                   </div>
                   <div className='text-right'>
                     <span
@@ -780,7 +780,7 @@ const DailyReport: React.FC = () => {
                           : 'bg-gray-100 text-gray-800'
                       }`}
                     >
-                      ₹{reportData.closingBalance.toLocaleString()}
+{reportData.closingBalance.toLocaleString()}
                     </span>
                   </div>
                 </div>

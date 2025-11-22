@@ -349,7 +349,7 @@ const Dashboard: React.FC = () => {
                 {statsLoading ? (
                   <div className='animate-pulse'>Loading...</div>
                 ) : stats?.totalCredit !== undefined ? (
-                  `₹${stats.totalCredit.toLocaleString()}`
+                  `${stats.totalCredit.toLocaleString()}`
                 ) : (
                   <span className='text-yellow-200'>Error loading</span>
                 )}
@@ -367,7 +367,7 @@ const Dashboard: React.FC = () => {
                 {statsLoading ? (
                   <div className='animate-pulse'>Loading...</div>
                 ) : stats?.totalDebit !== undefined ? (
-                  `₹${stats.totalDebit.toLocaleString()}`
+                  `${stats.totalDebit.toLocaleString()}`
                 ) : (
                   <span className='text-yellow-200'>Error loading</span>
                 )}
@@ -385,7 +385,7 @@ const Dashboard: React.FC = () => {
                 {statsLoading ? (
                   <div className='animate-pulse'>Loading...</div>
                 ) : stats?.balance !== undefined ? (
-                  `₹${stats.balance.toLocaleString()}`
+                  `${stats.balance.toLocaleString()}`
                 ) : (
                   <span className='text-yellow-200'>Error loading</span>
                 )}
@@ -650,10 +650,10 @@ const Dashboard: React.FC = () => {
                       {company.companyName}
                     </td>
                     <td className='py-3 px-4 text-right text-green-600 font-medium'>
-                      ₹{company.totalCredit.toLocaleString()}
+{company.totalCredit.toLocaleString()}
                     </td>
                     <td className='py-3 px-4 text-right text-red-600 font-medium'>
-                      ₹{company.totalDebit.toLocaleString()}
+{company.totalDebit.toLocaleString()}
                     </td>
                     <td className='py-3 px-4 text-right font-semibold'>
                       <span
@@ -665,7 +665,7 @@ const Dashboard: React.FC = () => {
                             : 'bg-gray-100 text-gray-800'
                         }`}
                       >
-                        ₹{company.closingBalance.toLocaleString()}
+{company.closingBalance.toLocaleString()}
                       </span>
                     </td>
                   </tr>
@@ -679,10 +679,10 @@ const Dashboard: React.FC = () => {
                   Total Companies: {companyBalances?.length || 0}
                 </div>
                 <div className='text-right text-green-600 font-semibold'>
-                  ₹{companyBalances?.reduce((sum, c) => sum + c.totalCredit, 0)?.toLocaleString() || '0'}
+{companyBalances?.reduce((sum, c) => sum + c.totalCredit, 0)?.toLocaleString() || '0'}
                 </div>
                 <div className='text-right text-red-600 font-semibold'>
-                  ₹{companyBalances?.reduce((sum, c) => sum + c.totalDebit, 0)?.toLocaleString() || '0'}
+{companyBalances?.reduce((sum, c) => sum + c.totalDebit, 0)?.toLocaleString() || '0'}
                 </div>
                 <div className='text-right'>
                   <span
@@ -694,7 +694,7 @@ const Dashboard: React.FC = () => {
                         : 'bg-gray-100 text-gray-800'
                     }`}
                   >
-                    ₹{companyBalances?.reduce((sum, c) => sum + c.closingBalance, 0)?.toLocaleString() || '0'}
+{companyBalances?.reduce((sum, c) => sum + c.closingBalance, 0)?.toLocaleString() || '0'}
                   </span>
                 </div>
               </div>
