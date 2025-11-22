@@ -397,9 +397,6 @@ const Vehicles: React.FC = () => {
           <Button variant='secondary' onClick={loadVehicles}>
             Refresh
           </Button>
-          <Button variant='secondary' onClick={exportToExcel}>
-            Export
-          </Button>
           <Button
             onClick={() => {
               setShowAddForm(!showAddForm);

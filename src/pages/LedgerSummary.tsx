@@ -1011,9 +1011,6 @@ const LedgerSummary: React.FC = () => {
           <Button variant='secondary' onClick={printSummary}>
             Print
           </Button>
-          <Button variant='secondary' onClick={exportToExcel}>
-            Export
-          </Button>
         </div>
       </div>
 

@@ -526,9 +526,6 @@ const DailyReport: React.FC = () => {
             <Button variant='secondary' onClick={printReport}>
               Print
             </Button>
-            <Button variant='secondary' onClick={exportToExcel}>
-              Export
-            </Button>
           </div>
         </div>
         

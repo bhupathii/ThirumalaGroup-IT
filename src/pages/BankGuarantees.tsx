@@ -371,9 +371,6 @@ const BankGuarantees: React.FC = () => {
           <Button variant='secondary' onClick={loadBankGuarantees}>
             Refresh
           </Button>
-          <Button variant='secondary' onClick={exportToExcel}>
-            Export
-          </Button>
           <Button
             onClick={() => {
               setShowAddForm(!showAddForm);

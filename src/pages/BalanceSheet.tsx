@@ -833,9 +833,6 @@ const BalanceSheet: React.FC = () => {
             <Button variant='secondary' onClick={refreshData}>
               Refresh
             </Button>
-            <Button variant='secondary' onClick={exportToExcel}>
-              Export
-            </Button>
             <Button variant='secondary' onClick={printReport}>
               Print
             </Button>
@@ -844,9 +841,6 @@ const BalanceSheet: React.FC = () => {
             </Button>
             <Button variant='secondary' onClick={resetFilters}>
               Reset
-            </Button>
-            <Button variant='secondary' onClick={() => setCustomRows([])}>
-              Clear Custom Rows
             </Button>
           </div>
         </div>

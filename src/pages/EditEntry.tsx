@@ -2026,25 +2026,6 @@ const EditEntry: React.FC = () => {
           </p>
         </div>
         <div className='flex items-center gap-3'>
-          <Button variant='secondary' onClick={testDataAccess}>
-            Test Data Access
-          </Button>
-          <Button
-            variant='secondary'
-            onClick={() => {
-              const format = window.prompt(
-                'Enter export format (csv or pdf):',
-                'csv'
-              );
-              if (format === 'csv' || format === 'pdf') {
-                exportData(format);
-              } else if (format !== null) {
-                toast.error('Invalid format. Please enter "csv" or "pdf"');
-              }
-            }}
-          >
-            Export
-          </Button>
           <Button
             variant='secondary'
             onClick={async () => {

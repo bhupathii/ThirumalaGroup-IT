@@ -514,27 +514,6 @@ const DeletedRecords: React.FC = () => {
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Button
-              variant='outline'
-              onClick={async () => {
-                console.log('🔍 Manual debug triggered...');
-                await supabaseDB.debugDeletedRecords();
-                toast.info('Debug info logged to console');
-              }}
-              className='flex items-center gap-2'
-            >
-              <AlertTriangle className='w-4 h-4' />
-              Debug
-            </Button>
-            <Button
-              variant='secondary'
-              onClick={exportToExcel}
-              disabled={filteredRecords.length === 0}
-              className='flex items-center gap-2'
-            >
-              <Download className='w-4 h-4' />
-              Export
-            </Button>
           </div>
         </div>
 

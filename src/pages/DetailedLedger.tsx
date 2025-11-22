@@ -147,6 +147,27 @@ const DetailedLedger: React.FC = () => {
     applyFilters();
   }, [ledgerEntries, filters, searchTerm]);
 
+  // Update staff and user lists from loaded entries to ensure dropdown values match actual data
+  useEffect(() => {
+    if (ledgerEntries.length > 0) {
+      const distinctStaff = [...new Set(ledgerEntries.map(e => String(e.staff || '').trim()).filter(Boolean))].sort();
+      const distinctUsers = [...new Set(ledgerEntries.map(e => String(e.user || '').trim()).filter(Boolean))].sort();
+      
+      const staffData = distinctStaff.map(staff => ({
+        value: staff,
+        label: staff,
+      }));
+      const userData = distinctUsers.map(user => ({
+        value: user,
+        label: user,
+      }));
+      
+      // Update lists with actual values from entries
+      setStaffList([{ value: '', label: 'All Staff' }, ...staffData]);
+      setUserList([{ value: '', label: 'All Users' }, ...userData]);
+    }
+  }, [ledgerEntries]);
+
   // Filter accounts when company changes
   useEffect(() => {
     console.log('Company filter changed:', filters.companyName);
@@ -205,16 +226,37 @@ const DetailedLedger: React.FC = () => {
       setAccounts([{ value: '', label: 'Select a company first' }]);
       setSubAccounts([{ value: '', label: 'Select a company first' }]);
 
-      // Load staff and users
-      const users = await supabaseDB.getUsers();
-      const usersData = users
-        .filter(u => u.is_active)
-        .map(user => ({
-          value: user.username,
-          label: user.username,
+      // Load staff and users from actual cash_book entries
+      try {
+        // Get distinct staff and user values from cash_book
+        const sampleEntries = await supabaseDB.getCashBookEntries(10000, 0); // Load sample to get distinct values
+        const distinctStaff = [...new Set(sampleEntries.map(e => e.staff).filter(Boolean))].sort();
+        const distinctUsers = [...new Set(sampleEntries.map(e => e.users || e.staff).filter(Boolean))].sort();
+        
+        const staffData = distinctStaff.map(staff => ({
+          value: staff,
+          label: staff,
         }));
-      setStaffList([{ value: '', label: 'All Staff' }, ...usersData]);
-      setUserList([{ value: '', label: 'All Users' }, ...usersData]);
+        const userData = distinctUsers.map(user => ({
+          value: user,
+          label: user,
+        }));
+        
+        setStaffList([{ value: '', label: 'All Staff' }, ...staffData]);
+        setUserList([{ value: '', label: 'All Users' }, ...userData]);
+      } catch (error) {
+        console.error('Error loading staff/user from entries, falling back to users table:', error);
+        // Fallback to users table if cash_book query fails
+        const users = await supabaseDB.getUsers();
+        const usersData = users
+          .filter(u => u.is_active)
+          .map(user => ({
+            value: user.username,
+            label: user.username,
+          }));
+        setStaffList([{ value: '', label: 'All Staff' }, ...usersData]);
+        setUserList([{ value: '', label: 'All Users' }, ...usersData]);
+      }
     } catch (error) {
       console.error('Error loading dropdown data:', error);
       toast.error('Failed to load dropdown data');
@@ -514,7 +556,7 @@ const DetailedLedger: React.FC = () => {
           credit: entry.credit,
           debit: entry.debit,
           staff: entry.staff,
-          user: entry.staff,
+          user: entry.users || entry.staff, // Use users field (logged-in user), fallback to staff if missing
           entryTime: entry.entry_time,
           approved: entry.approved,
           balance: balance,
@@ -580,13 +622,25 @@ const DetailedLedger: React.FC = () => {
     }
 
     // Staff filter
-    if (filters.staffwise) {
-      filtered = filtered.filter(entry => entry.staff === filters.staffwise);
+    if (filters.staffwise && filters.staffwise.trim() !== '') {
+      const filterStaff = filters.staffwise.trim();
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(entry => {
+        const entryStaff = String(entry.staff || '').trim();
+        return entryStaff === filterStaff;
+      });
+      console.log(`🔍 Staff filter "${filterStaff}": ${beforeCount} -> ${filtered.length} entries`);
     }
 
     // User filter
-    if (filters.user) {
-      filtered = filtered.filter(entry => entry.user === filters.user);
+    if (filters.user && filters.user.trim() !== '') {
+      const filterUser = filters.user.trim();
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(entry => {
+        const entryUser = String(entry.user || '').trim();
+        return entryUser === filterUser;
+      });
+      console.log(`🔍 User filter "${filterUser}": ${beforeCount} -> ${filtered.length} entries`);
     }
 
     // Credit amount filter (exact match)
@@ -819,12 +873,6 @@ const DetailedLedger: React.FC = () => {
           </Button>
           <Button variant='secondary' onClick={loadLedgerData}>
             Refresh
-          </Button>
-          <Button variant='secondary' onClick={exportToExcel}>
-            Export Excel
-          </Button>
-          <Button variant='secondary' onClick={debugCompanyData}>
-            Debug BVR/BVT
           </Button>
         </div>
       </div>
@@ -1406,7 +1454,7 @@ const DetailedLedger: React.FC = () => {
         <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50'>
           <div className='bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto'>
             <div className='p-6'>
-              <div className='flex items-center justify-between mb-6'>
+              <div className='flex items-center justify-between mb-6 no-print'>
                 <h3 className='text-lg font-semibold'>
                   Print Preview - Detailed Ledger
                 </h3>
@@ -1424,109 +1472,323 @@ const DetailedLedger: React.FC = () => {
                 </div>
               </div>
 
+              {/* Print Styles */}
+              <style>{`
+                @media print {
+                  @page {
+                    size: A4 landscape;
+                    margin: 0.5cm;
+                  }
+                  * {
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                  }
+                  body * {
+                    visibility: hidden;
+                  }
+                  .print-content, .print-content * {
+                    visibility: visible;
+                  }
+                  .print-content {
+                    position: relative;
+                    width: 100%;
+                    font-family: Arial, sans-serif;
+                    margin: 0;
+                    padding: 0;
+                  }
+                  .no-print {
+                    display: none !important;
+                  }
+                  .print-page {
+                    page-break-after: always;
+                    break-after: page;
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                    margin: 0;
+                    padding: 0;
+                    display: block;
+                    width: 100%;
+                    min-height: 0;
+                    overflow: visible;
+                  }
+                  .print-page:last-child {
+                    page-break-after: auto;
+                    break-after: auto;
+                  }
+                  .print-page-header {
+                    page-break-after: avoid;
+                    break-after: avoid;
+                    margin-bottom: 8px;
+                    padding-bottom: 5px;
+                  }
+                  .print-page-footer {
+                    page-break-before: avoid;
+                    break-before: avoid;
+                    margin-top: 8px;
+                    padding-top: 5px;
+                  }
+                  .print-table {
+                    width: 100%;
+                    font-size: 9px;
+                    border-collapse: collapse;
+                    table-layout: fixed;
+                    margin: 0;
+                    padding: 0;
+                    page-break-inside: auto;
+                    border-spacing: 0;
+                  }
+                  .print-table thead {
+                    display: table-header-group;
+                    page-break-after: avoid;
+                    break-after: avoid;
+                  }
+                  .print-table tbody {
+                    display: table-row-group;
+                    page-break-inside: auto;
+                  }
+                  .print-table tr {
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                    page-break-after: auto;
+                    break-after: auto;
+                    height: auto;
+                    min-height: 12px;
+                    display: table-row;
+                    border-collapse: collapse;
+                  }
+                  .print-table tbody tr {
+                    border-top: 1px solid #000;
+                    border-bottom: 1px solid #000;
+                  }
+                  .print-table th,
+                  .print-table td {
+                    padding: 4px 3px;
+                    border-left: 1px solid #000;
+                    border-right: 1px solid #000;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    line-height: 1.2;
+                    vertical-align: top;
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                    display: table-cell;
+                    position: relative;
+                  }
+                  .print-table th:first-child,
+                  .print-table td:first-child {
+                    border-left: 1px solid #000;
+                  }
+                  .print-table th:last-child,
+                  .print-table td:last-child {
+                    border-right: 1px solid #000;
+                  }
+                  .print-table th {
+                    background-color: #e5e5e5 !important;
+                    font-weight: bold;
+                    font-size: 9px;
+                    text-align: left;
+                    position: relative;
+                  }
+                  .print-table .col-particulars {
+                    word-break: break-word;
+                    white-space: normal;
+                    line-height: 1.3;
+                  }
+                  .print-table .col-company,
+                  .print-table .col-account,
+                  .print-table .col-subaccount,
+                  .print-table .col-staff,
+                  .print-table .col-user,
+                  .print-table .col-payment {
+                    white-space: normal;
+                    word-break: break-word;
+                  }
+                  .print-table .col-sno { width: 3.5%; text-align: center; }
+                  .print-table .col-date { width: 7%; }
+                  .print-table .col-company { width: 9%; }
+                  .print-table .col-account { width: 8%; }
+                  .print-table .col-subaccount { width: 8%; }
+                  .print-table .col-particulars { width: 18%; }
+                  .print-table .col-credit { width: 7.5%; text-align: right; }
+                  .print-table .col-debit { width: 7.5%; text-align: right; }
+                  .print-table .col-saleqty { width: 5%; text-align: center; }
+                  .print-table .col-purchaseqty { width: 5%; text-align: center; }
+                  .print-table .col-staff { width: 7%; }
+                  .print-table .col-payment { width: 8%; }
+                  .print-table .col-user { width: 7%; }
+                  .print-table .col-entrytime { width: 7.5%; }
+                }
+                @media screen {
+                  .print-content {
+                    display: block;
+                  }
+                  .print-table {
+                    width: 100%;
+                    font-size: 11px;
+                  }
+                  .print-page {
+                    margin-bottom: 20px;
+                    border: 1px dashed #ccc;
+                    padding: 10px;
+                  }
+                }
+              `}</style>
+
               {/* Print Content */}
-              <div className='print:block'>
-                <div className='text-center mb-6'>
-                  <h1 className='text-2xl font-bold text-gray-900'>
-                    Thirumala Group
-                  </h1>
-                  <h2 className='text-lg font-semibold text-gray-700'>
-                    Detailed Ledger Report
-                  </h2>
-                  <p className='text-gray-600'>
-                    From {format(new Date(filters.fromDate), 'MMM dd, yyyy')} to{' '}
-                    {format(new Date(filters.toDate), 'MMM dd, yyyy')}
-                  </p>
-                  {filters.companyName && (
-                    <p className='text-gray-600'>
-                      Company: {filters.companyName}
-                    </p>
-                  )}
-                  {filters.mainAccount && (
-                    <p className='text-gray-600'>
-                      Account: {filters.mainAccount}
-                    </p>
-                  )}
-                </div>
+              <div className='print-content print:block'>
+                {/* Transactions Table - Split into pages of 20 rows */}
+                {(() => {
+                  const rowsPerPage = 20;
+                  const totalPages = Math.ceil(filteredEntries.length / rowsPerPage);
+                  const pages = [];
+                  
+                  for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+                    const startIndex = pageIndex * rowsPerPage;
+                    const endIndex = Math.min(startIndex + rowsPerPage, filteredEntries.length);
+                    const pageEntries = filteredEntries.slice(startIndex, endIndex);
+                    const isLastPage = pageIndex === totalPages - 1;
+                    
+                    pages.push(
+                      <div key={pageIndex} className={!isLastPage ? 'print-page' : ''}>
+                        {/* Main Header - Only on first page */}
+                        {pageIndex === 0 && (
+                          <>
+                            <div className='print-page-header' style={{ marginBottom: '10px', textAlign: 'center' }}>
+                              <h1 style={{ fontSize: '20px', margin: '5px 0', fontWeight: 'bold' }}>
+                                Thirumala Group
+                              </h1>
+                              <h2 style={{ fontSize: '16px', margin: '3px 0', fontWeight: '600' }}>
+                                Detailed Ledger Report
+                              </h2>
+                              <p style={{ fontSize: '12px', margin: '3px 0' }}>
+                                From {format(new Date(filters.fromDate), 'dd/MM/yyyy')} to {format(new Date(filters.toDate), 'dd/MM/yyyy')}
+                              </p>
+                              <div style={{ fontSize: '11px', marginTop: '5px' }}>
+                                {filters.companyName && (
+                                  <span style={{ marginRight: '15px' }}>
+                                    Company: <strong>{filters.companyName}</strong>
+                                  </span>
+                                )}
+                                {filters.mainAccount && (
+                                  <span>
+                                    Account: <strong>{filters.mainAccount}</strong>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
 
-                {/* Summary */}
-                <div className='grid grid-cols-2 gap-4 mb-6 text-sm'>
-                  <div className='text-center p-3 border border-gray-300'>
-                    <div className='font-medium'>Total Credit</div>
-                    <div className='text-lg font-bold'>
-                      ₹{totals.totalCredit.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className='text-center p-3 border border-gray-300'>
-                    <div className='font-medium'>Total Debit</div>
-                    <div className='text-lg font-bold'>
-                      ₹{totals.totalDebit.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
+                            {/* Summary - Only on first page */}
+                            <div className='print-page-header' style={{ marginBottom: '10px', fontSize: '11px' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                                <div style={{ textAlign: 'center', padding: '8px', border: '2px solid #666' }}>
+                                  <div style={{ fontSize: '11px', marginBottom: '4px' }}>Total Credit</div>
+                                  <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
+                                    ₹{totals.totalCredit.toLocaleString()}
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: 'center', padding: '8px', border: '2px solid #666' }}>
+                                  <div style={{ fontSize: '11px', marginBottom: '4px' }}>Total Debit</div>
+                                  <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
+                                    ₹{totals.totalDebit.toLocaleString()}
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: 'center', padding: '8px', border: '2px solid #666' }}>
+                                  <div style={{ fontSize: '11px', marginBottom: '4px' }}>Balance</div>
+                                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: totals.balance >= 0 ? '#059669' : '#dc2626' }}>
+                                    ₹{Math.abs(totals.balance).toLocaleString()}
+                                    {totals.balance >= 0 ? ' CR' : ' DR'}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
 
-                {/* Transactions Table */}
-                <table className='w-full text-xs border-collapse border border-gray-300'>
-                  <thead>
-                    <tr className='bg-gray-100'>
-                      <th className='border border-gray-300 px-2 py-1 text-left'>
-                        S.No
-                      </th>
-                      <th className='border border-gray-300 px-2 py-1 text-left'>
-                        Date
-                      </th>
-                      <th className='border border-gray-300 px-2 py-1 text-left font-bold'>
-                        Company
-                      </th>
-                      <th className='border border-gray-300 px-2 py-1 text-left'>
-                        Account
-                      </th>
-                      <th className='border border-gray-300 px-2 py-1 text-left'>
-                        Particulars
-                      </th>
-                      <th className='border border-gray-300 px-2 py-1 text-right'>
-                        Credit
-                      </th>
-                      <th className='border border-gray-300 px-2 py-1 text-right'>
-                        Debit
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredEntries.map((entry, index) => (
-                      <tr key={entry.id}>
-                        <td className='border border-gray-300 px-2 py-1'>
-                          {index + 1}
-                        </td>
-                        <td className='border border-gray-300 px-2 py-1'>
-                          {format(new Date(entry.date), 'dd-MMM-yy')}
-                        </td>
-                        <td className='border border-gray-300 px-2 py-1 font-bold'>
-                          {entry.companyName}
-                        </td>
-                        <td className='border border-gray-300 px-2 py-1'>
-                          {entry.accountName}
-                        </td>
-                        <td className='border border-gray-300 px-2 py-1'>
-                          {entry.particulars}
-                        </td>
-                        <td className='border border-gray-300 px-2 py-1 text-right'>
-                          {entry.credit > 0
-                            ? entry.credit.toLocaleString()
-                            : '-'}
-                        </td>
-                        <td className='border border-gray-300 px-2 py-1 text-right'>
-                          {entry.debit > 0 ? entry.debit.toLocaleString() : '-'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                            {/* Additional Filter Info - Only on first page */}
+                            {(filters.subAccount || filters.staffwise || filters.user || filters.paymentMode) && (
+                              <div className='print-page-header' style={{ marginBottom: '8px', fontSize: '10px', padding: '5px', backgroundColor: '#f5f5f5' }}>
+                                {filters.subAccount && <span style={{ marginRight: '15px' }}>Sub Account: <strong>{filters.subAccount}</strong></span>}
+                                {filters.staffwise && <span style={{ marginRight: '15px' }}>Staff: <strong>{filters.staffwise}</strong></span>}
+                                {filters.user && <span style={{ marginRight: '15px' }}>User: <strong>{filters.user}</strong></span>}
+                                {filters.paymentMode && <span>Payment Mode: <strong>{filters.paymentMode}</strong></span>}
+                              </div>
+                            )}
+                          </>
+                        )}
 
-                <div className='mt-6 text-center text-xs text-gray-500'>
-                  Generated on {format(new Date(), 'MMM dd, yyyy HH:mm:ss')} by{' '}
-                  {user?.username}
-                </div>
+                        {/* Page Header for continuation pages */}
+                        {pageIndex > 0 && (
+                          <div className='print-page-header' style={{ marginBottom: '8px', fontSize: '10px', textAlign: 'center', color: '#666' }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '12px' }}>Thirumala Group - Detailed Ledger Report (Continued)</div>
+                            <div>Page {pageIndex + 1} of {totalPages}</div>
+                          </div>
+                        )}
+                        <table className='print-table'>
+                          <thead>
+                            <tr className='bg-gray-100'>
+                              <th className='col-sno text-left'>S.No</th>
+                              <th className='col-date text-left'>Date</th>
+                              <th className='col-company text-left font-bold'>Company</th>
+                              <th className='col-account text-left'>Account</th>
+                              <th className='col-subaccount text-left'>Sub Account</th>
+                              <th className='col-particulars text-left'>Particulars</th>
+                              <th className='col-credit text-right'>Credit</th>
+                              <th className='col-debit text-right'>Debit</th>
+                              <th className='col-saleqty text-center'>Sale Qty</th>
+                              <th className='col-purchaseqty text-center'>Purchase Qty</th>
+                              <th className='col-staff text-left'>Staff</th>
+                              <th className='col-payment text-left'>Payment Mode</th>
+                              <th className='col-user text-left'>User</th>
+                              <th className='col-entrytime text-left'>Entry Time</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pageEntries.map((entry, localIndex) => {
+                              const globalIndex = startIndex + localIndex;
+                              return (
+                                <tr key={entry.id}>
+                                  <td className='col-sno'>{globalIndex + 1}</td>
+                                  <td className='col-date'>{format(new Date(entry.date), 'dd/MM/yyyy')}</td>
+                                  <td className='col-company font-bold'>{entry.companyName}</td>
+                                  <td className='col-account'>{entry.accountName}</td>
+                                  <td className='col-subaccount'>{entry.subAccount || '-'}</td>
+                                  <td className='col-particulars' title={entry.particulars}>{entry.particulars}</td>
+                                  <td className='col-credit text-right'>
+                                    {entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : '-'}
+                                  </td>
+                                  <td className='col-debit text-right'>
+                                    {entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : '-'}
+                                  </td>
+                                  <td className='col-saleqty text-center'>
+                                    {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
+                                  </td>
+                                  <td className='col-purchaseqty text-center'>
+                                    {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
+                                  </td>
+                                  <td className='col-staff'>{entry.staff}</td>
+                                  <td className='col-payment'>
+                                    {entry.payment_mode && String(entry.payment_mode).trim() ? String(entry.payment_mode).trim() : '-'}
+                                  </td>
+                                  <td className='col-user'>{entry.user}</td>
+                                  <td className='col-entrytime'>{format(new Date(entry.entryTime), 'dd/MM/yyyy HH:mm')}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        {/* Page Footer */}
+                        <div className='print-page-footer' style={{ textAlign: 'center', fontSize: '9px', marginTop: '8px', color: '#666' }}>
+                          Page {pageIndex + 1} of {totalPages}
+                          {isLastPage && (
+                            <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px solid #ccc' }}>
+                              Generated on {format(new Date(), 'dd/MM/yyyy HH:mm')} by {user?.username} | Total Records: {filteredEntries.length}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  return pages;
+                })()}
               </div>
             </div>
           </div>

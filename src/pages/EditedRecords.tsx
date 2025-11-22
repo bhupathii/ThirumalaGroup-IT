@@ -405,25 +405,6 @@ const EditedRecords = () => {
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           {loading ? 'Loading...' : 'Refresh'}
         </Button>
-        <Button
-          variant='secondary'
-          size='sm'
-          onClick={async () => {
-            console.log('🔍 Manual debug triggered for edit audit log...');
-            await supabaseDB.debugEditAuditLog();
-            toast.success('Edit audit log debug info logged to console');
-          }}
-          className='flex items-center gap-2'
-        >
-          <AlertTriangle className='w-4 h-4' />
-          Debug
-        </Button>
-        <Button onClick={handleTestConnection} variant='secondary' size='sm'>
-          Test Connection
-        </Button>
-        <Button onClick={handleExportExcel} variant='secondary' size='sm'>
-          Export Excel
-        </Button>
         <Button onClick={handlePrint} variant='secondary' size='sm'>
           Print
         </Button>

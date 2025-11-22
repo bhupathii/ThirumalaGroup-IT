@@ -1583,28 +1583,12 @@ const NewEntry: React.FC = () => {
             <div className='flex gap-1'>
               <Button
                 variant='secondary'
-                onClick={testDatabaseConnection}
-                size='sm'
-                className='text-xs'
-              >
-                Test DB
-              </Button>
-              <Button
-                variant='secondary'
                 onClick={loadUsersData}
                 size='sm'
                 className='text-xs'
                 icon={RefreshCw}
               >
                 Refresh
-              </Button>
-              <Button
-                icon={Upload}
-                variant='secondary'
-                size='sm'
-                onClick={() => setShowUploadModal(true)}
-              >
-                CSV
               </Button>
               <Button
                 variant='danger'

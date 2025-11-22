@@ -280,14 +280,6 @@ const Dashboard: React.FC = () => {
 
         <div className='flex items-center gap-4'>
           <button
-            onClick={() => setShowPasswordModal(true)}
-            className='flex items-center gap-2 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors'
-            title='Change Password'
-          >
-            <Key className='w-4 h-4' />
-            <span className='text-sm'>Change Password</span>
-          </button>
-          <button
             onClick={handleManualRefresh}
             disabled={loading || autoUpdating}
             className='flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
@@ -598,8 +590,7 @@ const Dashboard: React.FC = () => {
           </div>
         ) : (
           <div className='overflow-x-auto'>
-            <div className='max-h-48 overflow-y-auto'>
-              <table className='w-full text-xs'>
+            <table className='w-full text-xs'>
                 <thead className='sticky top-0 bg-gray-50 z-10'>
                   <tr className='border-b border-gray-200'>
                     <th className='text-left py-3 px-4 font-semibold text-gray-700'>
@@ -650,7 +641,6 @@ const Dashboard: React.FC = () => {
                 ))}
                 </tbody>
               </table>
-            </div>
             {/* Summary Footer */}
             <div className='mt-4 p-4 bg-gray-100 rounded-lg border'>
               <div className='grid grid-cols-4 gap-4 text-sm'>
