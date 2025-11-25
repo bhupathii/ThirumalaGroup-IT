@@ -5,7 +5,9 @@ import Input from '../components/UI/Input';
 import Select from '../components/UI/Select';
 import { vehicleTypes } from '../lib/mockData';
 import { useAuth } from '../contexts/AuthContext';
+import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
+import ModeLabel from '../components/UI/ModeLabel';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { Vehicle } from '../lib/supabaseDatabase';
@@ -386,9 +388,12 @@ const Vehicles: React.FC = () => {
       {/* Header */}
       <div className='flex items-center justify-between'>
         <div>
-          <h1 className='text-3xl font-bold text-gray-900'>
-            Vehicles Management
-          </h1>
+          <div className='flex items-center gap-3 mb-1'>
+            <h1 className='text-3xl font-bold text-gray-900'>
+              Vehicles Management
+            </h1>
+            <ModeLabel />
+          </div>
           <p className='text-gray-600'>
             Comprehensive vehicle tracking with expiry management
           </p>

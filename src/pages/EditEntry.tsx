@@ -9,6 +9,7 @@ import { getTableName } from '../lib/tableNames';
 import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
+import ModeLabel from '../components/UI/ModeLabel';
 import { format } from 'date-fns';
 import {
   Calendar,
@@ -39,6 +40,38 @@ interface EditHistory {
   newValues?: any;
 }
 
+// Helper function to normalize date to YYYY-MM-DD format for comparison
+const normalizeDate = (date: string | Date | null | undefined): string | null => {
+  if (!date) return null;
+  
+  try {
+    // If it's already a string in YYYY-MM-DD format, return it
+    if (typeof date === 'string') {
+      // Handle dates with time components (e.g., "2025-11-21 00:00:00" or "2025-11-21T00:00:00")
+      const dateOnly = date.split('T')[0].split(' ')[0];
+      // Validate it's in YYYY-MM-DD format
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+        return dateOnly;
+      }
+      // Try parsing as date
+      const parsed = new Date(date);
+      if (!isNaN(parsed.getTime())) {
+        return format(parsed, 'yyyy-MM-dd');
+      }
+    }
+    
+    // If it's a Date object
+    if (date instanceof Date) {
+      return format(date, 'yyyy-MM-dd');
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('Error normalizing date:', date, error);
+    return null;
+  }
+};
+
 const EditEntry: React.FC = () => {
   const { user, isAdmin } = useAuth();
   const { mode: tableMode } = useTableMode();
@@ -52,7 +85,7 @@ const EditEntry: React.FC = () => {
   const [entriesForSelectedDate, setEntriesForSelectedDate] = useState<any[]>([]);
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('pending');
+  const [statusFilter, setStatusFilter] = useState(''); // Default to empty to show all entries
   const [loading, setLoading] = useState(false);
   
   // Performance optimization states
@@ -132,11 +165,14 @@ const EditEntry: React.FC = () => {
       );
     }
     
-    // Apply user filter
+    // Apply user filter - search by username (Edited By)
     if (filterUser) {
-      filtered = filtered.filter(entry => 
-        entry.users?.toLowerCase().includes(filterUser.toLowerCase())
-      );
+      filtered = filtered.filter(entry => {
+        const entryUser = entry.users ? String(entry.users).trim() : '';
+        const filterUserValue = String(filterUser).trim();
+        // Exact match for dropdown selection, or partial match for search
+        return entryUser === filterUserValue || entryUser.toLowerCase().includes(filterUserValue.toLowerCase());
+      });
     }
     
     // Apply payment mode filter
@@ -149,13 +185,13 @@ const EditEntry: React.FC = () => {
     
     // Apply date filter from calendar selection (priority over other date filters)
     if (selectedDateFilter) {
-      filtered = filtered.filter(entry => {
-        if (entry.c_date) {
-          const entryDate = format(new Date(entry.c_date), 'yyyy-MM-dd');
-          return entryDate === selectedDateFilter;
-        }
-        return false;
-      });
+      const normalizedFilterDate = normalizeDate(selectedDateFilter);
+      if (normalizedFilterDate) {
+        filtered = filtered.filter(entry => {
+          const normalizedEntryDate = normalizeDate(entry.c_date);
+          return normalizedEntryDate === normalizedFilterDate;
+        });
+      }
     }
     
     if (searchTerm) {
@@ -168,11 +204,13 @@ const EditEntry: React.FC = () => {
     }
     
     if (filterDate && !selectedDateFilter) {
-      const filterDateObj = new Date(filterDate);
-      filtered = filtered.filter(entry => {
-        const entryDate = new Date(entry.c_date);
-        return entryDate.toDateString() === filterDateObj.toDateString();
-      });
+      const normalizedFilterDate = normalizeDate(filterDate);
+      if (normalizedFilterDate) {
+        filtered = filtered.filter(entry => {
+          const normalizedEntryDate = normalizeDate(entry.c_date);
+          return normalizedEntryDate === normalizedFilterDate;
+        });
+      }
     }
     
     if (statusFilter) {
@@ -183,8 +221,18 @@ const EditEntry: React.FC = () => {
       }
     }
     
+    // Apply sale quantity filter
+    if (filterSaleQ) {
+      filtered = filtered.filter(entry => String(entry.sale_qty || '') === filterSaleQ);
+    }
+    
+    // Apply purchase quantity filter
+    if (filterPurchaseQ) {
+      filtered = filtered.filter(entry => String(entry.purchase_qty || '') === filterPurchaseQ);
+    }
+    
     return filtered;
-  }, [entries, filterCompanyName, filterAccountName, filterSubAccountName, filterParticulars, filterCredit, filterDebit, filterStaff, filterUser, filterPaymentMode, selectedDateFilter, searchTerm, filterDate, statusFilter]);
+  }, [entries, filterCompanyName, filterAccountName, filterSubAccountName, filterParticulars, filterCredit, filterDebit, filterStaff, filterUser, filterPaymentMode, selectedDateFilter, searchTerm, filterDate, statusFilter, filterSaleQ, filterPurchaseQ]);
   
   const [showHistory, setShowHistory] = useState(false);
   const [entryHistory] = useState<EditHistory[]>([]);
@@ -516,13 +564,18 @@ const EditEntry: React.FC = () => {
             .map(mode => String(mode).trim())
         )];
         
+        // Standard payment modes from NewEntry form: Cash, Bank Transfer, Online
+        const standardPaymentModes = ['Cash', 'Bank Transfer', 'Online'];
+        // Combine standard modes with existing database modes, ensuring no duplicates
+        const allPaymentModes = [...new Set([...standardPaymentModes, ...uniquePaymentModes])];
+        
         console.log('💰 Credit amounts loaded:', uniqueCredits.length);
         console.log('💰 Debit amounts loaded:', uniqueDebits.length);
-        console.log('💳 Payment modes loaded:', uniquePaymentModes.length);
+        console.log('💳 Payment modes loaded:', allPaymentModes.length);
         
         setCreditOptions(uniqueCredits.map(amount => ({ value: amount.toString(), label: amount.toString() })));
         setDebitOptions(uniqueDebits.map(amount => ({ value: amount.toString(), label: amount.toString() })));
-        setPaymentModeOptions(uniquePaymentModes.map(mode => ({ value: mode, label: mode })));
+        setPaymentModeOptions(allPaymentModes.map(mode => ({ value: mode, label: mode })));
       }
       
       console.log('✅ All dropdown data loaded successfully');
@@ -611,6 +664,14 @@ const EditEntry: React.FC = () => {
     try {
       console.log('🔍 Loading filter options for date:', date);
       
+      // Normalize the date to YYYY-MM-DD format for database query
+      const normalizedDate = normalizeDate(date);
+      if (!normalizedDate) {
+        console.error('Invalid date format:', date);
+        toast.error('Invalid date format');
+        return;
+      }
+      
       // Clear current filters when date changes
       setFilterCompanyName('');
       setFilterAccountName('');
@@ -620,11 +681,11 @@ const EditEntry: React.FC = () => {
       setFilterDebit('');
       setFilterPaymentMode('');
       
-      // Get all entries for the specific date
+      // Get all entries for the specific date (use normalized date for query)
       const { data, error } = await supabase
         .from(getTableName('cash_book'))
         .select('company_name, acc_name, sub_acc_name, particulars, credit, debit, payment_mode')
-        .eq('c_date', date);
+        .eq('c_date', normalizedDate);
 
       if (error) {
         console.error('Error loading filter options by date:', error);
@@ -848,8 +909,8 @@ const EditEntry: React.FC = () => {
           toast.error(errorMessage + 'unknown error');
         }
 
-        // Fallback: use database service paginated fetch
-        const fallback = await supabaseDB.getCashBookEntries(pageSize, 0);
+        // Fallback: use database service to fetch all entries
+        const fallback = await supabaseDB.getAllCashBookEntries();
         setEntries(fallback);
         setEntriesForSelectedDate([]);
         return;
@@ -861,9 +922,9 @@ const EditEntry: React.FC = () => {
         'entries'
       );
 
-      // Load first page (1000 entries) for better data visibility
-      let allEntries = await supabaseDB.getCashBookEntries(pageSize, 0);
-      console.log('✅ Initial entries fetched:', allEntries.length);
+      // Load all entries for both ITR and regular modes
+      const allEntries = await supabaseDB.getAllCashBookEntries();
+      console.log('✅ All entries fetched:', allEntries.length);
       
       // Get total count for pagination info
       const { count } = await supabase
@@ -871,92 +932,12 @@ const EditEntry: React.FC = () => {
         .select('*', { count: 'exact', head: true });
       console.log('📊 Total entries in database:', count);
       
-      // Store the total count before filtering
+      // Store the total count
       const totalCount = count || 0;
       setTotalEntries(totalCount);
 
-      // Apply search filter
-      if (searchTerm) {
-        allEntries = allEntries.filter(
-          entry =>
-            entry.particulars
-              ?.toLowerCase()
-              .includes(searchTerm.toLowerCase()) ||
-            entry.acc_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            entry.company_name?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-      }
-
-      // Apply date filter
-      if (filterDate) {
-        allEntries = allEntries.filter(entry => entry.c_date === filterDate);
-      }
-
-      // Apply status filter
-      if (statusFilter) {
-        switch (statusFilter) {
-          case 'approved':
-            allEntries = allEntries.filter(entry => entry.approved);
-            break;
-          case 'pending':
-            allEntries = allEntries.filter(entry => !entry.approved);
-            break;
-          case 'locked':
-            // TODO: Implement locked filter when Supabase schema supports it
-            allEntries = allEntries.filter(() => false);
-            break;
-        }
-      }
-
-      // Apply new filters
-      if (filterCompanyName) {
-        allEntries = allEntries.filter(
-          entry =>
-            entry.company_name &&
-            entry.company_name
-              .toLowerCase()
-              .includes(filterCompanyName.toLowerCase())
-        );
-      }
-      if (filterAccountName) {
-        allEntries = allEntries.filter(
-          entry =>
-            entry.acc_name &&
-            entry.acc_name
-              .toLowerCase()
-              .includes(filterAccountName.toLowerCase())
-        );
-      }
-      if (filterSubAccountName) {
-        allEntries = allEntries.filter(
-          entry =>
-            entry.sub_acc_name &&
-            entry.sub_acc_name
-              .toLowerCase()
-              .includes(filterSubAccountName.toLowerCase())
-        );
-      }
-      if (filterParticulars) {
-        allEntries = allEntries.filter(
-          entry =>
-            entry.particulars &&
-            entry.particulars
-              .toLowerCase()
-              .includes(filterParticulars.toLowerCase())
-        );
-      }
-      if (filterSaleQ) {
-        allEntries = allEntries.filter(
-          entry => String(entry.sale_qty || '') === filterSaleQ
-        );
-      }
-      if (filterPurchaseQ) {
-        allEntries = allEntries.filter(
-          entry => String(entry.purchase_qty || '') === filterPurchaseQ
-        );
-      }
-
-      console.log(`📊 After filtering: ${allEntries.length} entries (total in DB: ${totalCount})`);
+      // Store ALL entries without filtering - let filteredEntries memo handle filtering
+      console.log(`📊 Storing all ${allEntries.length} entries (filtering will be applied by filteredEntries memo)`);
       setEntries(allEntries);
       setEntriesForSelectedDate([]);
     } catch (error) {
@@ -2053,7 +2034,10 @@ const EditEntry: React.FC = () => {
     <div className='min-h-screen flex flex-col w-full max-w-full'>
       <div className='flex items-center justify-between'>
         <div>
-          <h1 className='text-3xl font-bold text-gray-900'>Edit Form</h1>
+          <div className='flex items-center gap-3'>
+            <h1 className='text-3xl font-bold text-gray-900'>Edit Form</h1>
+            <ModeLabel />
+          </div>
           <p className='text-gray-600'>
             , edit, and manage cash book entries with complete history tracking
           </p>
@@ -2282,20 +2266,32 @@ const EditEntry: React.FC = () => {
             variant='secondary'
             icon={RefreshCw}
             onClick={async () => {
-              console.log('🔄 Refreshing all dropdown options...');
-              await loadDropdownData();
-              
-              // Also refresh all filter dropdown options
-              const allAccountNamesList = await supabaseDB.getDistinctAccountNames();
-              setAllAccountNames(allAccountNamesList.map(name => ({ value: name, label: name })));
-              
-              const allSubAccountNamesList = await supabaseDB.getDistinctSubAccountNames();
-              setAllSubAccounts(allSubAccountNamesList.map(name => ({ value: name, label: name })));
-              
-              toast.success('All dropdown options refreshed');
+              console.log('🔄 Refreshing all data...');
+              setLoading(true);
+              try {
+                // Reload all entries
+                await loadEntries();
+                
+                // Refresh all dropdown options
+                await loadDropdownData();
+                
+                // Refresh all filter dropdown options
+                const allAccountNamesList = await supabaseDB.getDistinctAccountNames();
+                setAllAccountNames(allAccountNamesList.map(name => ({ value: name, label: name })));
+                
+                const allSubAccountNamesList = await supabaseDB.getDistinctSubAccountNames();
+                setAllSubAccounts(allSubAccountNamesList.map(name => ({ value: name, label: name })));
+                
+                toast.success('All data refreshed successfully');
+              } catch (error) {
+                console.error('Error refreshing data:', error);
+                toast.error('Failed to refresh data');
+              } finally {
+                setLoading(false);
+              }
             }}
           >
-            Refresh Companies
+            Refresh
           </Button>
         </div>
       </Card>
@@ -2793,10 +2789,11 @@ const EditEntry: React.FC = () => {
                                 // In view mode, filter entries by selected date
                                 setSelectedDateFilter(date);
                                 
+                                const normalizedFilterDate = normalizeDate(date);
                                 const entriesForDate = entries.filter(entry => {
-                                  if (entry.c_date) {
-                                    const entryDate = format(new Date(entry.c_date), 'yyyy-MM-dd');
-                                    return entryDate === date;
+                                  if (normalizedFilterDate) {
+                                    const normalizedEntryDate = normalizeDate(entry.c_date);
+                                    return normalizedEntryDate === normalizedFilterDate;
                                   }
                                   return false;
                                 });
@@ -2861,6 +2858,19 @@ const EditEntry: React.FC = () => {
                       />
                     </div>
 
+                    {/* Payment Mode */}
+                    <SearchableSelect
+                      label='Payment Mode'
+                      value={selectedEntry?.payment_mode || ''}
+                      onChange={value => editMode ? handleInputChange('payment_mode', value) : undefined}
+                      options={[
+                        { value: '', label: 'Select payment mode...' },
+                        ...paymentModeOptions
+                      ]}
+                      disabled={!editMode}
+                      placeholder='Select payment mode...'
+                    />
+
                     {/* Particulars */}
                     <Input
                       label='Particulars'
@@ -2870,14 +2880,23 @@ const EditEntry: React.FC = () => {
                       disabled={!editMode}
                     />
 
-                    {/* Amounts */}
+                    {/* Amounts - Only one field should accept entry */}
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-1'>
                       <Input
                         label='Credit'
                         value={selectedEntry?.credit || ''}
-                        onChange={val =>
-                          editMode ? handleInputChange('credit', Number((parseFloat(val) || 0).toFixed(2))) : undefined
-                        }
+                        onChange={val => {
+                          if (editMode) {
+                            const creditValue = Number((parseFloat(val) || 0).toFixed(2));
+                            // If credit is entered, clear debit
+                            if (creditValue > 0) {
+                              handleInputChange('credit', creditValue);
+                              handleInputChange('debit', 0);
+                            } else {
+                              handleInputChange('credit', creditValue);
+                            }
+                          }
+                        }}
                         placeholder='Enter credit amount...'
                         disabled={!editMode}
                         className={
@@ -2892,9 +2911,18 @@ const EditEntry: React.FC = () => {
                       <Input
                         label='Debit'
                         value={selectedEntry?.debit || ''}
-                        onChange={val =>
-                          editMode ? handleInputChange('debit', Number((parseFloat(val) || 0).toFixed(2))) : undefined
-                        }
+                        onChange={val => {
+                          if (editMode) {
+                            const debitValue = Number((parseFloat(val) || 0).toFixed(2));
+                            // If debit is entered, clear credit
+                            if (debitValue > 0) {
+                              handleInputChange('debit', debitValue);
+                              handleInputChange('credit', 0);
+                            } else {
+                              handleInputChange('debit', debitValue);
+                            }
+                          }
+                        }}
                         placeholder='Enter debit amount...'
                         disabled={!editMode}
                         className={

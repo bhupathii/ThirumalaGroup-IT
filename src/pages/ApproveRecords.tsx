@@ -6,7 +6,9 @@ import Select from '../components/UI/Select';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
+import ModeLabel from '../components/UI/ModeLabel';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { getTableName } from '../lib/tableNames';
@@ -31,6 +33,7 @@ interface ApprovalFilters {
 
 const ApproveRecords: React.FC = () => {
   const { user, isAdmin } = useAuth();
+  const { mode: tableMode } = useTableMode();
 
   const [filters, setFilters] = useState<ApprovalFilters>({
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -115,6 +118,15 @@ const ApproveRecords: React.FC = () => {
     loadEntries();
   }, [isAdmin]);
 
+  // Reload data when table mode changes (ITR/Regular)
+  useEffect(() => {
+    if (isAdmin) {
+      console.log('[ApproveRecords] Table mode changed to:', tableMode, '- reloading data...');
+      loadDropdownData();
+      loadEntries();
+    }
+  }, [tableMode]);
+
   useEffect(() => {
     const onRefresh = () => {
       // Add a small delay to ensure database operations are complete
@@ -150,15 +162,12 @@ const ApproveRecords: React.FC = () => {
       }));
       setCompanies([{ value: '', label: 'All Companies' }, ...companiesData]);
 
-      // Load staff
-      const users = await supabaseDB.getUsers();
-      const usersData = users
-        .filter(u => u.is_active)
-        .map(user => ({
-          value: user.username,
-          label: user.username,
-        }));
-      setStaffList([{ value: '', label: 'All Staff' }, ...usersData]);
+      // Load staff - only show names that have data in cash_book (mode-aware)
+      // getDistinctStaffNames uses getTableName('cash_book') which switches between cash_book and cash_book_itr
+      console.log('[ApproveRecords] Loading staff names for mode:', tableMode);
+      const staffData = await supabaseDB.getDistinctStaffNames();
+      console.log('[ApproveRecords] Loaded staff names - Count:', staffData.length);
+      setStaffList([{ value: '', label: 'All Staff' }, ...staffData]);
     } catch (error) {
       setFetchError('Failed to load dropdown data');
       console.error('Error loading dropdown data:', error);
@@ -275,9 +284,13 @@ const ApproveRecords: React.FC = () => {
       );
     }
 
-    // Staff filter
+    // Staff filter - match exactly or by partial match
     if (filters.staff) {
-      filtered = filtered.filter(entry => entry.staff === filters.staff);
+      filtered = filtered.filter(entry => {
+        const entryStaff = entry.staff ? String(entry.staff).trim() : '';
+        const filterStaff = String(filters.staff).trim();
+        return entryStaff === filterStaff || entryStaff.toLowerCase().includes(filterStaff.toLowerCase());
+      });
     }
 
     // Base set for summary (date/company/staff), regardless of approval state
@@ -308,7 +321,13 @@ const ApproveRecords: React.FC = () => {
     let del = [...deletedEntries];
     if (filters.date) del = del.filter(d => d.c_date === filters.date);
     if (filters.company) del = del.filter(d => d.company_name === filters.company);
-    if (filters.staff) del = del.filter(d => d.staff === filters.staff);
+    if (filters.staff) {
+      del = del.filter(d => {
+        const entryStaff = d.staff ? String(d.staff).trim() : '';
+        const filterStaff = String(filters.staff).trim();
+        return entryStaff === filterStaff || entryStaff.toLowerCase().includes(filterStaff.toLowerCase());
+      });
+    }
     // Show all deleted records that haven't been approved yet
     console.log('[ApproveRecords] Filtering deleted records...');
     console.log('[ApproveRecords] Total deleted records before filtering:', del.length);
@@ -345,7 +364,11 @@ const ApproveRecords: React.FC = () => {
       baseFiltered = baseFiltered.filter(entry => entry.company_name === filters.company);
     }
     if (filters.staff) {
-      baseFiltered = baseFiltered.filter(entry => entry.staff === filters.staff);
+      baseFiltered = baseFiltered.filter(entry => {
+        const entryStaff = entry.staff ? String(entry.staff).trim() : '';
+        const filterStaff = String(filters.staff).trim();
+        return entryStaff === filterStaff || entryStaff.toLowerCase().includes(filterStaff.toLowerCase());
+      });
     }
     
     const approvedRecords = baseFiltered.filter(e => e.approved === true || e.approved === 'true').length;
@@ -379,7 +402,11 @@ const ApproveRecords: React.FC = () => {
       deletedFiltered = deletedFiltered.filter(d => d.company_name === filters.company);
     }
     if (filters.staff) {
-      deletedFiltered = deletedFiltered.filter(d => d.staff === filters.staff);
+      deletedFiltered = deletedFiltered.filter(d => {
+        const entryStaff = d.staff ? String(d.staff).trim() : '';
+        const filterStaff = String(filters.staff).trim();
+        return entryStaff === filterStaff || entryStaff.toLowerCase().includes(filterStaff.toLowerCase());
+      });
     }
     
     const approvedDeleted = deletedFiltered.filter(d => d.approved === true || d.approved === 'true').length;
@@ -818,7 +845,17 @@ const ApproveRecords: React.FC = () => {
 
   const approveAllWithConfirmation = async () => {
     const pendingEntries = filteredEntries.filter(
-      entry => entry.approved !== 'true'
+      entry => {
+        // Check if entry is truly pending (not approved and not rejected)
+        const approved = entry.approved;
+        return (
+          approved === null ||
+          approved === undefined ||
+          approved === '' ||
+          approved === 'false' ||
+          approved === false
+        ) && approved !== 'true' && approved !== 'rejected';
+      }
     );
 
     if (pendingEntries.length === 0) {
@@ -834,31 +871,47 @@ const ApproveRecords: React.FC = () => {
       setLoading(true);
       try {
         let approvedCount = 0;
+        let errorCount = 0;
 
         for (const entry of pendingEntries) {
-          const { error } = await supabase
-            .from(getTableName('cash_book'))
-            .update({
-              approved: true,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', entry.id);
+          try {
+            const { error } = await supabase
+              .from(getTableName('cash_book'))
+              .update({
+                approved: true,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', entry.id);
 
-          if (!error) {
-            approvedCount++;
+            if (error) {
+              console.error(`Error approving entry ${entry.id}:`, error);
+              errorCount++;
+            } else {
+              approvedCount++;
+            }
+          } catch (err) {
+            console.error(`Exception approving entry ${entry.id}:`, err);
+            errorCount++;
           }
         }
 
         if (approvedCount > 0) {
           await loadEntries();
           setSelectedEntries(new Set());
-          toast.success(`${approvedCount} entries approved with confirmation!`);
+          if (errorCount > 0) {
+            toast.success(`${approvedCount} entries approved with confirmation! ${errorCount} failed.`);
+          } else {
+            toast.success(`${approvedCount} entries approved with confirmation!`);
+          }
           
           // Trigger dashboard refresh
           localStorage.setItem('dashboard-refresh', Date.now().toString());
           window.dispatchEvent(new CustomEvent('dashboard-refresh'));
+        } else {
+          toast.error(`Failed to approve entries. ${errorCount} errors occurred.`);
         }
       } catch (error) {
+        console.error('Error in approveAllWithConfirmation:', error);
         toast.error('Failed to approve entries');
       } finally {
         setLoading(false);
@@ -868,37 +921,46 @@ const ApproveRecords: React.FC = () => {
 
   const cancelApprove = async () => {
     if (selectedEntries.size === 0) {
-      toast.error('Please select entries to reject');
+      toast.error('Please select entries to cancel approval');
       return;
     }
+    
+    if (!window.confirm(`Are you sure you want to cancel approval for ${selectedEntries.size} selected entries? This will reset them to pending status.`)) {
+      return;
+    }
+    
     setLoading(true);
     try {
-      let rejectedCount = 0;
+      let cancelledCount = 0;
       for (const entryId of selectedEntries) {
         const { data, error } = await supabase
           .from(getTableName('cash_book'))
-          .update({ approved: 'false', updated_at: new Date().toISOString() })
+          .update({ 
+            approved: '', // Reset to pending (empty string)
+            updated_at: new Date().toISOString() 
+          })
           .eq('id', entryId)
           .select()
           .single();
-        console.log('Reject update result:', { data, error });
+        console.log('Cancel approval update result:', { data, error });
         if (!error && data) {
-          rejectedCount++;
+          cancelledCount++;
         }
       }
-      if (rejectedCount > 0) {
+      if (cancelledCount > 0) {
         await loadEntries();
         setSelectedEntries(new Set());
-        toast.success(`${rejectedCount} entries rejected successfully!`);
+        toast.success(`${cancelledCount} entries approval cancelled successfully!`);
         
         // Trigger dashboard refresh
         localStorage.setItem('dashboard-refresh', Date.now().toString());
         window.dispatchEvent(new CustomEvent('dashboard-refresh'));
       } else {
-        toast.error('Failed to reject entries');
+        toast.error('Failed to cancel approval for entries');
       }
     } catch (error) {
-      toast.error('Failed to reject entries');
+      console.error('Error cancelling approval:', error);
+      toast.error('Failed to cancel approval for entries');
     } finally {
       setLoading(false);
     }
@@ -1156,7 +1218,10 @@ const ApproveRecords: React.FC = () => {
       {/* Header */}
       <div className='flex items-center justify-between'>
         <div>
-          <h1 className='text-3xl font-bold text-gray-900'>Approve Records</h1>
+          <div className='flex items-center gap-3 mb-1'>
+            <h1 className='text-3xl font-bold text-gray-900'>Approve Records</h1>
+            <ModeLabel />
+          </div>
           <p className='text-gray-600'>
             Review and approve pending cash book entries
           </p>
@@ -1230,11 +1295,12 @@ const ApproveRecords: React.FC = () => {
           </div>
           {/* Staff Filter */}
           <div className='w-full'>
-            <Select
+            <SearchableSelect
               label='Staff'
               value={filters.staff}
               onChange={value => handleFilterChange('staff', value)}
               options={staffList}
+              placeholder='Search staff...'
               className='w-full'
             />
           </div>

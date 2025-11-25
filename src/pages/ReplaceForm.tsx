@@ -8,9 +8,11 @@ import { supabaseDB } from '../lib/supabaseDatabase';
 import { supabase } from '../lib/supabase';
 import { getTableName } from '../lib/tableNames';
 import { useAuth } from '../contexts/AuthContext';
+import { useTableMode } from '../contexts/TableModeContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/queryClient';
 import toast from 'react-hot-toast';
+import ModeLabel from '../components/UI/ModeLabel';
 import { format, parseISO } from 'date-fns';
 import {
   TrendingUp,
@@ -18,6 +20,7 @@ import {
   FileText,
   Replace,
   AlertCircle,
+  Search,
 } from 'lucide-react';
 
 interface ReplaceFormData {
@@ -31,6 +34,7 @@ interface ReplaceFormData {
 
 const ReplaceForm: React.FC = () => {
   const { user, isAdmin } = useAuth();
+  const { mode: tableMode } = useTableMode();
   const queryClient = useQueryClient();
 
   const [replaceData, setReplaceData] = useState<ReplaceFormData>({
@@ -44,6 +48,8 @@ const ReplaceForm: React.FC = () => {
 
   const [entries, setEntries] = useState<any[]>([]);
   const [filteredEntries, setFilteredEntries] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
 
@@ -68,6 +74,7 @@ const ReplaceForm: React.FC = () => {
   const [summary, setSummary] = useState({
     totalRecords: 0,
     affectedRecords: 0,
+    searchResultsCount: 0,
     totalCredit: 0,
     totalDebit: 0,
   });
@@ -84,6 +91,33 @@ const ReplaceForm: React.FC = () => {
   useEffect(() => {
     applyFilters();
   }, [entries, replaceData]);
+
+  // Apply search filter when search term changes
+  useEffect(() => {
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase().trim();
+      const results = filteredEntries.filter(entry => {
+        return (
+          entry.company_name?.toLowerCase().includes(searchLower) ||
+          entry.acc_name?.toLowerCase().includes(searchLower) ||
+          entry.sub_acc_name?.toLowerCase().includes(searchLower) ||
+          entry.particulars?.toLowerCase().includes(searchLower) ||
+          entry.staff?.toLowerCase().includes(searchLower) ||
+          entry.users?.toLowerCase().includes(searchLower) ||
+          entry.credit?.toString().includes(searchTerm) ||
+          entry.debit?.toString().includes(searchTerm)
+        );
+      });
+      setSearchResults(results);
+    } else {
+      setSearchResults([]);
+    }
+  }, [searchTerm, filteredEntries]);
+
+  // Update summary when search results change
+  useEffect(() => {
+    updateSummary(filteredEntries);
+  }, [searchResults, filteredEntries, searchTerm]);
 
   const loadDropdownData = async () => {
     try {
@@ -170,6 +204,9 @@ const ReplaceForm: React.FC = () => {
     }
 
     setFilteredEntries(filtered);
+    // Clear search when filters change
+    setSearchTerm('');
+    setSearchResults([]);
     updateSummary(filtered);
   };
 
@@ -177,13 +214,17 @@ const ReplaceForm: React.FC = () => {
     const totalRecords = entries.length;
     const affectedRecords = filtered.length;
     
+    // Determine which records to use for calculations (search results if search is active, otherwise filtered)
+    const recordsForCalculation = searchTerm.trim() && searchResults.length > 0 ? searchResults : filtered;
+    const searchResultsCount = searchTerm.trim() ? searchResults.length : 0;
+    
     // Safely calculate totals, handling null/undefined values
-    const totalCredit = filtered.reduce((sum, entry) => {
+    const totalCredit = recordsForCalculation.reduce((sum, entry) => {
       const credit = parseFloat(entry.credit) || 0;
       return sum + credit;
     }, 0);
     
-    const totalDebit = filtered.reduce((sum, entry) => {
+    const totalDebit = recordsForCalculation.reduce((sum, entry) => {
       const debit = parseFloat(entry.debit) || 0;
       return sum + debit;
     }, 0);
@@ -191,6 +232,7 @@ const ReplaceForm: React.FC = () => {
     setSummary({
       totalRecords,
       affectedRecords: affectedRecords || totalRecords, // Use totalRecords if no filters applied
+      searchResultsCount,
       totalCredit,
       totalDebit,
     });
@@ -955,7 +997,10 @@ const ReplaceForm: React.FC = () => {
       {/* Header */}
       <div className='flex items-center justify-between'>
         <div>
-          <h1 className='text-3xl font-bold text-gray-900'>Replace Form</h1>
+          <div className='flex items-center gap-3 mb-1'>
+            <h1 className='text-3xl font-bold text-gray-900'>Replace Form</h1>
+            <ModeLabel />
+          </div>
           <p className='text-gray-600'>
             Bulk replace account names and sub-accounts across all records
           </p>
@@ -1121,13 +1166,34 @@ const ReplaceForm: React.FC = () => {
         </div>
       </Card>
 
+      {/* Search Field */}
+      <Card>
+        <div className='flex items-center gap-4'>
+          <div className='flex-1'>
+            <Input
+              label='Search Records'
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder='Search by company, account, sub-account, particulars, staff, user, credit, or debit...'
+              icon={Search}
+            />
+          </div>
+          {searchTerm.trim() && (
+            <div className='text-sm text-gray-600 bg-gray-100 px-4 py-2 rounded-lg'>
+              <strong>{summary.searchResultsCount}</strong> search result{summary.searchResultsCount !== 1 ? 's' : ''}
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* Summary Cards */}
       <div className='grid grid-cols-1 md:grid-cols-4 gap-4'>
         <Card className='bg-gradient-to-r from-blue-500 to-blue-600 text-white'>
           <div className='flex items-center justify-between'>
             <div>
               <p className='text-blue-100 text-sm font-medium'>Total Records</p>
-              <p className='text-2xl font-bold'>{summary.totalRecords}</p>
+              <p className='text-2xl font-bold'>{summary.totalRecords.toLocaleString()}</p>
+              <p className='text-blue-200 text-xs mt-1'>All entries in database</p>
             </div>
             <FileText className='w-8 h-8 text-blue-200' />
           </div>
@@ -1139,7 +1205,12 @@ const ReplaceForm: React.FC = () => {
               <p className='text-orange-100 text-sm font-medium'>
                 Affected Records
               </p>
-              <p className='text-2xl font-bold'>{summary.affectedRecords}</p>
+              <p className='text-2xl font-bold'>{summary.affectedRecords.toLocaleString()}</p>
+              <p className='text-orange-200 text-xs mt-1'>
+                {searchTerm.trim() 
+                  ? `Search results: ${summary.searchResultsCount.toLocaleString()}`
+                  : 'Matching filter criteria'}
+              </p>
             </div>
             <Replace className='w-8 h-8 text-orange-200' />
           </div>
@@ -1219,7 +1290,7 @@ const ReplaceForm: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredEntries.slice(0, 50).map((entry, index) => (
+                {(searchTerm.trim() ? searchResults : filteredEntries).slice(0, 50).map((entry, index) => (
                   <tr
                     key={entry.id}
                     className={`border-b hover:bg-gray-50 transition-colors ${
@@ -1283,9 +1354,9 @@ const ReplaceForm: React.FC = () => {
                 ))}
               </tbody>
             </table>
-            {filteredEntries.length > 50 && (
+            {(searchTerm.trim() ? searchResults : filteredEntries).length > 50 && (
               <div className='mt-4 text-center text-gray-500'>
-                Showing first 50 of {filteredEntries.length} records
+                Showing first 50 of {(searchTerm.trim() ? searchResults : filteredEntries).length} records
               </div>
             )}
           </div>

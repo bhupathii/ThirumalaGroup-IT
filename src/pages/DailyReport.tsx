@@ -7,7 +7,9 @@ import { supabaseDB } from '../lib/supabaseDatabase';
 import { supabase } from '../lib/supabase';
 import { getTableName } from '../lib/tableNames';
 import { useAuth } from '../contexts/AuthContext';
+import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
+import ModeLabel from '../components/UI/ModeLabel';
 import { format, addDays, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import { Search, Calendar } from 'lucide-react';
 
@@ -213,21 +215,33 @@ const DailyReport: React.FC = () => {
         console.log(`📊 Company filter: ${beforeCompanyFilter} → ${filteredEntries.length} entries`);
       }
 
-      // Apply search filter
+      // Apply search filter - only search in Particulars, Credit, Debit
       if (searchTerm) {
         const beforeSearchFilter = filteredEntries.length;
-        filteredEntries = filteredEntries.filter(
-          entry =>
-            entry.particulars
-              ?.toLowerCase()
-              .includes(searchTerm.toLowerCase()) ||
-            entry.acc_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (entry.sub_acc_name &&
-              entry.sub_acc_name
-                .toLowerCase()
-                .includes(searchTerm.toLowerCase())) ||
-            entry.staff?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
+        const searchLower = searchTerm.toLowerCase().trim();
+        
+        // Check if search term is numeric (for Credit/Debit search)
+        const isNumeric = !isNaN(parseFloat(searchTerm)) && isFinite(Number(searchTerm));
+        const numericValue = isNumeric ? parseFloat(searchTerm) : null;
+        
+        filteredEntries = filteredEntries.filter(entry => {
+          // Search in Particulars (text search)
+          const matchesParticulars = entry.particulars
+            ?.toLowerCase()
+            .includes(searchLower) || false;
+          
+          // Search in Credit (numeric or text)
+          const matchesCredit = numericValue !== null
+            ? (entry.credit && Math.abs(entry.credit - numericValue) < 0.01) // Exact numeric match
+            : entry.credit?.toString().toLowerCase().includes(searchLower) || false;
+          
+          // Search in Debit (numeric or text)
+          const matchesDebit = numericValue !== null
+            ? (entry.debit && Math.abs(entry.debit - numericValue) < 0.01) // Exact numeric match
+            : entry.debit?.toString().toLowerCase().includes(searchLower) || false;
+          
+          return matchesParticulars || matchesCredit || matchesDebit;
+        });
         console.log(`🔍 Search filter: ${beforeSearchFilter} → ${filteredEntries.length} entries`);
       }
 
@@ -478,6 +492,19 @@ const DailyReport: React.FC = () => {
   return (
     <div className='min-h-screen flex flex-col'>
       <div className='w-full px-4 space-y-6'>
+        {/* Header */}
+        <div className='flex items-center justify-between'>
+          <div>
+            <div className='flex items-center gap-3 mb-1'>
+              <h1 className='text-3xl font-bold text-gray-900'>Daily Report</h1>
+              <ModeLabel />
+            </div>
+            <p className='text-gray-600'>
+              View daily transaction reports with company-wise breakdown
+            </p>
+          </div>
+        </div>
+        
         {/* Responsive filter bar */}
         <div className='flex flex-col md:flex-row gap-4 items-end'>
           <div className='flex-1'>

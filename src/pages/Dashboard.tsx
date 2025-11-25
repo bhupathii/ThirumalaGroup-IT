@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import { useDashboardStats, useCompanyBalances, useDropdownData, useInvalidateDashboard } from '../hooks/useDashboardData';
+import ModeLabel from '../components/UI/ModeLabel';
 import toast from 'react-hot-toast';
 import {
   TrendingUp,
@@ -296,9 +297,12 @@ const Dashboard: React.FC = () => {
       {/* Welcome Header */}
       <div className='flex items-center justify-between'>
         <div>
-          <h1 className='text-3xl font-bold text-gray-900'>
-            Welcome back, {user?.username}!
-          </h1>
+          <div className='flex items-center gap-3 mb-1'>
+            <h1 className='text-3xl font-bold text-gray-900'>
+              Welcome back, {user?.username}!
+            </h1>
+            <ModeLabel />
+          </div>
           <p className='text-gray-600'>
             Here's your business overview for today.
             {companyBalances && companyBalances.length > 0 && (
@@ -701,6 +705,29 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
         )}
+      </Card>
+
+      {/* Change Password Card - Visible in both ITR and Regular modes */}
+      <Card
+        title='Change Password'
+        subtitle='Update your account password'
+      >
+        <div className='flex items-center justify-between'>
+          <div className='flex items-center gap-3'>
+            <Key className='w-5 h-5 text-gray-600' />
+            <div>
+              <p className='text-sm text-gray-600'>
+                Click the button below to change your password
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => setShowPasswordModal(true)}
+            className='bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
+          >
+            Change Password
+          </Button>
+        </div>
       </Card>
 
       {/* Password Change Modal */}

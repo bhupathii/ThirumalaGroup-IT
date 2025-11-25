@@ -5,7 +5,9 @@ import Input from '../components/UI/Input';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
+import ModeLabel from '../components/UI/ModeLabel';
 import { format, parseISO } from 'date-fns';
 import { TrendingUp, TrendingDown, Search, BarChart3, Plus, Database, RefreshCw, Calendar } from 'lucide-react';
 
@@ -378,11 +380,11 @@ const DetailedLedger: React.FC = () => {
   const loadLedgerData = async () => {
     setLoading(true);
     try {
-      console.log('🔄 Loading initial ledger data...');
+      console.log('🔄 Loading all cashbook entries...');
       
-      // Load first page (1000 entries) for better performance
-      const entries = await supabaseDB.getCashBookEntries(pageSize, 0);
-      console.log('✅ Initial entries fetched:', entries.length);
+      // Load all entries for both ITR and regular modes
+      const entries = await supabaseDB.getAllCashBookEntries();
+      console.log('✅ All entries fetched:', entries.length);
       
       // Get total count for pagination info
       const totalCount = await supabaseDB.getCashBookEntriesCount();
@@ -455,7 +457,7 @@ const DetailedLedger: React.FC = () => {
       if (entries.length === 0) {
         toast.success('No entries found in database');
       } else {
-        toast.success(`Loaded ${entries.length} entries (showing first ${pageSize} of ${totalCount})`);
+        toast.success(`Loaded all ${entries.length} cashbook entries`);
       }
     } catch (error) {
       console.error('Error loading ledger data:', error);
@@ -1166,7 +1168,10 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
       {/* Header */}
       <div className='flex items-center justify-between'>
         <div>
-          <h1 className='text-3xl font-bold text-gray-900'>Detailed Ledger</h1>
+          <div className='flex items-center gap-3 mb-1'>
+            <h1 className='text-3xl font-bold text-gray-900'>Detailed Ledger</h1>
+            <ModeLabel />
+          </div>
           <p className='text-gray-600'>
             Comprehensive ledger analysis with advanced filtering
           </p>

@@ -5,7 +5,9 @@ import Input from '../components/UI/Input';
 import { Driver } from '../lib/supabaseDatabase';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
+import ModeLabel from '../components/UI/ModeLabel';
 import { format, differenceInDays } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Edit } from 'lucide-react';
@@ -184,9 +186,12 @@ const Drivers: React.FC = () => {
       <div className='space-y-6'>
         <div className='flex items-center justify-between'>
           <div>
-            <h1 className='text-2xl font-bold text-gray-900'>
-              Drivers Management
-            </h1>
+            <div className='flex items-center gap-3 mb-1'>
+              <h1 className='text-2xl font-bold text-gray-900'>
+                Drivers Management
+              </h1>
+              <ModeLabel />
+            </div>
             <p className='text-gray-600'>
               Track driver information and license expiry dates
             </p>

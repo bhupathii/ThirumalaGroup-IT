@@ -5,7 +5,9 @@ import Input from '../components/UI/Input';
 import Select from '../components/UI/Select';
 import { supabaseDB, BalanceSheetAccount } from '../lib/supabaseDatabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
+import ModeLabel from '../components/UI/ModeLabel';
 import { format, parseISO } from 'date-fns';
 
 interface BalanceSheetFilters {
@@ -775,6 +777,19 @@ const BalanceSheet: React.FC = () => {
   return (
     <div className='min-h-screen flex flex-col'>
       <div className='max-w-6xl w-full mx-auto space-y-6'>
+        {/* Header */}
+        <div className='flex items-center justify-between'>
+          <div>
+            <div className='flex items-center gap-3 mb-1'>
+              <h1 className='text-3xl font-bold text-gray-900'>Balance Sheet</h1>
+              <ModeLabel />
+            </div>
+            <p className='text-gray-600'>
+              Generate balance sheet reports with account-wise breakdown
+            </p>
+          </div>
+        </div>
+        
         {/* Performance Status Indicator */}
         <div className={`p-3 rounded-lg border ${usingOptimizedAPI ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
           <div className='flex items-center gap-2'>

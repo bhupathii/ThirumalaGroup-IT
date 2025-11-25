@@ -9,6 +9,7 @@ import { getTableName } from '../lib/tableNames';
 import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import { useCreateCashBookEntry, useBulkCashBookOperations } from '../hooks/useCashBookData';
+import ModeLabel from '../components/UI/ModeLabel';
 import { useDropdownData, useRecentEntriesByDate } from '../hooks/useDashboardData';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/queryClient';
@@ -137,6 +138,97 @@ const NewEntry: React.FC = () => {
   const [newSubAccountName, setNewSubAccountName] = useState('');
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
+
+  // Sync flag to prevent infinite loops when syncing quantity details
+  const syncingRef = useRef(false);
+
+  // Synchronize quantityChecked between main entry and dual entry
+  // When main entry quantityChecked changes, sync to dual entry
+  useEffect(() => {
+    if (!dualEntryEnabled || syncingRef.current) return;
+    if (entry.quantityChecked !== dualEntry.quantityChecked) {
+      syncingRef.current = true;
+      setDualEntry(prev => ({
+        ...prev,
+        quantityChecked: entry.quantityChecked,
+        // Sync values when enabling, preserve when disabling
+        saleQ: entry.quantityChecked ? entry.saleQ : prev.saleQ,
+        purchaseQ: entry.quantityChecked ? entry.purchaseQ : prev.purchaseQ,
+      }));
+      setTimeout(() => { syncingRef.current = false; }, 0);
+    }
+  }, [entry.quantityChecked, dualEntryEnabled]);
+
+  // When dual entry quantityChecked changes, sync to main entry
+  useEffect(() => {
+    if (!dualEntryEnabled || syncingRef.current) return;
+    if (dualEntry.quantityChecked !== entry.quantityChecked) {
+      syncingRef.current = true;
+      setEntry(prev => ({
+        ...prev,
+        quantityChecked: dualEntry.quantityChecked,
+        // Sync values when enabling, preserve when disabling
+        saleQ: dualEntry.quantityChecked ? dualEntry.saleQ : prev.saleQ,
+        purchaseQ: dualEntry.quantityChecked ? dualEntry.purchaseQ : prev.purchaseQ,
+      }));
+      setTimeout(() => { syncingRef.current = false; }, 0);
+    }
+  }, [dualEntry.quantityChecked, dualEntryEnabled]);
+
+  // Synchronize saleQ between main entry and dual entry (only when both are checked)
+  useEffect(() => {
+    if (!dualEntryEnabled || syncingRef.current) return;
+    if (entry.quantityChecked && dualEntry.quantityChecked && entry.saleQ !== dualEntry.saleQ) {
+      syncingRef.current = true;
+      setDualEntry(prev => ({ ...prev, saleQ: entry.saleQ }));
+      setTimeout(() => { syncingRef.current = false; }, 0);
+    }
+  }, [entry.saleQ, entry.quantityChecked, dualEntryEnabled]);
+
+  useEffect(() => {
+    if (!dualEntryEnabled || syncingRef.current) return;
+    if (entry.quantityChecked && dualEntry.quantityChecked && dualEntry.saleQ !== entry.saleQ) {
+      syncingRef.current = true;
+      setEntry(prev => ({ ...prev, saleQ: dualEntry.saleQ }));
+      setTimeout(() => { syncingRef.current = false; }, 0);
+    }
+  }, [dualEntry.saleQ, dualEntry.quantityChecked, dualEntryEnabled]);
+
+  // Synchronize purchaseQ between main entry and dual entry (only when both are checked)
+  useEffect(() => {
+    if (!dualEntryEnabled || syncingRef.current) return;
+    if (entry.quantityChecked && dualEntry.quantityChecked && entry.purchaseQ !== dualEntry.purchaseQ) {
+      syncingRef.current = true;
+      setDualEntry(prev => ({ ...prev, purchaseQ: entry.purchaseQ }));
+      setTimeout(() => { syncingRef.current = false; }, 0);
+    }
+  }, [entry.purchaseQ, entry.quantityChecked, dualEntryEnabled]);
+
+  useEffect(() => {
+    if (!dualEntryEnabled || syncingRef.current) return;
+    if (entry.quantityChecked && dualEntry.quantityChecked && dualEntry.purchaseQ !== entry.purchaseQ) {
+      syncingRef.current = true;
+      setEntry(prev => ({ ...prev, purchaseQ: dualEntry.purchaseQ }));
+      setTimeout(() => { syncingRef.current = false; }, 0);
+    }
+  }, [dualEntry.purchaseQ, dualEntry.quantityChecked, dualEntryEnabled]);
+
+  // When dual entry is enabled, sync initial state from main entry
+  useEffect(() => {
+    if (!dualEntryEnabled || syncingRef.current) return;
+    // Only sync if values are different to avoid unnecessary updates
+    if (dualEntry.quantityChecked !== entry.quantityChecked || 
+        (entry.quantityChecked && (dualEntry.saleQ !== entry.saleQ || dualEntry.purchaseQ !== entry.purchaseQ))) {
+      syncingRef.current = true;
+      setDualEntry(prev => ({
+        ...prev,
+        quantityChecked: entry.quantityChecked,
+        saleQ: entry.quantityChecked ? entry.saleQ : prev.saleQ,
+        purchaseQ: entry.quantityChecked ? entry.purchaseQ : prev.purchaseQ,
+      }));
+      setTimeout(() => { syncingRef.current = false; }, 0);
+    }
+  }, [dualEntryEnabled]);
 
   // Database connection test
   const testDatabaseConnection = async () => {
@@ -1558,7 +1650,10 @@ const NewEntry: React.FC = () => {
       {/* Header - Fixed at top */}
       <div className='flex items-center justify-between p-1 bg-white border-b border-gray-200 flex-shrink-0'>
         <div>
-          <h1 className='text-lg font-bold text-gray-900'>New Entry</h1>
+          <div className='flex items-center gap-2 mb-1'>
+            <h1 className='text-lg font-bold text-gray-900'>New Entry</h1>
+            <ModeLabel />
+          </div>
           <p className='text-xs text-gray-600'>
             Create new cash book entries with automatic daily entry numbering
           </p>

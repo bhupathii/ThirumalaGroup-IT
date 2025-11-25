@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import bcrypt from 'bcryptjs';
 import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
+import ModeLabel from '../components/UI/ModeLabel';
 import {
   UserIcon,
   Shield,
@@ -114,6 +115,13 @@ interface UserRow {
   featuresByMode?: Record<ModeKey, string[]>;
   mode?: 'regular' | 'itr' | null;
   created_at?: string;
+  address?: string;
+  aadhaar_number?: string;
+  phone?: string;
+  email?: string;
+  full_name?: string;
+  date_of_birth?: string;
+  other_details?: string;
 }
 
 interface NewUserFormState {
@@ -122,6 +130,13 @@ interface NewUserFormState {
   is_admin: boolean;
   mode: ModeKey;
   featuresByMode: Record<ModeKey, string[]>;
+  address?: string;
+  aadhaar_number?: string;
+  phone?: string;
+  email?: string;
+  full_name?: string;
+  date_of_birth?: string;
+  other_details?: string;
 }
 
 const UserManagement: React.FC = () => {
@@ -135,6 +150,13 @@ const UserManagement: React.FC = () => {
     is_admin: false,
     featuresByMode: emptyModeFeatures(),
     mode: currentMode,
+    address: '',
+    aadhaar_number: '',
+    phone: '',
+    email: '',
+    full_name: '',
+    date_of_birth: '',
+    other_details: '',
   }));
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -199,6 +221,13 @@ useEffect(() => {
         username, 
         mode,
         created_at,
+        email,
+        address,
+        aadhaar_number,
+        phone,
+        full_name,
+        date_of_birth,
+        other_details,
         user_types!inner(user_type)
       `)
       .order('created_at', { ascending: false });
@@ -212,7 +241,7 @@ useEffect(() => {
     );
     
     if (isModeColumnError) {
-      // Mode column doesn't exist, try without it
+      // Mode column doesn't exist, try without it - but still load personal details
       console.log('Mode column does not exist, loading users without mode...');
       hasModeColumn = false;
       const { data: dataWithoutMode, error: errorWithoutMode } = await supabase
@@ -221,6 +250,13 @@ useEffect(() => {
           id, 
           username, 
           created_at,
+          email,
+          address,
+          aadhaar_number,
+          phone,
+          full_name,
+          date_of_birth,
+          other_details,
           user_types!inner(user_type)
         `)
         .order('created_at', { ascending: false });
@@ -447,6 +483,13 @@ const upsertUserAccess = async (
             is_admin: false,
             featuresByMode: emptyModeFeatures(),
             mode: currentMode,
+            address: '',
+            aadhaar_number: '',
+            phone: '',
+            email: '',
+            full_name: '',
+            date_of_birth: '',
+            other_details: '',
           });
           loadUsers();
           setLoading(false);
@@ -466,6 +509,13 @@ const upsertUserAccess = async (
         is_admin: false,
         featuresByMode: emptyModeFeatures(),
         mode: currentMode,
+        address: '',
+        aadhaar_number: '',
+        phone: '',
+        email: '',
+        full_name: '',
+        date_of_birth: '',
+        other_details: '',
       });
       loadUsers();
     } catch (err: any) {
@@ -552,13 +602,20 @@ const upsertUserAccess = async (
         throw new Error('User type not found');
       }
 
-      // Try to insert with mode first
+      // Try to insert with mode first - include all personal details
       let insertData: any = {
         username: newUser.username,
         password_hash,
         user_type_id: userTypeData.id,
-        email: `${newUser.username}@thirumala.com`,
+        email: newUser.email || `${newUser.username}@thirumala.com`,
         mode: newUser.mode,
+        // Personal details
+        full_name: newUser.full_name || null,
+        address: newUser.address || null,
+        aadhaar_number: newUser.aadhaar_number || null,
+        phone: newUser.phone || null,
+        date_of_birth: newUser.date_of_birth || null,
+        other_details: newUser.other_details || null,
       };
 
       let createdUser: any = null;
@@ -583,11 +640,12 @@ const upsertUserAccess = async (
         if (isModeError) {
           console.log('Mode column does not exist, creating user without mode...');
           modeColumnExists = false;
-          delete insertData.mode;
+          // Remove mode but keep all personal details
+          const { mode, ...insertDataWithoutMode } = insertData;
           
           const { data: retryUser, error: retryError } = await supabase
             .from('users')
-            .insert(insertData)
+            .insert(insertDataWithoutMode)
             .select()
             .single();
           
@@ -972,6 +1030,13 @@ const upsertUserAccess = async (
         is_admin: false,
         featuresByMode: emptyModeFeatures(),
         mode: currentMode,
+        address: '',
+        aadhaar_number: '',
+        phone: '',
+        email: '',
+        full_name: '',
+        date_of_birth: '',
+        other_details: '',
       });
       loadUsers();
       
@@ -997,9 +1062,12 @@ const upsertUserAccess = async (
         {/* Header */}
         <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8'>
           <div>
-            <h1 className='text-3xl font-bold text-gray-900'>
-              User Management
-            </h1>
+            <div className='flex items-center gap-3 mb-1'>
+              <h1 className='text-3xl font-bold text-gray-900'>
+                User Management
+              </h1>
+              <ModeLabel />
+            </div>
             <p className='text-gray-600'>
               Create login credentials and manage feature access for your organization members
             </p>
@@ -1055,6 +1123,12 @@ const upsertUserAccess = async (
               {/* User Info Section */}
               <div className='grid grid-cols-1 gap-3 sm:gap-4'>
                 <Input
+                  label='Full Name'
+                  value={newUser?.full_name || ''}
+                  onChange={v => handleModalChange('full_name', v)}
+                  placeholder='Enter full name'
+                />
+                <Input
                   label='Username (Login ID)'
                   value={newUser?.username || ''}
                   onChange={v => handleModalChange('username', v)}
@@ -1069,6 +1143,53 @@ const upsertUserAccess = async (
                   placeholder='Enter password for login'
                   required
                 />
+                <Input
+                  label='Email'
+                  type='email'
+                  value={newUser?.email || ''}
+                  onChange={v => handleModalChange('email', v)}
+                  placeholder='Enter email address'
+                />
+                <Input
+                  label='Phone Number'
+                  type='tel'
+                  value={newUser?.phone || ''}
+                  onChange={v => handleModalChange('phone', v)}
+                  placeholder='Enter phone number'
+                />
+                <Input
+                  label='Address'
+                  value={newUser?.address || ''}
+                  onChange={v => handleModalChange('address', v)}
+                  placeholder='Enter address'
+                />
+                <Input
+                  label='Aadhaar Number'
+                  type='text'
+                  value={newUser?.aadhaar_number || ''}
+                  onChange={v => handleModalChange('aadhaar_number', v)}
+                  placeholder='Enter Aadhaar number (12 digits)'
+                  maxLength={12}
+                />
+                <Input
+                  label='Date of Birth'
+                  type='date'
+                  value={newUser?.date_of_birth || ''}
+                  onChange={v => handleModalChange('date_of_birth', v)}
+                  placeholder='Select date of birth'
+                />
+                <div>
+                  <label className='block text-sm font-medium text-gray-700 mb-1'>
+                    Other Personal Details
+                  </label>
+                  <textarea
+                    value={newUser?.other_details || ''}
+                    onChange={e => handleModalChange('other_details', e.target.value)}
+                    placeholder='Enter any other personal details...'
+                    rows={3}
+                    className='w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500'
+                  />
+                </div>
                 <label className='flex items-center gap-2 mt-2 cursor-pointer select-none'>
                   <input
                     type='checkbox'
@@ -1190,7 +1311,7 @@ const upsertUserAccess = async (
                 Admins ({users.filter(u => u.is_admin).length})
               </h2>
               <div className='flex flex-col gap-6'>
-                {users.filter(u => u.is_admin).map(u => {
+                {users.filter(u => u.is_admin).map((u, adminIndex) => {
                   const regularFeatureCount = u.featuresByMode?.regular?.length || 0;
                   const itrFeatureCount = u.featuresByMode?.itr?.length || 0;
 
@@ -1331,11 +1452,55 @@ const upsertUserAccess = async (
               >
                 <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 px-2 md:px-6 ${editingUserId === u.id ? 'overflow-visible' : ''}`}>
                   <div>
+                    <div className='mb-1 text-xs text-gray-500'>Full Name</div>
+                    <div className='text-gray-800 font-medium'>
+                      {u.full_name || '-'}
+                    </div>
+                  </div>
+                  <div>
                     <div className='mb-1 text-xs text-gray-500'>Username</div>
                     <div className='text-gray-800 font-medium'>
                       {u.username}
                     </div>
                   </div>
+                  <div>
+                    <div className='mb-1 text-xs text-gray-500'>Email</div>
+                    <div className='text-gray-800 font-medium'>
+                      {u.email || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className='mb-1 text-xs text-gray-500'>Phone</div>
+                    <div className='text-gray-800 font-medium'>
+                      {u.phone || '-'}
+                    </div>
+                  </div>
+                  <div className='md:col-span-2'>
+                    <div className='mb-1 text-xs text-gray-500'>Address</div>
+                    <div className='text-gray-800 font-medium'>
+                      {u.address || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className='mb-1 text-xs text-gray-500'>Aadhaar Number</div>
+                    <div className='text-gray-800 font-medium'>
+                      {u.aadhaar_number || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className='mb-1 text-xs text-gray-500'>Date of Birth</div>
+                    <div className='text-gray-800 font-medium'>
+                      {u.date_of_birth ? new Date(u.date_of_birth).toLocaleDateString() : '-'}
+                    </div>
+                  </div>
+                  {u.other_details && (
+                    <div className='md:col-span-2'>
+                      <div className='mb-1 text-xs text-gray-500'>Other Details</div>
+                      <div className='text-gray-800 font-medium text-sm'>
+                        {u.other_details}
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <div className='mb-1 text-xs text-gray-500'>
                       Admin Status
@@ -1791,11 +1956,55 @@ const upsertUserAccess = async (
               >
                 <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 px-2 md:px-6 ${editingUserId === u.id ? 'overflow-visible' : ''}`}>
                   <div>
+                    <div className='mb-1 text-xs text-gray-500'>Full Name</div>
+                    <div className='text-gray-800 font-medium'>
+                      {u.full_name || '-'}
+                    </div>
+                  </div>
+                  <div>
                     <div className='mb-1 text-xs text-gray-500'>Username</div>
                     <div className='text-gray-800 font-medium'>
                       {u.username}
                     </div>
                   </div>
+                  <div>
+                    <div className='mb-1 text-xs text-gray-500'>Email</div>
+                    <div className='text-gray-800 font-medium'>
+                      {u.email || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className='mb-1 text-xs text-gray-500'>Phone</div>
+                    <div className='text-gray-800 font-medium'>
+                      {u.phone || '-'}
+                    </div>
+                  </div>
+                  <div className='md:col-span-2'>
+                    <div className='mb-1 text-xs text-gray-500'>Address</div>
+                    <div className='text-gray-800 font-medium'>
+                      {u.address || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className='mb-1 text-xs text-gray-500'>Aadhaar Number</div>
+                    <div className='text-gray-800 font-medium'>
+                      {u.aadhaar_number || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className='mb-1 text-xs text-gray-500'>Date of Birth</div>
+                    <div className='text-gray-800 font-medium'>
+                      {u.date_of_birth ? new Date(u.date_of_birth).toLocaleDateString() : '-'}
+                    </div>
+                  </div>
+                  {u.other_details && (
+                    <div className='md:col-span-2'>
+                      <div className='mb-1 text-xs text-gray-500'>Other Details</div>
+                      <div className='text-gray-800 font-medium text-sm'>
+                        {u.other_details}
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <div className='mb-1 text-xs text-gray-500'>
                       Admin Status
