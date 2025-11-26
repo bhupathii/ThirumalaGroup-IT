@@ -122,11 +122,17 @@ export const printTable = (
     }
     
     .print-summary {
-      margin: 20px 0;
+      margin: 20px 0 20px auto;
       padding: 15px;
       background-color: #f8f9fa;
       border: 1px solid #dee2e6;
       border-radius: 4px;
+      width: fit-content;
+      max-width: 100%;
+      margin-left: auto !important;
+      margin-right: 0 !important;
+      float: right;
+      clear: both;
     }
     
     .print-summary h3 {
@@ -486,6 +492,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       padding: 30px;
       border: 2px solid #333;
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      display: block;
+      overflow: hidden;
     }
     
     .print-header {
@@ -595,12 +603,16 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     }
     
     .print-summary {
-      margin: 6px 0 8px 0;
+      margin: 6px 0 8px auto;
       padding: 0;
       background: transparent;
       border: none;
-      width: 100%;
-      max-width: 520px; /* keep labels and values close, avoid huge center gap */
+      width: fit-content;
+      max-width: 100%;
+      margin-left: auto !important;
+      margin-right: 0 !important;
+      float: right;
+      clear: both;
     }
     
     .print-summary h3 {
@@ -623,12 +635,16 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
 
     /* Boxed tables for summaries */
     .boxed-table {
-      width: 100%;
+      width: auto;
       max-width: 620px;
       border-collapse: collapse;
-      margin: 4px 0 6px 0;
+      margin: 4px 0 6px auto;
       font-size: 13px;
       font-weight: bold;
+      margin-left: auto !important;
+      margin-right: 0 !important;
+      float: right;
+      clear: both;
     }
     .boxed-table th {
       background-color: #f3f4f6;
@@ -855,8 +871,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
   // Company-wise closing balance for the filtered data
   let companySummaryHTML = '';
   
-  // In preview mode: Show all companies with opening/closing balances when "All Companies" is selected
-  if (!isPrintMode && isAllCompanies && companyBalances && companyBalances.length > 0) {
+  // Generate company summary HTML for both preview and print modes when companyBalances are provided
+  if (companyBalances && companyBalances.length > 0) {
     companySummaryHTML = `
       <div class="print-summary">
         <table class="boxed-table">
@@ -870,13 +886,17 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
           </thead>
           <tbody>
             ${companyBalances.map(company => {
-              const openingText = `${Math.abs(company.openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${company.openingBalance >= 0 ? 'CR' : 'DR'}`;
-              const closingText = `${Math.abs(company.closingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${company.closingBalance >= 0 ? 'CR' : 'DR'}`;
+              const openingValue = Math.abs(company.openingBalance);
+              const closingValue = Math.abs(company.closingBalance);
+              const isOpeningDR = company.openingBalance < 0;
+              const isClosingDR = company.closingBalance < 0;
+              const openingText = `${isOpeningDR ? '-' : ''}${openingValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${isOpeningDR ? 'DR' : 'CR'}`;
+              const closingText = `${isClosingDR ? '-' : ''}${closingValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${isClosingDR ? 'DR' : 'CR'}`;
               return `
                 <tr>
                   <td><strong>${company.companyName}</strong></td>
-                  <td class="${company.openingBalance >= 0 ? 'text-green' : 'text-red'}">${openingText}</td>
-                  <td class="${company.closingBalance >= 0 ? 'text-green' : 'text-red'}">${closingText}</td>
+                  <td class="${isOpeningDR ? 'text-red' : 'text-green'}">${openingText}</td>
+                  <td class="${isClosingDR ? 'text-red' : 'text-green'}">${closingText}</td>
                 </tr>
               `;
             }).join('')}
@@ -897,6 +917,43 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
   const generatePrintModeHTMLString = () => {
     const creditTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0) : 0;
     const debitTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0) : 0;
+    
+    // Generate company summary HTML for print mode
+    let printCompanySummaryHTML = '';
+    // Always show company summary if companyBalances are provided (for both preview and print)
+    if (companyBalances && companyBalances.length > 0) {
+      printCompanySummaryHTML = `
+        <div class="print-summary">
+          <table class="boxed-table">
+            <thead>
+              <tr><th colspan="3">Company-wise Opening and Closing Balances</th></tr>
+              <tr>
+                <th>Company</th>
+                <th>Opening Balance</th>
+                <th>Closing Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${companyBalances.map(company => {
+                const openingValue = Math.abs(company.openingBalance);
+                const closingValue = Math.abs(company.closingBalance);
+                const isOpeningDR = company.openingBalance < 0;
+                const isClosingDR = company.closingBalance < 0;
+                const openingText = `${isOpeningDR ? '-' : ''}${openingValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${isOpeningDR ? 'DR' : 'CR'}`;
+                const closingText = `${isClosingDR ? '-' : ''}${closingValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${isClosingDR ? 'DR' : 'CR'}`;
+                return `
+                  <tr>
+                    <td><strong>${company.companyName}</strong></td>
+                    <td style="color: ${isOpeningDR ? '#dc2626' : '#059669'}; font-weight: bold;">${openingText}</td>
+                    <td style="color: ${isClosingDR ? '#dc2626' : '#059669'}; font-weight: bold;">${closingText}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
     
     const printModeTableRows = data
       .map((row, index) => {
@@ -985,26 +1042,32 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
               ${printModeTableRows}
               <tr style="background-color: #f0f0f0; font-weight: bold;">
                 <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Total</td>
+                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
                 <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
               </tr>
               <tr style="background-color: #e8e8e8; font-weight: bold;">
                 <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Opening Balance</td>
+                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
                 <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${openingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
               </tr>
               <tr style="background-color: #e8e8e8; font-weight: bold;">
                 <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Closing Balance</td>
                 <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
+                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
                 <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${closingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
               </tr>
               <tr style="background-color: #d0d0d0; font-weight: bold;">
                 <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Grand Total</td>
+                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
                 <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${grandTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${grandTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
               </tr>
             </tbody>
           </table>
+          
+          ${printCompanySummaryHTML}
           
           ${includeFooter ? `
             <div class="print-footer">

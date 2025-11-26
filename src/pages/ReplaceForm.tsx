@@ -79,7 +79,7 @@ const ReplaceForm: React.FC = () => {
     }
     loadDropdownData();
     loadEntries();
-  }, [isAdmin]);
+  }, [isAdmin, tableMode]); // Reload when mode changes
 
   useEffect(() => {
     applyFilters();
@@ -205,10 +205,38 @@ const ReplaceForm: React.FC = () => {
   };
 
   const handleInputChange = (field: keyof ReplaceFormData, value: string) => {
-    setReplaceData(prev => ({
-      ...prev,
-      [field]: value,
-    }));
+    setReplaceData(prev => {
+      // If selecting a filter (oldCompanyName, oldAccountName, or oldSubAccount),
+      // clear the other two filters to ensure only one is active at a time
+      if (field === 'oldCompanyName' && value) {
+        return {
+          ...prev,
+          oldCompanyName: value,
+          oldAccountName: '', // Clear account name
+          oldSubAccount: '', // Clear sub account
+        };
+      } else if (field === 'oldAccountName' && value) {
+        return {
+          ...prev,
+          oldAccountName: value,
+          oldCompanyName: '', // Clear company name
+          oldSubAccount: '', // Clear sub account
+        };
+      } else if (field === 'oldSubAccount' && value) {
+        return {
+          ...prev,
+          oldSubAccount: value,
+          oldCompanyName: '', // Clear company name
+          oldAccountName: '', // Clear account name
+        };
+      } else {
+        // For other fields (newCompanyName, newAccountName, newSubAccount), update normally
+        return {
+          ...prev,
+          [field]: value,
+        };
+      }
+    });
   };
 
 
