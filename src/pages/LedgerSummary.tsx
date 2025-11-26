@@ -6,6 +6,7 @@ import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
+import ModeLabel from '../components/UI/ModeLabel';
 import { format, parseISO } from 'date-fns';
 import { Calendar } from 'lucide-react';
 import CustomCalendar from '../components/UI/CustomCalendar';
@@ -992,6 +993,7 @@ ${Math.abs(balance).toLocaleString()}
 
   return (
     <div className='space-y-6'>
+      <ModeLabel />
       {/* Header */}
       <div className='flex items-center justify-between'>
         <div>

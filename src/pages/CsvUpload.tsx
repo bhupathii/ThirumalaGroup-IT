@@ -5,7 +5,9 @@ import { supabaseDB } from '../lib/supabaseDatabase';
 import { supabase } from '../lib/supabase';
 import { getTableName } from '../lib/tableNames';
 import { useAuth } from '../contexts/AuthContext';
+import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
+import ModeLabel from '../components/UI/ModeLabel';
 import { format } from 'date-fns';
 import { importFromFile, validateImportedData } from '../utils/excel';
 import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
@@ -2109,6 +2111,7 @@ const CsvUpload: React.FC = () => {
 
   return (
     <div className='h-screen flex flex-col'>
+      <ModeLabel />
       <div className='flex-1 overflow-y-auto p-6'>
         <div className='w-full max-w-6xl mx-auto'>
           {/* Header */}

@@ -6,6 +6,7 @@ import Select from '../components/UI/Select';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import ModeLabel from '../components/UI/ModeLabel';
 import jsPDF from 'jspdf';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 // Fix for jsPDF autotable type
@@ -373,10 +374,12 @@ const EditedRecords = () => {
   }, [auditLog]);
   
   return (
-    <Card
-      title={isShowingRecentEntries ? 'Recent Records (No Edit History Available)' : 'Edited & Deleted Records'}
-      subtitle={isShowingRecentEntries ? `Showing ${filteredLog.length} recent entries` : `Edits: ${filteredLog.length} | Deleted: ${deletedLog.length}`}
-    >
+    <div className='space-y-4'>
+      <ModeLabel />
+      <Card
+        title={isShowingRecentEntries ? 'Recent Records (No Edit History Available)' : 'Edited & Deleted Records'}
+        subtitle={isShowingRecentEntries ? `Showing ${filteredLog.length} recent entries` : `Edits: ${filteredLog.length} | Deleted: ${deletedLog.length}`}
+      >
       <div className='flex flex-wrap gap-3 mb-4 items-end'>
         <Select
           label='Edited Date'
@@ -584,7 +587,8 @@ const EditedRecords = () => {
         </>
       )}
 
-    </Card>
+      </Card>
+    </div>
   );
 };
 
