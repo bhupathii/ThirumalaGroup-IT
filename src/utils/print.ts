@@ -645,6 +645,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       font-weight: bold;
       margin-left: auto !important;
       margin-right: 0 !important;
+      display: table;
     }
     .boxed-table th {
       background-color: #f3f4f6;
@@ -874,8 +875,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
   // Generate company summary HTML for both preview and print modes when companyBalances are provided
   if (companyBalances && companyBalances.length > 0) {
     companySummaryHTML = `
-      <div class="print-summary">
-        <table class="boxed-table">
+      <div class="print-summary" style="margin-left: auto; margin-right: 0; width: fit-content; text-align: right;">
+        <table class="boxed-table" style="margin-left: auto; margin-right: 0;">
           <thead>
             <tr><th colspan="3">Company-wise Opening and Closing Balances</th></tr>
             <tr>
@@ -923,8 +924,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     // Always show company summary if companyBalances are provided (for both preview and print)
     if (companyBalances && companyBalances.length > 0) {
       printCompanySummaryHTML = `
-        <div class="print-summary">
-          <table class="boxed-table">
+        <div class="print-summary" style="margin-left: auto; margin-right: 0; width: fit-content; text-align: right;">
+          <table class="boxed-table" style="margin-left: auto; margin-right: 0;">
             <thead>
               <tr><th colspan="3">Company-wise Opening and Closing Balances</th></tr>
               <tr>
@@ -1067,7 +1068,9 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
             </tbody>
           </table>
           
-          ${printCompanySummaryHTML}
+          <div style="text-align: right; width: 100%;">
+            ${printCompanySummaryHTML}
+          </div>
           
           ${includeFooter ? `
             <div class="print-footer">
@@ -1196,7 +1199,9 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
         </table>
         
         ${summaryHTML}
-        ${companySummaryHTML}
+        <div style="text-align: right; width: 100%;">
+          ${companySummaryHTML}
+        </div>
         
         ${includeFooter ? `
           <div class="print-footer">
