@@ -122,7 +122,7 @@ export const printTable = (
     }
     
     .print-summary {
-      margin: 20px 0 20px auto;
+      margin: 0 auto 0 0;
       padding: 15px;
       background-color: #f8f9fa;
       border: 1px solid #dee2e6;
@@ -493,7 +493,9 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       padding: 30px;
       border: 2px solid #333;
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      display: block;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
       overflow: visible;
     }
     
@@ -604,7 +606,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     }
     
     .print-summary {
-      margin: 6px 0 8px auto;
+      margin: 0 auto 0 0;
       padding: 0;
       background: transparent;
       border: none;
@@ -640,7 +642,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       width: auto;
       max-width: 620px;
       border-collapse: collapse;
-      margin: 4px 0 6px 0;
+      margin: 0;
       font-size: 13px;
       font-weight: bold;
       margin-left: auto !important;
