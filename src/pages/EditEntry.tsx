@@ -2368,6 +2368,12 @@ const EditEntry: React.FC = () => {
                       Particulars
                     </th>
                     <th className='w-16 px-1 py-1 text-right font-medium text-gray-700'>
+                      Purchase Qty
+                    </th>
+                    <th className='w-16 px-1 py-1 text-right font-medium text-gray-700'>
+                      Sale Qty
+                    </th>
+                    <th className='w-16 px-1 py-1 text-right font-medium text-gray-700'>
                       Credit
                     </th>
                     <th className='w-16 px-1 py-1 text-right font-medium text-gray-700'>
@@ -2416,6 +2422,16 @@ const EditEntry: React.FC = () => {
                         title={entry.particulars}
                       >
                         {entry.particulars}
+                      </td>
+                      <td className='w-16 px-1 py-1 text-right text-sm font-bold'>
+                        {entry.sale_qty !== null && entry.sale_qty !== undefined && entry.sale_qty !== ''
+                          ? `${Number(entry.sale_qty).toLocaleString()}`
+                          : '-'}
+                      </td>
+                      <td className='w-16 px-1 py-1 text-right text-sm font-bold'>
+                        {entry.purchase_qty !== null && entry.purchase_qty !== undefined && entry.purchase_qty !== ''
+                          ? `${Number(entry.purchase_qty).toLocaleString()}`
+                          : '-'}
                       </td>
                       <td className='w-16 px-1 py-1 text-right font-medium text-green-600 text-sm font-bold'>
                         {entry.credit > 0
@@ -2767,7 +2783,7 @@ const EditEntry: React.FC = () => {
             </div>
 
             {/* Content - Scrollable */}
-            <div className='flex-1 p-1'>
+            <div className='flex-1 p-1 overflow-y-auto'>
               <div className='w-full max-w-7xl mx-auto'>
                 <Card className='p-1 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg'>
                   <form className='space-y-1 text-xs'>
@@ -2979,11 +2995,9 @@ const EditEntry: React.FC = () => {
                     </div>
                   </form>
                 </Card>
-              </div>
-            </div>
 
-            {/* Entry Metadata */}
-            <div className='bg-gray-50 p-4 rounded-lg mt-8'>
+                {/* Entry Metadata */}
+                <div className='bg-gray-50 p-4 rounded-lg mt-8'>
                 <h4 className='font-medium text-gray-900 mb-3'>
                   Entry Information
                 </h4>
@@ -3030,7 +3044,9 @@ const EditEntry: React.FC = () => {
                     </div>
                   </div>
                 )}
+                </div>
               </div>
+            </div>
 
             {/* Footer - Fixed at Bottom */}
             {editMode && (
