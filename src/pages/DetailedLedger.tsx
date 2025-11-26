@@ -1,15 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
-import Input from '../components/UI/Input';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { useAuth } from '../contexts/AuthContext';
-import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
 import CustomCalendar from '../components/UI/CustomCalendar';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { TrendingUp, TrendingDown, Search, BarChart3, Plus, Database, RefreshCw, Calendar } from 'lucide-react';
 
 interface DetailedLedgerFilters {
@@ -58,8 +56,8 @@ const DetailedLedger: React.FC = () => {
     subAccount: '',
     staffwise: '',
     user: '',
-    creditAmount: 0,
-    debitAmount: 0,
+    creditAmount: '',
+    debitAmount: '',
     betweenDates: true,
   });
 
@@ -122,8 +120,6 @@ const DetailedLedger: React.FC = () => {
   // Local visible inputs for dd/MM/yyyy editing to prevent mm/dd flip
   const [fromDateInput, setFromDateInput] = useState('');
   const [toDateInput, setToDateInput] = useState('');
-  const fromPickerRef = useRef<HTMLInputElement>(null);
-  const toPickerRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     try {
@@ -134,15 +130,7 @@ const DetailedLedger: React.FC = () => {
     }
   }, [filters.fromDate, filters.toDate]);
 
-  // Summary data
-  const [summary, setSummary] = useState({
-    totalCredit: 0,
-    totalDebit: 0,
-    balance: 0,
-    recordCount: 0,
-    openingBalance: 0,
-    closingBalance: 0,
-  });
+  // Summary data (removed - using totals useMemo instead for better performance)
 
   useEffect(() => {
     loadDropdownData();
@@ -269,17 +257,17 @@ const DetailedLedger: React.FC = () => {
     }
   };
 
-  // Debug function to check BVR/BVT company data
-  const debugCompanyData = async () => {
-    try {
-      console.log('🔍 [DEBUG] Starting BVR/BVT company data debug...');
-      await supabaseDB.debugCompanyAccountData();
-      toast.success('Debug data logged to console. Check browser console for details.');
-    } catch (error) {
-      console.error('Error in debug:', error);
-      toast.error('Debug failed. Check console for details.');
-    }
-  };
+  // Debug function to check BVR/BVT company data (commented out - available for debugging if needed)
+  // const debugCompanyData = async () => {
+  //   try {
+  //     console.log('🔍 [DEBUG] Starting BVR/BVT company data debug...');
+  //     await supabaseDB.debugCompanyAccountData();
+  //     toast.success('Debug data logged to console. Check browser console for details.');
+  //   } catch (error) {
+  //     console.error('Error in debug:', error);
+  //     toast.error('Debug failed. Check console for details.');
+  //   }
+  // };
 
   const loadAllAccounts = async () => {
     try {
@@ -450,13 +438,7 @@ const DetailedLedger: React.FC = () => {
       const entriesWithPaymentMode = ledgerData.filter(e => e.payment_mode && e.payment_mode.trim());
       console.log(`✅ DetailedLedger loaded: ${ledgerData.length} entries, ${entriesWithPaymentMode.length} have payment_mode values`);
       if (entriesWithPaymentMode.length > 0) {
-        // Helper function to get payment mode display label
-        const getPaymentModeLabel = (mode: string): string => {
-          if (mode === 'Online') return 'Double';
-          if (mode === 'Bank Transfer') return 'Bank';
-          return mode;
-        };
-        
+        // Log payment mode summary with correct labels
         console.log('📊 Payment mode summary:', {
           Cash: entriesWithPaymentMode.filter(e => e.payment_mode === 'Cash').length,
           Bank: entriesWithPaymentMode.filter(e => e.payment_mode === 'Bank Transfer').length,
@@ -492,7 +474,7 @@ const DetailedLedger: React.FC = () => {
       
       // Convert to ledger format with running balance
       let runningBalance = ledgerEntries.length > 0 ? ledgerEntries[ledgerEntries.length - 1].runningBalance : 0;
-      const moreLedgerData: LedgerEntry[] = moreEntries.map((entry, index) => {
+      const moreLedgerData: LedgerEntry[] = moreEntries.map((entry) => {
         const balance = entry.credit - entry.debit;
         runningBalance += balance;
 
@@ -554,7 +536,7 @@ const DetailedLedger: React.FC = () => {
       
       // Convert to ledger format with running balance
       let runningBalance = 0;
-      const ledgerData: LedgerEntry[] = allEntries.map((entry, index) => {
+      const ledgerData: LedgerEntry[] = allEntries.map((entry) => {
         const balance = entry.credit - entry.debit;
         runningBalance += balance;
 
@@ -696,18 +678,11 @@ const DetailedLedger: React.FC = () => {
     }
 
     // Calculate summary
-    const totalCredit = filtered.reduce((sum, entry) => sum + entry.credit, 0);
-    const totalDebit = filtered.reduce((sum, entry) => sum + entry.debit, 0);
-    const balance = totalCredit - totalDebit;
-
-    setSummary({
-      totalCredit,
-      totalDebit,
-      balance,
-      recordCount: filtered.length,
-      openingBalance: 0, // Calculate based on entries before date range
-      closingBalance: balance,
-    });
+    // Summary calculation (using totals useMemo instead)
+    // const totalCredit = filtered.reduce((sum, entry) => sum + entry.credit, 0);
+    // const totalDebit = filtered.reduce((sum, entry) => sum + entry.debit, 0);
+    // const balance = totalCredit - totalDebit;
+    // Summary is now calculated via totals useMemo (line 112-118)
 
     setFilteredEntries(filtered);
   };
@@ -757,9 +732,18 @@ const DetailedLedger: React.FC = () => {
       
       // Convert to ledger format with running balance
       let runningBalance = 0;
-      const ledgerData: LedgerEntry[] = filteredEntries.map((entry, index) => {
+      const ledgerData: LedgerEntry[] = filteredEntries.map((entry) => {
         const balance = entry.credit - entry.debit;
         runningBalance += balance;
+
+        // Extract payment_mode
+        let paymentMode = '';
+        if (entry.payment_mode) {
+          const pmStr = String(entry.payment_mode).trim();
+          if (pmStr && pmStr !== 'null' && pmStr !== 'undefined' && pmStr !== '') {
+            paymentMode = pmStr;
+          }
+        }
 
         return {
           id: entry.id,
@@ -771,12 +755,15 @@ const DetailedLedger: React.FC = () => {
           particulars: entry.particulars,
           credit: entry.credit,
           debit: entry.debit,
+          saleQuantity: entry.sale_qty || 0,
+          purchaseQuantity: entry.purchase_qty || 0,
           staff: entry.staff,
           user: entry.users || entry.staff,
           entryTime: entry.entry_time,
           approved: entry.approved,
           balance: balance,
           runningBalance: runningBalance,
+          payment_mode: paymentMode,
         };
       });
       
@@ -1136,6 +1123,18 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
   };
 
   const exportToExcel = () => {
+    if (filteredEntries.length === 0) {
+      toast.error('No entries to export');
+      return;
+    }
+    
+    // Helper function to get payment mode display label
+    const getPaymentModeDisplayLabel = (mode: string): string => {
+      if (mode === 'Online') return 'Double';
+      if (mode === 'Bank Transfer') return 'Bank';
+      return mode || '';
+    };
+    
     const exportData = filteredEntries.map((entry, index) => ({
       'S.No': index + 1,
       Date: entry.date,
@@ -1147,7 +1146,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
       Debit: entry.debit,
       Balance: entry.balance,
       Staff: entry.staff,
-      'Payment Mode': entry.payment_mode || '',
+      'Payment Mode': getPaymentModeDisplayLabel(entry.payment_mode),
       User: entry.user,
       'Entry Time': entry.entryTime,
       // Status removed per requirement
@@ -1195,6 +1194,9 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
           </Button>
           <Button variant='secondary' onClick={loadLedgerData}>
             Refresh
+          </Button>
+          <Button variant='secondary' onClick={exportToExcel}>
+            Export CSV
           </Button>
         </div>
       </div>
