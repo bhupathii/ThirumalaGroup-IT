@@ -4,6 +4,7 @@ import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import Select from '../components/UI/Select';
 import { supabaseDB } from '../lib/supabaseDatabase';
+import { useTableMode } from '../contexts/TableModeContext';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
@@ -28,6 +29,8 @@ const FIELDS = [
   { key: 'acc_name', label: 'Main A/c' },
   { key: 'sub_acc_name', label: 'SubAccount' },
   { key: 'particulars', label: 'Particulars' },
+  { key: 'sale_qty', label: 'Purchase Qty' },
+  { key: 'purchase_qty', label: 'Sale Qty' },
   { key: 'credit', label: 'Credit' },
   { key: 'debit', label: 'Debit' },
   { key: 'staff', label: 'Staff' },
@@ -46,6 +49,11 @@ const highlightClass = 'bg-yellow-100 font-semibold';
 const getFieldDisplay = (field: FieldKey, value: any) => {
   if (field === 'credit' || field === 'debit') {
     return value ? `${Number(value).toLocaleString()}` : '-';
+  }
+  if (field === 'sale_qty' || field === 'purchase_qty') {
+    return value !== null && value !== undefined && value !== '' 
+      ? `${Number(value).toLocaleString()}` 
+      : '-';
   }
   if (field === 'c_date' && value) {
     return !isNaN(new Date(value).getTime())
@@ -72,6 +80,7 @@ const getChangedFields = (oldObj: CashBookPartial, newObj: CashBookPartial) => {
 };
 
 const EditedRecords = () => {
+  const { mode: tableMode } = useTableMode();
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -84,6 +93,11 @@ const EditedRecords = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Reload data when mode changes
+  useEffect(() => {
+    loadData();
+  }, [tableMode]);
 
   // Listen for dashboard refresh events to reload data when records are deleted
   useEffect(() => {
@@ -229,16 +243,59 @@ const EditedRecords = () => {
       // Compute if any field actually changed
       const changedMap = getChangedFields(oldObj, newObj);
       const hasAnyChange = Object.values(changedMap).some(Boolean);
-      // Date-wise filter: match edited_at date (YYYY-MM-DD)
-      const editedDate = log.edited_at ? String(log.edited_at).slice(0, 10) : '';
+      
+      // Date-wise filter: normalize edited_at date to YYYY-MM-DD format
+      // Use the same extraction method as getDistinctEditedDates (slice(0, 10))
+      let editedDate = '';
+      if (log.edited_at) {
+        try {
+          const dateStr = String(log.edited_at);
+          // Extract first 10 characters (YYYY-MM-DD) - same as getDistinctEditedDates
+          editedDate = dateStr.slice(0, 10);
+          
+          // Validate that we got a valid date format
+          if (!editedDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // If slice didn't work, try regex extraction
+            const dateMatch = dateStr.match(/(\d{4}-\d{2}-\d{2})/);
+            if (dateMatch) {
+              editedDate = dateMatch[1];
+            } else {
+              // Fallback: try parsing as Date object
+              const parsedDate = new Date(dateStr);
+              if (!isNaN(parsedDate.getTime())) {
+                editedDate = format(parsedDate, 'yyyy-MM-dd');
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('Error parsing edited_at date:', log.edited_at, error);
+        }
+      }
+      
+      // Debug logging for date matching (only when filter is active)
+      if (selectedDate && selectedDate !== '') {
+        console.log('🔍 Date filter check:', {
+          logId: log.id,
+          edited_at_raw: log.edited_at,
+          editedDate_extracted: editedDate,
+          selectedDate,
+          matches: editedDate === selectedDate,
+          matchLength: editedDate.length,
+          selectedLength: selectedDate.length
+        });
+      }
+      
       const matchesDate = selectedDate === '' || editedDate === selectedDate;
+      
+      // User filter: match by username (edited_by contains username, userFilter now contains username)
       const matchesUser = userFilter === '' || log.edited_by === userFilter;
+      
       // Exclude deletes and synthetic recent entries
       const isDelete = log.action === 'DELETE' || (log.new_values == null && log.old_values != null);
       const isSyntheticRecent = log.action === 'SHOWING_RECENT_ENTRIES';
       const result = matchesDate && matchesUser && !isDelete && !isSyntheticRecent && hasAnyChange;
       
-      if (!result) {
+      if (!result && (selectedDate || userFilter)) {
         console.log('🔍 Filtered out record:', {
           id: log.id,
           editedDate,
@@ -247,16 +304,18 @@ const EditedRecords = () => {
           editedBy: log.edited_by,
           userFilter,
           matchesUser,
-          isDelete
+          isDelete,
+          isSyntheticRecent,
+          hasAnyChange
         });
       }
       
       return result;
     });
     
-    console.log('🔍 Filtered result:', filtered.length, 'records');
+    console.log('🔍 Filtered result:', filtered.length, 'records out of', auditLog.length);
     return filtered;
-  }, [auditLog, selectedDate, userFilter]);
+  }, [auditLog, selectedDate, userFilter, users]);
 
 
   // Pagination
@@ -394,7 +453,7 @@ const EditedRecords = () => {
           onChange={setUserFilter}
           options={[
             { value: '', label: 'All Users' },
-            ...users.map(u => ({ value: u.id, label: u.username })),
+            ...users.map(u => ({ value: u.username, label: u.username })),
           ]}
           className='w-48'
         />

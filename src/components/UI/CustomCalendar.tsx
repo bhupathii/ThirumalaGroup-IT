@@ -196,16 +196,30 @@ const CustomCalendar: React.FC<CustomCalendarProps> = ({
           const isSelected = dateStr === selectedDate;
           const hasEntries = getDatesWithEntries.has(dateStr);
           
+          // Determine background color priority:
+          // 1. Selected date: solid blue (highest priority)
+          // 2. Dates with entries: light blue background
+          // 3. Today: blue-200 background
+          // 4. Default: white/transparent
+          let bgClass = '';
+          if (isSelected) {
+            bgClass = 'bg-blue-500 text-white';
+          } else if (hasEntries && isCurrentMonth) {
+            bgClass = 'bg-blue-100 text-gray-700';
+          } else if (isToday) {
+            bgClass = 'bg-blue-200 font-bold';
+          }
+          
           return (
             <button
               key={index}
               onClick={() => handleDateClick(date)}
               type="button"
               className={`
-                relative p-2 text-xs rounded hover:bg-blue-100 transition-colors
+                relative p-2 text-xs rounded transition-colors
                 ${!isCurrentMonth ? 'text-gray-300' : 'text-gray-700'}
-                ${isToday ? 'bg-blue-200 font-bold' : ''}
-                ${isSelected ? 'bg-blue-500 text-white' : ''}
+                ${bgClass}
+                ${!bgClass ? 'hover:bg-blue-50' : ''}
               `}
             >
               {date.getDate()}

@@ -179,11 +179,16 @@ const NewEntry: React.FC = () => {
   }, [dualEntry.quantityChecked, dualEntryEnabled]);
 
   // Synchronize saleQ between main entry and dual entry (only when both are checked)
+  // Also maintain mutual exclusivity: if sale has value, clear purchase
   useEffect(() => {
     if (!dualEntryEnabled || syncingRef.current) return;
     if (entry.quantityChecked && dualEntry.quantityChecked && entry.saleQ !== dualEntry.saleQ) {
       syncingRef.current = true;
-      setDualEntry(prev => ({ ...prev, saleQ: entry.saleQ }));
+      setDualEntry(prev => ({ 
+        ...prev, 
+        saleQ: entry.saleQ,
+        purchaseQ: entry.saleQ ? '' : prev.purchaseQ // Clear purchase if sale has value
+      }));
       setTimeout(() => { syncingRef.current = false; }, 0);
     }
   }, [entry.saleQ, entry.quantityChecked, dualEntryEnabled]);
@@ -192,17 +197,26 @@ const NewEntry: React.FC = () => {
     if (!dualEntryEnabled || syncingRef.current) return;
     if (entry.quantityChecked && dualEntry.quantityChecked && dualEntry.saleQ !== entry.saleQ) {
       syncingRef.current = true;
-      setEntry(prev => ({ ...prev, saleQ: dualEntry.saleQ }));
+      setEntry(prev => ({ 
+        ...prev, 
+        saleQ: dualEntry.saleQ,
+        purchaseQ: dualEntry.saleQ ? '' : prev.purchaseQ // Clear purchase if sale has value
+      }));
       setTimeout(() => { syncingRef.current = false; }, 0);
     }
   }, [dualEntry.saleQ, dualEntry.quantityChecked, dualEntryEnabled]);
 
   // Synchronize purchaseQ between main entry and dual entry (only when both are checked)
+  // Also maintain mutual exclusivity: if purchase has value, clear sale
   useEffect(() => {
     if (!dualEntryEnabled || syncingRef.current) return;
     if (entry.quantityChecked && dualEntry.quantityChecked && entry.purchaseQ !== dualEntry.purchaseQ) {
       syncingRef.current = true;
-      setDualEntry(prev => ({ ...prev, purchaseQ: entry.purchaseQ }));
+      setDualEntry(prev => ({ 
+        ...prev, 
+        purchaseQ: entry.purchaseQ,
+        saleQ: entry.purchaseQ ? '' : prev.saleQ // Clear sale if purchase has value
+      }));
       setTimeout(() => { syncingRef.current = false; }, 0);
     }
   }, [entry.purchaseQ, entry.quantityChecked, dualEntryEnabled]);
@@ -211,7 +225,11 @@ const NewEntry: React.FC = () => {
     if (!dualEntryEnabled || syncingRef.current) return;
     if (entry.quantityChecked && dualEntry.quantityChecked && dualEntry.purchaseQ !== entry.purchaseQ) {
       syncingRef.current = true;
-      setEntry(prev => ({ ...prev, purchaseQ: dualEntry.purchaseQ }));
+      setEntry(prev => ({ 
+        ...prev, 
+        purchaseQ: dualEntry.purchaseQ,
+        saleQ: dualEntry.purchaseQ ? '' : prev.saleQ // Clear sale if purchase has value
+      }));
       setTimeout(() => { syncingRef.current = false; }, 0);
     }
   }, [dualEntry.purchaseQ, dualEntry.quantityChecked, dualEntryEnabled]);
@@ -605,8 +623,7 @@ const NewEntry: React.FC = () => {
         !dualEntry.companyName ||
         !dualEntry.accountName ||
         !dualEntry.subAccount ||
-        !dualEntry.particulars ||
-        !dualEntry.paymentMode
+        !dualEntry.particulars
       ) {
         toast.error('Please fill in all required fields in Dual Entry');
         return;
@@ -664,18 +681,7 @@ const NewEntry: React.FC = () => {
         const dualCreditNum = parseFloat(dualEntry.credit) || 0;
         const dualDebitNum = parseFloat(dualEntry.debit) || 0;
         
-        // Prepare payment_mode value for dual entry
-        const dualPaymentModeValue = dualEntry.paymentMode && dualEntry.paymentMode.trim() 
-          ? dualEntry.paymentMode.trim() 
-          : null;
-        
-        console.log('💾 Saving dual entry with payment_mode:', {
-          input: dualEntry.paymentMode,
-          processed: dualPaymentModeValue,
-          company: dualEntry.companyName,
-          account: dualEntry.accountName
-        });
-        
+        // Payment mode removed from dual entry per user request
         const dualEntryData = {
           acc_name: dualEntry.accountName,
           sub_acc_name: dualEntry.subAccount,
@@ -691,7 +697,7 @@ const NewEntry: React.FC = () => {
           address: '',
           staff: entry.staff,
           users: user?.username || '',
-          payment_mode: dualPaymentModeValue, // Save payment_mode value or null if empty
+          payment_mode: null, // Payment mode removed from dual entry
           sale_qty: dualEntry.quantityChecked
             ? parseFloat(dualEntry.saleQ) || 0
             : 0,
@@ -710,14 +716,13 @@ const NewEntry: React.FC = () => {
             console.log(`✅ Dual Entry ${idx + 1} saved, checking payment_mode:`, {
               saved_entry_id: savedEntry?.id,
               payment_mode_saved: savedEntry?.payment_mode,
-              payment_mode_input: idx === 0 ? paymentModeValue : dualPaymentModeValue
+              payment_mode_input: idx === 0 ? paymentModeValue : null // Dual entry has no payment mode
             });
           });
           
-          // Show warning if payment_mode wasn't saved
+          // Show warning if payment_mode wasn't saved (only for main entry)
           const hasPaymentMode = savedEntries.some((e: any) => e?.payment_mode);
-          const expectedPaymentMode = paymentModeValue || dualPaymentModeValue;
-          if (expectedPaymentMode && !hasPaymentMode) {
+          if (paymentModeValue && !hasPaymentMode) {
             toast.error('⚠️ Payment mode column missing in database. Please add it using SQL: ALTER TABLE cash_book ADD COLUMN payment_mode TEXT;');
           }
         }
@@ -1426,6 +1431,24 @@ const NewEntry: React.FC = () => {
                   getFieldValue(
                     row,
                     [
+                      'Purchase Qty',
+                      'Purchase Quantity',
+                      'Quantity Purchased',
+                      'PurchaseQty',
+                      'PurchaseQuantity',
+                      'QuantityPurchased',
+                      'Buy Qty',
+                      'BuyQty',
+                      'Buy Quantity',
+                      'BuyQuantity',
+                    ],
+                    0
+                  )
+                ),
+                purchase_qty: sanitizeNumber(
+                  getFieldValue(
+                    row,
+                    [
                       'Sale Qty',
                       'Sale Quantity',
                       'Sales Qty',
@@ -1438,24 +1461,6 @@ const NewEntry: React.FC = () => {
                       'SalesQuantity',
                       'Qty Sold',
                       'QtySold',
-                    ],
-                    0
-                  )
-                ),
-                purchase_qty: sanitizeNumber(
-                  getFieldValue(
-                    row,
-                    [
-                      'Purchase Qty',
-                      'Purchase Quantity',
-                      'Quantity Purchased',
-                      'PurchaseQty',
-                      'PurchaseQuantity',
-                      'QuantityPurchased',
-                      'Buy Qty',
-                      'BuyQty',
-                      'Buy Quantity',
-                      'BuyQuantity',
                     ],
                     0
                   )
@@ -1573,32 +1578,7 @@ const NewEntry: React.FC = () => {
   };
 
   // Admin function to delete empty companies
-  const handleDeleteEmptyCompanies = async () => {
-    const companiesToDelete = [
-      'vijajajj',
-      'vijayyy', 
-      'Vijayyyy',
-      'CompanyName',
-      'okok',
-      'pranay'
-    ];
-
-    try {
-      console.log('🗑️ Deleting empty companies:', companiesToDelete);
-      const result = await supabaseDB.deleteEmptyCompanies(companiesToDelete);
-      
-      if (result.success) {
-        toast.success(`Successfully deleted ${result.deleted.length} empty companies: ${result.deleted.join(', ')}`);
-        // Refresh dropdown data
-        queryClient.invalidateQueries({ queryKey: queryKeys.dropdowns.companies() });
-      } else {
-        toast.error(`Failed to delete companies: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('Error deleting empty companies:', error);
-      toast.error('Failed to delete empty companies');
-    }
-  };
+  // Removed handleDeleteEmptyCompanies function - Clean Companies button removed per user request
 
   return (
     <div className='min-h-screen flex flex-col w-full max-w-full'>
@@ -1687,14 +1667,6 @@ const NewEntry: React.FC = () => {
                 icon={RefreshCw}
               >
                 Refresh
-              </Button>
-              <Button
-                variant='danger'
-                size='sm'
-                onClick={handleDeleteEmptyCompanies}
-                className='text-xs'
-              >
-                Clean Companies
               </Button>
             </div>
           </div>
@@ -2039,11 +2011,17 @@ const NewEntry: React.FC = () => {
                 {entry.quantityChecked && (
                   <div className='grid grid-cols-1 md:grid-cols-2 gap-1'>
                     <Input
-                      label='Sale Quantity'
+                      label='Purchase Quantity'
                       value={entry.saleQ}
-                      onChange={val =>
-                        setEntry(prev => ({ ...prev, saleQ: val }))
-                      }
+                      onChange={val => {
+                        // If sale quantity is entered, clear purchase quantity
+                        const saleVal = val.trim();
+                        setEntry(prev => ({ 
+                          ...prev, 
+                          saleQ: saleVal,
+                          purchaseQ: saleVal ? '' : prev.purchaseQ // Clear purchase if sale has value
+                        }));
+                      }}
                       placeholder='0'
                       type='number'
                       min='0'
@@ -2051,11 +2029,17 @@ const NewEntry: React.FC = () => {
                       size='sm'
                     />
                     <Input
-                      label='Purchase Quantity'
+                      label='Sale Quantity'
                       value={entry.purchaseQ}
-                      onChange={val =>
-                        setEntry(prev => ({ ...prev, purchaseQ: val }))
-                      }
+                      onChange={val => {
+                        // If purchase quantity is entered, clear sale quantity
+                        const purchaseVal = val.trim();
+                        setEntry(prev => ({ 
+                          ...prev, 
+                          purchaseQ: purchaseVal,
+                          saleQ: purchaseVal ? '' : prev.saleQ // Clear sale if purchase has value
+                        }));
+                      }}
                       placeholder='0'
                       type='number'
                       min='0'
@@ -2222,22 +2206,6 @@ const NewEntry: React.FC = () => {
                         step='any'
                         size='sm'
                       />
-                      <SearchableSelect
-                        label='Payment Mode'
-                        value={dualEntry.paymentMode}
-                        onChange={val =>
-                          setDualEntry(prev => ({ ...prev, paymentMode: val }))
-                        }
-                        options={[
-                          { value: '', label: 'Select payment mode...' },
-                          { value: 'Cash', label: 'Cash' },
-                          { value: 'Bank Transfer', label: 'Bank' },
-                          { value: 'Online', label: 'Double' }
-                        ]}
-                        placeholder='Select payment mode...'
-                        required
-                        size='sm'
-                      />
                     </div>
 
                     {/* Combined Quantity Checkbox and Inputs for Dual Entry */}
@@ -2267,24 +2235,33 @@ const NewEntry: React.FC = () => {
                       {dualEntry.quantityChecked && (
                         <div className='grid grid-cols-1 md:grid-cols-2 gap-1'>
                           <Input
-                            label='Sale Quantity'
+                            label='Purchase Quantity'
                             value={dualEntry.saleQ}
-                            onChange={val =>
-                              setDualEntry(prev => ({ ...prev, saleQ: val }))
-                            }
+                            onChange={val => {
+                              // If sale quantity is entered, clear purchase quantity
+                              const saleVal = val.trim();
+                              setDualEntry(prev => ({ 
+                                ...prev, 
+                                saleQ: saleVal,
+                                purchaseQ: saleVal ? '' : prev.purchaseQ // Clear purchase if sale has value
+                              }));
+                            }}
                             placeholder='0'
                             type='number'
                             min='0'
                           />
                           <Input
-                            label='Purchase Quantity'
+                            label='Sale Quantity'
                             value={dualEntry.purchaseQ}
-                            onChange={val =>
+                            onChange={val => {
+                              // If purchase quantity is entered, clear sale quantity
+                              const purchaseVal = val.trim();
                               setDualEntry(prev => ({
                                 ...prev,
-                                purchaseQ: val,
-                              }))
-                            }
+                                purchaseQ: purchaseVal,
+                                saleQ: purchaseVal ? '' : prev.saleQ // Clear sale if purchase has value
+                              }));
+                            }}
                             placeholder='0'
                             type='number'
                             min='0'
@@ -2654,7 +2631,7 @@ const NewEntry: React.FC = () => {
                   automatic column mapping and default values for any missing
                   fields. <strong>Recommended columns:</strong> Date, Company,
                   Main Account, Sub Account, Particulars, Credit, Debit, Staff,
-                  Sale Qty, Purchase Qty, Address.
+                  Purchase Qty, Sale Qty, Address.
                 </p>
                 <div className='flex gap-2 justify-center'>
                   <Button
@@ -2671,8 +2648,8 @@ const NewEntry: React.FC = () => {
                           Credit: '1000',
                           Debit: '0',
                           Staff: 'admin',
-                          'Sale Qty': '0',
                           'Purchase Qty': '0',
+                          'Sale Qty': '0',
                         },
                         {
                           Date: '2024-01-15',
@@ -2683,8 +2660,8 @@ const NewEntry: React.FC = () => {
                           Credit: '0',
                           Debit: '500',
                           Staff: 'admin',
-                          'Sale Qty': '0',
                           'Purchase Qty': '0',
+                          'Sale Qty': '0',
                         },
                       ];
 
