@@ -803,6 +803,52 @@ const DailyReport: React.FC = () => {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot className='bg-gray-100 border-t-2 border-gray-400'>
+                  <tr>
+                    <td colSpan={6} className='px-3 py-3 font-bold text-base text-right'>
+                      Total
+                    </td>
+                    <td className='px-3 py-3 text-right text-green-700 font-bold text-base'>
+                      {reportData.totalCredit.toLocaleString()}
+                    </td>
+                    <td className='px-3 py-3 text-right text-red-700 font-bold text-base'>
+                      {reportData.totalDebit.toLocaleString()}
+                    </td>
+                    <td colSpan={2} className='px-3 py-3'></td>
+                  </tr>
+                  <tr>
+                    <td colSpan={6} className='px-3 py-3 font-bold text-base text-right'>
+                      Opening Balance
+                    </td>
+                    <td className='px-3 py-3 text-right font-bold text-base'></td>
+                    <td className='px-3 py-3 text-right font-bold text-base'>
+                      {reportData.openingBalance.toLocaleString()}
+                    </td>
+                    <td colSpan={2} className='px-3 py-3'></td>
+                  </tr>
+                  <tr>
+                    <td colSpan={6} className='px-3 py-3 font-bold text-base text-right'>
+                      Closing Balance
+                    </td>
+                    <td className='px-3 py-3 text-right font-bold text-base'></td>
+                    <td className='px-3 py-3 text-right font-bold text-base'>
+                      {reportData.closingBalance.toLocaleString()}
+                    </td>
+                    <td colSpan={2} className='px-3 py-3'></td>
+                  </tr>
+                  <tr className='bg-blue-100 border-t-2 border-blue-400'>
+                    <td colSpan={6} className='px-3 py-3 font-bold text-base text-right'>
+                      Grand Total
+                    </td>
+                    <td className='px-3 py-3 text-right text-green-700 font-bold text-base'>
+                      {reportData.grandTotal.toLocaleString()}
+                    </td>
+                    <td className='px-3 py-3 text-right text-red-700 font-bold text-base'>
+                      {reportData.grandTotal.toLocaleString()}
+                    </td>
+                    <td colSpan={2} className='px-3 py-3'></td>
+                  </tr>
+                </tfoot>
               </table>
               
               {/* Performance Info */}

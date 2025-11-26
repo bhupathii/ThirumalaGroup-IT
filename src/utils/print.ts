@@ -486,17 +486,18 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     }
     
     .print-container {
-      max-width: 900px;
+      max-width: 100%;
       width: 100%;
       margin: 0 auto;
       background-color: white;
-      padding: 30px;
+      padding: 20px;
       border: 2px solid #333;
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
       display: flex;
       flex-direction: column;
       min-height: 100vh;
       overflow: visible;
+      box-sizing: border-box;
     }
     
     .print-header {
@@ -571,24 +572,41 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     
     .print-table {
       width: 100%;
+      max-width: 100%;
       border-collapse: collapse;
       margin: 20px 0;
+      table-layout: auto;
+      word-wrap: break-word;
+    }
+    
+    .print-table tfoot {
+      display: table-footer-group;
+    }
+    
+    .print-table tfoot tr {
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     
     .print-table th {
       background-color: #f3f4f6;
       border: 1px solid #d1d5db;
-      padding: 8px;
+      padding: 6px 4px;
       text-align: left;
       font-weight: bold;
-      font-size: 13px;
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     
     .print-table td {
       border: 1px solid #d1d5db;
-      padding: 6px 8px;
-      font-size: 12px;
+      padding: 4px;
+      font-size: 11px;
       font-weight: bold;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      word-wrap: break-word;
     }
     
     .print-table tr:nth-child(even) {
@@ -774,10 +792,18 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     }
     
     @media print {
+      @page {
+        size: A4 portrait;
+        margin: 0.3in 0.5in 0.5in 0.5in;
+      }
       body {
         background-color: white;
         padding: 0;
+        margin: 0;
         display: block;
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
       }
       .print-container {
         max-width: 100%;
@@ -786,24 +812,63 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
         padding: 0;
         border: none;
         box-shadow: none;
+        page-break-inside: avoid;
+      }
+      .print-table {
+        width: 100% !important;
+        max-width: 100% !important;
+        font-size: 10px;
+        page-break-inside: auto;
+        table-layout: auto;
+        word-wrap: break-word;
+        border-collapse: collapse !important;
+      }
+      .print-table th,
+      .print-table td {
+        padding: 3px 2px;
+        font-size: 10px;
+        border: 1px solid #000 !important;
+        word-wrap: break-word;
+        box-sizing: border-box;
+      }
+      .print-table tfoot {
+        display: table-footer-group !important;
+        width: 100% !important;
+      }
+      .print-table tfoot tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        display: table-row !important;
+        width: 100% !important;
+      }
+      .print-table tfoot td {
+        white-space: nowrap;
+        box-sizing: border-box;
       }
       .print-button {
         display: none;
       }
+      .print-summary,
+      .boxed-table {
+        max-width: 100%;
+        width: auto;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
     }
   `;
 
-  // Generate table HTML
+  // Generate table HTML - Adjusted widths to fit A4 page
   const columns = [
-    { key: 'sno', label: 'S.No', width: '60px' },
-    { key: 'date', label: 'Date', width: '100px' },
-    { key: 'companyName', label: 'Company', width: '180px' },
-    { key: 'accountName', label: 'Account', width: '150px' },
-    { key: 'subAccount', label: 'Sub Account', width: '150px' },
-    { key: 'particulars', label: 'Particulars', width: '200px' },
-    { key: 'credit', label: 'Credit', width: '100px' },
-    { key: 'debit', label: 'Debit', width: '100px' },
-    { key: 'staff', label: 'Staff', width: '100px' },
+    { key: 'sno', label: 'S.No', width: '5%' },
+    { key: 'date', label: 'Date', width: '8%' },
+    { key: 'companyName', label: 'Company', width: '15%' },
+    { key: 'accountName', label: 'Account', width: '12%' },
+    { key: 'subAccount', label: 'Sub Account', width: '12%' },
+    { key: 'particulars', label: 'Particulars', width: '18%' },
+    { key: 'credit', label: 'Credit', width: '10%' },
+    { key: 'debit', label: 'Debit', width: '10%' },
+    { key: 'staff', label: 'Staff', width: '10%' },
   ];
 
   // Remove Date and Staff columns when not provided in data (or explicitly excluded)
@@ -858,7 +923,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     .join('');
 
   const tableHeaders = filteredColumns
-    .map(col => `<th style="width: ${col.width || 'auto'}; font-weight: bold;">${col.label}</th>`)
+    .map(col => `<th style="width: ${col.width || 'auto'}; font-weight: bold; font-size: 11px; padding: 4px 3px;">${col.label}</th>`)
     .join('');
 
   // Calculate totals for the table footer
@@ -1001,8 +1066,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       .join('');
 
     // Calculate colspan: number of columns before credit column
+    // filteredColumns excludes 'date' and 'staff', so we have: sno, companyName, accountName, subAccount, particulars, credit, debit
     const creditColIndex = filteredColumns.findIndex(col => col.key.toLowerCase().includes('credit'));
-    const debitColIndex = filteredColumns.findIndex(col => col.key.toLowerCase().includes('debit'));
     const totalColspan = creditColIndex >= 0 ? creditColIndex : filteredColumns.length - 2;
 
     // Calculate grand totals
@@ -1037,37 +1102,35 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
             </div>
           ` : ''}
           
-          <table class="print-table">
+          <table class="print-table" style="width: 100%; max-width: 100%; border-collapse: collapse; table-layout: auto;">
             <thead>
               <tr>${tableHeaders}</tr>
             </thead>
-              <tbody>
+            <tbody>
               ${printModeTableRows}
+            </tbody>
+            <tfoot>
               <tr style="background-color: #f0f0f0; font-weight: bold;">
-                <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Total</td>
-                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
-                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-weight: bold; font-size: 11px;">Total</td>
+                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
               </tr>
               <tr style="background-color: #e8e8e8; font-weight: bold;">
-                <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Opening Balance</td>
-                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
-                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${openingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
+                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-weight: bold; font-size: 11px;">Opening Balance</td>
+                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;"></td>
+                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${openingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
               </tr>
               <tr style="background-color: #e8e8e8; font-weight: bold;">
-                <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Closing Balance</td>
-                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
-                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
-                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${closingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-weight: bold; font-size: 11px;">Closing Balance</td>
+                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;"></td>
+                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${closingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
               </tr>
               <tr style="background-color: #d0d0d0; font-weight: bold;">
-                <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Grand Total</td>
-                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
-                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${grandTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${grandTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-weight: bold; font-size: 11px;">Grand Total</td>
+                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${grandTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${grandTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
               </tr>
-            </tbody>
+            </tfoot>
           </table>
           
           <div style="text-align: right; width: 100%;">
@@ -1147,57 +1210,59 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
           </div>
         ` : ''}
         
-        <table class="print-table">
+        <table class="print-table" style="width: 100%; max-width: 100%; border-collapse: collapse; table-layout: auto;">
           <thead>
             <tr>${tableHeaders}</tr>
           </thead>
           <tbody>
             ${tableRows}
-            ${!isPrintMode && data.length > 0 ? (() => {
-              // Calculate totals for preview mode
-              const previewCreditTotal = data.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0);
-              const previewDebitTotal = data.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0);
-              
-              // Calculate overall opening and closing balances
-              let previewOpeningBalance = Math.abs(openingBalance);
-              let previewClosingBalance = Math.abs(closingBalance);
-              
-              if (isAllCompanies && companyBalances && companyBalances.length > 0) {
-                previewOpeningBalance = companyBalances.reduce((sum, company) => sum + Math.abs(company.openingBalance), 0);
-                previewClosingBalance = companyBalances.reduce((sum, company) => sum + Math.abs(company.closingBalance), 0);
-              }
-              
-              const previewGrandTotalCredit = previewCreditTotal + previewOpeningBalance;
-              const previewGrandTotalDebit = previewDebitTotal + previewClosingBalance;
-              
-              // Calculate colspan: number of columns before credit column
-              const creditColIndex = filteredColumns.findIndex(col => col.key.toLowerCase().includes('credit'));
-              const totalColspan = creditColIndex >= 0 ? creditColIndex : filteredColumns.length - 2;
-              
-              return `
-                <tr style="background-color: #f0f0f0; font-weight: bold;">
-                  <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Total</td>
-                  <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${previewCreditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${previewDebitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                </tr>
-                <tr style="background-color: #e8e8e8; font-weight: bold;">
-                  <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Opening Balance</td>
-                  <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${previewOpeningBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
-                </tr>
-                <tr style="background-color: #e8e8e8; font-weight: bold;">
-                  <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Closing Balance</td>
-                  <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;"></td>
-                  <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${previewClosingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                </tr>
-                <tr style="background-color: #d0d0d0; font-weight: bold;">
-                  <td colspan="${totalColspan}" style="text-align: right; padding: 6px 8px; border: 1px solid #d1d5db; font-weight: bold;">Grand Total</td>
-                  <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${previewGrandTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td style="padding: 6px 8px; border: 1px solid #d1d5db; text-align: right; font-weight: bold;">${previewGrandTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                </tr>
-              `;
-            })() : ''}
           </tbody>
+          ${!isPrintMode && data.length > 0 ? (() => {
+            // Calculate totals for preview mode
+            const previewCreditTotal = data.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0);
+            const previewDebitTotal = data.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0);
+            
+            // Calculate overall opening and closing balances
+            let previewOpeningBalance = Math.abs(openingBalance);
+            let previewClosingBalance = Math.abs(closingBalance);
+            
+            if (isAllCompanies && companyBalances && companyBalances.length > 0) {
+              previewOpeningBalance = companyBalances.reduce((sum, company) => sum + Math.abs(company.openingBalance), 0);
+              previewClosingBalance = companyBalances.reduce((sum, company) => sum + Math.abs(company.closingBalance), 0);
+            }
+            
+            const previewGrandTotalCredit = previewCreditTotal + previewOpeningBalance;
+            const previewGrandTotalDebit = previewDebitTotal + previewClosingBalance;
+            
+            // Calculate colspan: number of columns before credit column
+            const creditColIndex = filteredColumns.findIndex(col => col.key.toLowerCase().includes('credit'));
+            const totalColspan = creditColIndex >= 0 ? creditColIndex : filteredColumns.length - 2;
+            
+            return `
+            <tfoot>
+              <tr style="background-color: #f0f0f0; font-weight: bold;">
+                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #d1d5db; font-weight: bold; font-size: 11px;">Total</td>
+                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewCreditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewDebitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              </tr>
+              <tr style="background-color: #e8e8e8; font-weight: bold;">
+                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #d1d5db; font-weight: bold; font-size: 11px;">Opening Balance</td>
+                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;"></td>
+                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewOpeningBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              </tr>
+              <tr style="background-color: #e8e8e8; font-weight: bold;">
+                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #d1d5db; font-weight: bold; font-size: 11px;">Closing Balance</td>
+                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;"></td>
+                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewClosingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              </tr>
+              <tr style="background-color: #d0d0d0; font-weight: bold;">
+                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #d1d5db; font-weight: bold; font-size: 11px;">Grand Total</td>
+                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewGrandTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewGrandTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              </tr>
+            </tfoot>
+            `;
+          })() : ''}
         </table>
         
         ${summaryHTML}
