@@ -692,9 +692,20 @@ const ApproveRecords: React.FC = () => {
       return;
     }
 
+    // Get all pending entries for the selected company (not approved and not rejected)
     const companyEntries = filteredEntries.filter(
-      entry =>
-        entry.company_name === filters.company && entry.approved !== 'true'
+      entry => {
+        const matchesCompany = entry.company_name === filters.company;
+        const approved = entry.approved;
+        const isPending = (
+          approved === null ||
+          approved === undefined ||
+          approved === '' ||
+          approved === 'false' ||
+          approved === false
+        ) && approved !== 'true' && approved !== 'rejected';
+        return matchesCompany && isPending;
+      }
     );
 
     if (companyEntries.length === 0) {
@@ -710,170 +721,9 @@ const ApproveRecords: React.FC = () => {
       setLoading(true);
       try {
         let approvedCount = 0;
-
-        for (const entry of companyEntries) {
-          const { error } = await supabase
-            .from(getTableName('cash_book'))
-            .update({
-              approved: true,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', entry.id);
-
-          if (!error) {
-            approvedCount++;
-          }
-        }
-
-        if (approvedCount > 0) {
-          await loadEntries();
-          setSelectedEntries(new Set());
-          toast.success(
-            `${approvedCount} entries approved for ${filters.company}!`
-          );
-          
-          // Trigger dashboard refresh
-          localStorage.setItem('dashboard-refresh', Date.now().toString());
-          window.dispatchEvent(new CustomEvent('dashboard-refresh'));
-        }
-      } catch (error) {
-        toast.error('Failed to approve company entries');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const approveAllStaffwise = async () => {
-    if (!filters.staff) {
-      toast.error('Please select staff first');
-      return;
-    }
-
-    const staffEntries = filteredEntries.filter(
-      entry => entry.staff === filters.staff && entry.approved !== 'true'
-    );
-
-    if (staffEntries.length === 0) {
-      toast.error('No pending entries found for this staff member');
-      return;
-    }
-
-    if (
-      window.confirm(
-        `Approve all ${staffEntries.length} pending entries for ${filters.staff}?`
-      )
-    ) {
-      setLoading(true);
-      try {
-        let approvedCount = 0;
-
-        for (const entry of staffEntries) {
-          const { error } = await supabase
-            .from(getTableName('cash_book'))
-            .update({
-              approved: true,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', entry.id);
-
-          if (!error) {
-            approvedCount++;
-          }
-        }
-
-        if (approvedCount > 0) {
-          await loadEntries();
-          setSelectedEntries(new Set());
-          toast.success(
-            `${approvedCount} entries approved for ${filters.staff}!`
-          );
-          
-          // Trigger dashboard refresh
-          localStorage.setItem('dashboard-refresh', Date.now().toString());
-          window.dispatchEvent(new CustomEvent('dashboard-refresh'));
-        }
-      } catch (error) {
-        toast.error('Failed to approve staff entries');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const approveAllWithoutConfirmation = async () => {
-    const pendingEntries = filteredEntries.filter(
-      entry => entry.approved !== 'true'
-    );
-
-    if (pendingEntries.length === 0) {
-      toast.error('No pending entries to approve');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      let approvedCount = 0;
-
-      for (const entry of pendingEntries) {
-        const { error } = await supabase
-          .from(getTableName('cash_book'))
-          .update({
-            approved: true,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', entry.id);
-
-        if (!error) {
-          approvedCount++;
-        }
-      }
-
-      if (approvedCount > 0) {
-        await loadEntries();
-        setSelectedEntries(new Set());
-        toast.success(
-          `${approvedCount} entries approved without confirmation!`
-        );
-      }
-    } catch (error) {
-      toast.error('Failed to approve entries');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const approveAllWithConfirmation = async () => {
-    const pendingEntries = filteredEntries.filter(
-      entry => {
-        // Check if entry is truly pending (not approved and not rejected)
-        const approved = entry.approved;
-        return (
-          approved === null ||
-          approved === undefined ||
-          approved === '' ||
-          approved === 'false' ||
-          approved === false
-        ) && approved !== 'true' && approved !== 'rejected';
-      }
-    );
-
-    if (pendingEntries.length === 0) {
-      toast.error('No pending entries to approve');
-      return;
-    }
-
-    if (
-      window.confirm(
-        `Are you sure you want to approve all ${pendingEntries.length} pending entries?`
-      )
-    ) {
-      setLoading(true);
-      try {
-        let approvedCount = 0;
         let errorCount = 0;
 
-        for (const entry of pendingEntries) {
+        for (const entry of companyEntries) {
           try {
             const { error } = await supabase
               .from(getTableName('cash_book'))
@@ -899,9 +749,9 @@ const ApproveRecords: React.FC = () => {
           await loadEntries();
           setSelectedEntries(new Set());
           if (errorCount > 0) {
-            toast.success(`${approvedCount} entries approved with confirmation! ${errorCount} failed.`);
+            toast.success(`${approvedCount} entries approved for ${filters.company}! ${errorCount} failed.`);
           } else {
-            toast.success(`${approvedCount} entries approved with confirmation!`);
+            toast.success(`${approvedCount} entries approved for ${filters.company}!`);
           }
           
           // Trigger dashboard refresh
@@ -911,52 +761,318 @@ const ApproveRecords: React.FC = () => {
           toast.error(`Failed to approve entries. ${errorCount} errors occurred.`);
         }
       } catch (error) {
-        console.error('Error in approveAllWithConfirmation:', error);
-        toast.error('Failed to approve entries');
+        console.error('Error in approveAllCompanywise:', error);
+        toast.error('Failed to approve company entries');
       } finally {
         setLoading(false);
       }
     }
   };
 
-  const cancelApprove = async () => {
-    if (selectedEntries.size === 0) {
-      toast.error('Please select entries to cancel approval');
+  const approveAllStaffwise = async () => {
+    if (!filters.staff) {
+      toast.error('Please select staff first');
       return;
     }
-    
-    if (!window.confirm(`Are you sure you want to cancel approval for ${selectedEntries.size} selected entries? This will reset them to pending status.`)) {
+
+    // Get all pending entries for the selected staff (not approved and not rejected)
+    const staffEntries = filteredEntries.filter(
+      entry => {
+        const matchesStaff = entry.staff === filters.staff;
+        const approved = entry.approved;
+        const isPending = (
+          approved === null ||
+          approved === undefined ||
+          approved === '' ||
+          approved === 'false' ||
+          approved === false
+        ) && approved !== 'true' && approved !== 'rejected';
+        return matchesStaff && isPending;
+      }
+    );
+
+    if (staffEntries.length === 0) {
+      toast.error('No pending entries found for this staff member');
+      return;
+    }
+
+    if (
+      window.confirm(
+        `Approve all ${staffEntries.length} pending entries for ${filters.staff}?`
+      )
+    ) {
+      setLoading(true);
+      try {
+        let approvedCount = 0;
+        let errorCount = 0;
+
+        for (const entry of staffEntries) {
+          try {
+            const { error } = await supabase
+              .from(getTableName('cash_book'))
+              .update({
+                approved: true,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', entry.id);
+
+            if (error) {
+              console.error(`Error approving entry ${entry.id}:`, error);
+              errorCount++;
+            } else {
+              approvedCount++;
+            }
+          } catch (err) {
+            console.error(`Exception approving entry ${entry.id}:`, err);
+            errorCount++;
+          }
+        }
+
+        if (approvedCount > 0) {
+          await loadEntries();
+          setSelectedEntries(new Set());
+          if (errorCount > 0) {
+            toast.success(`${approvedCount} entries approved for ${filters.staff}! ${errorCount} failed.`);
+          } else {
+            toast.success(`${approvedCount} entries approved for ${filters.staff}!`);
+          }
+          
+          // Trigger dashboard refresh
+          localStorage.setItem('dashboard-refresh', Date.now().toString());
+          window.dispatchEvent(new CustomEvent('dashboard-refresh'));
+        } else {
+          toast.error(`Failed to approve entries. ${errorCount} errors occurred.`);
+        }
+      } catch (error) {
+        console.error('Error in approveAllStaffwise:', error);
+        toast.error('Failed to approve staff entries');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const approveAllWithoutConfirmation = async () => {
+    // Get all pending entries (not approved and not rejected)
+    const pendingEntries = filteredEntries.filter(
+      entry => {
+        const approved = entry.approved;
+        return (
+          approved === null ||
+          approved === undefined ||
+          approved === '' ||
+          approved === 'false' ||
+          approved === false
+        ) && approved !== 'true' && approved !== 'rejected';
+      }
+    );
+
+    if (pendingEntries.length === 0) {
+      toast.error('No pending entries to approve');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let approvedCount = 0;
+      let errorCount = 0;
+
+      // Approve all entries directly without any confirmation
+      for (const entry of pendingEntries) {
+        try {
+          const { error } = await supabase
+            .from(getTableName('cash_book'))
+            .update({
+              approved: true,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', entry.id);
+
+          if (error) {
+            console.error(`Error approving entry ${entry.id}:`, error);
+            errorCount++;
+          } else {
+            approvedCount++;
+          }
+        } catch (err) {
+          console.error(`Exception approving entry ${entry.id}:`, err);
+          errorCount++;
+        }
+      }
+
+      if (approvedCount > 0) {
+        await loadEntries();
+        setSelectedEntries(new Set());
+        if (errorCount > 0) {
+          toast.success(`${approvedCount} entries approved without confirmation! ${errorCount} failed.`);
+        } else {
+          toast.success(`${approvedCount} entries approved without confirmation!`);
+        }
+        
+        // Trigger dashboard refresh
+        localStorage.setItem('dashboard-refresh', Date.now().toString());
+        window.dispatchEvent(new CustomEvent('dashboard-refresh'));
+      } else {
+        toast.error(`Failed to approve entries. ${errorCount} errors occurred.`);
+      }
+    } catch (error) {
+      console.error('Error in approveAllWithoutConfirmation:', error);
+      toast.error('Failed to approve entries');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const approveAllWithConfirmation = async () => {
+    // Get all pending entries (not approved and not rejected)
+    const pendingEntries = filteredEntries.filter(
+      entry => {
+        const approved = entry.approved;
+        return (
+          approved === null ||
+          approved === undefined ||
+          approved === '' ||
+          approved === 'false' ||
+          approved === false
+        ) && approved !== 'true' && approved !== 'rejected';
+      }
+    );
+
+    if (pendingEntries.length === 0) {
+      toast.error('No pending entries to approve');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let approvedCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+
+      // Approve entries one by one with confirmation for each
+      for (let i = 0; i < pendingEntries.length; i++) {
+        const entry = pendingEntries[i];
+        const entryInfo = `Entry ${i + 1} of ${pendingEntries.length}\nDate: ${entry.c_date}\nCompany: ${entry.company_name}\nAccount: ${entry.acc_name}\nAmount: ${entry.credit || entry.debit || 0}`;
+        
+        // Show confirmation dialog for each entry
+        const shouldApprove = window.confirm(
+          `Approve this entry?\n\n${entryInfo}\n\nClick OK to approve, Cancel to skip.`
+        );
+
+        if (shouldApprove) {
+          try {
+            const { error } = await supabase
+              .from(getTableName('cash_book'))
+              .update({
+                approved: true,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', entry.id);
+
+            if (error) {
+              console.error(`Error approving entry ${entry.id}:`, error);
+              errorCount++;
+            } else {
+              approvedCount++;
+            }
+          } catch (err) {
+            console.error(`Exception approving entry ${entry.id}:`, err);
+            errorCount++;
+          }
+        } else {
+          skippedCount++;
+        }
+      }
+
+      // Reload entries after processing all
+      await loadEntries();
+      setSelectedEntries(new Set());
+      
+      // Show summary message
+      if (approvedCount > 0) {
+        let message = `${approvedCount} entries approved with confirmation!`;
+        if (skippedCount > 0) {
+          message += ` ${skippedCount} skipped.`;
+        }
+        if (errorCount > 0) {
+          message += ` ${errorCount} failed.`;
+        }
+        toast.success(message);
+        
+        // Trigger dashboard refresh
+        localStorage.setItem('dashboard-refresh', Date.now().toString());
+        window.dispatchEvent(new CustomEvent('dashboard-refresh'));
+      } else {
+        if (skippedCount > 0) {
+          toast.info(`No entries approved. ${skippedCount} entries were skipped.`);
+        } else {
+          toast.error(`Failed to approve entries. ${errorCount} errors occurred.`);
+        }
+      }
+    } catch (error) {
+      console.error('Error in approveAllWithConfirmation:', error);
+      toast.error('Failed to approve entries');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelApprove = async () => {
+    // Get all approved entries from filtered entries
+    const approvedEntries = filteredEntries.filter(
+      entry => entry.approved === true || entry.approved === 'true'
+    );
+
+    if (approvedEntries.length === 0) {
+      toast.error('No approved entries found to cancel');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to cancel approval for ${approvedEntries.length} approved entries? This will reset them to pending status.`)) {
       return;
     }
     
     setLoading(true);
     try {
       let cancelledCount = 0;
-      for (const entryId of selectedEntries) {
-        const { data, error } = await supabase
-          .from(getTableName('cash_book'))
-          .update({ 
-            approved: '', // Reset to pending (empty string)
-            updated_at: new Date().toISOString() 
-          })
-          .eq('id', entryId)
-          .select()
-          .single();
-        console.log('Cancel approval update result:', { data, error });
-        if (!error && data) {
-          cancelledCount++;
+      let errorCount = 0;
+
+      for (const entry of approvedEntries) {
+        try {
+          const { error } = await supabase
+            .from(getTableName('cash_book'))
+            .update({ 
+              approved: '', // Reset to pending (empty string)
+              updated_at: new Date().toISOString() 
+            })
+            .eq('id', entry.id);
+
+          if (error) {
+            console.error(`Error cancelling approval for entry ${entry.id}:`, error);
+            errorCount++;
+          } else {
+            cancelledCount++;
+          }
+        } catch (err) {
+          console.error(`Exception cancelling approval for entry ${entry.id}:`, err);
+          errorCount++;
         }
       }
+
       if (cancelledCount > 0) {
         await loadEntries();
         setSelectedEntries(new Set());
-        toast.success(`${cancelledCount} entries approval cancelled successfully!`);
+        if (errorCount > 0) {
+          toast.success(`${cancelledCount} entries approval cancelled successfully! ${errorCount} failed.`);
+        } else {
+          toast.success(`${cancelledCount} entries approval cancelled successfully!`);
+        }
         
         // Trigger dashboard refresh
         localStorage.setItem('dashboard-refresh', Date.now().toString());
         window.dispatchEvent(new CustomEvent('dashboard-refresh'));
       } else {
-        toast.error('Failed to cancel approval for entries');
+        toast.error(`Failed to cancel approval for entries. ${errorCount} errors occurred.`);
       }
     } catch (error) {
       console.error('Error cancelling approval:', error);

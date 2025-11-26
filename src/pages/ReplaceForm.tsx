@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
-import Input from '../components/UI/Input';
 import Select from '../components/UI/Select';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
@@ -20,7 +19,6 @@ import {
   FileText,
   Replace,
   AlertCircle,
-  Search,
 } from 'lucide-react';
 
 interface ReplaceFormData {
@@ -48,10 +46,7 @@ const ReplaceForm: React.FC = () => {
 
   const [entries, setEntries] = useState<any[]>([]);
   const [filteredEntries, setFilteredEntries] = useState<any[]>([]);
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
-  const [previewMode, setPreviewMode] = useState(false);
 
   // Dropdown data
   const [accounts, setAccounts] = useState<{ value: string; label: string }[]>(
@@ -73,8 +68,6 @@ const ReplaceForm: React.FC = () => {
   // Summary data
   const [summary, setSummary] = useState({
     totalRecords: 0,
-    affectedRecords: 0,
-    searchResultsCount: 0,
     totalCredit: 0,
     totalDebit: 0,
   });
@@ -92,32 +85,10 @@ const ReplaceForm: React.FC = () => {
     applyFilters();
   }, [entries, replaceData]);
 
-  // Apply search filter when search term changes
-  useEffect(() => {
-    if (searchTerm.trim()) {
-      const searchLower = searchTerm.toLowerCase().trim();
-      const results = filteredEntries.filter(entry => {
-        return (
-          entry.company_name?.toLowerCase().includes(searchLower) ||
-          entry.acc_name?.toLowerCase().includes(searchLower) ||
-          entry.sub_acc_name?.toLowerCase().includes(searchLower) ||
-          entry.particulars?.toLowerCase().includes(searchLower) ||
-          entry.staff?.toLowerCase().includes(searchLower) ||
-          entry.users?.toLowerCase().includes(searchLower) ||
-          entry.credit?.toString().includes(searchTerm) ||
-          entry.debit?.toString().includes(searchTerm)
-        );
-      });
-      setSearchResults(results);
-    } else {
-      setSearchResults([]);
-    }
-  }, [searchTerm, filteredEntries]);
-
-  // Update summary when search results change
+  // Update summary immediately when filtered entries change
   useEffect(() => {
     updateSummary(filteredEntries);
-  }, [searchResults, filteredEntries, searchTerm]);
+  }, [filteredEntries]);
 
   const loadDropdownData = async () => {
     try {
@@ -162,8 +133,6 @@ const ReplaceForm: React.FC = () => {
       
       toast.success(`Loaded ${allEntries.length} entries`, { id: 'load-entries' });
       
-      // Reset preview when reloading
-      setPreviewMode(false);
     } catch (error) {
       console.error('Error loading entries:', error);
       toast.error('Failed to load entries', { id: 'load-entries' });
@@ -204,19 +173,18 @@ const ReplaceForm: React.FC = () => {
     }
 
     setFilteredEntries(filtered);
-    // Clear search when filters change
-    setSearchTerm('');
-    setSearchResults([]);
-    updateSummary(filtered);
+    // Summary will be updated by useEffect when filteredEntries changes
   };
 
   const updateSummary = (filtered: any[]) => {
-    const totalRecords = entries.length;
-    const affectedRecords = filtered.length;
+    // Check if any filter is selected (company, account, or sub-account)
+    const hasSelection = replaceData.oldCompanyName || replaceData.oldAccountName || replaceData.oldSubAccount;
     
-    // Determine which records to use for calculations (search results if search is active, otherwise filtered)
-    const recordsForCalculation = searchTerm.trim() && searchResults.length > 0 ? searchResults : filtered;
-    const searchResultsCount = searchTerm.trim() ? searchResults.length : 0;
+    // If selection is made, show filtered count; otherwise show all entries count
+    const totalRecords = hasSelection ? filtered.length : entries.length;
+    
+    // Use filtered entries for calculations when selection is made
+    const recordsForCalculation = hasSelection ? filtered : entries;
     
     // Safely calculate totals, handling null/undefined values
     const totalCredit = recordsForCalculation.reduce((sum, entry) => {
@@ -231,8 +199,6 @@ const ReplaceForm: React.FC = () => {
 
     setSummary({
       totalRecords,
-      affectedRecords: affectedRecords || totalRecords, // Use totalRecords if no filters applied
-      searchResultsCount,
       totalCredit,
       totalDebit,
     });
@@ -245,59 +211,6 @@ const ReplaceForm: React.FC = () => {
     }));
   };
 
-  const handlePreview = () => {
-    if (
-      !replaceData.oldAccountName &&
-      !replaceData.oldSubAccount &&
-      !replaceData.oldCompanyName
-    ) {
-      toast.error('Please select at least one field to replace');
-      return;
-    }
-
-    if (
-      !replaceData.newAccountName &&
-      !replaceData.newSubAccount &&
-      !replaceData.newCompanyName
-    ) {
-      toast.error('Please select at least one new value');
-      return;
-    }
-
-    // Apply filters first to get correct count
-    applyFilters();
-    setPreviewMode(true);
-    
-    // Get updated summary after filtering
-    const affectedCount = filteredEntries.length;
-    toast.success(
-      `Preview: ${affectedCount} records will be affected`
-    );
-  };
-
-  const handlePreviewCompanyName = () => {
-    if (!replaceData.oldCompanyName) {
-      toast.error('Please select an old company name');
-      return;
-    }
-
-    const matchingEntries = entries.filter(
-      entry => entry.company_name === replaceData.oldCompanyName
-    );
-
-    if (matchingEntries.length === 0) {
-      toast.error(
-        `No records found with company name "${replaceData.oldCompanyName}"`
-      );
-      return;
-    }
-
-    setFilteredEntries(matchingEntries);
-    setPreviewMode(true);
-    toast.success(
-      `Preview: ${matchingEntries.length} records will be affected`
-    );
-  };
 
   const handleReplaceAccountName = async () => {
     if (!replaceData.oldAccountName || !replaceData.newAccountName) {
@@ -423,7 +336,6 @@ const ReplaceForm: React.FC = () => {
             oldAccountName: '',
             newAccountName: '',
           }));
-          setPreviewMode(false);
           
           // Trigger dashboard refresh
           localStorage.setItem('dashboard-refresh', Date.now().toString());
@@ -538,7 +450,6 @@ const ReplaceForm: React.FC = () => {
             oldSubAccount: '',
             newSubAccount: '',
           }));
-          setPreviewMode(false);
           
           // Trigger dashboard refresh
           localStorage.setItem('dashboard-refresh', Date.now().toString());
@@ -945,7 +856,6 @@ const ReplaceForm: React.FC = () => {
             oldCompanyName: '',
             newCompanyName: '',
           }));
-          setPreviewMode(false);
           
           // Trigger dashboard refresh
           localStorage.setItem('dashboard-refresh', Date.now().toString());
@@ -971,7 +881,6 @@ const ReplaceForm: React.FC = () => {
       newAccountName: '',
       newSubAccount: '',
     });
-    setPreviewMode(false);
     setFilteredEntries([]);
     toast.success('Form reset');
   };
@@ -1060,14 +969,6 @@ const ReplaceForm: React.FC = () => {
                 className='bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed'
               >
                 Replace Company Name
-              </Button>
-              <Button
-                variant='secondary'
-                onClick={handlePreviewCompanyName}
-                disabled={!replaceData.oldCompanyName || loading}
-                className='ml-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
-              >
-                Preview
               </Button>
             </div>
           </div>
@@ -1166,53 +1067,20 @@ const ReplaceForm: React.FC = () => {
         </div>
       </Card>
 
-      {/* Search Field */}
-      <Card>
-        <div className='flex items-center gap-4'>
-          <div className='flex-1'>
-            <Input
-              label='Search Records'
-              value={searchTerm}
-              onChange={setSearchTerm}
-              placeholder='Search by company, account, sub-account, particulars, staff, user, credit, or debit...'
-              icon={Search}
-            />
-          </div>
-          {searchTerm.trim() && (
-            <div className='text-sm text-gray-600 bg-gray-100 px-4 py-2 rounded-lg'>
-              <strong>{summary.searchResultsCount}</strong> search result{summary.searchResultsCount !== 1 ? 's' : ''}
-            </div>
-          )}
-        </div>
-      </Card>
-
       {/* Summary Cards */}
-      <div className='grid grid-cols-1 md:grid-cols-4 gap-4'>
+      <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
         <Card className='bg-gradient-to-r from-blue-500 to-blue-600 text-white'>
           <div className='flex items-center justify-between'>
             <div>
               <p className='text-blue-100 text-sm font-medium'>Total Records</p>
               <p className='text-2xl font-bold'>{summary.totalRecords.toLocaleString()}</p>
-              <p className='text-blue-200 text-xs mt-1'>All entries in database</p>
+              <p className='text-blue-200 text-xs mt-1'>
+                {replaceData.oldCompanyName || replaceData.oldAccountName || replaceData.oldSubAccount
+                  ? 'Matching selected criteria'
+                  : 'All entries in database'}
+              </p>
             </div>
             <FileText className='w-8 h-8 text-blue-200' />
-          </div>
-        </Card>
-
-        <Card className='bg-gradient-to-r from-orange-500 to-orange-600 text-white'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <p className='text-orange-100 text-sm font-medium'>
-                Affected Records
-              </p>
-              <p className='text-2xl font-bold'>{summary.affectedRecords.toLocaleString()}</p>
-              <p className='text-orange-200 text-xs mt-1'>
-                {searchTerm.trim() 
-                  ? `Search results: ${summary.searchResultsCount.toLocaleString()}`
-                  : 'Matching filter criteria'}
-              </p>
-            </div>
-            <Replace className='w-8 h-8 text-orange-200' />
           </div>
         </Card>
 
@@ -1253,115 +1121,6 @@ const ReplaceForm: React.FC = () => {
         </Card>
       )}
 
-      {/* Preview Table */}
-      {previewMode && !loading && filteredEntries.length > 0 && (
-        <Card
-          title='Preview of Affected Records'
-          subtitle={`${filteredEntries.length} records will be modified`}
-        >
-          <div className='overflow-x-auto'>
-            <table className='w-full text-sm'>
-              <thead className='bg-gray-50 border-b border-gray-200'>
-                <tr>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    S.No
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Date
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Company
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Current Account
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Current SubAccount
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Particulars
-                  </th>
-                  <th className='px-3 py-2 text-right font-medium text-gray-700'>
-                    Credit
-                  </th>
-                  <th className='px-3 py-2 text-right font-medium text-gray-700'>
-                    Debit
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {(searchTerm.trim() ? searchResults : filteredEntries).slice(0, 50).map((entry, index) => (
-                  <tr
-                    key={entry.id}
-                    className={`border-b hover:bg-gray-50 transition-colors ${
-                      index % 2 === 0 ? 'bg-white' : 'bg-gray-25'
-                    }`}
-                  >
-                    <td className='px-3 py-2 font-medium'>{entry.sno}</td>
-                    <td className='px-3 py-2'>
-                      {format(new Date(entry.c_date), 'dd-MMM-yy')}
-                    </td>
-                    <td className='px-3 py-2 font-medium text-blue-600'>
-                      <span
-                        className={
-                          replaceData.oldCompanyName === entry.company_name
-                            ? 'bg-yellow-200 px-2 py-1 rounded'
-                            : ''
-                        }
-                      >
-                        {entry.company_name}
-                      </span>
-                    </td>
-                    <td className='px-3 py-2'>
-                      <span
-                        className={
-                          replaceData.oldAccountName === entry.acc_name
-                            ? 'bg-yellow-200 px-2 py-1 rounded'
-                            : ''
-                        }
-                      >
-                        {entry.acc_name}
-                      </span>
-                    </td>
-                    <td className='px-3 py-2'>
-                      <span
-                        className={
-                          replaceData.oldSubAccount === entry.sub_acc_name
-                            ? 'bg-yellow-200 px-2 py-1 rounded'
-                            : ''
-                        }
-                      >
-                        {entry.sub_acc_name || '-'}
-                      </span>
-                    </td>
-                    <td
-                      className='px-3 py-2 max-w-xs truncate'
-                      title={entry.particulars}
-                    >
-                      {entry.particulars}
-                    </td>
-                    <td className='px-3 py-2 text-right font-medium text-green-600'>
-                      {entry.credit && parseFloat(entry.credit) > 0
-                        ? `${parseFloat(entry.credit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : '-'}
-                    </td>
-                    <td className='px-3 py-2 text-right font-medium text-red-600'>
-                      {entry.debit && parseFloat(entry.debit) > 0
-                        ? `${parseFloat(entry.debit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {(searchTerm.trim() ? searchResults : filteredEntries).length > 50 && (
-              <div className='mt-4 text-center text-gray-500'>
-                Showing first 50 of {(searchTerm.trim() ? searchResults : filteredEntries).length} records
-              </div>
-            )}
-          </div>
-        </Card>
-      )}
     </div>
   );
 };
