@@ -27,6 +27,8 @@ import {
 interface ApprovalFilters {
   date: string;
   company: string;
+  mainAccount: string;
+  subAccount: string;
   staff: string;
   showUnfiltered: boolean;
 }
@@ -38,6 +40,8 @@ const ApproveRecords: React.FC = () => {
   const [filters, setFilters] = useState<ApprovalFilters>({
     date: format(new Date(), 'yyyy-MM-dd'),
     company: '',
+    mainAccount: '',
+    subAccount: '',
     staff: '',
     showUnfiltered: false,
   });
@@ -84,6 +88,12 @@ const ApproveRecords: React.FC = () => {
 
   // Dropdown data
   const [companies, setCompanies] = useState<
+    { value: string; label: string }[]
+  >([]);
+  const [accounts, setAccounts] = useState<
+    { value: string; label: string }[]
+  >([]);
+  const [subAccounts, setSubAccounts] = useState<
     { value: string; label: string }[]
   >([]);
   const [staffList, setStaffList] = useState<
@@ -161,6 +171,22 @@ const ApproveRecords: React.FC = () => {
         label: company.company_name,
       }));
       setCompanies([{ value: '', label: 'All Companies' }, ...companiesData]);
+
+      // Load accounts
+      const accountNames = await supabaseDB.getDistinctAccountNames();
+      const accountsData = accountNames.map(accountName => ({
+        value: accountName,
+        label: accountName,
+      }));
+      setAccounts([{ value: '', label: 'All Accounts' }, ...accountsData]);
+
+      // Load sub-accounts
+      const subAccountNames = await supabaseDB.getDistinctSubAccountNames();
+      const subAccountsData = subAccountNames.map(subAccountName => ({
+        value: subAccountName,
+        label: subAccountName,
+      }));
+      setSubAccounts([{ value: '', label: 'All Sub Accounts' }, ...subAccountsData]);
 
       // Load staff - only show names that have data in cash_book (mode-aware)
       // getDistinctStaffNames uses getTableName('cash_book') which switches between cash_book and cash_book_itr
@@ -284,6 +310,20 @@ const ApproveRecords: React.FC = () => {
       );
     }
 
+    // Main Account filter
+    if (filters.mainAccount) {
+      filtered = filtered.filter(
+        entry => entry.acc_name === filters.mainAccount
+      );
+    }
+
+    // Sub Account filter
+    if (filters.subAccount) {
+      filtered = filtered.filter(
+        entry => entry.sub_acc_name === filters.subAccount
+      );
+    }
+
     // Staff filter - match exactly or by partial match
     if (filters.staff) {
       filtered = filtered.filter(entry => {
@@ -321,6 +361,8 @@ const ApproveRecords: React.FC = () => {
     let del = [...deletedEntries];
     if (filters.date) del = del.filter(d => d.c_date === filters.date);
     if (filters.company) del = del.filter(d => d.company_name === filters.company);
+    if (filters.mainAccount) del = del.filter(d => d.acc_name === filters.mainAccount);
+    if (filters.subAccount) del = del.filter(d => d.sub_acc_name === filters.subAccount);
     if (filters.staff) {
       del = del.filter(d => {
         const entryStaff = d.staff ? String(d.staff).trim() : '';
@@ -363,6 +405,12 @@ const ApproveRecords: React.FC = () => {
     if (filters.company) {
       baseFiltered = baseFiltered.filter(entry => entry.company_name === filters.company);
     }
+    if (filters.mainAccount) {
+      baseFiltered = baseFiltered.filter(entry => entry.acc_name === filters.mainAccount);
+    }
+    if (filters.subAccount) {
+      baseFiltered = baseFiltered.filter(entry => entry.sub_acc_name === filters.subAccount);
+    }
     if (filters.staff) {
       baseFiltered = baseFiltered.filter(entry => {
         const entryStaff = entry.staff ? String(entry.staff).trim() : '';
@@ -401,6 +449,12 @@ const ApproveRecords: React.FC = () => {
     if (filters.company) {
       deletedFiltered = deletedFiltered.filter(d => d.company_name === filters.company);
     }
+    if (filters.mainAccount) {
+      deletedFiltered = deletedFiltered.filter(d => d.acc_name === filters.mainAccount);
+    }
+    if (filters.subAccount) {
+      deletedFiltered = deletedFiltered.filter(d => d.sub_acc_name === filters.subAccount);
+    }
     if (filters.staff) {
       deletedFiltered = deletedFiltered.filter(d => {
         const entryStaff = d.staff ? String(d.staff).trim() : '';
@@ -429,10 +483,38 @@ const ApproveRecords: React.FC = () => {
   };
 
   const handleFilterChange = (field: keyof ApprovalFilters, value: any) => {
-    setFilters(prev => ({
-      ...prev,
-      [field]: value,
-    }));
+    setFilters(prev => {
+      // Implement mutual exclusivity: if selecting company, mainAccount, or subAccount,
+      // clear the other two filters
+      if (field === 'company' && value) {
+        return {
+          ...prev,
+          company: value,
+          mainAccount: '', // Clear main account
+          subAccount: '', // Clear sub account
+        };
+      } else if (field === 'mainAccount' && value) {
+        return {
+          ...prev,
+          mainAccount: value,
+          company: '', // Clear company
+          subAccount: '', // Clear sub account
+        };
+      } else if (field === 'subAccount' && value) {
+        return {
+          ...prev,
+          subAccount: value,
+          company: '', // Clear company
+          mainAccount: '', // Clear main account
+        };
+      } else {
+        // For other fields (date, staff, showUnfiltered), update normally
+        return {
+          ...prev,
+          [field]: value,
+        };
+      }
+    });
   };
 
   const navigateDate = (direction: 'prev' | 'next') => {
@@ -1120,7 +1202,7 @@ const ApproveRecords: React.FC = () => {
             <div class="header">
               <h1 class="title">Thirumala Group</h1>
               <p class="subtitle">Approve Records Report</p>
-              <p>Date: ${filters.date} | Company: ${filters.company || 'All'} | Staff: ${filters.staff || 'All'}</p>
+              <p>Date: ${filters.date} | Company: ${filters.company || 'All'} | Main Account: ${filters.mainAccount || 'All'} | Sub Account: ${filters.subAccount || 'All'} | Staff: ${filters.staff || 'All'}</p>
             </div>
 
             <div class="summary">
@@ -1360,7 +1442,7 @@ const ApproveRecords: React.FC = () => {
 
       {/* Controls */}
       <Card className='bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'>
-        <div className='grid grid-cols-1 md:grid-cols-4 gap-4 gap-y-4'>
+        <div className='grid grid-cols-1 md:grid-cols-6 gap-4 gap-y-4'>
           {/* Date Navigation */}
           <div className='md:col-span-2 w-full'>
             <label className='block text-sm font-medium text-gray-700 mb-2'>
@@ -1399,7 +1481,7 @@ const ApproveRecords: React.FC = () => {
             </div>
           </div>
           {/* Company Filter */}
-          <div className='w-full'>
+          <div className={`w-full ${filters.mainAccount || filters.subAccount ? 'opacity-50 pointer-events-none' : ''}`}>
             <SearchableSelect
               label='Company'
               value={filters.company}
@@ -1407,6 +1489,31 @@ const ApproveRecords: React.FC = () => {
               options={companies}
               placeholder='Search company...'
               className='w-full'
+              disabled={!!filters.mainAccount || !!filters.subAccount}
+            />
+          </div>
+          {/* Main Account Filter */}
+          <div className={`w-full ${filters.company || filters.subAccount ? 'opacity-50 pointer-events-none' : ''}`}>
+            <SearchableSelect
+              label='Main Account'
+              value={filters.mainAccount}
+              onChange={value => handleFilterChange('mainAccount', value)}
+              options={accounts}
+              placeholder='Search main account...'
+              className='w-full'
+              disabled={!!filters.company || !!filters.subAccount}
+            />
+          </div>
+          {/* Sub Account Filter */}
+          <div className={`w-full ${filters.company || filters.mainAccount ? 'opacity-50 pointer-events-none' : ''}`}>
+            <SearchableSelect
+              label='Sub Account'
+              value={filters.subAccount}
+              onChange={value => handleFilterChange('subAccount', value)}
+              options={subAccounts}
+              placeholder='Search sub account...'
+              className='w-full'
+              disabled={!!filters.company || !!filters.mainAccount}
             />
           </div>
           {/* Staff Filter */}
