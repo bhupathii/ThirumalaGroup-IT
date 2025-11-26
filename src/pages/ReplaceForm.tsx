@@ -956,7 +956,7 @@ const ReplaceForm: React.FC = () => {
       <Card className='bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'>
         <div className='space-y-6'>
           {/* Company Name Replacement */}
-          <div className='bg-white p-6 rounded-lg border border-gray-200'>
+          <div className={`bg-white p-6 rounded-lg border border-gray-200 ${replaceData.oldAccountName || replaceData.oldSubAccount ? 'opacity-50 pointer-events-none' : ''}`}>
             <h3 className='text-lg font-semibold text-gray-900 mb-4'>
               Replace Company Name
             </h3>
@@ -970,6 +970,7 @@ const ReplaceForm: React.FC = () => {
                     { value: '', label: 'Select old company...' },
                     ...companies,
                   ]}
+                  disabled={!!replaceData.oldAccountName || !!replaceData.oldSubAccount}
                 />
               </div>
               <div>
@@ -982,6 +983,7 @@ const ReplaceForm: React.FC = () => {
                     ...companies,
                   ]}
                   placeholder='Select new company...'
+                  disabled={!!replaceData.oldAccountName || !!replaceData.oldSubAccount}
                 />
               </div>
             </div>
@@ -992,7 +994,9 @@ const ReplaceForm: React.FC = () => {
                   !replaceData.oldCompanyName ||
                   !replaceData.newCompanyName ||
                   loading ||
-                  replaceData.oldCompanyName.trim() === replaceData.newCompanyName.trim()
+                  replaceData.oldCompanyName.trim() === replaceData.newCompanyName.trim() ||
+                  !!replaceData.oldAccountName ||
+                  !!replaceData.oldSubAccount
                 }
                 className='bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed'
               >
@@ -1002,7 +1006,7 @@ const ReplaceForm: React.FC = () => {
           </div>
 
           {/* Account Name Replacement */}
-          <div className='bg-white p-6 rounded-lg border border-gray-200'>
+          <div className={`bg-white p-6 rounded-lg border border-gray-200 ${replaceData.oldCompanyName || replaceData.oldSubAccount ? 'opacity-50 pointer-events-none' : ''}`}>
             <h3 className='text-lg font-semibold text-gray-900 mb-4'>
               Replace Account Name
             </h3>
@@ -1016,6 +1020,7 @@ const ReplaceForm: React.FC = () => {
                     { value: '', label: 'Select old account...' },
                     ...accounts,
                   ]}
+                  disabled={!!replaceData.oldCompanyName || !!replaceData.oldSubAccount}
                 />
               </div>
               <div>
@@ -1028,6 +1033,7 @@ const ReplaceForm: React.FC = () => {
                     ...newAccounts,
                   ]}
                   placeholder='Select new account...'
+                  disabled={!!replaceData.oldCompanyName || !!replaceData.oldSubAccount}
                 />
               </div>
             </div>
@@ -1038,7 +1044,9 @@ const ReplaceForm: React.FC = () => {
                   !replaceData.oldAccountName ||
                   !replaceData.newAccountName ||
                   loading ||
-                  replaceData.oldAccountName.trim() === replaceData.newAccountName.trim()
+                  replaceData.oldAccountName.trim() === replaceData.newAccountName.trim() ||
+                  !!replaceData.oldCompanyName ||
+                  !!replaceData.oldSubAccount
                 }
                 className='bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
               >
@@ -1048,7 +1056,7 @@ const ReplaceForm: React.FC = () => {
           </div>
 
           {/* Sub Account Replacement */}
-          <div className='bg-white p-6 rounded-lg border border-gray-200'>
+          <div className={`bg-white p-6 rounded-lg border border-gray-200 ${replaceData.oldCompanyName || replaceData.oldAccountName ? 'opacity-50 pointer-events-none' : ''}`}>
             <h3 className='text-lg font-semibold text-gray-900 mb-4'>
               Replace Sub Account
             </h3>
@@ -1062,6 +1070,7 @@ const ReplaceForm: React.FC = () => {
                     { value: '', label: 'Select old sub account...' },
                     ...subAccounts,
                   ]}
+                  disabled={!!replaceData.oldCompanyName || !!replaceData.oldAccountName}
                 />
               </div>
               <div>
@@ -1074,6 +1083,7 @@ const ReplaceForm: React.FC = () => {
                     ...newSubAccounts,
                   ]}
                   placeholder='Select new sub account...'
+                  disabled={!!replaceData.oldCompanyName || !!replaceData.oldAccountName}
                 />
               </div>
             </div>
@@ -1084,7 +1094,9 @@ const ReplaceForm: React.FC = () => {
                   !replaceData.oldSubAccount ||
                   !replaceData.newSubAccount ||
                   loading ||
-                  replaceData.oldSubAccount.trim() === replaceData.newSubAccount.trim()
+                  replaceData.oldSubAccount.trim() === replaceData.newSubAccount.trim() ||
+                  !!replaceData.oldCompanyName ||
+                  !!replaceData.oldAccountName
                 }
                 className='bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed'
               >
