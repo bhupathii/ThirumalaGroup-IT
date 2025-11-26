@@ -10,6 +10,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import { useCreateCashBookEntry, useBulkCashBookOperations } from '../hooks/useCashBookData';
 import ModeLabel from '../components/UI/ModeLabel';
+import CustomCalendar from '../components/UI/CustomCalendar';
 import { useDropdownData, useRecentEntriesByDate } from '../hooks/useDashboardData';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/queryClient';
@@ -83,6 +84,8 @@ const NewEntry: React.FC = () => {
   const [dualEntryEnabled, setDualEntryEnabled] = useState(false);
   const [mainDateInput, setMainDateInput] = useState('');
   const [dualDateInput, setDualDateInput] = useState('');
+  const [showMainCalendar, setShowMainCalendar] = useState(false);
+  const [showDualCalendar, setShowDualCalendar] = useState(false);
   const mainDatePickerRef = useRef<HTMLInputElement>(null);
   const dualDatePickerRef = useRef<HTMLInputElement>(null);
   const [dualEntry, setDualEntry] = useState<NewEntryForm>({
@@ -1749,26 +1752,22 @@ const NewEntry: React.FC = () => {
                     />
                     <button
                       type='button'
-                      onClick={() => {
-                        const el = mainDatePickerRef.current as any;
-                        if (el && typeof el.showPicker === 'function') el.showPicker();
-                        else mainDatePickerRef.current?.click();
-                      }}
+                      onClick={() => setShowMainCalendar(!showMainCalendar)}
                       className='absolute right-2 top-7 p-1 hover:bg-gray-100 rounded'
                     >
                       <Calendar className='w-4 h-4 text-gray-500' />
                     </button>
-                    <input
-                      ref={mainDatePickerRef}
-                      type='date'
-                      value={entry.date}
-                      onChange={e => {
-                        const iso = e.target.value;
-                        handleInputChange('date', iso);
-                        try { setMainDateInput(format(new Date(iso), 'dd/MM/yyyy')); } catch {}
-                      }}
-                      className='absolute left-0 top-0 w-0 h-0 opacity-0'
-                    />
+                    {showMainCalendar && (
+                      <CustomCalendar
+                        onDateSelect={(date) => {
+                          handleInputChange('date', date);
+                          setMainDateInput(format(new Date(date), 'dd/MM/yyyy'));
+                          setShowMainCalendar(false);
+                        }}
+                        selectedDate={entry.date}
+                        onClose={() => setShowMainCalendar(false)}
+                      />
+                    )}
                   </div>
 
                   <div className='space-y-0.5'>
@@ -2003,8 +2002,8 @@ const NewEntry: React.FC = () => {
                     options={[
                       { value: '', label: 'Select payment mode...' },
                       { value: 'Cash', label: 'Cash' },
-                      { value: 'Bank Transfer', label: 'Bank Transfer' },
-                      { value: 'Online', label: 'Online' }
+                      { value: 'Bank Transfer', label: 'Bank' },
+                      { value: 'Online', label: 'Double' }
                     ]}
                     placeholder='Select payment mode...'
                       required
@@ -2096,26 +2095,22 @@ const NewEntry: React.FC = () => {
                         />
                         <button
                           type='button'
-                          onClick={() => {
-                            const el = dualDatePickerRef.current as any;
-                            if (el && typeof el.showPicker === 'function') el.showPicker();
-                            else dualDatePickerRef.current?.click();
-                          }}
+                          onClick={() => setShowDualCalendar(!showDualCalendar)}
                           className='absolute right-2 top-7 p-1 hover:bg-gray-100 rounded'
                         >
                           <Calendar className='w-4 h-4 text-gray-500' />
                         </button>
-                        <input
-                          ref={dualDatePickerRef}
-                          type='date'
-                          value={dualEntry.date}
-                          onChange={e => {
-                            const iso = e.target.value;
-                            setDualEntry(prev => ({ ...prev, date: iso }));
-                            try { setDualDateInput(format(new Date(iso), 'dd/MM/yyyy')); } catch {}
-                          }}
-                          className='absolute left-0 top-0 w-0 h-0 opacity-0'
-                        />
+                        {showDualCalendar && (
+                          <CustomCalendar
+                            onDateSelect={(date) => {
+                              setDualEntry(prev => ({ ...prev, date }));
+                              setDualDateInput(format(new Date(date), 'dd/MM/yyyy'));
+                              setShowDualCalendar(false);
+                            }}
+                            selectedDate={dualEntry.date}
+                            onClose={() => setShowDualCalendar(false)}
+                          />
+                        )}
                       </div>
                       <SearchableSelect
                         ref={dualCompanyNameRef}
@@ -2236,7 +2231,8 @@ const NewEntry: React.FC = () => {
                         options={[
                           { value: '', label: 'Select payment mode...' },
                           { value: 'Cash', label: 'Cash' },
-                          { value: 'Bank Transfer', label: 'Bank Transfer' }
+                          { value: 'Bank Transfer', label: 'Bank' },
+                          { value: 'Online', label: 'Double' }
                         ]}
                         placeholder='Select payment mode...'
                         required
@@ -2443,7 +2439,7 @@ const NewEntry: React.FC = () => {
                                 : '-'}
                             </td>
                             <td className='w-16 px-1 py-0 text-xs truncate' title={entry.payment_mode || 'No payment mode'}>
-                              {entry.payment_mode && String(entry.payment_mode).trim() ? String(entry.payment_mode).trim() : '-'}
+                              {entry.payment_mode && String(entry.payment_mode).trim() ? (entry.payment_mode === 'Online' ? 'Double' : entry.payment_mode === 'Bank Transfer' ? 'Bank' : String(entry.payment_mode).trim()) : '-'}
                             </td>
                             <td className='w-16 px-1 py-0 text-xs truncate' title={entry.staff}>
                               {entry.staff}

@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
 import { Calendar } from 'lucide-react';
+import CustomCalendar from '../components/UI/CustomCalendar';
 
 interface LedgerSummaryFilters {
   betweenDates: boolean;
@@ -71,6 +72,8 @@ const LedgerSummary: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     'company' | 'mainAccount' | 'subAccount'
   >('company');
+  const [showFromCalendar, setShowFromCalendar] = useState(false);
+  const [showToCalendar, setShowToCalendar] = useState(false);
 
   // Dropdown data
   const [companies, setCompanies] = useState<
@@ -1061,26 +1064,23 @@ ${Math.abs(balance).toLocaleString()}
                   />
                   <button
                     type='button'
-                    onClick={() => {
-                      const el = fromPickerRef.current as any;
-                      if (el && typeof el.showPicker === 'function') el.showPicker();
-                      else fromPickerRef.current?.click();
-                    }}
+                    onClick={() => setShowFromCalendar(!showFromCalendar)}
                     className='absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded'
                   >
                     <Calendar className='w-4 h-4 text-gray-500' />
                   </button>
-                  <input
-                    ref={fromPickerRef}
-                    type='date'
-                    value={filters.fromDate}
-                    onChange={e => {
-                      const iso = e.target.value;
-                      handleFilterChange('fromDate', iso);
-                      try { setFromDateInput(format(new Date(iso), 'dd/MM/yyyy')); } catch {}
-                    }}
-                    className='absolute left-0 top-0 w-0 h-0 opacity-0'
-                  />
+                  {showFromCalendar && (
+                    <CustomCalendar
+                      entries={ledgerEntries.map(e => ({ c_date: e.date }))}
+                      onDateSelect={(date) => {
+                        handleFilterChange('fromDate', date);
+                        setFromDateInput(format(new Date(date), 'dd/MM/yyyy'));
+                        setShowFromCalendar(false);
+                      }}
+                      selectedDate={filters.fromDate}
+                      onClose={() => setShowFromCalendar(false)}
+                    />
+                  )}
                 </div>
               </div>
               <div>
@@ -1106,26 +1106,23 @@ ${Math.abs(balance).toLocaleString()}
                   />
                   <button
                     type='button'
-                    onClick={() => {
-                      const el = toPickerRef.current as any;
-                      if (el && typeof el.showPicker === 'function') el.showPicker();
-                      else toPickerRef.current?.click();
-                    }}
+                    onClick={() => setShowToCalendar(!showToCalendar)}
                     className='absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded'
                   >
                     <Calendar className='w-4 h-4 text-gray-500' />
                   </button>
-                  <input
-                    ref={toPickerRef}
-                    type='date'
-                    value={filters.toDate}
-                    onChange={e => {
-                      const iso = e.target.value;
-                      handleFilterChange('toDate', iso);
-                      try { setToDateInput(format(new Date(iso), 'dd/MM/yyyy')); } catch {}
-                    }}
-                    className='absolute left-0 top-0 w-0 h-0 opacity-0'
-                  />
+                  {showToCalendar && (
+                    <CustomCalendar
+                      entries={ledgerEntries.map(e => ({ c_date: e.date }))}
+                      onDateSelect={(date) => {
+                        handleFilterChange('toDate', date);
+                        setToDateInput(format(new Date(date), 'dd/MM/yyyy'));
+                        setShowToCalendar(false);
+                      }}
+                      selectedDate={filters.toDate}
+                      onClose={() => setShowToCalendar(false)}
+                    />
+                  )}
                 </div>
               </div>
             </div>

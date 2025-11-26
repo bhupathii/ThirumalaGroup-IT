@@ -10,6 +10,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
+import CustomCalendar from '../components/UI/CustomCalendar';
 import { format } from 'date-fns';
 import {
   Calendar,
@@ -569,13 +570,20 @@ const EditEntry: React.FC = () => {
         // Combine standard modes with existing database modes, ensuring no duplicates
         const allPaymentModes = [...new Set([...standardPaymentModes, ...uniquePaymentModes])];
         
+        // Helper function to map payment mode values to display labels
+        const getPaymentModeLabel = (mode: string): string => {
+          if (mode === 'Online') return 'Double';
+          if (mode === 'Bank Transfer') return 'Bank';
+          return mode;
+        };
+        
         console.log('💰 Credit amounts loaded:', uniqueCredits.length);
         console.log('💰 Debit amounts loaded:', uniqueDebits.length);
         console.log('💳 Payment modes loaded:', allPaymentModes.length);
         
         setCreditOptions(uniqueCredits.map(amount => ({ value: amount.toString(), label: amount.toString() })));
         setDebitOptions(uniqueDebits.map(amount => ({ value: amount.toString(), label: amount.toString() })));
-        setPaymentModeOptions(allPaymentModes.map(mode => ({ value: mode, label: mode })));
+        setPaymentModeOptions(allPaymentModes.map(mode => ({ value: mode, label: getPaymentModeLabel(mode) })));
       }
       
       console.log('✅ All dropdown data loaded successfully');
@@ -725,7 +733,13 @@ const EditEntry: React.FC = () => {
       setParticularsOptions(uniqueParticulars.map(name => ({ value: name, label: name })));
       setCreditOptions(uniqueCredits.map(amount => ({ value: amount.toString(), label: amount.toString() })));
       setDebitOptions(uniqueDebits.map(amount => ({ value: amount.toString(), label: amount.toString() })));
-      setPaymentModeOptions(uniquePaymentModes.map(mode => ({ value: mode, label: mode })));
+      // Helper function to map payment mode values to display labels
+      const getPaymentModeLabel = (mode: string): string => {
+        if (mode === 'Online') return 'Double';
+        if (mode === 'Bank Transfer') return 'Bank';
+        return mode;
+      };
+      setPaymentModeOptions(uniquePaymentModes.map(mode => ({ value: mode, label: getPaymentModeLabel(mode) })));
       
       // Show toast with summary
       const summary = [
@@ -1997,7 +2011,7 @@ const EditEntry: React.FC = () => {
           
           <div class="voucher-section">
             <span class="voucher-label">Payment Mode:</span>
-            <span class="voucher-value">${entry.payment_mode || 'Cash'}</span>
+            <span class="voucher-value">${entry.payment_mode === 'Online' ? 'Double' : entry.payment_mode === 'Bank Transfer' ? 'Bank' : (entry.payment_mode || 'Cash')}</span>
           </div>
           
           <div class="voucher-footer">
@@ -2088,6 +2102,7 @@ const EditEntry: React.FC = () => {
             </div>
             {showCalendar && (
               <CustomCalendar
+                entries={entries}
                 onDateSelect={(date) => {
                   setFilterDate(date);
                   setFilterDateInput(format(new Date(date), 'dd/MM/yyyy'));
@@ -2413,7 +2428,7 @@ const EditEntry: React.FC = () => {
                           : '-'}
                       </td>
                       <td className='w-16 px-1 py-1 text-sm truncate font-bold' title={entry.payment_mode || 'No payment mode'}>
-                        {entry.payment_mode && String(entry.payment_mode).trim() ? String(entry.payment_mode).trim() : '-'}
+                        {entry.payment_mode && String(entry.payment_mode).trim() ? (entry.payment_mode === 'Online' ? 'Double' : entry.payment_mode === 'Bank Transfer' ? 'Bank' : String(entry.payment_mode).trim()) : '-'}
                       </td>
                       <td className='w-16 px-1 py-1 text-sm truncate font-bold' title={entry.staff}>{entry.staff}</td>
                       <td className='w-16 px-1 py-1 text-sm truncate font-bold' title={entry.users || 'No user'}>
@@ -2782,6 +2797,7 @@ const EditEntry: React.FC = () => {
                         </div>
                         {showCalendar && (
                           <CustomCalendar
+                            entries={entries}
                             onDateSelect={(date) => {
                               if (editMode) {
                                 handleInputChange('c_date', date);
@@ -2811,7 +2827,7 @@ const EditEntry: React.FC = () => {
                               }
                               setShowCalendar(false);
                             }}
-                            selectedDate={selectedEntry?.c_date || ''}
+                            selectedDate={selectedEntry?.c_date ? format(new Date(selectedEntry.c_date), 'yyyy-MM-dd') : ''}
                             onClose={() => setShowCalendar(false)}
                           />
                         )}

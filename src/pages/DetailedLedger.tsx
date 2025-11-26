@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
+import CustomCalendar from '../components/UI/CustomCalendar';
 import { format, parseISO } from 'date-fns';
 import { TrendingUp, TrendingDown, Search, BarChart3, Plus, Database, RefreshCw, Calendar } from 'lucide-react';
 
@@ -69,6 +70,8 @@ const DetailedLedger: React.FC = () => {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [printAllEntries, setPrintAllEntries] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showFromCalendar, setShowFromCalendar] = useState(false);
+  const [showToCalendar, setShowToCalendar] = useState(false);
   
   // Pagination states
   const [pageSize] = useState(1000); // Show 1000 entries per page
@@ -447,10 +450,17 @@ const DetailedLedger: React.FC = () => {
       const entriesWithPaymentMode = ledgerData.filter(e => e.payment_mode && e.payment_mode.trim());
       console.log(`✅ DetailedLedger loaded: ${ledgerData.length} entries, ${entriesWithPaymentMode.length} have payment_mode values`);
       if (entriesWithPaymentMode.length > 0) {
+        // Helper function to get payment mode display label
+        const getPaymentModeLabel = (mode: string): string => {
+          if (mode === 'Online') return 'Double';
+          if (mode === 'Bank Transfer') return 'Bank';
+          return mode;
+        };
+        
         console.log('📊 Payment mode summary:', {
           Cash: entriesWithPaymentMode.filter(e => e.payment_mode === 'Cash').length,
-          'Bank Transfer': entriesWithPaymentMode.filter(e => e.payment_mode === 'Bank Transfer').length,
-          Online: entriesWithPaymentMode.filter(e => e.payment_mode === 'Online').length
+          Bank: entriesWithPaymentMode.filter(e => e.payment_mode === 'Bank Transfer').length,
+          Double: entriesWithPaymentMode.filter(e => e.payment_mode === 'Online').length
         });
       }
       
@@ -1237,29 +1247,23 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                     />
                     <button
                       type='button'
-                      onClick={() => {
-                        const el = fromPickerRef.current as any;
-                        if (el && typeof el.showPicker === 'function') {
-                          el.showPicker();
-                        } else {
-                          fromPickerRef.current?.click();
-                        }
-                      }}
+                      onClick={() => setShowFromCalendar(!showFromCalendar)}
                       className='absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded'
                     >
                       <Calendar className='w-4 h-4 text-gray-500' />
                     </button>
-                    <input
-                      ref={fromPickerRef}
-                      type='date'
-                      value={filters.fromDate}
-                      onChange={e => {
-                        const iso = e.target.value;
-                        handleFilterChange('fromDate', iso);
-                        try { setFromDateInput(format(new Date(iso), 'dd/MM/yyyy')); } catch {}
-                      }}
-                      className='absolute left-0 top-0 w-0 h-0 opacity-0'
-                    />
+                    {showFromCalendar && (
+                      <CustomCalendar
+                        entries={ledgerEntries.map(e => ({ c_date: e.date }))}
+                        onDateSelect={(date) => {
+                          handleFilterChange('fromDate', date);
+                          setFromDateInput(format(new Date(date), 'dd/MM/yyyy'));
+                          setShowFromCalendar(false);
+                        }}
+                        selectedDate={filters.fromDate}
+                        onClose={() => setShowFromCalendar(false)}
+                      />
+                    )}
                   </div>
                 </div>
                 <div>
@@ -1285,29 +1289,23 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                     />
                     <button
                       type='button'
-                      onClick={() => {
-                        const el = toPickerRef.current as any;
-                        if (el && typeof el.showPicker === 'function') {
-                          el.showPicker();
-                        } else {
-                          toPickerRef.current?.click();
-                        }
-                      }}
+                      onClick={() => setShowToCalendar(!showToCalendar)}
                       className='absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded'
                     >
                       <Calendar className='w-4 h-4 text-gray-500' />
                     </button>
-                    <input
-                      ref={toPickerRef}
-                      type='date'
-                      value={filters.toDate}
-                      onChange={e => {
-                        const iso = e.target.value;
-                        handleFilterChange('toDate', iso);
-                        try { setToDateInput(format(new Date(iso), 'dd/MM/yyyy')); } catch {}
-                      }}
-                      className='absolute left-0 top-0 w-0 h-0 opacity-0'
-                    />
+                    {showToCalendar && (
+                      <CustomCalendar
+                        entries={ledgerEntries.map(e => ({ c_date: e.date }))}
+                        onDateSelect={(date) => {
+                          handleFilterChange('toDate', date);
+                          setToDateInput(format(new Date(date), 'dd/MM/yyyy'));
+                          setShowToCalendar(false);
+                        }}
+                        selectedDate={filters.toDate}
+                        onClose={() => setShowToCalendar(false)}
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -1409,7 +1407,8 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                 >
                   <option value=''>All</option>
                   <option value='Cash'>Cash</option>
-                  <option value='Bank Transfer'>Bank Transfer</option>
+                  <option value='Bank Transfer'>Bank</option>
+                  <option value='Online'>Double</option>
                 </select>
               </div>
             </div>
@@ -1651,7 +1650,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                       {entry.staff}
                     </td>
                     <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.payment_mode || 'No payment mode'}>
-                      {entry.payment_mode && String(entry.payment_mode).trim() ? String(entry.payment_mode).trim() : '-'}
+                      {entry.payment_mode && String(entry.payment_mode).trim() ? (entry.payment_mode === 'Online' ? 'Double' : entry.payment_mode === 'Bank Transfer' ? 'Bank' : String(entry.payment_mode).trim()) : '-'}
                     </td>
                     <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.user}>
                       {entry.user}

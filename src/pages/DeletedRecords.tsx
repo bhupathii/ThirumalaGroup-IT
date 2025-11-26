@@ -148,7 +148,7 @@ const DeletedRecords: React.FC = () => {
         console.log('1. No records have been deleted yet');
         console.log('2. The delete function is not working properly');
         console.log('3. The database query is not finding the records');
-        toast.warning('No deleted records found. Try deleting a record first.');
+        toast('No deleted records found. Try deleting a record first.', { icon: '⚠️' });
       } else {
         toast.success(`Loaded ${records.length} deleted records`);
       }

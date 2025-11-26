@@ -117,9 +117,16 @@ const ExportExcel: React.FC = () => {
             .map(mode => String(mode).trim())
         )].sort();
         
+        // Helper function to map payment mode values to display labels
+        const getPaymentModeLabel = (mode: string): string => {
+          if (mode === 'Online') return 'Double';
+          if (mode === 'Bank Transfer') return 'Bank';
+          return mode;
+        };
+        
         const paymentModeDataOptions = uniquePaymentModes.map(mode => ({
           value: mode,
-          label: mode,
+          label: getPaymentModeLabel(mode),
         }));
         setPaymentModeOptions([{ value: '', label: 'All Payment Modes' }, ...paymentModeDataOptions]);
       }
@@ -299,7 +306,7 @@ const ExportExcel: React.FC = () => {
           'Debit': record.debit || 0,
           'Staff': record.staff || '',
           'User': record.users || '',
-          'Payment Mode': record.payment_mode || '',
+          'Payment Mode': record.payment_mode === 'Online' ? 'Double' : record.payment_mode === 'Bank Transfer' ? 'Bank' : (record.payment_mode || ''),
           'Sale Quantity': record.sale_qty || 0,
           'Purchase Quantity': record.purchase_qty || 0,
           'Deleted By': record.deleted_by || record.users || record.staff || 'Unknown',

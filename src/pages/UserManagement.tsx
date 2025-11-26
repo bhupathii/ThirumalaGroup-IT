@@ -213,69 +213,83 @@ useEffect(() => {
     let userRows: any[] = [];
     let hasModeColumn = true;
     
-    // First try with mode column
-    const { data: dataWithMode, error: errorWithMode } = await supabase
+    // Start with minimal required fields - try without join first
+    let { data: dataBase, error: errorBase } = await supabase
       .from('users')
-      .select(`
-        id, 
-        username, 
-        mode,
-        created_at,
-        email,
-        address,
-        aadhaar_number,
-        phone,
-        full_name,
-        date_of_birth,
-        other_details,
-        user_types!inner(user_type)
-      `)
+      .select('id, username, created_at, user_type_id')
       .order('created_at', { ascending: false });
     
-    // Check if error is specifically about mode column
-    const isModeColumnError = errorWithMode && (
-      errorWithMode.message?.includes('mode') || 
-      errorWithMode.message?.includes('column "mode"') ||
-      errorWithMode.code === '42703' ||
-      errorWithMode.message?.toLowerCase().includes('does not exist')
-    );
-    
-    if (isModeColumnError) {
-      // Mode column doesn't exist, try without it - but still load personal details
-      console.log('Mode column does not exist, loading users without mode...');
-      hasModeColumn = false;
-      const { data: dataWithoutMode, error: errorWithoutMode } = await supabase
-        .from('users')
-        .select(`
-          id, 
-          username, 
-          created_at,
-          email,
-          address,
-          aadhaar_number,
-          phone,
-          full_name,
-          date_of_birth,
-          other_details,
-          user_types!inner(user_type)
-        `)
-        .order('created_at', { ascending: false });
-      
-      if (errorWithoutMode) {
-        console.error('Error loading users:', errorWithoutMode);
-        toast.error('Error loading users');
-        return;
-      }
-      userRows = dataWithoutMode || [];
-    } else if (errorWithMode) {
-      console.error('Error loading users:', errorWithMode);
-      toast.error('Error loading users');
+    if (errorBase) {
+      console.error('Error loading users:', errorBase);
+      toast.error(`Error loading users: ${errorBase.message || 'Unknown error'}`);
+      setUsers([]);
       return;
-    } else {
-      userRows = dataWithMode || [];
     }
     
-    if (!userRows || userRows.length === 0) return;
+    if (!dataBase || dataBase.length === 0) {
+      console.log('No users found in database');
+      setUsers([]);
+      return;
+    }
+    
+    // Get all unique user_type_ids
+    const userTypeIds = [...new Set(dataBase.map((u: any) => u.user_type_id).filter(Boolean))];
+    
+    // Load all user_types at once
+    const { data: allUserTypes } = await supabase
+      .from('user_types')
+      .select('id, user_type')
+      .in('id', userTypeIds);
+    
+    // Create a map for quick lookup
+    const userTypesMap = new Map((allUserTypes || []).map((ut: any) => [ut.id, ut.user_type]));
+    
+    // Now merge user_types with users
+    const usersWithTypes = dataBase.map((user: any) => {
+      const userType = user.user_type_id ? userTypesMap.get(user.user_type_id) : null;
+      return {
+        ...user,
+        user_types: userType ? { user_type: userType } : null,
+      };
+    });
+    
+    // Try to load optional fields - handle gracefully if columns don't exist
+    const userIds = usersWithTypes.map((u: any) => u.id);
+    let dataWithOptionalFields: any[] = [];
+    
+    if (userIds.length > 0) {
+      // Try to load optional fields, but don't fail if they don't exist
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, mode, email, address, aadhaar_number, phone, full_name, date_of_birth, other_details')
+        .in('id', userIds);
+      
+      // Only use data if no error or if error is just about missing columns
+      if (!error || (error.code !== '42703' && !error.message?.includes('does not exist'))) {
+        dataWithOptionalFields = data || [];
+      }
+    }
+    
+    // Merge optional fields
+    const mergedUsers = usersWithTypes.map((user: any) => {
+      const optionalFields = dataWithOptionalFields?.find((u: any) => u.id === user.id);
+      return {
+        ...user,
+        mode: optionalFields?.mode || null,
+        email: optionalFields?.email || '',
+        address: optionalFields?.address || '',
+        aadhaar_number: optionalFields?.aadhaar_number || '',
+        phone: optionalFields?.phone || '',
+        full_name: optionalFields?.full_name || '',
+        date_of_birth: optionalFields?.date_of_birth || '',
+        other_details: optionalFields?.other_details || '',
+      };
+    });
+    
+    userRows = mergedUsers;
+    hasModeColumn = dataWithOptionalFields && dataWithOptionalFields.some((u: any) => u.mode !== undefined);
+    
+    console.log(`✅ Loaded ${userRows.length} users from database`);
 
     // Load features for each user from user_access table
     const usersWithFeatures = await Promise.all(
@@ -320,12 +334,20 @@ useEffect(() => {
 
 
         return {
-          ...u,
+          id: u.id,
+          username: u.username,
           is_admin: isAdmin,
           features,
           featuresByMode,
           mode: hasModeColumn ? (u.mode || null) : null,
           created_at: u.created_at || null,
+          email: u.email || '',
+          address: u.address || '',
+          aadhaar_number: u.aadhaar_number || '',
+          phone: u.phone || '',
+          full_name: u.full_name || '',
+          date_of_birth: u.date_of_birth || '',
+          other_details: u.other_details || '',
         };
       })
     );

@@ -4092,14 +4092,23 @@ class SupabaseDatabase {
           .select('*')
           .order('deleted_at', { ascending: false });
 
-        if (!tableError && tableData && tableData.length > 0) {
-          console.log('✅ Successfully fetched deleted records from deleted_cash_book table:', tableData.length);
-          return tableData;
-        } else if (tableError) {
-          console.log('⚠️ deleted_cash_book table not accessible, trying localStorage...');
+        if (tableError) {
+          // If there's an error accessing the table, try localStorage fallback
+          console.log('⚠️ deleted_cash_book table not accessible:', tableError.message);
+          console.log('🔄 Trying localStorage fallback...');
+        } else {
+          // Table is accessible - return data (even if empty)
+          console.log('✅ Successfully fetched deleted records from deleted_cash_book table:', tableData?.length || 0);
+          if (tableData && tableData.length > 0) {
+            return tableData;
+          } else {
+            // Table exists but is empty - still check localStorage as fallback
+            console.log('📋 deleted_cash_book table is empty, checking localStorage...');
+          }
         }
       } catch (tableErr) {
-        console.log('⚠️ Error accessing deleted_cash_book table, trying localStorage...');
+        console.log('⚠️ Error accessing deleted_cash_book table:', tableErr);
+        console.log('🔄 Trying localStorage fallback...');
       }
 
       // Fallback: Fetch deleted records from localStorage
@@ -4376,22 +4385,8 @@ class SupabaseDatabase {
         }
       }
 
-      // Check cash_book for deleted records (fallback)
-      console.log('📋 Checking cash_book for deleted records...');
-      const { data: cashBookDeletedData, error: cashBookError } = await supabase
-        .from(getTableName('cash_book'))
-        .select('*')
-        .eq('deleted', true)
-        .limit(5);
-
-      if (cashBookError) {
-        console.log('❌ cash_book deleted records error:', cashBookError.message);
-      } else {
-        console.log('✅ cash_book deleted records:', cashBookDeletedData?.length || 0, 'records');
-        if (cashBookDeletedData && cashBookDeletedData.length > 0) {
-          console.log('📝 Sample cash_book deleted record:', cashBookDeletedData[0]);
-        }
-      }
+      // Note: Deleted records are stored in deleted_cash_book table, not in cash_book with a deleted flag
+      // So we don't check cash_book for deleted records
 
       // Check total cash_book records
       console.log('📋 Checking total cash_book records...');

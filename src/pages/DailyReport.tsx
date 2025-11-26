@@ -10,6 +10,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
+import CustomCalendar from '../components/UI/CustomCalendar';
 import { format, addDays, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import { Search, Calendar } from 'lucide-react';
 
@@ -54,10 +55,27 @@ const DailyReport: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showCompanyBalances, setShowCompanyBalances] = useState(true);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
   
   // Data loading states
   const [totalEntries, setTotalEntries] = useState(0);
   const [allLoadedEntries, setAllLoadedEntries] = useState<any[]>([]);
+  const { mode: tableMode } = useTableMode();
+
+  // Load all entries for calendar green dots
+  useEffect(() => {
+    const loadAllEntries = async () => {
+      try {
+        console.log('📅 Loading all entries for calendar, mode:', tableMode);
+        const entries = await supabaseDB.getAllCashBookEntries();
+        console.log('📅 Loaded entries for calendar:', entries.length);
+        setAllLoadedEntries(entries);
+      } catch (error) {
+        console.error('Error loading entries for calendar:', error);
+      }
+    };
+    loadAllEntries();
+  }, [tableMode]);
 
   // Helper functions for date format conversion
   const convertToInternalFormat = (ddMMyyyy: string): string => {
@@ -552,20 +570,27 @@ const DailyReport: React.FC = () => {
                 }}
                 className='w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500'
               />
-              {/* Hidden date input positioned over calendar icon */}
-              <input
-                id='hidden-date-input'
-                type='date'
-                value={selectedDate}
-                onChange={(e) => handleDatePickerChange(e.target.value)}
-                className='absolute right-2 top-1/2 transform -translate-y-1/2 w-5 h-5 opacity-0 cursor-pointer'
-                style={{ zIndex: 10 }}
-              />
+              {/* Calendar button */}
+              <button
+                type='button'
+                onClick={() => setShowCalendar(!showCalendar)}
+                className='absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 rounded'
+              >
+                <Calendar className='w-5 h-5 text-gray-500' />
+              </button>
               
-              {/* Calendar icon for visual reference */}
-              <div className='absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none'>
-                <Calendar className='w-5 h-5' />
-              </div>
+              {/* Custom Calendar with green dots */}
+              {showCalendar && (
+                <CustomCalendar
+                  entries={allLoadedEntries}
+                  onDateSelect={(date) => {
+                    handleDatePickerChange(date);
+                    setShowCalendar(false);
+                  }}
+                  selectedDate={selectedDate}
+                  onClose={() => setShowCalendar(false)}
+                />
+              )}
             </div>
           </div>
           <div className='flex-1'>
