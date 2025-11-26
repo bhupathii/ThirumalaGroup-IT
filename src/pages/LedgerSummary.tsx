@@ -5,6 +5,7 @@ import Input from '../components/UI/Input';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
 import { format, parseISO } from 'date-fns';
@@ -49,6 +50,7 @@ interface SubAccountSummary {
 
 const LedgerSummary: React.FC = () => {
   const { user } = useAuth();
+  const { mode: tableMode } = useTableMode();
 
   const [filters, setFilters] = useState<LedgerSummaryFilters>({
     betweenDates: true,
@@ -75,6 +77,7 @@ const LedgerSummary: React.FC = () => {
   >('company');
   const [showFromCalendar, setShowFromCalendar] = useState(false);
   const [showToCalendar, setShowToCalendar] = useState(false);
+  const [allEntries, setAllEntries] = useState<any[]>([]);
 
   // Dropdown data
   const [companies, setCompanies] = useState<
@@ -102,6 +105,21 @@ const LedgerSummary: React.FC = () => {
       setToDateInput(filters.toDate ? format(new Date(filters.toDate), 'dd/MM/yyyy') : '');
     } catch {}
   }, [filters.fromDate, filters.toDate]);
+
+  // Load all entries for calendar green dots
+  useEffect(() => {
+    const loadAllEntries = async () => {
+      try {
+        console.log('📅 Loading all entries for calendar, mode:', tableMode);
+        const entries = await supabaseDB.getAllCashBookEntries();
+        console.log('📅 Loaded entries for calendar:', entries.length);
+        setAllEntries(entries);
+      } catch (error) {
+        console.error('Error loading entries for calendar:', error);
+      }
+    };
+    loadAllEntries();
+  }, [tableMode]);
 
   // Summary totals
   const [grandTotals, setGrandTotals] = useState({
@@ -1073,7 +1091,7 @@ ${Math.abs(balance).toLocaleString()}
                   </button>
                   {showFromCalendar && (
                     <CustomCalendar
-                      entries={ledgerEntries.map(e => ({ c_date: e.date }))}
+                      entries={allEntries}
                       onDateSelect={(date) => {
                         handleFilterChange('fromDate', date);
                         setFromDateInput(format(new Date(date), 'dd/MM/yyyy'));
@@ -1115,7 +1133,7 @@ ${Math.abs(balance).toLocaleString()}
                   </button>
                   {showToCalendar && (
                     <CustomCalendar
-                      entries={ledgerEntries.map(e => ({ c_date: e.date }))}
+                      entries={allEntries}
                       onDateSelect={(date) => {
                         handleFilterChange('toDate', date);
                         setToDateInput(format(new Date(date), 'dd/MM/yyyy'));

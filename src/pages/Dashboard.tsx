@@ -89,6 +89,7 @@ const Dashboard: React.FC = () => {
     const loadCredentials = async () => {
       try {
         // Try to fetch from database first
+        // This will silently return empty array if table doesn't exist (404 errors handled in supabaseDatabase)
         const dbCredentials = await supabaseDB.getRecentUserCredentials(10);
         if (dbCredentials && dbCredentials.length > 0) {
           setUserCredentials(dbCredentials.reverse()); // Show newest first
@@ -96,8 +97,18 @@ const Dashboard: React.FC = () => {
           localStorage.setItem('user_credentials', JSON.stringify(dbCredentials));
           return;
         }
-      } catch (error) {
-        console.log('Could not load credentials from database, using localStorage:', error);
+      } catch (error: any) {
+        // Silently handle errors (table might not exist - that's okay)
+        // Only log if it's not a table not found error
+        const isTableNotFound = 
+          error?.code === '42P01' || 
+          error?.message?.includes('does not exist') ||
+          error?.message?.includes('not found') ||
+          error?.status === 404;
+        
+        if (!isTableNotFound) {
+          console.log('Could not load credentials from database, using localStorage:', error);
+        }
       }
       
       // Fallback to localStorage if database fetch fails or returns empty
@@ -119,6 +130,7 @@ const Dashboard: React.FC = () => {
     const handleDashboardRefresh = async () => {
       invalidateAll();
       // Also reload credentials when dashboard refreshes - from database first
+      // This will silently return empty array if table doesn't exist (404 errors handled in supabaseDatabase)
       try {
         const dbCredentials = await supabaseDB.getRecentUserCredentials(10);
         if (dbCredentials && dbCredentials.length > 0) {
@@ -127,8 +139,18 @@ const Dashboard: React.FC = () => {
           localStorage.setItem('user_credentials', JSON.stringify(dbCredentials));
           return;
         }
-      } catch (error) {
-        console.log('Could not load credentials from database, using localStorage:', error);
+      } catch (error: any) {
+        // Silently handle errors (table might not exist - that's okay)
+        // Only log if it's not a table not found error
+        const isTableNotFound = 
+          error?.code === '42P01' || 
+          error?.message?.includes('does not exist') ||
+          error?.message?.includes('not found') ||
+          error?.status === 404;
+        
+        if (!isTableNotFound) {
+          console.log('Could not load credentials from database, using localStorage:', error);
+        }
       }
       
       // Fallback to localStorage

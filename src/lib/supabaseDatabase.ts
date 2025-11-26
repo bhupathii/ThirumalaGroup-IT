@@ -2468,22 +2468,46 @@ class SupabaseDatabase {
         });
 
       if (error) {
-        // Table might not exist, that's okay - we'll use localStorage as fallback
-        console.log('⚠️ Could not save credentials to database (table may not exist):', error.message);
+        // Table might not exist (404 error) - silently fail and use localStorage as fallback
+        const isTableNotFound = 
+          error.code === '42P01' || 
+          error.message?.includes('does not exist') ||
+          error.message?.includes('not found') ||
+          error.message?.includes('relation') ||
+          error.status === 404;
+        
+        if (!isTableNotFound) {
+          // Only log non-404 errors (actual problems)
+          console.log('⚠️ Could not save credentials to database:', error.message);
+        }
         return false;
       }
 
-      // Clean up old entries (older than 7 days)
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      await supabase
-        .from('user_credentials_log')
-        .delete()
-        .lt('created_at', sevenDaysAgo.toISOString());
+      // Clean up old entries (older than 7 days) - silently fail if table doesn't exist
+      try {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        await supabase
+          .from('user_credentials_log')
+          .delete()
+          .lt('created_at', sevenDaysAgo.toISOString());
+      } catch (cleanupError) {
+        // Silently ignore cleanup errors (table might not exist)
+      }
 
       return true;
-    } catch (error) {
-      console.error('Error saving credentials to database:', error);
+    } catch (error: any) {
+      // Silently handle table not found errors
+      const isTableNotFound = 
+        error?.code === '42P01' || 
+        error?.message?.includes('does not exist') ||
+        error?.message?.includes('not found') ||
+        error?.message?.includes('relation') ||
+        error?.status === 404;
+      
+      if (!isTableNotFound) {
+        console.error('Error saving credentials to database:', error);
+      }
       return false;
     }
   }
@@ -2498,8 +2522,20 @@ class SupabaseDatabase {
         .limit(limit);
 
       if (error) {
-        // Table might not exist, return empty array
-        console.log('⚠️ Could not fetch credentials from database (table may not exist):', error.message);
+        // Table might not exist (404 error) - silently return empty array
+        // Check if it's a table not found error (code 42P01 or message contains 'does not exist')
+        const isTableNotFound = 
+          error.code === '42P01' || 
+          error.message?.includes('does not exist') ||
+          error.message?.includes('not found') ||
+          error.message?.includes('relation') ||
+          error.status === 404;
+        
+        if (!isTableNotFound) {
+          // Only log non-404 errors (actual problems)
+          console.log('⚠️ Could not fetch credentials from database:', error.message);
+        }
+        // Silently return empty array for table not found errors
         return [];
       }
 
@@ -2511,8 +2547,18 @@ class SupabaseDatabase {
         featuresByMode: cred.features_by_mode || {},
         created_at: cred.created_at,
       }));
-    } catch (error) {
-      console.error('Error fetching credentials from database:', error);
+    } catch (error: any) {
+      // Silently handle table not found errors
+      const isTableNotFound = 
+        error?.code === '42P01' || 
+        error?.message?.includes('does not exist') ||
+        error?.message?.includes('not found') ||
+        error?.message?.includes('relation') ||
+        error?.status === 404;
+      
+      if (!isTableNotFound) {
+        console.error('Error fetching credentials from database:', error);
+      }
       return [];
     }
   }
