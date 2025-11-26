@@ -26,6 +26,8 @@ interface DailyReportData {
 
 const DailyReport: React.FC = () => {
   const { user } = useAuth();
+  const { mode: tableMode } = useTableMode();
+  
   // Persisted initial date for stable mount; avoid calling helper before it's defined
   const initialPersistedDate = ((): string => {
     const saved = localStorage.getItem('dailyReportDate');
@@ -59,22 +61,34 @@ const DailyReport: React.FC = () => {
   
   // Data loading states
   const [totalEntries, setTotalEntries] = useState(0);
-  const [allLoadedEntries, setAllLoadedEntries] = useState<any[]>([]);
-  const { mode: tableMode } = useTableMode();
+  // Calendar entries - same structure as DetailedLedger
+  const [calendarEntries, setCalendarEntries] = useState<any[]>([]);
 
-  // Load all entries for calendar green dots
+  // Load all entries for calendar - exactly like DetailedLedger does
   useEffect(() => {
-    const loadAllEntries = async () => {
+    const loadCalendarEntries = async () => {
       try {
-        console.log('📅 Loading all entries for calendar, mode:', tableMode);
+        console.log('📅 Loading entries for calendar, mode:', tableMode);
         const entries = await supabaseDB.getAllCashBookEntries();
-        console.log('📅 Loaded entries for calendar:', entries.length);
-        setAllLoadedEntries(entries);
+        console.log('📅 Loaded entries for calendar:', entries?.length || 0);
+        
+        // Convert to same format as DetailedLedger uses for calendar
+        // DetailedLedger uses: ledgerEntries.map(e => ({ c_date: e.date }))
+        // where e.date comes from entry.c_date
+        // So we just need entries with c_date field
+        const formattedEntries = entries.map((entry: any) => ({
+          c_date: entry.c_date
+        }));
+        
+        setCalendarEntries(formattedEntries);
+        console.log('📅 Calendar entries formatted:', formattedEntries.length);
       } catch (error) {
         console.error('Error loading entries for calendar:', error);
+        setCalendarEntries([]);
       }
     };
-    loadAllEntries();
+    
+    loadCalendarEntries();
   }, [tableMode]);
 
   // Helper functions for date format conversion
@@ -579,17 +593,17 @@ const DailyReport: React.FC = () => {
                 <Calendar className='w-5 h-5 text-gray-500' />
               </button>
               
-              {/* Custom Calendar with dark red dots */}
+              {/* Custom Calendar with red dots - exactly like DetailedLedger */}
               {showCalendar && (
                 <CustomCalendar
-                  entries={allLoadedEntries}
+                  entries={calendarEntries}
                   onDateSelect={(date) => {
                     handleDatePickerChange(date);
                     setShowCalendar(false);
                   }}
                   selectedDate={selectedDate}
                   onClose={() => setShowCalendar(false)}
-                  dotColor="dark-red"
+                  dotColor="red"
                 />
               )}
             </div>
