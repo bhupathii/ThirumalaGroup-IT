@@ -131,8 +131,9 @@ export const printTable = (
       max-width: 100%;
       margin-left: auto !important;
       margin-right: 0 !important;
-      float: right;
-      clear: both;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
     }
     
     .print-summary h3 {
@@ -493,7 +494,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       border: 2px solid #333;
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
       display: block;
-      overflow: hidden;
+      overflow: visible;
     }
     
     .print-header {
@@ -611,8 +612,9 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       max-width: 100%;
       margin-left: auto !important;
       margin-right: 0 !important;
-      float: right;
-      clear: both;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
     }
     
     .print-summary h3 {
@@ -638,13 +640,11 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       width: auto;
       max-width: 620px;
       border-collapse: collapse;
-      margin: 4px 0 6px auto;
+      margin: 4px 0 6px 0;
       font-size: 13px;
       font-weight: bold;
       margin-left: auto !important;
       margin-right: 0 !important;
-      float: right;
-      clear: both;
     }
     .boxed-table th {
       background-color: #f3f4f6;
