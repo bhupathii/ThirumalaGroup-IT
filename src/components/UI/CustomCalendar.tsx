@@ -9,6 +9,7 @@ interface CustomCalendarProps {
   selectedDate?: string;
   onClose?: () => void;
   entries?: any[]; // Optional: if provided, use these entries instead of loading from DB
+  dotColor?: 'green' | 'red' | 'dark-red'; // Color of the dot for dates with entries
 }
 
 const CustomCalendar: React.FC<CustomCalendarProps> = ({
@@ -16,6 +17,7 @@ const CustomCalendar: React.FC<CustomCalendarProps> = ({
   selectedDate = '',
   onClose,
   entries: providedEntries,
+  dotColor = 'green', // Default to green for backward compatibility
 }) => {
   const { mode: tableMode } = useTableMode();
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -224,7 +226,11 @@ const CustomCalendar: React.FC<CustomCalendarProps> = ({
             >
               {date.getDate()}
               {hasEntries && (
-                <div className="absolute bottom-0.5 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 bg-green-500 rounded-full opacity-80 shadow-sm"></div>
+                <div className={`absolute bottom-0.5 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full opacity-80 shadow-sm ${
+                  dotColor === 'dark-red' ? 'bg-red-800' : 
+                  dotColor === 'red' ? 'bg-red-500' : 
+                  'bg-green-500'
+                }`}></div>
               )}
             </button>
           );
@@ -233,7 +239,11 @@ const CustomCalendar: React.FC<CustomCalendarProps> = ({
       
       <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
         <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 bg-green-500 rounded-full opacity-80 shadow-sm"></div>
+          <div className={`w-1.5 h-1.5 rounded-full opacity-80 shadow-sm ${
+            dotColor === 'dark-red' ? 'bg-red-800' : 
+            dotColor === 'red' ? 'bg-red-500' : 
+            'bg-green-500'
+          }`}></div>
           <span>Has entries</span>
         </div>
         {onClose && (

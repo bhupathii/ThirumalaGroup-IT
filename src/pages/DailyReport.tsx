@@ -579,7 +579,7 @@ const DailyReport: React.FC = () => {
                 <Calendar className='w-5 h-5 text-gray-500' />
               </button>
               
-              {/* Custom Calendar with green dots */}
+              {/* Custom Calendar with dark red dots */}
               {showCalendar && (
                 <CustomCalendar
                   entries={allLoadedEntries}
@@ -589,6 +589,7 @@ const DailyReport: React.FC = () => {
                   }}
                   selectedDate={selectedDate}
                   onClose={() => setShowCalendar(false)}
+                  dotColor="dark-red"
                 />
               )}
             </div>
