@@ -2972,9 +2972,17 @@ const EditEntry: React.FC = () => {
                         label='Sale Quantity'
                         type='number'
                         value={selectedEntry?.sale_qty || ''}
-                        onChange={val =>
-                          editMode ? handleInputChange('sale_qty', parseFloat(val) || 0) : undefined
-                        }
+                        onChange={val => {
+                          if (editMode) {
+                            const saleQtyValue = Number((parseFloat(val) || 0).toFixed(2));
+                            if (saleQtyValue > 0) {
+                              handleInputChange('sale_qty', saleQtyValue);
+                              handleInputChange('purchase_qty', 0);
+                            } else {
+                              handleInputChange('sale_qty', saleQtyValue);
+                            }
+                          }
+                        }}
                         placeholder='Enter sale quantity...'
                         disabled={!editMode}
                         min='0'
@@ -2984,9 +2992,17 @@ const EditEntry: React.FC = () => {
                         label='Purchase Quantity'
                         type='number'
                         value={selectedEntry?.purchase_qty || ''}
-                        onChange={val =>
-                          editMode ? handleInputChange('purchase_qty', parseFloat(val) || 0) : undefined
-                        }
+                        onChange={val => {
+                          if (editMode) {
+                            const purchaseQtyValue = Number((parseFloat(val) || 0).toFixed(2));
+                            if (purchaseQtyValue > 0) {
+                              handleInputChange('purchase_qty', purchaseQtyValue);
+                              handleInputChange('sale_qty', 0);
+                            } else {
+                              handleInputChange('purchase_qty', purchaseQtyValue);
+                            }
+                          }
+                        }}
                         placeholder='Enter purchase quantity...'
                         disabled={!editMode}
                         min='0'

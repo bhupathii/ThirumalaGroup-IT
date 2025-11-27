@@ -306,8 +306,8 @@ const DeletedRecords: React.FC = () => {
   };
 
   const exportToExcel = () => {
-    const exportData = filteredRecords.map(record => ({
-      'S.No': record.sno,
+    const exportData = filteredRecords.map((record, index) => ({
+      'S.No': index + 1,
       'Date': format(new Date(record.c_date), 'dd-MMM-yyyy'),
       'Company': record.company_name,
       'Main Account': record.acc_name,
@@ -680,14 +680,16 @@ const DeletedRecords: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentRecords.map((record, idx) => (
-                    <tr
-                      key={record.id}
-                      className={`border-b border-gray-100 hover:bg-red-50 transition-colors ${
-                        idx % 2 === 0 ? 'bg-white' : 'bg-red-25'
-                      }`}
-                    >
-                      <td className='w-12 px-1 py-1 font-medium text-sm font-bold'>{record.sno}</td>
+                  {currentRecords.map((record, idx) => {
+                    const serialNumber = startIndex + idx + 1;
+                    return (
+                      <tr
+                        key={record.id}
+                        className={`border-b border-gray-100 hover:bg-red-50 transition-colors ${
+                          idx % 2 === 0 ? 'bg-white' : 'bg-red-25'
+                        }`}
+                      >
+                        <td className='w-12 px-1 py-1 font-medium text-sm font-bold'>{serialNumber}</td>
                       <td className='w-16 px-1 py-1 text-sm font-bold'>{format(new Date(record.c_date), 'dd/MM/yyyy')}</td>
                       <td className='w-20 px-1 py-1 text-sm truncate font-bold' title={record.company_name}>{record.company_name}</td>
                       <td className='w-20 px-1 py-1 text-sm truncate font-bold' title={record.acc_name}>{record.acc_name}</td>
@@ -710,34 +712,35 @@ const DeletedRecords: React.FC = () => {
                       <td className='w-20 px-1 py-1 text-center'>
                         {getStatusIcon(record)}
                       </td>
-                      <td className='w-24 px-1 py-1 text-center'>
-                        <div className='flex gap-0.5 justify-center'>
-                          <Button
-                            size='sm'
-                            variant='secondary'
-                            onClick={() => restoreRecord(record)}
-                            disabled={restoring === record.id || !isAdmin}
-                            className='p-1 text-green-700 hover:text-green-800'
-                            title='Restore Record'
-                          >
-                            <RotateCcw className='w-3 h-3' />
-                            <span className='sr-only'>Restore</span>
-                          </Button>
-                          <Button
-                            size='sm'
-                            variant='danger'
-                            onClick={() => permanentlyDeleteRecord(record)}
-                            disabled={!isAdmin}
-                            className='p-1'
-                            title='Permanently Delete'
-                          >
-                            <Trash2 className='w-3 h-3' />
-                            <span className='sr-only'>Delete</span>
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        <td className='w-24 px-1 py-1 text-center'>
+                          <div className='flex gap-0.5 justify-center'>
+                            <Button
+                              size='sm'
+                              variant='secondary'
+                              onClick={() => restoreRecord(record)}
+                              disabled={restoring === record.id || !isAdmin}
+                              className='p-1 text-green-700 hover:text-green-800'
+                              title='Restore Record'
+                            >
+                              <RotateCcw className='w-3 h-3' />
+                              <span className='sr-only'>Restore</span>
+                            </Button>
+                            <Button
+                              size='sm'
+                              variant='danger'
+                              onClick={() => permanentlyDeleteRecord(record)}
+                              disabled={!isAdmin}
+                              className='p-1'
+                              title='Permanently Delete'
+                            >
+                              <Trash2 className='w-3 h-3' />
+                              <span className='sr-only'>Delete</span>
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 
