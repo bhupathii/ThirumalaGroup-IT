@@ -159,19 +159,14 @@ const Sidebar: React.FC = () => {
                 return user?.is_admin;
               }
               
-              // Dashboard should always be visible to logged-in users
-              if (item.key === 'dashboard') {
-                return true;
-              }
-              
-              // For non-admin users, check if they have this feature
+              // For non-admin users, check if they have this feature (including dashboard)
               if (!user?.is_admin) {
                 // Ensure features is an array before checking
                 const userFeatures = Array.isArray(user?.features) ? user.features : [];
                 const hasAccess = userFeatures.includes(item.key);
                 
                 // Debug log for missing features
-                if (item.key !== 'dashboard' && !hasAccess) {
+                if (!hasAccess) {
                   console.log(`🔒 Access denied: User "${user?.username}" doesn't have feature "${item.key}"`, {
                     availableFeatures: userFeatures
                   });

@@ -9,6 +9,7 @@ import bcrypt from 'bcryptjs';
 import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import ModeLabel from '../components/UI/ModeLabel';
+import { format } from 'date-fns';
 import {
   UserIcon,
   Shield,
@@ -652,40 +653,141 @@ const upsertUserAccess = async (
         .single();
       
       if (error) {
-        // Check if error is specifically about the mode column
-        const isModeError = error.message?.includes('mode') || 
-                           error.message?.includes('column "mode"') ||
-                           error.code === '42703' || 
-                           error.code === 'PGRST116' ||
-                           error.message?.toLowerCase().includes('does not exist');
+        // Check if error is about missing columns (mode, aadhaar_number, address, or other personal details)
+        const isColumnError = error.message?.includes('column') || 
+                              error.message?.includes('does not exist') ||
+                              error.code === '42703' || 
+                              error.code === 'PGRST116';
         
-        if (isModeError) {
-          console.log('Mode column does not exist, creating user without mode...');
-          modeColumnExists = false;
-          // Remove mode but keep all personal details
-          const { mode, ...insertDataWithoutMode } = insertData;
+        if (isColumnError) {
+          console.log('Column error detected, trying to create user without problematic columns...');
+          
+          // Extract the column name from error message
+          const errorMessage = error.message || '';
+          const columnMatch = errorMessage.match(/column ['"]([^'"]+)['"]/i) || 
+                             errorMessage.match(/column\s+([a-z_]+)/i);
+          const missingColumn = columnMatch ? columnMatch[1]?.toLowerCase() : null;
+          
+          console.log(`⚠️ Missing column detected: ${missingColumn}`);
+          
+          // Check which specific columns are missing
+          const isModeError = missingColumn === 'mode' || errorMessage.includes('mode');
+          const isAadhaarError = missingColumn === 'aadhaar_number' || missingColumn === 'aadhaar' || errorMessage.includes('aadhaar');
+          const isAddressError = missingColumn === 'address' || errorMessage.includes('address');
+          const isPhoneError = missingColumn === 'phone' || errorMessage.includes('phone');
+          const isFullNameError = missingColumn === 'full_name' || errorMessage.includes('full_name');
+          const isDateOfBirthError = missingColumn === 'date_of_birth' || errorMessage.includes('date_of_birth');
+          const isOtherDetailsError = missingColumn === 'other_details' || errorMessage.includes('other_details');
+          const isEmailError = missingColumn === 'email' || errorMessage.includes('email');
+          
+          // Create a clean insert data object with only required fields
+          // Email is required (NOT NULL constraint), so always include it
+          const cleanInsertData: any = {
+            username: insertData.username,
+            password_hash: insertData.password_hash,
+            user_type_id: insertData.user_type_id,
+            email: insertData.email || `${insertData.username}@thirumala.com`, // Always include email with default if needed
+          };
+          
+          if (!isModeError && insertData.mode) {
+            cleanInsertData.mode = insertData.mode;
+          }
+          
+          // Include personal details only if the columns exist
+          if (!isFullNameError && insertData.full_name) {
+            cleanInsertData.full_name = insertData.full_name;
+          }
+          if (!isAddressError && insertData.address) {
+            cleanInsertData.address = insertData.address;
+          }
+          if (!isAadhaarError && insertData.aadhaar_number) {
+            cleanInsertData.aadhaar_number = insertData.aadhaar_number;
+          }
+          if (!isPhoneError && insertData.phone) {
+            cleanInsertData.phone = insertData.phone;
+          }
+          if (!isDateOfBirthError && insertData.date_of_birth) {
+            cleanInsertData.date_of_birth = insertData.date_of_birth;
+          }
+          if (!isOtherDetailsError && insertData.other_details) {
+            cleanInsertData.other_details = insertData.other_details;
+          }
+          
+          if (isModeError) {
+            modeColumnExists = false;
+          }
           
           const { data: retryUser, error: retryError } = await supabase
             .from('users')
-            .insert(insertDataWithoutMode)
+            .insert(cleanInsertData)
             .select()
             .single();
           
           if (retryError) {
-            console.error('❌ Error creating user:', retryError);
-            throw retryError;
-          }
-          
-          if (!retryUser || !retryUser.id) {
-            throw new Error('User was created but no ID was returned. Please try again.');
-          }
-          
-          finalUser = retryUser;
-          createdUser = retryUser;
-          
-          // Only show error if mode column truly doesn't exist
-          if (!modeColumnExists) {
-            toast.error('User created, but mode column does not exist. Please add it to the database using: ALTER TABLE users ADD COLUMN mode TEXT CHECK (mode IN (\'regular\', \'itr\'));', { duration: 10000 });
+            console.error('❌ Error creating user after retry:', retryError);
+            // If retry also fails, try with only absolutely required fields
+            // Email is required (NOT NULL constraint), so always include it
+            const minimalData = {
+              username: insertData.username,
+              password_hash: insertData.password_hash,
+              user_type_id: insertData.user_type_id,
+              email: insertData.email || `${insertData.username}@thirumala.com`, // Always include email with default
+            };
+            
+            const { data: minimalUser, error: minimalError } = await supabase
+              .from('users')
+              .insert(minimalData)
+              .select()
+              .single();
+            
+            if (minimalError) {
+              console.error('❌ Error creating user with minimal data:', minimalError);
+              throw minimalError;
+            }
+            
+            if (!minimalUser || !minimalUser.id) {
+              throw new Error('User was created but no ID was returned. Please try again.');
+            }
+            
+            finalUser = minimalUser;
+            createdUser = minimalUser;
+            toast('User created with minimal data. Some personal details could not be saved due to missing database columns.', { 
+              duration: 7000,
+              icon: '⚠️',
+              style: {
+                background: '#f59e0b',
+                color: '#fff',
+              },
+            });
+          } else {
+            if (!retryUser || !retryUser.id) {
+              throw new Error('User was created but no ID was returned. Please try again.');
+            }
+            
+            finalUser = retryUser;
+            createdUser = retryUser;
+            
+            // Show warnings for missing columns
+            const missingColumns: string[] = [];
+            if (isModeError) missingColumns.push('mode');
+            if (isAadhaarError) missingColumns.push('aadhaar_number');
+            if (isAddressError) missingColumns.push('address');
+            if (isPhoneError) missingColumns.push('phone');
+            if (isFullNameError) missingColumns.push('full_name');
+            if (isDateOfBirthError) missingColumns.push('date_of_birth');
+            if (isOtherDetailsError) missingColumns.push('other_details');
+            if (isEmailError) missingColumns.push('email');
+            
+            if (missingColumns.length > 0) {
+              toast(`User created, but these columns don't exist in database: ${missingColumns.join(', ')}. Related data was not saved.`, { 
+                duration: 7000,
+                icon: '⚠️',
+                style: {
+                  background: '#f59e0b',
+                  color: '#fff',
+                },
+              });
+            }
           }
         } else {
           console.error('❌ Error creating user:', error);
@@ -1512,7 +1614,7 @@ const upsertUserAccess = async (
                   <div>
                     <div className='mb-1 text-xs text-gray-500'>Date of Birth</div>
                     <div className='text-gray-800 font-medium'>
-                      {u.date_of_birth ? new Date(u.date_of_birth).toLocaleDateString() : '-'}
+                      {u.date_of_birth ? format(new Date(u.date_of_birth), 'dd/MM/yyyy') : '-'}
                     </div>
                   </div>
                   {u.other_details && (
@@ -2016,7 +2118,7 @@ const upsertUserAccess = async (
                   <div>
                     <div className='mb-1 text-xs text-gray-500'>Date of Birth</div>
                     <div className='text-gray-800 font-medium'>
-                      {u.date_of_birth ? new Date(u.date_of_birth).toLocaleDateString() : '-'}
+                      {u.date_of_birth ? format(new Date(u.date_of_birth), 'dd/MM/yyyy') : '-'}
                     </div>
                   </div>
                   {u.other_details && (

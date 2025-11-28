@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
@@ -11,10 +11,11 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-
+  const navigate = useNavigate();
   const { user, login } = useAuth();
 
   if (user) {
+    // Always show mode selection after login
     return <Navigate to='/mode-selection' replace />;
   }
 
@@ -31,6 +32,8 @@ const Login: React.FC = () => {
 
     if (result.success) {
       toast.success('Login successful!');
+      // Always redirect to mode selection
+      navigate('/mode-selection', { replace: true });
     } else {
       toast.error(result.error || 'Login failed');
     }

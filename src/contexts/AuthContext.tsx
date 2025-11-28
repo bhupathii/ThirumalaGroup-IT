@@ -63,6 +63,7 @@ interface User {
   is_admin: boolean;
   features: string[];
   featuresByMode?: Record<ModeKey, string[]>;
+  mode?: 'regular' | 'itr' | null;
 }
 
 interface AuthContextType {
@@ -71,7 +72,7 @@ interface AuthContextType {
   login: (
     username: string,
     password: string
-  ) => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<{ success: boolean; error?: string; userMode?: 'regular' | 'itr' | null }>;
   logout: () => Promise<void>;
   changePassword: (
     currentPassword: string,
@@ -291,6 +292,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         is_admin: isAdmin,
         features: features || [],
         featuresByMode,
+        mode: dbUser.mode || null, // Include user's mode from database
       };
       
       console.log('🔐 Login successful - User data:', {
@@ -298,13 +300,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         is_admin: userData.is_admin,
         featuresCount: userData.features.length,
         features: userData.features,
-        userId: userData.id
+        userId: userData.id,
+        mode: userData.mode
       });
       
       setUser(userData);
       sessionStorage.setItem('thirumala_user', JSON.stringify(userData));
       sessionStorage.setItem('thirumala_session_time', Date.now().toString());
-      return { success: true };
+      return { success: true, userMode: userData.mode };
     } catch (err) {
       console.error('Login error:', err);
       return { success: false, error: 'Login failed. Please try again.' };
