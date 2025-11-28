@@ -2351,7 +2351,7 @@ const EditEntry: React.FC = () => {
                     <th className='w-12 px-1 py-0 text-left font-medium text-gray-700'>
                       S.No
                     </th>
-                    <th className='w-16 px-1 py-0 text-left font-medium text-gray-700'>
+                    <th className='w-24 min-w-[96px] px-1 py-0 text-left font-medium text-gray-700 whitespace-nowrap'>
                       Date
                     </th>
                     <th className='w-20 px-1 py-1 text-left font-medium text-gray-700'>
@@ -2408,7 +2408,7 @@ const EditEntry: React.FC = () => {
                       onClick={() => setSelectedEntry(entry)}
                     >
                       <td className='w-12 px-1 py-0 font-medium text-sm font-bold'>{index + 1}</td>
-                      <td className='w-16 px-1 py-0 text-sm font-bold'>
+                      <td className='w-24 min-w-[96px] px-1 py-0 text-sm font-bold whitespace-nowrap'>
                         {format(new Date(entry.c_date), 'dd/MM/yyyy')}
                       </td>
                       <td className='w-20 px-1 py-1 font-medium text-blue-600 text-sm truncate font-bold' title={entry.company_name}>
