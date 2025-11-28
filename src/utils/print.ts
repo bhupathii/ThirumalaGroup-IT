@@ -1117,8 +1117,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
               </tr>
               <tr style="background-color: #e8e8e8; font-weight: bold;">
                 <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-weight: bold; font-size: 11px;">Opening Balance</td>
-                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;"></td>
                 <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${openingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;"></td>
               </tr>
               <tr style="background-color: #e8e8e8; font-weight: bold;">
                 <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-weight: bold; font-size: 11px;">Closing Balance</td>
@@ -1247,8 +1247,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
               </tr>
               <tr style="background-color: #e8e8e8; font-weight: bold;">
                 <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #d1d5db; font-weight: bold; font-size: 11px;">Opening Balance</td>
-                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;"></td>
                 <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewOpeningBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;"></td>
               </tr>
               <tr style="background-color: #e8e8e8; font-weight: bold;">
                 <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #d1d5db; font-weight: bold; font-size: 11px;">Closing Balance</td>

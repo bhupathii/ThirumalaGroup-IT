@@ -159,8 +159,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     // Check for existing session on app load
     const checkSession = async () => {
       try {
-        const savedUser = localStorage.getItem('thirumala_user');
-        const sessionTime = localStorage.getItem('thirumala_session_time');
+        const savedUser = sessionStorage.getItem('thirumala_user');
+        const sessionTime = sessionStorage.getItem('thirumala_session_time');
         if (savedUser && sessionTime) {
           const parsedUser: User = JSON.parse(savedUser);
           const sessionAge = Date.now() - parseInt(sessionTime);
@@ -178,7 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
               } else {
                 parsedUser.features = getFeaturesForMode(featuresByMode, activeMode);
               }
-              localStorage.setItem('thirumala_user', JSON.stringify(parsedUser));
+              sessionStorage.setItem('thirumala_user', JSON.stringify(parsedUser));
             } catch (featureError) {
               console.error('❌ Error reloading features for session:', featureError);
               if (!Array.isArray(parsedUser.features)) {
@@ -188,8 +188,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
             setUser(parsedUser);
           } else {
-            localStorage.removeItem('thirumala_user');
-            localStorage.removeItem('thirumala_session_time');
+            sessionStorage.removeItem('thirumala_user');
+            sessionStorage.removeItem('thirumala_session_time');
           }
         }
       } catch (error) {
@@ -215,7 +215,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         }
         const nextFeatures = getFeaturesForMode(prev.featuresByMode, nextMode);
         const updatedUser = { ...prev, features: nextFeatures };
-        localStorage.setItem('thirumala_user', JSON.stringify(updatedUser));
+        sessionStorage.setItem('thirumala_user', JSON.stringify(updatedUser));
         return updatedUser;
       });
     };
@@ -302,8 +302,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
       
       setUser(userData);
-      localStorage.setItem('thirumala_user', JSON.stringify(userData));
-      localStorage.setItem('thirumala_session_time', Date.now().toString());
+      sessionStorage.setItem('thirumala_user', JSON.stringify(userData));
+      sessionStorage.setItem('thirumala_session_time', Date.now().toString());
       return { success: true };
     } catch (err) {
       console.error('Login error:', err);
@@ -314,8 +314,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const logout = async () => {
     try {
       setUser(null);
-      localStorage.removeItem('thirumala_user');
-      localStorage.removeItem('thirumala_session_time');
+      sessionStorage.removeItem('thirumala_user');
+      sessionStorage.removeItem('thirumala_session_time');
     } catch (error) {
       console.error('Logout error:', error);
     }
