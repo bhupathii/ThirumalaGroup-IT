@@ -182,8 +182,6 @@ export const printTable = (
       color: #ea580c;
     }
   `;
-
-  // Generate table HTML
   const tableRows = data
     .map(row => {
       const cells = columns
@@ -580,7 +578,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     }
     
     .print-table tfoot {
-      display: table-footer-group;
+      display: table-row-group;
     }
     
     .print-table tfoot tr {
@@ -832,7 +830,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
         box-sizing: border-box;
       }
       .print-table tfoot {
-        display: table-footer-group !important;
+        display: table-row-group !important;
         width: 100% !important;
       }
       .print-table tfoot tr {
@@ -870,6 +868,53 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     { key: 'debit', label: 'Debit', width: '10%' },
     { key: 'staff', label: 'Staff', width: '10%' },
   ];
+
+  const formatCurrency = (value: number) =>
+    value.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  const buildTotalsSummaryTable = (
+    totals: {
+      totalCredit: number;
+      totalDebit: number;
+      openingBalanceValue: number;
+      closingBalanceValue: number;
+      grandTotalCredit: number;
+      grandTotalDebit: number;
+    },
+    borderColor = '#000'
+  ) => `
+    <table class="summary-balance-table" style="border-color: ${borderColor};">
+      <thead>
+        <tr>
+          <th style="border: 1px solid ${borderColor};">Description</th>
+          <th style="border: 1px solid ${borderColor};">Credit</th>
+          <th style="border: 1px solid ${borderColor};">Debit</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="border: 1px solid ${borderColor};">Total</td>
+          <td style="border: 1px solid ${borderColor};">${formatCurrency(totals.totalCredit)}</td>
+          <td style="border: 1px solid ${borderColor};">${formatCurrency(totals.totalDebit)}</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid ${borderColor};">Opening Balance</td>
+          <td style="border: 1px solid ${borderColor};">${formatCurrency(totals.openingBalanceValue)}</td>
+          <td style="border: 1px solid ${borderColor};"></td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid ${borderColor};">Closing Balance</td>
+          <td style="border: 1px solid ${borderColor};"></td>
+          <td style="border: 1px solid ${borderColor};">${formatCurrency(totals.closingBalanceValue)}</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid ${borderColor};">Grand Total</td>
+          <td style="border: 1px solid ${borderColor};">${formatCurrency(totals.grandTotalCredit)}</td>
+          <td style="border: 1px solid ${borderColor};">${formatCurrency(totals.grandTotalDebit)}</td>
+        </tr>
+      </tbody>
+    </table>
+  `;
 
   // Remove Date and Staff columns when not provided in data (or explicitly excluded)
   const filteredColumns = columns.filter(col => {
@@ -1085,11 +1130,6 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       })
       .join('');
 
-    // Calculate colspan: number of columns before credit column
-    // filteredColumns excludes 'date' and 'staff', so we have: sno, companyName, accountName, subAccount, particulars, credit, debit
-    const creditColIndex = filteredColumns.findIndex(col => col.key.toLowerCase().includes('credit'));
-    const totalColspan = creditColIndex >= 0 ? creditColIndex : filteredColumns.length - 2;
-
     // Calculate grand totals
     const grandTotalCredit = creditTotal + openingBalance;
     const grandTotalDebit = debitTotal + closingBalance;
@@ -1097,6 +1137,18 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     // Format opening and closing balances (without CR/DR for grand total calculation)
     const openingBalanceValue = Math.abs(openingBalance);
     const closingBalanceValue = Math.abs(closingBalance);
+
+    const totalsSummaryTable = buildTotalsSummaryTable(
+      {
+        totalCredit: creditTotal,
+        totalDebit: debitTotal,
+        openingBalanceValue,
+        closingBalanceValue,
+        grandTotalCredit,
+        grandTotalDebit,
+      },
+      '#000'
+    );
 
     return `
       <!DOCTYPE html>
@@ -1129,29 +1181,11 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
             <tbody>
               ${printModeTableRows}
             </tbody>
-            <tfoot>
-              <tr style="background-color: #f0f0f0; font-weight: bold;">
-                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-weight: bold; font-size: 11px;">Total</td>
-                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-              </tr>
-              <tr style="background-color: #e8e8e8; font-weight: bold;">
-                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-weight: bold; font-size: 11px;">Opening Balance</td>
-                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${openingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;"></td>
-              </tr>
-              <tr style="background-color: #e8e8e8; font-weight: bold;">
-                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-weight: bold; font-size: 11px;">Closing Balance</td>
-                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;"></td>
-                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${closingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-              </tr>
-              <tr style="background-color: #d0d0d0; font-weight: bold;">
-                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #000; font-weight: bold; font-size: 11px;">Grand Total</td>
-                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${grandTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 4px 3px; border: 1px solid #000; text-align: right; font-weight: bold; font-size: 11px;">${grandTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-              </tr>
-            </tfoot>
           </table>
+
+          <div class="print-summary">
+            ${totalsSummaryTable}
+          </div>
           
           <div style="text-align: right; width: 100%;">
             ${printCompanySummaryHTML}
@@ -1237,7 +1271,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
           <tbody>
             ${tableRows}
           </tbody>
-          ${!isPrintMode && data.length > 0 ? (() => {
+        </table>
+        ${!isPrintMode && data.length > 0 ? (() => {
             // Calculate totals for preview mode
             const previewCreditTotal = data.reduce((sum, row) => {
               const creditValue = row.credit;
@@ -1264,36 +1299,25 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
             const previewGrandTotalCredit = previewCreditTotal + previewOpeningBalance;
             const previewGrandTotalDebit = previewDebitTotal + previewClosingBalance;
             
-            // Calculate colspan: number of columns before credit column
-            const creditColIndex = filteredColumns.findIndex(col => col.key.toLowerCase().includes('credit'));
-            const totalColspan = creditColIndex >= 0 ? creditColIndex : filteredColumns.length - 2;
-            
+            const previewSummaryTable = buildTotalsSummaryTable(
+              {
+                totalCredit: previewCreditTotal,
+                totalDebit: previewDebitTotal,
+                openingBalanceValue: previewOpeningBalance,
+                closingBalanceValue: previewClosingBalance,
+                grandTotalCredit: previewGrandTotalCredit,
+                grandTotalDebit: previewGrandTotalDebit,
+              },
+              '#d1d5db'
+            );
+
             return `
-            <tfoot>
-              <tr style="background-color: #f0f0f0; font-weight: bold;">
-                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #d1d5db; font-weight: bold; font-size: 11px;">Total</td>
-                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewCreditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewDebitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-              </tr>
-              <tr style="background-color: #e8e8e8; font-weight: bold;">
-                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #d1d5db; font-weight: bold; font-size: 11px;">Opening Balance</td>
-                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewOpeningBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;"></td>
-              </tr>
-              <tr style="background-color: #e8e8e8; font-weight: bold;">
-                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #d1d5db; font-weight: bold; font-size: 11px;">Closing Balance</td>
-                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;"></td>
-                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewClosingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-              </tr>
-              <tr style="background-color: #d0d0d0; font-weight: bold;">
-                <td colspan="${totalColspan}" style="text-align: right; padding: 4px 3px; border: 1px solid #d1d5db; font-weight: bold; font-size: 11px;">Grand Total</td>
-                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewGrandTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 4px 3px; border: 1px solid #d1d5db; text-align: right; font-weight: bold; font-size: 11px;">${previewGrandTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-              </tr>
-            </tfoot>
+            <div class="print-summary">
+              ${previewSummaryTable}
+            </div>
             `;
           })() : ''}
-        </table>
+        
         
         ${summaryHTML}
         <div style="text-align: right; width: 100%;">
