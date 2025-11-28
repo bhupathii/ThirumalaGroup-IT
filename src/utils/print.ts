@@ -914,7 +914,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
             }
           }
 
-          return `<td style="font-weight: bold;">${displayValue || ''}</td>`;
+          return `<td style="font-weight: bold; border: 1px solid #d1d5db; padding: 4px 3px;">${displayValue || ''}</td>`;
         })
         .join('');
 
@@ -927,8 +927,18 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     .join('');
 
   // Calculate totals for the table footer
-  const creditTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0) : 0;
-  const debitTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0) : 0;
+  const creditTotal = data.length > 0 ? data.reduce((sum, row) => {
+    const creditValue = row.credit;
+    if (creditValue === null || creditValue === undefined || creditValue === '') return sum;
+    const numValue = typeof creditValue === 'number' ? creditValue : parseFloat(String(creditValue).replace(/,/g, ''));
+    return sum + (isNaN(numValue) ? 0 : numValue);
+  }, 0) : 0;
+  const debitTotal = data.length > 0 ? data.reduce((sum, row) => {
+    const debitValue = row.debit;
+    if (debitValue === null || debitValue === undefined || debitValue === '') return sum;
+    const numValue = typeof debitValue === 'number' ? debitValue : parseFloat(String(debitValue).replace(/,/g, ''));
+    return sum + (isNaN(numValue) ? 0 : numValue);
+  }, 0) : 0;
   const balance = creditTotal - debitTotal;
 
   // Generate summary table - removed per user request
@@ -983,8 +993,18 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
 
   // Generate print mode HTML function (to be called when print button is clicked)
   const generatePrintModeHTMLString = () => {
-    const creditTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0) : 0;
-    const debitTotal = data.length > 0 ? data.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0) : 0;
+    const creditTotal = data.length > 0 ? data.reduce((sum, row) => {
+      const creditValue = row.credit;
+      if (creditValue === null || creditValue === undefined || creditValue === '') return sum;
+      const numValue = typeof creditValue === 'number' ? creditValue : parseFloat(String(creditValue).replace(/,/g, ''));
+      return sum + (isNaN(numValue) ? 0 : numValue);
+    }, 0) : 0;
+    const debitTotal = data.length > 0 ? data.reduce((sum, row) => {
+      const debitValue = row.debit;
+      if (debitValue === null || debitValue === undefined || debitValue === '') return sum;
+      const numValue = typeof debitValue === 'number' ? debitValue : parseFloat(String(debitValue).replace(/,/g, ''));
+      return sum + (isNaN(numValue) ? 0 : numValue);
+    }, 0) : 0;
     
     // Generate company summary HTML for print mode
     let printCompanySummaryHTML = '';
@@ -1057,7 +1077,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
               }
             }
 
-            return `<td style="font-weight: bold;">${displayValue || ''}</td>`;
+            return `<td style="font-weight: bold; border: 1px solid #000; padding: 4px 3px;">${displayValue || ''}</td>`;
           })
           .join('');
 
@@ -1219,8 +1239,18 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
           </tbody>
           ${!isPrintMode && data.length > 0 ? (() => {
             // Calculate totals for preview mode
-            const previewCreditTotal = data.reduce((sum, row) => sum + (parseFloat(row.credit) || 0), 0);
-            const previewDebitTotal = data.reduce((sum, row) => sum + (parseFloat(row.debit) || 0), 0);
+            const previewCreditTotal = data.reduce((sum, row) => {
+              const creditValue = row.credit;
+              if (creditValue === null || creditValue === undefined || creditValue === '') return sum;
+              const numValue = typeof creditValue === 'number' ? creditValue : parseFloat(String(creditValue).replace(/,/g, ''));
+              return sum + (isNaN(numValue) ? 0 : numValue);
+            }, 0);
+            const previewDebitTotal = data.reduce((sum, row) => {
+              const debitValue = row.debit;
+              if (debitValue === null || debitValue === undefined || debitValue === '') return sum;
+              const numValue = typeof debitValue === 'number' ? debitValue : parseFloat(String(debitValue).replace(/,/g, ''));
+              return sum + (isNaN(numValue) ? 0 : numValue);
+            }, 0);
             
             // Calculate overall opening and closing balances
             let previewOpeningBalance = Math.abs(openingBalance);

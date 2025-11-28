@@ -287,6 +287,7 @@ const DailyReport: React.FC = () => {
       try {
         if (selectedCompany) {
           // Calculate opening balance for the selected company only
+          // Use the same method as "All Companies" for consistency
           const { data: previousEntries, error: prevError } = await supabase
             .from(getTableName('cash_book'))
             .select('credit, debit, company_name, c_date')
@@ -296,12 +297,21 @@ const DailyReport: React.FC = () => {
           if (prevError) throw prevError;
 
           // Sum entries only for the selected company up to previous date
+          // Use proper number conversion with precision
           openingBalance = (previousEntries || []).reduce(
-            (sum, entry) => sum + (Number(entry.credit) - Number(entry.debit)),
+            (sum, entry) => {
+              const credit = parseFloat(entry.credit) || 0;
+              const debit = parseFloat(entry.debit) || 0;
+              return sum + (credit - debit);
+            },
             0
           );
           
+          // Round to 2 decimal places for precision
+          openingBalance = Math.round(openingBalance * 100) / 100;
+          
           console.log(`💰 Opening balance for ${selectedCompany} (up to ${prevDate}): ${openingBalance.toLocaleString()}`);
+          console.log(`📊 Previous entries count: ${previousEntries?.length || 0}`);
         } else {
           // Calculate opening balance for all companies (Dashboard net balance)
           const companyBalances = await supabaseDB.getCompanyClosingBalancesByDate(prevDate);
@@ -333,10 +343,18 @@ const DailyReport: React.FC = () => {
           if (prevError) throw prevError;
 
           // Sum entries (filtered by company if selected)
+          // Use proper number conversion with precision
           openingBalance = (previousEntries || []).reduce(
-            (sum, entry) => sum + (Number(entry.credit) - Number(entry.debit)),
+            (sum, entry) => {
+              const credit = parseFloat(entry.credit) || 0;
+              const debit = parseFloat(entry.debit) || 0;
+              return sum + (credit - debit);
+            },
             0
           );
+          
+          // Round to 2 decimal places for precision
+          openingBalance = Math.round(openingBalance * 100) / 100;
         } catch (fallbackError) {
           console.warn('Fallback also failed:', fallbackError);
           openingBalance = 0;
@@ -820,10 +838,10 @@ const DailyReport: React.FC = () => {
                     <td colSpan={6} className='px-3 py-3 font-bold text-base text-right'>
                       Opening Balance
                     </td>
-                    <td className='px-3 py-3 text-right font-bold text-base'></td>
-                    <td className='px-3 py-3 text-right font-bold text-base'>
+                    <td className='px-3 py-3 text-right text-green-700 font-bold text-base'>
                       {reportData.openingBalance.toLocaleString()}
                     </td>
+                    <td className='px-3 py-3 text-right font-bold text-base'></td>
                     <td colSpan={2} className='px-3 py-3'></td>
                   </tr>
                   <tr>
@@ -841,10 +859,10 @@ const DailyReport: React.FC = () => {
                       Grand Total
                     </td>
                     <td className='px-3 py-3 text-right text-green-700 font-bold text-base'>
-                      {reportData.grandTotal.toLocaleString()}
+                      {(reportData.totalCredit + reportData.openingBalance).toLocaleString()}
                     </td>
                     <td className='px-3 py-3 text-right text-red-700 font-bold text-base'>
-                      {reportData.grandTotal.toLocaleString()}
+                      {(reportData.totalDebit + reportData.closingBalance).toLocaleString()}
                     </td>
                     <td colSpan={2} className='px-3 py-3'></td>
                   </tr>
