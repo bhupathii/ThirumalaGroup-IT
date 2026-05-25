@@ -73,7 +73,7 @@ const NewEntry: React.FC = () => {
     creditOffline: '',
     debitOnline: '',
     debitOffline: '',
-    staff: '',
+    staff: localStorage.getItem('lastSelectedStaff') || 'D',
     paymentMode: '',
     quantityChecked: false,
   });
@@ -88,6 +88,11 @@ const NewEntry: React.FC = () => {
   const [showDualCalendar, setShowDualCalendar] = useState(false);
   const mainDatePickerRef = useRef<HTMLInputElement>(null);
   const dualDatePickerRef = useRef<HTMLInputElement>(null);
+
+  // Refs to track manual edits of dual entry amounts
+  const dualCreditManuallyEdited = useRef(false);
+  const dualDebitManuallyEdited = useRef(false);
+
   const [dualEntry, setDualEntry] = useState<NewEntryForm>({
     date: format(new Date(), 'yyyy-MM-dd'),
     companyName: '',
@@ -102,7 +107,7 @@ const NewEntry: React.FC = () => {
     creditOffline: '',
     debitOnline: '',
     debitOffline: '',
-    staff: '',
+    staff: localStorage.getItem('lastSelectedStaff') || 'D',
     paymentMode: '',
     quantityChecked: false,
   });
@@ -250,6 +255,42 @@ const NewEntry: React.FC = () => {
       setTimeout(() => { syncingRef.current = false; }, 0);
     }
   }, [dualEntryEnabled]);
+
+  // Auto-fill dual entry when dual entry is enabled or main amounts change
+  useEffect(() => {
+    if (!entry.credit) {
+      dualDebitManuallyEdited.current = false;
+    }
+    if (!entry.debit) {
+      dualCreditManuallyEdited.current = false;
+    }
+
+    if (!dualEntryEnabled) return;
+
+    if (entry.credit) {
+      if (!dualDebitManuallyEdited.current) {
+        setDualEntry(prev => ({
+          ...prev,
+          debit: entry.credit,
+          credit: ''
+        }));
+      }
+    } else if (entry.debit) {
+      if (!dualCreditManuallyEdited.current) {
+        setDualEntry(prev => ({
+          ...prev,
+          credit: entry.debit,
+          debit: ''
+        }));
+      }
+    } else {
+      setDualEntry(prev => ({
+        ...prev,
+        credit: '',
+        debit: ''
+      }));
+    }
+  }, [dualEntryEnabled, entry.credit, entry.debit]);
 
   // Database connection test
   const testDatabaseConnection = async () => {
@@ -618,6 +659,16 @@ const NewEntry: React.FC = () => {
       toast.error('Please enter either credit or debit amount in main entry');
       return;
     }
+    if (mainCredit > 0 && mainDebit > 0) {
+      toast.error('You can enter only Credit OR Debit amount in Main Entry, not both.');
+      return;
+    }
+    
+    // Save selected staff to localStorage
+    if (entry.staff) {
+      localStorage.setItem('lastSelectedStaff', entry.staff);
+    }
+
     // If dual entry enabled, validate dual entry
     let dualCredit = 0,
       dualDebit = 0;
@@ -636,6 +687,24 @@ const NewEntry: React.FC = () => {
       dualDebit = parseFloat(dualEntry.debit) || 0;
       if (dualCredit === 0 && dualDebit === 0) {
         toast.error('Please enter either credit or debit amount in Dual Entry');
+        return;
+      }
+
+      // Validate opposite side only
+      if (mainCredit > 0 && dualCredit > 0) {
+        toast.error('Dual Entry amount must be on the opposite side (Debit) of Main Entry.');
+        return;
+      }
+      if (mainDebit > 0 && dualDebit > 0) {
+        toast.error('Dual Entry amount must be on the opposite side (Credit) of Main Entry.');
+        return;
+      }
+      if (mainCredit > 0 && dualDebit === 0) {
+        toast.error('Dual Entry must have a Debit amount since Main Entry is Credit.');
+        return;
+      }
+      if (mainDebit > 0 && dualCredit === 0) {
+        toast.error('Dual Entry must have a Credit amount since Main Entry is Debit.');
         return;
       }
     }
@@ -772,6 +841,7 @@ const NewEntry: React.FC = () => {
       
       // Reset forms
       const currentDate = entry.date;
+      const currentStaff = entry.staff || localStorage.getItem('lastSelectedStaff') || 'D';
       setEntry({
         date: currentDate,
         companyName: '',
@@ -786,7 +856,7 @@ const NewEntry: React.FC = () => {
         creditOffline: '',
         debitOnline: '',
         debitOffline: '',
-        staff: entry.staff, // Preserve the current staff selection
+        staff: currentStaff, // Preserve the current staff selection
         paymentMode: '',
         quantityChecked: false,
       });
@@ -806,11 +876,13 @@ const NewEntry: React.FC = () => {
         creditOffline: '',
         debitOnline: '',
         debitOffline: '',
-        staff: entry.staff, // Preserve the current staff selection
+        staff: currentStaff, // Preserve the current staff selection
         paymentMode: '',
         quantityChecked: false,
       });
       setDualEntryEnabled(false);
+      dualCreditManuallyEdited.current = false;
+      dualDebitManuallyEdited.current = false;
       
       // Invalidate React Query cache to refresh recent entries
       console.log('🔄 Invalidating cache for date:', entry.date);
@@ -949,6 +1021,7 @@ const NewEntry: React.FC = () => {
       });
       setEntry(prev => ({ ...prev, staff: name }));
       setDualEntry(prev => ({ ...prev, staff: name }));
+      localStorage.setItem('lastSelectedStaff', name);
       setNewStaffName('');
       setNewStaffEmail('');
       setShowNewStaff(false);
@@ -1939,9 +2012,14 @@ const NewEntry: React.FC = () => {
                     ref={creditRef}
                     label='Credit'
                     value={entry.credit}
-                    onChange={val =>
-                      setEntry(prev => ({ ...prev, credit: val }))
-                    }
+                    onChange={val => {
+                      setEntry(prev => ({ 
+                        ...prev, 
+                        credit: val,
+                        debit: val ? '' : prev.debit 
+                      }));
+                    }}
+                    disabled={!!entry.debit}
                     onKeyDown={(e) => handleKeyDown(e, debitRef)}
                     placeholder='Enter credit amount'
                     type='number'
@@ -1953,9 +2031,14 @@ const NewEntry: React.FC = () => {
                     ref={debitRef}
                     label='Debit'
                     value={entry.debit}
-                    onChange={val =>
-                      setEntry(prev => ({ ...prev, debit: val }))
-                    }
+                    onChange={val => {
+                      setEntry(prev => ({ 
+                        ...prev, 
+                        debit: val,
+                        credit: val ? '' : prev.credit 
+                      }));
+                    }}
+                    disabled={!!entry.credit}
                     onKeyDown={(e) => handleKeyDown(e, staffRef)}
                     placeholder='Enter debit amount'
                     type='number'
@@ -2180,9 +2263,15 @@ const NewEntry: React.FC = () => {
                         ref={dualCreditRef}
                         label='Credit'
                         value={dualEntry.credit}
-                        onChange={val =>
-                          setDualEntry(prev => ({ ...prev, credit: val }))
-                        }
+                        onChange={val => {
+                          setDualEntry(prev => ({ ...prev, credit: val }));
+                          if (val !== '') {
+                            dualCreditManuallyEdited.current = true;
+                          } else {
+                            dualCreditManuallyEdited.current = false;
+                          }
+                        }}
+                        disabled={!!entry.credit || !!dualEntry.debit || (!entry.credit && !entry.debit)}
                         onKeyDown={(e) => handleKeyDown(e, dualDebitRef)}
                         placeholder='Enter credit amount'
                         type='number'
@@ -2194,9 +2283,15 @@ const NewEntry: React.FC = () => {
                         ref={dualDebitRef}
                         label='Debit'
                         value={dualEntry.debit}
-                        onChange={val =>
-                          setDualEntry(prev => ({ ...prev, debit: val }))
-                        }
+                        onChange={val => {
+                          setDualEntry(prev => ({ ...prev, debit: val }));
+                          if (val !== '') {
+                            dualDebitManuallyEdited.current = true;
+                          } else {
+                            dualDebitManuallyEdited.current = false;
+                          }
+                        }}
+                        disabled={!!entry.debit || !!dualEntry.credit || (!entry.credit && !entry.debit)}
                         onKeyDown={(e) => handleKeyDown(e, null)}
                         placeholder='Enter debit amount'
                         type='number'
@@ -2299,10 +2394,31 @@ const NewEntry: React.FC = () => {
                         creditOffline: '',
                         debitOnline: '',
                         debitOffline: '',
-                        staff: entry.staff, // Preserve the current staff selection
+                        staff: entry.staff || localStorage.getItem('lastSelectedStaff') || 'D', // Preserve the current staff selection
                         paymentMode: '',
                         quantityChecked: false,
                       });
+                      setDualEntry({
+                        date: format(new Date(), 'yyyy-MM-dd'),
+                        companyName: '',
+                        accountName: '',
+                        subAccount: '',
+                        particulars: '',
+                        saleQ: '',
+                        purchaseQ: '',
+                        credit: '',
+                        debit: '',
+                        creditOnline: '',
+                        creditOffline: '',
+                        debitOnline: '',
+                        debitOffline: '',
+                        staff: entry.staff || localStorage.getItem('lastSelectedStaff') || 'D', // Preserve the current staff selection
+                        paymentMode: '',
+                        quantityChecked: false,
+                      });
+                      setDualEntryEnabled(false);
+                      dualCreditManuallyEdited.current = false;
+                      dualDebitManuallyEdited.current = false;
                       // Accounts are now managed by React Query
                       setSubAccounts([]);
                     }}

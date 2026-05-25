@@ -1398,21 +1398,18 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                 />
               </div>
 
-              <div>
-                <label className='block text-sm font-medium text-gray-700 mb-1'>
-                  Payment Mode
-                </label>
-                <select
-                  value={filters.paymentMode || ''}
-                  onChange={e => handleFilterChange('paymentMode', e.target.value)}
-                  className='w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500'
-                >
-                  <option value=''>All</option>
-                  <option value='Cash'>Cash</option>
-                  <option value='Bank Transfer'>Bank</option>
-                  <option value='Online'>Double</option>
-                </select>
-              </div>
+              <SearchableSelect
+                label='Payment Mode'
+                value={filters.paymentMode || ''}
+                onChange={value => handleFilterChange('paymentMode', value)}
+                options={[
+                  { value: '', label: 'All' },
+                  { value: 'Cash', label: 'Cash' },
+                  { value: 'Bank Transfer', label: 'Bank' },
+                  { value: 'Online', label: 'Double' },
+                ]}
+                placeholder='Search payment mode...'
+              />
             </div>
 
             {/* Action Buttons */}

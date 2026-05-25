@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
-import Select from '../components/UI/Select';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { supabase } from '../lib/supabase';
@@ -962,7 +961,7 @@ const ReplaceForm: React.FC = () => {
             </h3>
             <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
               <div>
-                <Select
+                <SearchableSelect
                   label='Old Company Name'
                   value={replaceData.oldCompanyName}
                   onChange={value => handleInputChange('oldCompanyName', value)}
@@ -970,6 +969,7 @@ const ReplaceForm: React.FC = () => {
                     { value: '', label: 'Select old company...' },
                     ...companies,
                   ]}
+                  placeholder='Select old company...'
                   disabled={!!replaceData.oldAccountName || !!replaceData.oldSubAccount}
                 />
               </div>
@@ -1012,14 +1012,15 @@ const ReplaceForm: React.FC = () => {
             </h3>
             <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
               <div>
-                <Select
-                  label='Old AccountName'
+                <SearchableSelect
+                  label='Old Account Name'
                   value={replaceData.oldAccountName}
                   onChange={value => handleInputChange('oldAccountName', value)}
                   options={[
                     { value: '', label: 'Select old account...' },
                     ...accounts,
                   ]}
+                  placeholder='Select old account...'
                   disabled={!!replaceData.oldCompanyName || !!replaceData.oldSubAccount}
                 />
               </div>
@@ -1062,14 +1063,15 @@ const ReplaceForm: React.FC = () => {
             </h3>
             <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
               <div>
-                <Select
-                  label='Old SubAccount'
+                <SearchableSelect
+                  label='Old Sub Account'
                   value={replaceData.oldSubAccount}
                   onChange={value => handleInputChange('oldSubAccount', value)}
                   options={[
                     { value: '', label: 'Select old sub account...' },
                     ...subAccounts,
                   ]}
+                  placeholder='Select old sub account...'
                   disabled={!!replaceData.oldCompanyName || !!replaceData.oldAccountName}
                 />
               </div>

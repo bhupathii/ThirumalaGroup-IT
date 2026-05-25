@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
-import Select from '../components/UI/Select';
+import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB, BalanceSheetAccount } from '../lib/supabaseDatabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
@@ -806,21 +806,15 @@ const BalanceSheet: React.FC = () => {
         </div>
         {/* Responsive filter bar */}
         <div className='flex flex-col md:flex-row gap-4 items-end'>
-          <div className='flex-1'>
-            <label className='block text-sm font-medium text-gray-700 mb-1'>
-              Company
-            </label>
-            <select
+          <div className='flex-1 w-full'>
+            <SearchableSelect
+              label='Company'
               value={filters.companyName}
-              onChange={e => handleFilterChange('companyName', e.target.value)}
-              className='w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500'
-            >
-              {companies.map(c => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+              onChange={value => handleFilterChange('companyName', value)}
+              options={companies}
+              placeholder='Select company...'
+              className='w-full'
+            />
           </div>
           <div className='flex-1'>
             <label className='block text-sm font-medium text-gray-700 mb-1'>
