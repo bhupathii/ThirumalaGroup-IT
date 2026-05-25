@@ -390,12 +390,16 @@ const NewEntry: React.FC = () => {
   useEffect(() => {
     try {
       setMainDateInput(entry.date ? format(new Date(entry.date), 'dd/MM/yyyy') : '');
-    } catch {}
+    } catch (e) {
+      console.error('Error formatting main date:', e);
+    }
   }, [entry.date]);
   useEffect(() => {
     try {
       setDualDateInput(dualEntry.date ? format(new Date(dualEntry.date), 'dd/MM/yyyy') : '');
-    } catch {}
+    } catch (e) {
+      console.error('Error formatting dual date:', e);
+    }
   }, [dualEntry.date]);
 
   useEffect(() => {
@@ -734,7 +738,9 @@ const NewEntry: React.FC = () => {
         try {
           localStorage.setItem('dashboard-refresh', Date.now().toString());
           window.dispatchEvent(new CustomEvent('dashboard-refresh'));
-        } catch {}
+        } catch (e) {
+          console.error('Error dispatching dashboard-refresh:', e);
+        }
       } else {
         // Use single entry mutation
         const savedEntry = await createEntryMutation.mutateAsync(mainEntryData);
@@ -759,7 +765,9 @@ const NewEntry: React.FC = () => {
         try {
           localStorage.setItem('dashboard-refresh', Date.now().toString());
           window.dispatchEvent(new CustomEvent('dashboard-refresh'));
-        } catch {}
+        } catch (e) {
+          console.error('Error dispatching dashboard-refresh:', e);
+        }
       }
       
       // Reset forms
@@ -1163,19 +1171,9 @@ const NewEntry: React.FC = () => {
                     const [day, month, year] = dateStr.split('/');
                     date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
                   }
-                  // Check for MM/DD/YYYY format
-                  else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
-                    const [month, day, year] = dateStr.split('/');
-                    date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                  }
                   // Check for DD-MM-YYYY format
                   else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(dateStr)) {
                     const [day, month, year] = dateStr.split('-');
-                    date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                  }
-                  // Check for MM-DD-YYYY format
-                  else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(dateStr)) {
-                    const [month, day, year] = dateStr.split('-');
                     date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
                   }
                   // Try default Date constructor as fallback

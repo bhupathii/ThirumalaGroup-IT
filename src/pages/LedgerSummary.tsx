@@ -103,7 +103,9 @@ const LedgerSummary: React.FC = () => {
     try {
       setFromDateInput(filters.fromDate ? format(new Date(filters.fromDate), 'dd/MM/yyyy') : '');
       setToDateInput(filters.toDate ? format(new Date(filters.toDate), 'dd/MM/yyyy') : '');
-    } catch {}
+    } catch (e) {
+      console.error('Error formatting date:', e);
+    }
   }, [filters.fromDate, filters.toDate]);
 
   // Load all entries for calendar green dots

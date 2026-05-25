@@ -1093,19 +1093,9 @@ const CsvUpload: React.FC = () => {
                         const [day, month, year] = dateStr.split('/');
                         parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
                       }
-                      // Check for MM/DD/YYYY format
-                      else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
-                        const [month, day, year] = dateStr.split('/');
-                        parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                      }
                       // Check for DD-MM-YYYY format
                       else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(dateStr)) {
                         const [day, month, year] = dateStr.split('-');
-                        parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                      }
-                      // Check for MM-DD-YYYY format
-                      else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(dateStr)) {
-                        const [month, day, year] = dateStr.split('-');
                         parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
                       }
                       // Try default Date constructor as fallback
