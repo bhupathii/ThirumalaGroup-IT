@@ -20,13 +20,13 @@ interface CustomCalendarProps {
   dotColor?: 'green' | 'red' | 'dark-red';
 }
 
-const CustomCalendar: React.FC<CustomCalendarProps> = ({
+const CustomCalendar = ({
   onDateSelect,
   selectedDate = '',
   onClose,
   entries: providedEntries,
-  dotColor = 'green',
-}) => {
+  dotColor = 'red',
+}: CustomCalendarProps) => {
   const { mode: tableMode } = useTableMode();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [loadedEntries, setLoadedEntries] = useState<any[]>([]);
