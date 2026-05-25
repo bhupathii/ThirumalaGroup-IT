@@ -16,6 +16,7 @@ let lines = content.split('\n');
 
 const messages = results[0].messages.sort((a, b) => b.line - a.line); // Reverse order
 
+for (const msg of messages) {
   const lineIdx = msg.line - 1;
   const line = lines[lineIdx];
 
