@@ -59,6 +59,8 @@ const NewEntry: React.FC = () => {
   const { companies } = useDropdownData();
   const queryClient = useQueryClient();
 
+  const [sessionStaff, setSessionStaff] = useState('D');
+
   const [entry, setEntry] = useState<NewEntryForm>({
     date: format(new Date(), 'yyyy-MM-dd'),
     companyName: '',
@@ -73,8 +75,8 @@ const NewEntry: React.FC = () => {
     creditOffline: '',
     debitOnline: '',
     debitOffline: '',
-    staff: localStorage.getItem('lastSelectedStaff') || 'D',
-    paymentMode: '',
+    staff: 'D',
+    paymentMode: localStorage.getItem('lastSelectedPaymentMode') || '',
     quantityChecked: false,
   });
 
@@ -107,8 +109,8 @@ const NewEntry: React.FC = () => {
     creditOffline: '',
     debitOnline: '',
     debitOffline: '',
-    staff: localStorage.getItem('lastSelectedStaff') || 'D',
-    paymentMode: '',
+    staff: 'D',
+    paymentMode: localStorage.getItem('lastSelectedPaymentMode') || '',
     quantityChecked: false,
   });
 
@@ -614,9 +616,13 @@ const NewEntry: React.FC = () => {
       }
     }
     
-    // Save selected staff to localStorage
+    // Save selected staff to sessionState
     if (entry.staff) {
-      localStorage.setItem('lastSelectedStaff', entry.staff);
+      setSessionStaff(entry.staff);
+    }
+    // Save selected payment mode to localStorage
+    if (entry.paymentMode) {
+      localStorage.setItem('lastSelectedPaymentMode', entry.paymentMode);
     }
 
     // If dual entry enabled, validate dual entry
@@ -801,7 +807,7 @@ const NewEntry: React.FC = () => {
       
       // Reset forms
       const currentDate = entry.date;
-      const currentStaff = entry.staff || localStorage.getItem('lastSelectedStaff') || 'D';
+      const currentPaymentMode = entry.paymentMode || localStorage.getItem('lastSelectedPaymentMode') || '';
       setEntry({
         date: currentDate,
         companyName: '',
@@ -816,8 +822,8 @@ const NewEntry: React.FC = () => {
         creditOffline: '',
         debitOnline: '',
         debitOffline: '',
-        staff: currentStaff, // Preserve the current staff selection
-        paymentMode: '',
+        staff: sessionStaff, // Preserve the session staff selection
+        paymentMode: currentPaymentMode, // Keep same Payment Mode
         quantityChecked: false,
       });
       // Accounts are now managed by React Query
@@ -836,8 +842,8 @@ const NewEntry: React.FC = () => {
         creditOffline: '',
         debitOnline: '',
         debitOffline: '',
-        staff: currentStaff, // Preserve the current staff selection
-        paymentMode: '',
+        staff: sessionStaff, // Preserve the session staff selection
+        paymentMode: currentPaymentMode, // Keep same Payment Mode
         quantityChecked: false,
       });
       setDualEntryEnabled(false);
@@ -983,7 +989,7 @@ const NewEntry: React.FC = () => {
       });
       setEntry(prev => ({ ...prev, staff: name }));
       setDualEntry(prev => ({ ...prev, staff: name }));
-      localStorage.setItem('lastSelectedStaff', name);
+      setSessionStaff(name);
       setNewStaffName('');
       setNewStaffEmail('');
       setShowNewStaff(false);
@@ -1935,7 +1941,7 @@ const NewEntry: React.FC = () => {
                       label='Particulars'
                       value={entry.particulars}
                       onChange={value => handleInputChange('particulars', value)}
-                      onKeyDown={(e) => handleKeyDown(e, staffRef)}
+                      onKeyDown={(e) => handleKeyDown(e, creditRef)}
                       placeholder='Enter transaction details...'
                       required
                       size='sm'
@@ -1946,11 +1952,13 @@ const NewEntry: React.FC = () => {
                   <div className='space-y-0.5 md:col-span-2'>
                     <SearchableSelect
                       ref={staffRef}
+                      tabIndex={-1}
                       label='Staff'
                       value={entry.staff}
-                      onChange={value =>
-                        setEntry(prev => ({ ...prev, staff: value }))
-                      }
+                      onChange={value => {
+                        setEntry(prev => ({ ...prev, staff: value }));
+                        setSessionStaff(value);
+                      }}
                       onSelect={() => {
                         // Auto-navigate to credit amount when staff is selected
                         setTimeout(() => {
@@ -2007,7 +2015,20 @@ const NewEntry: React.FC = () => {
                       }));
                     }}
                     disabled={!!entry.debit}
-                    onKeyDown={(e) => handleKeyDown(e, debitRef)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (debitRef.current && !debitRef.current.disabled) {
+                          debitRef.current.focus();
+                        } else {
+                          if (entry.paymentMode) {
+                            if (quantityCheckedRef.current) quantityCheckedRef.current.focus();
+                          } else {
+                            if (paymentModeRef.current) paymentModeRef.current.focus();
+                          }
+                        }
+                      }
+                    }}
                     placeholder='Enter credit amount'
                     type='number'
                     min='0'
@@ -2026,7 +2047,16 @@ const NewEntry: React.FC = () => {
                       }));
                     }}
                     disabled={!!entry.credit}
-                    onKeyDown={(e) => handleKeyDown(e, paymentModeRef)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (entry.paymentMode) {
+                          if (quantityCheckedRef.current) quantityCheckedRef.current.focus();
+                        } else {
+                          if (paymentModeRef.current) paymentModeRef.current.focus();
+                        }
+                      }
+                    }}
                     placeholder='Enter debit amount'
                     type='number'
                     min='0'
@@ -2035,11 +2065,13 @@ const NewEntry: React.FC = () => {
                   />
                   <SearchableSelect
                     ref={paymentModeRef}
+                    tabIndex={entry.paymentMode ? -1 : undefined}
                     label='Payment Mode'
                     value={entry.paymentMode}
-                    onChange={val =>
-                      setEntry(prev => ({ ...prev, paymentMode: val }))
-                    }
+                    onChange={val => {
+                      setEntry(prev => ({ ...prev, paymentMode: val }));
+                      localStorage.setItem('lastSelectedPaymentMode', val);
+                    }}
                     onSelect={() => {
                       // Auto-navigate to Quantity Details checkbox when payment mode is selected
                       setTimeout(() => {
@@ -2472,6 +2504,7 @@ const NewEntry: React.FC = () => {
                     variant='secondary'
                     size='sm'
                     onClick={() => {
+                      const currentPaymentMode = entry.paymentMode || localStorage.getItem('lastSelectedPaymentMode') || '';
                       setEntry({
                         date: entry.date,
                         companyName: '',
@@ -2486,8 +2519,8 @@ const NewEntry: React.FC = () => {
                         creditOffline: '',
                         debitOnline: '',
                         debitOffline: '',
-                        staff: entry.staff || localStorage.getItem('lastSelectedStaff') || 'D', // Preserve the current staff selection
-                        paymentMode: '',
+                        staff: sessionStaff, // Preserve the session staff selection
+                        paymentMode: currentPaymentMode, // Keep same Payment Mode
                         quantityChecked: false,
                       });
                       setDualEntry({
@@ -2504,8 +2537,8 @@ const NewEntry: React.FC = () => {
                         creditOffline: '',
                         debitOnline: '',
                         debitOffline: '',
-                        staff: entry.staff || localStorage.getItem('lastSelectedStaff') || 'D', // Preserve the current staff selection
-                        paymentMode: '',
+                        staff: sessionStaff, // Preserve the session staff selection
+                        paymentMode: currentPaymentMode, // Keep same Payment Mode
                         quantityChecked: false,
                       });
                       setDualEntryEnabled(false);

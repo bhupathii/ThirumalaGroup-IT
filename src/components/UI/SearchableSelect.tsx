@@ -12,9 +12,9 @@ interface SearchableSelectProps {
   className?: string;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   onSelect?: (value: string) => void; // New callback for when an option is selected
-  searchPlaceholder?: string;
   noOptionsMessage?: string;
   size?: 'sm' | 'md' | 'lg';
+  tabIndex?: number;
 }
 
 const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
@@ -30,9 +30,9 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
       className = '',
       onKeyDown,
       onSelect,
-      searchPlaceholder = 'Search...',
       noOptionsMessage = 'No options found',
       size = 'md',
+      tabIndex,
     },
     ref
   ) => {
@@ -249,6 +249,7 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
             placeholder={isOpen && displayValue ? displayValue : placeholder}
             disabled={disabled}
             required={required}
+            tabIndex={tabIndex}
             role='combobox'
             aria-expanded={isOpen}
             aria-autocomplete='list'
@@ -269,6 +270,7 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
               <button
                 type='button'
                 onClick={handleClear}
+                tabIndex={-1}
                 className='p-1 text-gray-400 hover:text-gray-600 mr-1 focus:outline-none'
               >
                 <X size={16} />
@@ -289,6 +291,7 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
                 }
               }}
               onMouseDown={(e) => e.preventDefault()} // Prevents input blur on click
+              tabIndex={-1}
               className='p-1 text-gray-400 hover:text-gray-600 focus:outline-none'
             >
               <ChevronDown 
