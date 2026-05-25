@@ -167,14 +167,20 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
             if (hasUserTyped || hasNavigated) {
               const indexToSelect = highlightedIndex >= 0 ? highlightedIndex : 0;
               if (filteredOptions[indexToSelect]) {
-                handleSelect(filteredOptions[indexToSelect].value);
+                if (e.shiftKey) {
+                  // Select option but do not run onSelect (to avoid forward auto-focus)
+                  onChange(filteredOptions[indexToSelect].value);
+                } else {
+                  // Select option and run onSelect
+                  handleSelect(filteredOptions[indexToSelect].value);
+                }
               }
             }
           }
           setIsOpen(false);
           setSearchTerm('');
           setHighlightedIndex(-1);
-          // Let the Tab key event propagate normally so it shifts focus to the next field
+          // Let the Tab key event propagate normally so it shifts focus to the next/previous field
           break;
         default:
           // Call the parent onKeyDown if provided

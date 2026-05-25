@@ -86,12 +86,12 @@ const NewEntry: React.FC = () => {
   const [dualDateInput, setDualDateInput] = useState('');
   const [showMainCalendar, setShowMainCalendar] = useState(false);
   const [showDualCalendar, setShowDualCalendar] = useState(false);
-  const mainDatePickerRef = useRef<HTMLInputElement>(null);
-  const dualDatePickerRef = useRef<HTMLInputElement>(null);
 
   // Refs to track manual edits of dual entry amounts
   const dualCreditManuallyEdited = useRef(false);
   const dualDebitManuallyEdited = useRef(false);
+  const dualPurchaseQManuallyEdited = useRef(false);
+  const dualSaleQManuallyEdited = useRef(false);
 
   const [dualEntry, setDualEntry] = useState<NewEntryForm>({
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -159,9 +159,6 @@ const NewEntry: React.FC = () => {
       setDualEntry(prev => ({
         ...prev,
         quantityChecked: entry.quantityChecked,
-        // Sync values when enabling, preserve when disabling
-        saleQ: entry.quantityChecked ? entry.saleQ : prev.saleQ,
-        purchaseQ: entry.quantityChecked ? entry.purchaseQ : prev.purchaseQ,
       }));
       setTimeout(() => { syncingRef.current = false; }, 0);
     }
@@ -175,86 +172,46 @@ const NewEntry: React.FC = () => {
       setEntry(prev => ({
         ...prev,
         quantityChecked: dualEntry.quantityChecked,
-        // Sync values when enabling, preserve when disabling
-        saleQ: dualEntry.quantityChecked ? dualEntry.saleQ : prev.saleQ,
-        purchaseQ: dualEntry.quantityChecked ? dualEntry.purchaseQ : prev.purchaseQ,
       }));
       setTimeout(() => { syncingRef.current = false; }, 0);
     }
   }, [dualEntry.quantityChecked, dualEntryEnabled]);
 
-  // Synchronize saleQ between main entry and dual entry (only when both are checked)
-  // Also maintain mutual exclusivity: if sale has value, clear purchase
+  // Auto-fill dual entry quantities when dual entry is enabled or main quantities change
   useEffect(() => {
-    if (!dualEntryEnabled || syncingRef.current) return;
-    if (entry.quantityChecked && dualEntry.quantityChecked && entry.saleQ !== dualEntry.saleQ) {
-      syncingRef.current = true;
-      setDualEntry(prev => ({ 
-        ...prev, 
-        saleQ: entry.saleQ,
-        purchaseQ: entry.saleQ ? '' : prev.purchaseQ // Clear purchase if sale has value
-      }));
-      setTimeout(() => { syncingRef.current = false; }, 0);
+    if (!entry.saleQ) {
+      dualSaleQManuallyEdited.current = false;
     }
-  }, [entry.saleQ, entry.quantityChecked, dualEntryEnabled]);
-
-  useEffect(() => {
-    if (!dualEntryEnabled || syncingRef.current) return;
-    if (entry.quantityChecked && dualEntry.quantityChecked && dualEntry.saleQ !== entry.saleQ) {
-      syncingRef.current = true;
-      setEntry(prev => ({ 
-        ...prev, 
-        saleQ: dualEntry.saleQ,
-        purchaseQ: dualEntry.saleQ ? '' : prev.purchaseQ // Clear purchase if sale has value
-      }));
-      setTimeout(() => { syncingRef.current = false; }, 0);
+    if (!entry.purchaseQ) {
+      dualPurchaseQManuallyEdited.current = false;
     }
-  }, [dualEntry.saleQ, dualEntry.quantityChecked, dualEntryEnabled]);
 
-  // Synchronize purchaseQ between main entry and dual entry (only when both are checked)
-  // Also maintain mutual exclusivity: if purchase has value, clear sale
-  useEffect(() => {
-    if (!dualEntryEnabled || syncingRef.current) return;
-    if (entry.quantityChecked && dualEntry.quantityChecked && entry.purchaseQ !== dualEntry.purchaseQ) {
-      syncingRef.current = true;
-      setDualEntry(prev => ({ 
-        ...prev, 
-        purchaseQ: entry.purchaseQ,
-        saleQ: entry.purchaseQ ? '' : prev.saleQ // Clear sale if purchase has value
-      }));
-      setTimeout(() => { syncingRef.current = false; }, 0);
-    }
-  }, [entry.purchaseQ, entry.quantityChecked, dualEntryEnabled]);
+    if (!dualEntryEnabled) return;
 
-  useEffect(() => {
-    if (!dualEntryEnabled || syncingRef.current) return;
-    if (entry.quantityChecked && dualEntry.quantityChecked && dualEntry.purchaseQ !== entry.purchaseQ) {
-      syncingRef.current = true;
-      setEntry(prev => ({ 
-        ...prev, 
-        purchaseQ: dualEntry.purchaseQ,
-        saleQ: dualEntry.purchaseQ ? '' : prev.saleQ // Clear sale if purchase has value
-      }));
-      setTimeout(() => { syncingRef.current = false; }, 0);
-    }
-  }, [dualEntry.purchaseQ, dualEntry.quantityChecked, dualEntryEnabled]);
-
-  // When dual entry is enabled, sync initial state from main entry
-  useEffect(() => {
-    if (!dualEntryEnabled || syncingRef.current) return;
-    // Only sync if values are different to avoid unnecessary updates
-    if (dualEntry.quantityChecked !== entry.quantityChecked || 
-        (entry.quantityChecked && (dualEntry.saleQ !== entry.saleQ || dualEntry.purchaseQ !== entry.purchaseQ))) {
-      syncingRef.current = true;
+    if (entry.saleQ) {
+      if (!dualSaleQManuallyEdited.current) {
+        setDualEntry(prev => ({
+          ...prev,
+          purchaseQ: entry.saleQ,
+          saleQ: ''
+        }));
+      }
+    } else if (entry.purchaseQ) {
+      if (!dualPurchaseQManuallyEdited.current) {
+        setDualEntry(prev => ({
+          ...prev,
+          saleQ: entry.purchaseQ,
+          purchaseQ: ''
+        }));
+      }
+    } else {
       setDualEntry(prev => ({
         ...prev,
-        quantityChecked: entry.quantityChecked,
-        saleQ: entry.quantityChecked ? entry.saleQ : prev.saleQ,
-        purchaseQ: entry.quantityChecked ? entry.purchaseQ : prev.purchaseQ,
+        saleQ: '',
+        purchaseQ: ''
       }));
-      setTimeout(() => { syncingRef.current = false; }, 0);
     }
-  }, [dualEntryEnabled]);
+  }, [dualEntryEnabled, entry.saleQ, entry.purchaseQ]);
 
   // Auto-fill dual entry when dual entry is enabled or main amounts change
   useEffect(() => {
@@ -292,31 +249,6 @@ const NewEntry: React.FC = () => {
     }
   }, [dualEntryEnabled, entry.credit, entry.debit]);
 
-  // Database connection test
-  const testDatabaseConnection = async () => {
-    try {
-      console.log('🔍 Testing database connection...');
-
-      // Test basic connectivity
-      const { error } = await supabase.from(getTableName('companies')).select('count');
-      if (error) {
-        console.error('❌ Database connection failed:', error);
-        toast.error('Database connection failed: ' + error.message);
-        return false;
-      }
-
-      console.log('✅ Database connection successful');
-      toast.success('Database connection successful');
-      return true;
-    } catch (error) {
-      console.error('💥 Database test error:', error);
-      toast.error(
-        'Database test error: ' +
-          (error instanceof Error ? error.message : 'Unknown error')
-      );
-      return false;
-    }
-  };
 
   // CSV Upload states
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -342,9 +274,14 @@ const NewEntry: React.FC = () => {
   const mainAccountRef = useRef<HTMLInputElement>(null);
   const subAccountRef = useRef<HTMLInputElement>(null);
   const particularsRef = useRef<HTMLInputElement>(null);
+  const staffRef = useRef<HTMLInputElement>(null);
   const creditRef = useRef<HTMLInputElement>(null);
   const debitRef = useRef<HTMLInputElement>(null);
-  const staffRef = useRef<HTMLInputElement>(null);
+  const paymentModeRef = useRef<HTMLInputElement>(null);
+  const quantityCheckedRef = useRef<HTMLInputElement>(null);
+  const purchaseQRef = useRef<HTMLInputElement>(null);
+  const saleQRef = useRef<HTMLInputElement>(null);
+  const saveBtnRef = useRef<HTMLButtonElement>(null);
 
   // Refs for dual entry form navigation
   const dualDateRef = useRef<HTMLInputElement>(null);
@@ -354,6 +291,9 @@ const NewEntry: React.FC = () => {
   const dualParticularsRef = useRef<HTMLInputElement>(null);
   const dualCreditRef = useRef<HTMLInputElement>(null);
   const dualDebitRef = useRef<HTMLInputElement>(null);
+  const dualQuantityCheckedRef = useRef<HTMLInputElement>(null);
+  const dualPurchaseQRef = useRef<HTMLInputElement>(null);
+  const dualSaleQRef = useRef<HTMLInputElement>(null);
 
   // Function to handle Enter key navigation
   const handleKeyDown = (e: React.KeyboardEvent, nextRef: React.RefObject<HTMLElement> | null) => {
@@ -663,6 +603,16 @@ const NewEntry: React.FC = () => {
       toast.error('You can enter only Credit OR Debit amount in Main Entry, not both.');
       return;
     }
+
+    // Validate quantity details in main entry
+    if (entry.quantityChecked) {
+      const saleQty = parseFloat(entry.saleQ) || 0;
+      const purchaseQty = parseFloat(entry.purchaseQ) || 0;
+      if (saleQty > 0 && purchaseQty > 0) {
+        toast.error('You can enter only Purchase OR Sale Quantity, not both.');
+        return;
+      }
+    }
     
     // Save selected staff to localStorage
     if (entry.staff) {
@@ -706,6 +656,16 @@ const NewEntry: React.FC = () => {
       if (mainDebit > 0 && dualCredit === 0) {
         toast.error('Dual Entry must have a Credit amount since Main Entry is Debit.');
         return;
+      }
+
+      // Validate quantity details in dual entry
+      if (dualEntry.quantityChecked) {
+        const dualSaleQty = parseFloat(dualEntry.saleQ) || 0;
+        const dualPurchaseQty = parseFloat(dualEntry.purchaseQ) || 0;
+        if (dualSaleQty > 0 && dualPurchaseQty > 0) {
+          toast.error('You can enter only Purchase OR Sale Quantity in Dual Entry, not both.');
+          return;
+        }
       }
     }
     setLoading(true);
@@ -883,6 +843,8 @@ const NewEntry: React.FC = () => {
       setDualEntryEnabled(false);
       dualCreditManuallyEdited.current = false;
       dualDebitManuallyEdited.current = false;
+      dualPurchaseQManuallyEdited.current = false;
+      dualSaleQManuallyEdited.current = false;
       
       // Invalidate React Query cache to refresh recent entries
       console.log('🔄 Invalidating cache for date:', entry.date);
@@ -1795,6 +1757,7 @@ const NewEntry: React.FC = () => {
                     />
                     <button
                       type='button'
+                      tabIndex={-1}
                       onClick={() => setShowMainCalendar(!showMainCalendar)}
                       className='absolute right-2 top-7 p-1 hover:bg-gray-100 rounded'
                     >
@@ -1821,7 +1784,7 @@ const NewEntry: React.FC = () => {
                       onChange={value =>
                         handleInputChange('companyName', value)
                       }
-                      onSelect={(value) => {
+                      onSelect={() => {
                         // Auto-navigate to next field when company is selected
                         setTimeout(() => {
                           if (mainAccountRef.current) {
@@ -1843,6 +1806,7 @@ const NewEntry: React.FC = () => {
                         onClick={() => setShowNewCompany(true)}
                         className='text-xs px-1 py-1'
                         icon={Building}
+                        tabIndex={-1}
                       >
                         Add
                       </Button>
@@ -1854,6 +1818,7 @@ const NewEntry: React.FC = () => {
                           onClick={() => handleDelete('company')}
                           className='text-xs px-1 py-1'
                           icon={AlertCircle}
+                          tabIndex={-1}
                         >
                           Del
                         </Button>
@@ -1869,7 +1834,7 @@ const NewEntry: React.FC = () => {
                       onChange={value =>
                         handleInputChange('accountName', value)
                       }
-                      onSelect={(value) => {
+                      onSelect={() => {
                         // Auto-navigate to next field when account is selected
                         setTimeout(() => {
                           if (subAccountRef.current) {
@@ -1892,6 +1857,7 @@ const NewEntry: React.FC = () => {
                         onClick={() => setShowNewAccount(true)}
                         className='text-xs px-1 py-1'
                         icon={FileText}
+                        tabIndex={-1}
                       >
                         Add
                       </Button>
@@ -1903,6 +1869,7 @@ const NewEntry: React.FC = () => {
                           onClick={() => handleDelete('account')}
                           className='text-xs px-1 py-1'
                           icon={AlertCircle}
+                          tabIndex={-1}
                         >
                           Del
                         </Button>
@@ -1919,6 +1886,14 @@ const NewEntry: React.FC = () => {
                       label='Sub Account'
                       value={entry.subAccount}
                       onChange={value => handleInputChange('subAccount', value)}
+                      onSelect={() => {
+                        // Auto-navigate to particulars when sub account is selected
+                        setTimeout(() => {
+                          if (particularsRef.current) {
+                            particularsRef.current.focus();
+                          }
+                        }, 100);
+                      }}
                       options={subAccounts}
                       placeholder='Select sub account...'
                       onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, particularsRef)}
@@ -1934,6 +1909,7 @@ const NewEntry: React.FC = () => {
                         onClick={() => setShowNewSubAccount(true)}
                         className='text-xs px-1 py-1'
                         icon={FileText}
+                        tabIndex={-1}
                       >
                         Add
                       </Button>
@@ -1945,6 +1921,7 @@ const NewEntry: React.FC = () => {
                           onClick={() => handleDelete('subAccount')}
                           className='text-xs px-1 py-1'
                           icon={AlertCircle}
+                          tabIndex={-1}
                         >
                           Del
                         </Button>
@@ -1958,7 +1935,7 @@ const NewEntry: React.FC = () => {
                       label='Particulars'
                       value={entry.particulars}
                       onChange={value => handleInputChange('particulars', value)}
-                      onKeyDown={(e) => handleKeyDown(e, creditRef)}
+                      onKeyDown={(e) => handleKeyDown(e, staffRef)}
                       placeholder='Enter transaction details...'
                       required
                       size='sm'
@@ -1974,6 +1951,14 @@ const NewEntry: React.FC = () => {
                       onChange={value =>
                         setEntry(prev => ({ ...prev, staff: value }))
                       }
+                      onSelect={() => {
+                        // Auto-navigate to credit amount when staff is selected
+                        setTimeout(() => {
+                          if (creditRef.current) {
+                            creditRef.current.focus();
+                          }
+                        }, 100);
+                      }}
                       options={users}
                       placeholder='Select staff...'
                       onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, creditRef)}
@@ -1989,6 +1974,7 @@ const NewEntry: React.FC = () => {
                         onClick={() => setShowNewStaff(true)}
                         className='text-xs px-1 py-1'
                         icon={Building}
+                        tabIndex={-1}
                       >
                         Add
                       </Button>
@@ -1999,6 +1985,7 @@ const NewEntry: React.FC = () => {
                         onClick={() => handleDelete('staff')}
                         className='text-xs px-1 py-1'
                         icon={AlertCircle}
+                        tabIndex={-1}
                       >
                         Del
                       </Button>
@@ -2039,7 +2026,7 @@ const NewEntry: React.FC = () => {
                       }));
                     }}
                     disabled={!!entry.credit}
-                    onKeyDown={(e) => handleKeyDown(e, staffRef)}
+                    onKeyDown={(e) => handleKeyDown(e, paymentModeRef)}
                     placeholder='Enter debit amount'
                     type='number'
                     min='0'
@@ -2047,11 +2034,20 @@ const NewEntry: React.FC = () => {
                     size='sm'
                   />
                   <SearchableSelect
+                    ref={paymentModeRef}
                     label='Payment Mode'
                     value={entry.paymentMode}
                     onChange={val =>
                       setEntry(prev => ({ ...prev, paymentMode: val }))
                     }
+                    onSelect={() => {
+                      // Auto-navigate to Quantity Details checkbox when payment mode is selected
+                      setTimeout(() => {
+                        if (quantityCheckedRef.current) {
+                          quantityCheckedRef.current.focus();
+                        }
+                      }, 100);
+                    }}
                     options={[
                       { value: '', label: 'Select payment mode...' },
                       { value: 'Cash', label: 'Cash' },
@@ -2059,7 +2055,8 @@ const NewEntry: React.FC = () => {
                       { value: 'Online', label: 'Double' }
                     ]}
                     placeholder='Select payment mode...'
-                      required
+                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, quantityCheckedRef)}
+                    required
                     size='sm'
                   />
                 </div>
@@ -2067,6 +2064,7 @@ const NewEntry: React.FC = () => {
                 {/* Quantity Checkbox */}
                 <div className='flex items-center space-x-2'>
                   <input
+                    ref={quantityCheckedRef}
                     type='checkbox'
                     id='quantityChecked'
                     checked={entry.quantityChecked}
@@ -2076,6 +2074,30 @@ const NewEntry: React.FC = () => {
                         quantityChecked: e.target.checked,
                       }))
                     }
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const nextChecked = !entry.quantityChecked;
+                        setEntry(prev => ({
+                          ...prev,
+                          quantityChecked: nextChecked,
+                        }));
+                        
+                        if (nextChecked) {
+                          setTimeout(() => {
+                            if (purchaseQRef.current) purchaseQRef.current.focus();
+                          }, 100);
+                        } else {
+                          setTimeout(() => {
+                            if (dualEntryEnabled && dualDateRef.current) {
+                              dualDateRef.current.focus();
+                            } else if (saveBtnRef.current) {
+                              saveBtnRef.current.focus();
+                            }
+                          }, 100);
+                        }
+                      }
+                    }}
                     className='w-4 h-4'
                   />
                   <label
@@ -2092,6 +2114,7 @@ const NewEntry: React.FC = () => {
                 {entry.quantityChecked && (
                   <div className='grid grid-cols-1 md:grid-cols-2 gap-1'>
                     <Input
+                      ref={purchaseQRef}
                       label='Purchase Quantity'
                       value={entry.saleQ}
                       onChange={val => {
@@ -2103,6 +2126,8 @@ const NewEntry: React.FC = () => {
                           purchaseQ: saleVal ? '' : prev.purchaseQ // Clear purchase if sale has value
                         }));
                       }}
+                      onKeyDown={(e) => handleKeyDown(e, saleQRef)}
+                      disabled={!!entry.purchaseQ}
                       placeholder='0'
                       type='number'
                       min='0'
@@ -2110,6 +2135,7 @@ const NewEntry: React.FC = () => {
                       size='sm'
                     />
                     <Input
+                      ref={saleQRef}
                       label='Sale Quantity'
                       value={entry.purchaseQ}
                       onChange={val => {
@@ -2121,6 +2147,17 @@ const NewEntry: React.FC = () => {
                           saleQ: purchaseVal ? '' : prev.saleQ // Clear sale if purchase has value
                         }));
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (dualEntryEnabled && dualDateRef.current) {
+                            dualDateRef.current.focus();
+                          } else if (saveBtnRef.current) {
+                            saveBtnRef.current.focus();
+                          }
+                        }
+                      }}
+                      disabled={!!entry.saleQ}
                       placeholder='0'
                       type='number'
                       min='0'
@@ -2160,6 +2197,7 @@ const NewEntry: React.FC = () => {
                         />
                         <button
                           type='button'
+                          tabIndex={-1}
                           onClick={() => setShowDualCalendar(!showDualCalendar)}
                           className='absolute right-2 top-7 p-1 hover:bg-gray-100 rounded'
                         >
@@ -2187,7 +2225,7 @@ const NewEntry: React.FC = () => {
                             companyName: value,
                           }))
                         }
-                        onSelect={(value) => {
+                        onSelect={() => {
                           // Auto-navigate to next field when company is selected
                           setTimeout(() => {
                             if (dualMainAccountRef.current) {
@@ -2211,7 +2249,7 @@ const NewEntry: React.FC = () => {
                             accountName: value,
                           }))
                         }
-                        onSelect={(value) => {
+                        onSelect={() => {
                           // Auto-navigate to next field when account is selected
                           setTimeout(() => {
                             if (dualSubAccountRef.current) {
@@ -2236,6 +2274,13 @@ const NewEntry: React.FC = () => {
                         onChange={value =>
                           setDualEntry(prev => ({ ...prev, subAccount: value }))
                         }
+                        onSelect={() => {
+                          setTimeout(() => {
+                            if (dualParticularsRef.current) {
+                              dualParticularsRef.current.focus();
+                            }
+                          }, 100);
+                        }}
                         options={dualSubAccounts}
                         placeholder='Select sub account...'
                         onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, dualParticularsRef)}
@@ -2292,7 +2337,7 @@ const NewEntry: React.FC = () => {
                           }
                         }}
                         disabled={!!entry.debit || !!dualEntry.credit || (!entry.credit && !entry.debit)}
-                        onKeyDown={(e) => handleKeyDown(e, null)}
+                        onKeyDown={(e) => handleKeyDown(e, dualQuantityCheckedRef)}
                         placeholder='Enter debit amount'
                         type='number'
                         min='0'
@@ -2305,6 +2350,7 @@ const NewEntry: React.FC = () => {
                     <div className='space-y-4 mt-2'>
                       <div className='flex items-center gap-2'>
                         <input
+                          ref={dualQuantityCheckedRef}
                           type='checkbox'
                           checked={dualEntry.quantityChecked}
                           onChange={e =>
@@ -2315,6 +2361,28 @@ const NewEntry: React.FC = () => {
                               purchaseQ: e.target.checked ? prev.purchaseQ : '',
                             }))
                           }
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const nextChecked = !dualEntry.quantityChecked;
+                              setDualEntry(prev => ({
+                                ...prev,
+                                quantityChecked: nextChecked,
+                                saleQ: nextChecked ? prev.saleQ : '',
+                                purchaseQ: nextChecked ? prev.purchaseQ : '',
+                              }));
+                              
+                              if (nextChecked) {
+                                setTimeout(() => {
+                                  if (dualPurchaseQRef.current) dualPurchaseQRef.current.focus();
+                                }, 100);
+                              } else {
+                                setTimeout(() => {
+                                  if (saveBtnRef.current) saveBtnRef.current.focus();
+                                }, 100);
+                              }
+                            }
+                          }}
                           id='dualQuantityChecked'
                         />
                         <label
@@ -2328,6 +2396,7 @@ const NewEntry: React.FC = () => {
                       {dualEntry.quantityChecked && (
                         <div className='grid grid-cols-1 md:grid-cols-2 gap-1'>
                           <Input
+                            ref={dualPurchaseQRef}
                             label='Purchase Quantity'
                             value={dualEntry.saleQ}
                             onChange={val => {
@@ -2338,12 +2407,20 @@ const NewEntry: React.FC = () => {
                                 saleQ: saleVal,
                                 purchaseQ: saleVal ? '' : prev.purchaseQ // Clear purchase if sale has value
                               }));
+                              if (saleVal !== '') {
+                                dualPurchaseQManuallyEdited.current = true;
+                              } else {
+                                dualPurchaseQManuallyEdited.current = false;
+                              }
                             }}
+                            onKeyDown={(e) => handleKeyDown(e, dualSaleQRef)}
+                            disabled={!entry.purchaseQ}
                             placeholder='0'
                             type='number'
                             min='0'
                           />
                           <Input
+                            ref={dualSaleQRef}
                             label='Sale Quantity'
                             value={dualEntry.purchaseQ}
                             onChange={val => {
@@ -2354,7 +2431,21 @@ const NewEntry: React.FC = () => {
                                 purchaseQ: purchaseVal,
                                 saleQ: purchaseVal ? '' : prev.saleQ // Clear sale if purchase has value
                               }));
+                              if (purchaseVal !== '') {
+                                dualSaleQManuallyEdited.current = true;
+                              } else {
+                                dualSaleQManuallyEdited.current = false;
+                              }
                             }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (saveBtnRef.current) {
+                                  saveBtnRef.current.focus();
+                                }
+                              }
+                            }}
+                            disabled={!entry.saleQ}
                             placeholder='0'
                             type='number'
                             min='0'
@@ -2368,6 +2459,7 @@ const NewEntry: React.FC = () => {
                 {/* Action Buttons */}
                 <div className='flex justify-center gap-1 pt-1 border-t border-gray-200'>
                   <Button
+                    ref={saveBtnRef}
                     type='submit'
                     disabled={loading}
                     size='sm'
@@ -2419,6 +2511,8 @@ const NewEntry: React.FC = () => {
                       setDualEntryEnabled(false);
                       dualCreditManuallyEdited.current = false;
                       dualDebitManuallyEdited.current = false;
+                      dualPurchaseQManuallyEdited.current = false;
+                      dualSaleQManuallyEdited.current = false;
                       // Accounts are now managed by React Query
                       setSubAccounts([]);
                     }}

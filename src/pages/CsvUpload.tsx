@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 // import { supabaseDB } from '../lib/supabaseDatabase';
@@ -356,8 +356,6 @@ const processBatchIndividually = async (
       }
 
       // Handle date validation
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const originalDate = cleanEntry.c_date;
       if (
         !cleanEntry.c_date ||
         cleanEntry.c_date === '' ||
@@ -400,8 +398,7 @@ const processBatchIndividually = async (
       // This ensures data integrity by only allowing existing companies
 
       // Insert individual entry
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { data: result, error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from(getTableName('cash_book'))
         .insert(entryData)
         .select()
@@ -441,38 +438,15 @@ const sanitizeDate = (value: unknown): string => {
         return format(date, 'yyyy-MM-dd HH:mm:ss');
       }
 
-      // Try parsing common date formats with more robust parsing
-      const dateFormats = [
-        'yyyy-MM-dd',
-        'dd/MM/yyyy',
-        'MM/dd/yyyy',
-        'dd-MM-yyyy',
-        'MM-dd-yyyy',
-        'yyyy/MM/dd',
-        'dd.MM.yyyy',
-        'MM.dd.yyyy',
-        'dd/MM/yy',
-        'MM/dd/yy',
-        'dd-MM-yy',
-        'MM-dd-yy',
-        'yyyy-MM-dd HH:mm:ss',
-        'dd/MM/yyyy HH:mm:ss',
-        'MM/dd/yyyy HH:mm:ss',
-      ];
-
-      // Try parsing with different approaches
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-      for (const formatStr of dateFormats) {
-        try {
-          // For formats with time, try parsing without time first
-          const dateOnly = trimmedValue.split(' ')[0];
-          const parsedDate = new Date(dateOnly);
-          if (!isNaN(parsedDate.getTime())) {
-            return format(parsedDate, 'yyyy-MM-dd HH:mm:ss');
-          }
-        } catch {
-          continue;
+      // Try parsing common date formats by parsing date without time first
+      try {
+        const dateOnly = trimmedValue.split(' ')[0];
+        const parsedDate = new Date(dateOnly);
+        if (!isNaN(parsedDate.getTime())) {
+          return format(parsedDate, 'yyyy-MM-dd HH:mm:ss');
         }
+      } catch {
+        // Fall through
       }
 
       // Try Excel date serial number conversion (Excel stores dates as numbers)
@@ -562,8 +536,6 @@ const CsvUpload: React.FC = () => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadPreview, setUploadPreview] = useState<Record<string, unknown>[]>([]);
   const [uploadLoading, setUploadLoading] = useState(false);
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [importProgress, setImportProgress] = useState({
     current: 0,
     total: 0,
@@ -591,17 +563,6 @@ const CsvUpload: React.FC = () => {
   } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // Memoized values for better performance
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const isImporting = useMemo(() => uploadLoading, [uploadLoading]);
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const hasResults = useMemo(() => importResults !== null, [importResults]);
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const canUpload = useMemo(
-    () => !uploadLoading && uploadedFile === null,
-    [uploadLoading, uploadedFile]
-  );
-
   const handleFileUpload = async (file: File) => {
     if (!file.name.endsWith('.csv')) {
       toast.error('Please upload a CSV file');
@@ -610,7 +571,6 @@ const CsvUpload: React.FC = () => {
 
     setUploadedFile(file);
     setUploadLoading(true);
-    setUploadProgress(0);
     setImportResults(null);
 
     try {
@@ -634,7 +594,6 @@ const CsvUpload: React.FC = () => {
       toast.error('Failed to upload CSV file');
     } finally {
       setUploadLoading(false);
-      setUploadProgress(100);
     }
   };
 
@@ -674,7 +633,6 @@ const CsvUpload: React.FC = () => {
     }
 
     setUploadLoading(true);
-    setUploadProgress(0);
     setImportResults(null);
 
     // COMPREHENSIVE FOREIGN KEY CONSTRAINT DISABLING
@@ -728,8 +686,7 @@ const CsvUpload: React.FC = () => {
 
     // Test database connection
     try {
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { data: testData, error: testError } = await supabase
+      const { error: testError } = await supabase
         .from(getTableName('cash_book'))
         .select('id')
         .limit(1);
@@ -1674,7 +1631,6 @@ const CsvUpload: React.FC = () => {
   const resetUpload = () => {
     setUploadedFile(null);
     setUploadPreview([]);
-    setUploadProgress(0);
     setImportResults(null);
     setIsDragOver(false);
   };
@@ -1784,8 +1740,7 @@ const CsvUpload: React.FC = () => {
       }
 
       // Test Supabase client
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { data, error } = await supabase.from(getTableName('cash_book')).select('count');
+      const { error } = await supabase.from(getTableName('cash_book')).select('count');
       if (error) {
         console.error('❌ Database connection failed:', error);
         toast.error('Database connection failed: ' + error.message);
@@ -1989,8 +1944,7 @@ const CsvUpload: React.FC = () => {
       toast.success(`Starting sync of ${offlineData.length} entries...`);
 
       // Test connection first
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { data, error } = await supabase.from(getTableName('cash_book')).select('count');
+      const { error } = await supabase.from(getTableName('cash_book')).select('count');
       if (error) {
         toast.error('Connection still unavailable. Cannot sync.');
         return;
