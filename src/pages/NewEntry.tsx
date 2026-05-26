@@ -87,7 +87,6 @@ const NewEntry: React.FC = () => {
   const [mainDateInput, setMainDateInput] = useState('');
   const [dualDateInput, setDualDateInput] = useState('');
   const [showMainCalendar, setShowMainCalendar] = useState(false);
-  const [showDualCalendar, setShowDualCalendar] = useState(false);
 
   // Refs to track manual edits of dual entry amounts
   const dualCreditManuallyEdited = useRef(false);
@@ -148,6 +147,19 @@ const NewEntry: React.FC = () => {
   const [newSubAccountName, setNewSubAccountName] = useState('');
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
+
+  // Synchronize date between main entry and dual entry
+  useEffect(() => {
+    setDualEntry(prev => {
+      if (prev.date !== entry.date) {
+        return {
+          ...prev,
+          date: entry.date,
+        };
+      }
+      return prev;
+    });
+  }, [entry.date]);
 
   // Sync flag to prevent infinite loops when syncing quantity details
   const syncingRef = useRef(false);
@@ -286,7 +298,6 @@ const NewEntry: React.FC = () => {
   const saveBtnRef = useRef<HTMLButtonElement>(null);
 
   // Refs for dual entry form navigation
-  const dualDateRef = useRef<HTMLInputElement>(null);
   const dualCompanyNameRef = useRef<HTMLInputElement>(null);
   const dualMainAccountRef = useRef<HTMLInputElement>(null);
   const dualSubAccountRef = useRef<HTMLInputElement>(null);
@@ -851,6 +862,13 @@ const NewEntry: React.FC = () => {
       dualDebitManuallyEdited.current = false;
       dualPurchaseQManuallyEdited.current = false;
       dualSaleQManuallyEdited.current = false;
+      
+      // Focus back to main Date field
+      setTimeout(() => {
+        if (dateRef.current) {
+          dateRef.current.focus();
+        }
+      }, 100);
       
       // Invalidate React Query cache to refresh recent entries
       console.log('🔄 Invalidating cache for date:', entry.date);
@@ -2121,8 +2139,8 @@ const NewEntry: React.FC = () => {
                           }, 100);
                         } else {
                           setTimeout(() => {
-                            if (dualEntryEnabled && dualDateRef.current) {
-                              dualDateRef.current.focus();
+                            if (dualEntryEnabled && dualCompanyNameRef.current) {
+                              dualCompanyNameRef.current.focus();
                             } else if (saveBtnRef.current) {
                               saveBtnRef.current.focus();
                             }
@@ -2182,8 +2200,8 @@ const NewEntry: React.FC = () => {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          if (dualEntryEnabled && dualDateRef.current) {
-                            dualDateRef.current.focus();
+                          if (dualEntryEnabled && dualCompanyNameRef.current) {
+                            dualCompanyNameRef.current.focus();
                           } else if (saveBtnRef.current) {
                             saveBtnRef.current.focus();
                           }
@@ -2210,42 +2228,13 @@ const NewEntry: React.FC = () => {
                       <div className='relative'>
                         <label className='block font-bold text-gray-700 mb-1 text-xs' style={{ fontFamily: 'Times New Roman', fontSize: '14px', fontWeight: 'bold' }}>Date</label>
                         <input
-                          ref={dualDateRef as any}
                           type='text'
                           value={dualDateInput}
-                          onChange={e => {
-                            const v = e.target.value;
-                            setDualDateInput(v);
-                            const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-                            if (m) {
-                              const [, dd, mm, yyyy] = m;
-                              setDualEntry(prev => ({ ...prev, date: `${yyyy}-${mm}-${dd}` }));
-                            }
-                          }}
-                          onKeyDown={(e) => handleKeyDown(e, dualCompanyNameRef)}
+                          disabled
                           placeholder='dd/MM/yyyy'
-                          className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold'
+                          className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-100 text-gray-500 font-bold cursor-not-allowed'
                           style={{ fontWeight: 'bold', fontSize: '14px' }}
                         />
-                        <button
-                          type='button'
-                          tabIndex={-1}
-                          onClick={() => setShowDualCalendar(!showDualCalendar)}
-                          className='absolute right-2 top-7 p-1 hover:bg-gray-100 rounded'
-                        >
-                          <Calendar className='w-4 h-4 text-gray-500' />
-                        </button>
-                        {showDualCalendar && (
-                          <CustomCalendar
-                            onDateSelect={(date) => {
-                              setDualEntry(prev => ({ ...prev, date }));
-                              setDualDateInput(format(new Date(date), 'dd/MM/yyyy'));
-                              setShowDualCalendar(false);
-                            }}
-                            selectedDate={dualEntry.date}
-                            onClose={() => setShowDualCalendar(false)}
-                          />
-                        )}
                       </div>
                       <SearchableSelect
                         ref={dualCompanyNameRef}
@@ -2524,7 +2513,7 @@ const NewEntry: React.FC = () => {
                         quantityChecked: false,
                       });
                       setDualEntry({
-                        date: format(new Date(), 'yyyy-MM-dd'),
+                        date: entry.date,
                         companyName: '',
                         accountName: '',
                         subAccount: '',
