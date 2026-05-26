@@ -49,6 +49,7 @@ const BankGuarantees: React.FC = () => {
     credit: 0,
     debit: 0,
     department: '',
+    cancelled: false,
   });
 
   // Summary stats
@@ -271,6 +272,7 @@ const BankGuarantees: React.FC = () => {
             credit: 0,
             debit: 0,
             department: '',
+            cancelled: false,
           });
           setShowAddForm(false);
           toast.success('Bank guarantee added successfully!');
