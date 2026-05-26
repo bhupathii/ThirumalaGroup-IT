@@ -56,6 +56,17 @@ const NewEntry: React.FC = () => {
   const navigate = useNavigate();
   const [vehicleAlerts, setVehicleAlerts] = useState<string | null>(null);
   const [bgAlerts, setBgAlerts] = useState<string | null>(null);
+  const [showNotifications, setShowNotifications] = useState(true);
+
+  useEffect(() => {
+    if (vehicleAlerts || bgAlerts) {
+      setShowNotifications(true);
+      const timer = setTimeout(() => {
+        setShowNotifications(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [vehicleAlerts, bgAlerts]);
 
   useEffect(() => {
     const checkExpiries = async () => {
@@ -1826,13 +1837,13 @@ const NewEntry: React.FC = () => {
         </div>
       </div>
 
-      {/* Expiry Notifications Banners */}
-      {(vehicleAlerts || bgAlerts) && (
-        <div className='flex flex-col gap-1.5 p-2 bg-gray-50 border-b border-gray-200 flex-shrink-0'>
+      {/* Floating Expiry Notifications Popup */}
+      {showNotifications && (vehicleAlerts || bgAlerts) && (
+        <div className='fixed top-4 left-1/2 transform -translate-x-1/2 z-50 flex flex-col gap-2 w-full max-w-md px-4 pointer-events-auto'>
           {vehicleAlerts && (
             <div 
               onClick={() => navigate('/vehicles')}
-              className='bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors rounded p-2 flex items-center justify-between cursor-pointer text-amber-800'
+              className='bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors rounded-lg p-3 flex items-center justify-between cursor-pointer text-amber-800 shadow-lg'
             >
               <div className='flex items-center gap-2'>
                 <AlertCircle className='w-4 h-4 text-amber-600 flex-shrink-0' />
@@ -1846,7 +1857,7 @@ const NewEntry: React.FC = () => {
           {bgAlerts && (
             <div 
               onClick={() => navigate('/bank-guarantees')}
-              className='bg-red-50 border border-red-200 hover:bg-red-100 transition-colors rounded p-2 flex items-center justify-between cursor-pointer text-red-800'
+              className='bg-red-50 border border-red-200 hover:bg-red-100 transition-colors rounded-lg p-3 flex items-center justify-between cursor-pointer text-red-800 shadow-lg'
             >
               <div className='flex items-center gap-2'>
                 <AlertCircle className='w-4 h-4 text-red-600 flex-shrink-0' />
