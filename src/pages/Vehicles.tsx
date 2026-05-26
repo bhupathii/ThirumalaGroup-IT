@@ -467,26 +467,6 @@ const Vehicles: React.FC = () => {
       {/* Filters */}
       <Card className='bg-gradient-to-r from-gray-50 to-blue-50 border-gray-200'>
         <div className='grid grid-cols-1 md:grid-cols-4 gap-4'>
-          <div className='flex flex-col justify-end'>
-            <label
-              htmlFor='vehicle-search'
-              className='text-sm font-medium text-gray-700 mb-1'
-            >
-              Search
-            </label>
-            <div className='relative'>
-              <Search className='w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400' />
-              <input
-                id='vehicle-search'
-                type='text'
-                placeholder='Search vehicles...'
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className='pl-10 pr-4 h-12 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base'
-              />
-            </div>
-          </div>
-
           <Select
             label='Vehicle Type'
             value={filters.vehicleType}
@@ -510,15 +490,46 @@ const Vehicles: React.FC = () => {
               <strong>{filteredVehicles.length}</strong> vehicles found
             </div>
           </div>
-          {/* Add an empty div to keep the grid aligned with Bank Guarantees page */}
-          {/* <div /> */}
+
+          <div className='flex flex-col justify-end'>
+            <label
+              htmlFor='vehicle-search'
+              className='text-sm font-medium text-gray-700 mb-1'
+            >
+              Search
+            </label>
+            <div className='relative'>
+              <Search className='w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400' />
+              <input
+                id='vehicle-search'
+                type='text'
+                placeholder='Search vehicles...'
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className='pl-10 pr-4 h-12 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base'
+              />
+            </div>
+          </div>
         </div>
       </Card>
 
       {/* Add/Edit Vehicle Form */}
       {(showAddForm || editingVehicle) && (
         <Card
-          title={editingVehicle ? 'Edit Vehicle' : 'New Vehicle Entry Form'}
+          title={
+            <div className='flex items-center gap-3'>
+              <span>{editingVehicle ? 'Edit Vehicle' : 'New Vehicle Entry Form'}</span>
+              {(() => {
+                const count = vehicles.filter(v => hasExpiringDocuments(v)).length;
+                return count > 0 ? (
+                  <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-300'>
+                    <AlertTriangle className='w-3 h-3' />
+                    Vehicle expiry due: {count}
+                  </span>
+                ) : null;
+              })()}
+            </div>
+          }
         >
           <form onSubmit={handleSubmit} className='space-y-4'>
             <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>

@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
-import Select from '../components/UI/Select';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -1049,7 +1048,7 @@ const ApproveRecords: React.FC = () => {
         window.dispatchEvent(new CustomEvent('dashboard-refresh'));
       } else {
         if (skippedCount > 0) {
-          toast.info(`No entries approved. ${skippedCount} entries were skipped.`);
+          toast(`No entries approved. ${skippedCount} entries were skipped.`);
         } else {
           toast.error(`Failed to approve entries. ${errorCount} errors occurred.`);
         }
@@ -1342,6 +1341,12 @@ const ApproveRecords: React.FC = () => {
     const startIndex = (currentPage - 1) * recordsPerPage;
     const endIndex = startIndex + recordsPerPage;
     return filteredEntries.slice(startIndex, endIndex);
+  };
+
+  const getApprovedPageEntries = () => {
+    const startIndex = (approvedPage - 1) * recordsPerPage;
+    const endIndex = startIndex + recordsPerPage;
+    return filteredApprovedEntries.slice(startIndex, endIndex);
   };
 
 

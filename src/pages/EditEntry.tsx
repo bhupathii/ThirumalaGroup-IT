@@ -2568,7 +2568,7 @@ const EditEntry: React.FC = () => {
               <div className='flex flex-col gap-3 items-center'>
                 <div className='flex gap-2'>
                   <Button
-                    onClick={loadMoreEntries}
+                    onClick={() => loadMoreEntries()}
                     disabled={isLoadingMore || isLoadingAll}
                     variant='secondary'
                     icon={isLoadingMore ? RefreshCw : Plus}

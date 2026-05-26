@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
-import Input from '../components/UI/Input';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { supabase } from '../lib/supabase';
 import { getTableName } from '../lib/tableNames';
-import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
 import CustomCalendar from '../components/UI/CustomCalendar';
-import { format, addDays, subDays, startOfMonth, endOfMonth } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { Search, Calendar } from 'lucide-react';
 
 interface DailyReportData {
@@ -39,7 +37,7 @@ const matchDailyReportSearchTerm = (entry: any, searchTerm: string): boolean => 
         dateStr1 = format(dateObj, 'dd/MM/yyyy');
         dateStr2 = format(dateObj, 'yyyy-MM-dd');
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -84,7 +82,6 @@ const matchDailyReportSearchTerm = (entry: any, searchTerm: string): boolean => 
 };
 
 const DailyReport: React.FC = () => {
-  const { user } = useAuth();
   const { mode: tableMode } = useTableMode();
   
   // Default to today's date whenever opened; do not load previously selected date
@@ -111,12 +108,8 @@ const DailyReport: React.FC = () => {
     { value: string; label: string }[]
   >([]);
   const [loading, setLoading] = useState(false);
-  const [showCompanyBalances, setShowCompanyBalances] = useState(true);
-  const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   
-  // Data loading states
-  const [totalEntries, setTotalEntries] = useState(0);
   // Calendar entries - same structure as DetailedLedger
   const [calendarEntries, setCalendarEntries] = useState<any[]>([]);
 
@@ -251,7 +244,7 @@ const DailyReport: React.FC = () => {
       if (data.length > 0) {
         toast.success(`Found ${data.length} entries on ${date} with ${uniqueCompanies.length} companies: ${uniqueCompanies.join(', ')}`);
       } else {
-        toast.info(`No entries found on ${date}`);
+        toast(`No entries found on ${date}`);
         // If no entries found, load all companies
         await loadCompanies();
       }
@@ -429,10 +422,6 @@ const DailyReport: React.FC = () => {
         companyBalances,
       });
 
-      // Update total entries count for display
-      const totalCount = await supabaseDB.getCashBookEntriesCount();
-      setTotalEntries(totalCount);
-      setAllLoadedEntries(filteredEntries); // Store current filtered entries
 
       console.log(`✅ Daily Report generated for ${selectedDate}: ${filteredEntries.length} entries`);
       toast.success(`Daily Report generated: ${filteredEntries.length} entries for ${selectedDate}`);
@@ -442,20 +431,6 @@ const DailyReport: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const navigateDate = async (direction: 'prev' | 'next') => {
-    const currentDate = new Date(selectedDate);
-    const newDate =
-      direction === 'prev' ? subDays(currentDate, 1) : addDays(currentDate, 1);
-    const newDateString = format(newDate, 'yyyy-MM-dd');
-    const newDisplayDate = format(newDate, 'dd/MM/yyyy');
-    setSelectedDate(newDateString);
-    setDisplayDate(newDisplayDate);
-    // Clear company selection when date changes
-    setSelectedCompany('');
-    // Load companies for the new date
-    await loadCompaniesByDate(newDateString);
   };
 
   const printReport = async () => {
@@ -521,52 +496,6 @@ const DailyReport: React.FC = () => {
       console.error('Print error:', error);
       toast.error('Print failed. Please try again.');
     }
-  };
-
-  const exportToExcel = () => {
-    const exportData = reportData.entries.map(entry => ({
-      'S.No': entry.sno,
-      Date: format(new Date(entry.c_date), 'dd/MM/yyyy'),
-      Company: entry.company_name,
-      'Main Account': entry.acc_name,
-      'Sub Account': entry.sub_acc_name || '',
-      Particulars: entry.particulars,
-      Credit: entry.credit,
-      Debit: entry.debit,
-      'Sale Qty': entry.sale_qty,
-      'Purchase Qty': entry.purchase_qty || 0,
-      Staff: entry.staff,
-      User: entry.users,
-      'Entry Time': entry.entry_time,
-      Approved: entry.approved ? `${entry.users || 'Unknown User'} - ${entry.entry_time ? format(new Date(entry.entry_time), 'dd/MM/yyyy HH:mm') : 'N/A'}` : 'Pending',
-    }));
-
-    // Create CSV content
-    const headers = Object.keys(exportData[0] || {});
-    const csvContent = [
-      headers.join(','),
-      ...exportData.map(row =>
-        headers.map(header => `"${row[header as keyof typeof row]}"`).join(',')
-      ),
-    ].join('\n');
-
-    // Download file
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `daily-report-${selectedDate}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Report exported successfully!');
-  };
-
-  const getRowColor = (entry: any) => {
-    if (!entry.approved) return 'bg-yellow-50 border-yellow-200';
-    if (entry.edited) return 'bg-blue-50 border-blue-200';
-    if (entry.credit > 0) return 'bg-green-50 border-green-200';
-    if (entry.debit > 0) return 'bg-red-50 border-red-200';
-    return 'bg-white border-gray-200';
   };
 
   return (

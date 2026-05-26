@@ -135,7 +135,7 @@ class SupabaseDatabase {
         .limit(1);
       
       // If no error, column exists
-      if (!error || !error.message?.includes('payment_mode') && !error.code === '42703') {
+      if (!error || (!error.message?.includes('payment_mode') && error.code !== '42703')) {
         console.log('✅ payment_mode column exists');
         return true;
       }
@@ -1198,7 +1198,7 @@ class SupabaseDatabase {
 
     // Filter out undefined values to allow database defaults to work
     // CRITICAL: Always include payment_mode field to ensure it's saved correctly
-    const filteredEntry = Object.fromEntries(
+    const filteredEntry: Record<string, any> = Object.fromEntries(
       Object.entries(entry).filter(([key, value]) => {
         // Always include payment_mode field if it exists in the entry object (even if null)
         if (key === 'payment_mode') {
@@ -1239,7 +1239,7 @@ class SupabaseDatabase {
     
     // First attempt: try with payment_mode if it exists
     // CRITICAL: Ensure payment_mode is always included in insertData
-    const insertData = {
+    const insertData: Record<string, any> = {
       ...filteredEntry,
       sno: nextSno,
       entry_time: new Date().toISOString(),
@@ -1309,7 +1309,8 @@ class SupabaseDatabase {
         console.warn('⚠️ Retrying without payment_mode...');
         
         // Remove payment_mode and retry
-        const { payment_mode, ...entryWithoutPaymentMode } = insertData;
+        const entryWithoutPaymentMode = { ...insertData };
+        delete (entryWithoutPaymentMode as any).payment_mode;
         const retryResult = await supabase
           .from(getTableName('cash_book'))
           .insert(entryWithoutPaymentMode)
@@ -1465,7 +1466,7 @@ class SupabaseDatabase {
       // Filter out undefined fields to respect DB defaults
       // But always include payment_mode if it exists (even if null)
       const sanitized = operations.map((op) => {
-        const base = Object.fromEntries(
+        const base: Record<string, any> = Object.fromEntries(
           Object.entries(op).filter(([key, v]) => {
             // Always include payment_mode field if it exists (even if null)
             if (key === 'payment_mode') return true;
@@ -2474,7 +2475,7 @@ class SupabaseDatabase {
           error.message?.includes('does not exist') ||
           error.message?.includes('not found') ||
           error.message?.includes('relation') ||
-          error.status === 404;
+          (error as any).status === 404;
         
         if (!isTableNotFound) {
           // Only log non-404 errors (actual problems)
@@ -2491,7 +2492,7 @@ class SupabaseDatabase {
           .from('user_credentials_log')
           .delete()
           .lt('created_at', sevenDaysAgo.toISOString());
-      } catch (cleanupError) {
+      } catch {
         // Silently ignore cleanup errors (table might not exist)
       }
 
@@ -2529,7 +2530,7 @@ class SupabaseDatabase {
           error.message?.includes('does not exist') ||
           error.message?.includes('not found') ||
           error.message?.includes('relation') ||
-          error.status === 404;
+          (error as any).status === 404;
         
         if (!isTableNotFound) {
           // Only log non-404 errors (actual problems)
@@ -4241,18 +4242,11 @@ class SupabaseDatabase {
       if (!fetchError && deletedEntry) {
         console.log('✅ Found deleted entry in deleted_cash_book:', { id: deletedEntry.id, acc_name: deletedEntry.acc_name });
 
-        // Step 2: Prepare the restored entry (remove deleted fields)
-        const restoredEntry = {
-          sno: deletedEntry.sno,
-          date: deletedEntry.date,
-          acc_name: deletedEntry.acc_name,
-          particulars: deletedEntry.particulars,
-          debit: deletedEntry.debit,
-          credit: deletedEntry.credit,
-          balance: deletedEntry.balance,
-          created_at: deletedEntry.created_at,
-          updated_at: new Date().toISOString(),
-        };
+        // Step 2: Prepare the restored entry (remove deleted specific fields)
+        const restoredEntry = { ...deletedEntry };
+        delete (restoredEntry as any).deleted_by;
+        delete (restoredEntry as any).deleted_at;
+        restoredEntry.updated_at = new Date().toISOString();
 
         console.log('📝 Restored entry data:', restoredEntry);
 
@@ -4573,7 +4567,7 @@ class SupabaseDatabase {
   }
 
   // Enhanced connection test with multiple approaches
-  async testDatabaseConnectionEnhanced(): Promise<{ success: boolean; method: string; error?: any }> {
+  async testDatabaseConnectionEnhanced(): Promise<{ success: boolean; method: string; data?: any; count?: number | null; session?: any; error?: any }> {
     try {
       console.log('🔌 [TEST] Testing database connection with enhanced approach...');
       
