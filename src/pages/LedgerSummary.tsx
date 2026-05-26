@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
@@ -9,7 +9,7 @@ import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
 import { format, parseISO } from 'date-fns';
-import { Calendar } from 'lucide-react';
+import { Calendar, Search } from 'lucide-react';
 import CustomCalendar from '../components/UI/CustomCalendar';
 
 interface LedgerSummaryFilters {
@@ -79,19 +79,64 @@ const LedgerSummary: React.FC = () => {
   const [showToCalendar, setShowToCalendar] = useState(false);
   const [allEntries, setAllEntries] = useState<any[]>([]);
 
-  // Dropdown data
-  const [companies, setCompanies] = useState<
-    { value: string; label: string }[]
-  >([]);
-  const [accounts, setAccounts] = useState<{ value: string; label: string }[]>(
-    []
-  );
-  const [subAccounts, setSubAccounts] = useState<
-    { value: string; label: string }[]
-  >([]);
-  const [staffList, setStaffList] = useState<
-    { value: string; label: string }[]
-  >([]);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // 1. Get entries within the date range (fromDate to toDate)
+  const entriesInRange = useMemo(() => {
+    if (!filters.betweenDates) return allEntries;
+    const fromStr = filters.fromDate;
+    const toStr = filters.toDate;
+    return allEntries.filter(entry => {
+      return entry.c_date >= fromStr && entry.c_date <= toStr;
+    });
+  }, [allEntries, filters.fromDate, filters.toDate, filters.betweenDates]);
+
+  // 2. Companies in range
+  const companyOptions = useMemo(() => {
+    const distinctCompanies = [...new Set(entriesInRange.map(e => e.company_name).filter(Boolean))].sort();
+    return [
+      { value: '', label: 'All Companies' },
+      ...distinctCompanies.map(name => ({ value: name, label: name }))
+    ];
+  }, [entriesInRange]);
+
+  // 3. Accounts in range (filtered by selected company if any)
+  const accountOptions = useMemo(() => {
+    let filtered = entriesInRange;
+    if (filters.companyName) {
+      filtered = filtered.filter(e => e.company_name === filters.companyName);
+    }
+    const distinctAccounts = [...new Set(filtered.map(e => e.acc_name).filter(Boolean))].sort();
+    return [
+      { value: '', label: 'All Accounts' },
+      ...distinctAccounts.map(name => ({ value: name, label: name }))
+    ];
+  }, [entriesInRange, filters.companyName]);
+
+  // 4. Sub Accounts in range (filtered by selected company and main account)
+  const subAccountOptions = useMemo(() => {
+    let filtered = entriesInRange;
+    if (filters.companyName) {
+      filtered = filtered.filter(e => e.company_name === filters.companyName);
+    }
+    if (filters.mainAccount) {
+      filtered = filtered.filter(e => e.acc_name === filters.mainAccount);
+    }
+    const distinctSubAccounts = [...new Set(filtered.map(e => e.sub_acc_name).filter(Boolean))].sort();
+    return [
+      { value: '', label: 'All Sub Accounts' },
+      ...distinctSubAccounts.map(name => ({ value: name, label: name }))
+    ];
+  }, [entriesInRange, filters.companyName, filters.mainAccount]);
+
+  // 5. Staff in range
+  const staffOptions = useMemo(() => {
+    const distinctStaff = [...new Set(entriesInRange.map(e => e.staff).filter(Boolean))].sort();
+    return [
+      { value: '', label: 'All Staff' },
+      ...distinctStaff.map(name => ({ value: name, label: name }))
+    ];
+  }, [entriesInRange]);
 
   // Visible dd/MM/yyyy inputs + hidden pickers
   const [fromDateInput, setFromDateInput] = useState('');
@@ -132,19 +177,8 @@ const LedgerSummary: React.FC = () => {
   });
 
   useEffect(() => {
-    loadDropdownData();
-    loadAccountsByCompany();
-    loadSubAccountsByAccount();
     generateSummary();
   }, []);
-
-  useEffect(() => {
-    loadAccountsByCompany();
-  }, [filters.companyName]);
-
-  useEffect(() => {
-    loadSubAccountsByAccount();
-  }, [filters.companyName, filters.mainAccount]);
 
   // Implement live filtering: call generateSummary automatically when filters change
   useEffect(() => {
@@ -152,84 +186,42 @@ const LedgerSummary: React.FC = () => {
     // eslint-disable-next-line
   }, [filters, activeTab]);
 
-  const loadDropdownData = async () => {
-    try {
-      // Load companies
-      const companies = await supabaseDB.getCompaniesWithData();
-      const companiesData = companies.map(company => ({
-        value: company.company_name,
-        label: company.company_name,
-      }));
-      setCompanies([{ value: '', label: 'All Companies' }, ...companiesData]);
+  // Reset child filters if their currently selected values are no longer available in the dynamically filtered lists
+  useEffect(() => {
+    setFilters(prev => {
+      let updated = false;
+      const newFilters = { ...prev };
 
-      // Load staff
-      const users = await supabaseDB.getUsers();
-      const usersData = users
-        .filter(u => u.is_active)
-        .map(user => ({
-          value: user.username,
-          label: user.username,
-        }));
-      setStaffList([{ value: '', label: 'All Staff' }, ...usersData]);
-    } catch (error) {
-      console.error('Error loading dropdown data:', error);
-      toast.error('Failed to load dropdown data');
-    }
-  };
-
-  const loadAccountsByCompany = async () => {
-    try {
-      let accounts: string[] = [];
-      
-      if (filters.companyName) {
-        // Load accounts for specific company
-        accounts = await supabaseDB.getDistinctAccountNamesByCompany(
-          filters.companyName
-        );
-      } else {
-        // Load all accounts when no company is selected
-        accounts = await supabaseDB.getDistinctAccountNames();
+      // 1. Company Name
+      if (newFilters.companyName && !companyOptions.some(c => c.value === newFilters.companyName)) {
+        newFilters.companyName = '';
+        newFilters.mainAccount = '';
+        newFilters.subAccount = '';
+        updated = true;
       }
-      
-      const accountsData = accounts.map(account => ({
-        value: account,
-        label: account,
-      }));
-      setAccounts([{ value: '', label: 'All Accounts' }, ...accountsData]);
-    } catch (error) {
-      console.error('Error loading accounts:', error);
-      toast.error('Failed to load accounts');
-    }
-  };
 
-  const loadSubAccountsByAccount = async () => {
-    try {
-      let subAccounts: string[] = [];
-      
-      if (filters.companyName && filters.mainAccount) {
-        // Load sub accounts for specific company and main account
-        subAccounts = await supabaseDB.getSubAccountsByAccountAndCompany(
-          filters.mainAccount,
-          filters.companyName
-        );
-      } else {
-        // Load all sub accounts when no company/main account is selected
-        subAccounts = await supabaseDB.getDistinctSubAccountNames();
+      // 2. Main Account
+      if (newFilters.mainAccount && !accountOptions.some(a => a.value === newFilters.mainAccount)) {
+        newFilters.mainAccount = '';
+        newFilters.subAccount = '';
+        updated = true;
       }
-      
-      const subAccountsData = subAccounts.map(subAcc => ({
-        value: subAcc,
-        label: subAcc,
-      }));
-      setSubAccounts([
-        { value: '', label: 'All Sub Accounts' },
-        ...subAccountsData,
-      ]);
-    } catch (error) {
-      console.error('Error loading sub accounts:', error);
-      toast.error('Failed to load sub accounts');
-    }
-  };
+
+      // 3. Sub Account
+      if (newFilters.subAccount && !subAccountOptions.some(s => s.value === newFilters.subAccount)) {
+        newFilters.subAccount = '';
+        updated = true;
+      }
+
+      // 4. Staff
+      if (newFilters.staff && !staffOptions.some(s => s.value === newFilters.staff)) {
+        newFilters.staff = '';
+        updated = true;
+      }
+
+      return updated ? newFilters : prev;
+    });
+  }, [companyOptions, accountOptions, subAccountOptions, staffOptions]);
 
   const generateSummary = async () => {
     setLoading(true);
@@ -471,18 +463,17 @@ const LedgerSummary: React.FC = () => {
     field: keyof LedgerSummaryFilters,
     value: any
   ) => {
-    setFilters(prev => ({
-      ...prev,
-      [field]: value,
-    }));
-
-    // Reset dependent filters
-    if (field === 'companyName') {
-      setFilters(prev => ({ ...prev, mainAccount: '', subAccount: '' }));
-    }
-    if (field === 'mainAccount') {
-      setFilters(prev => ({ ...prev, subAccount: '' }));
-    }
+    setFilters(prev => {
+      const newFilters = { ...prev, [field]: value };
+      if (field === 'companyName') {
+        newFilters.mainAccount = '';
+        newFilters.subAccount = '';
+      }
+      if (field === 'mainAccount') {
+        newFilters.subAccount = '';
+      }
+      return newFilters;
+    });
   };
 
   const refreshData = () => {
@@ -597,6 +588,9 @@ const LedgerSummary: React.FC = () => {
       return;
     }
 
+    const fromFormatted = format(new Date(filters.fromDate), 'dd/MM/yyyy');
+    const toFormatted = format(new Date(filters.toDate), 'dd/MM/yyyy');
+
     const currentData = getCurrentData();
     const title =
       activeTab === 'company'
@@ -662,8 +656,8 @@ const LedgerSummary: React.FC = () => {
             <h1>Thirumala Group</h1>
             <h2>Ledger Summary Report</h2>
             <div class="company-name">${filters.companyName || 'All Companies'}</div>
-            <div class="date-time">Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</div>
-            ${filters.betweenDates ? `<div class="period">Period: <span class="from-date">${filters.fromDate}</span> to ${filters.toDate}</div>` : ''}
+            ${filters.betweenDates ? `<div class="period">Period: <strong>${fromFormatted}</strong> to <strong>${toFormatted}</strong></div>` : ''}
+            <div class="date-time">Generated on ${format(new Date(), 'dd/MM/yyyy')} at ${format(new Date(), 'HH:mm:ss')}</div>
           </div>
 
           <div class="totals-section">
@@ -804,16 +798,62 @@ ${Math.abs(balance).toLocaleString()}
   };
 
   const getCurrentData = () => {
+    let data: any[] = [];
     switch (activeTab) {
       case 'company':
-        return companySummaries;
+        data = companySummaries;
+        break;
       case 'mainAccount':
-        return mainAccountSummaries;
+        data = mainAccountSummaries;
+        break;
       case 'subAccount':
-        return subAccountSummaries;
+        data = subAccountSummaries;
+        break;
       default:
-        return [];
+        data = [];
     }
+
+    if (!searchTerm.trim()) {
+      return data;
+    }
+
+    const searchLower = searchTerm.toLowerCase().trim();
+
+    return data.filter(item => {
+      const creditStr = item.totalCredit !== undefined ? String(item.totalCredit) : String(item.credit || 0);
+      const debitStr = item.totalDebit !== undefined ? String(item.totalDebit) : String(item.debit || 0);
+      const balanceStr = item.balance !== undefined ? String(item.balance) : '';
+
+      if (activeTab === 'company') {
+        const company = item as CompanySummary;
+        return (
+          company.companyName.toLowerCase().includes(searchLower) ||
+          creditStr.includes(searchLower) ||
+          debitStr.includes(searchLower) ||
+          balanceStr.includes(searchLower)
+        );
+      } else if (activeTab === 'mainAccount') {
+        const account = item as AccountSummary & { companyName?: string };
+        return (
+          account.accountName.toLowerCase().includes(searchLower) ||
+          (account.companyName || '').toLowerCase().includes(searchLower) ||
+          creditStr.includes(searchLower) ||
+          debitStr.includes(searchLower) ||
+          balanceStr.includes(searchLower)
+        );
+      } else if (activeTab === 'subAccount') {
+        const subAccount = item as SubAccountSummary;
+        return (
+          subAccount.subAccount.toLowerCase().includes(searchLower) ||
+          subAccount.mainAccount.toLowerCase().includes(searchLower) ||
+          (subAccount.companyName || '').toLowerCase().includes(searchLower) ||
+          creditStr.includes(searchLower) ||
+          debitStr.includes(searchLower) ||
+          balanceStr.includes(searchLower)
+        );
+      }
+      return false;
+    });
   };
 
   const renderSummaryTable = () => {
@@ -840,7 +880,7 @@ ${Math.abs(balance).toLocaleString()}
               </tr>
             </thead>
             <tbody>
-              {companySummaries.map((company, index) => (
+              {data.map((company, index) => (
                 <tr
                   key={company.companyName}
                   className={`border-b hover:bg-gray-50 ${
@@ -898,7 +938,7 @@ ${Math.abs(balance).toLocaleString()}
               </tr>
             </thead>
             <tbody>
-              {mainAccountSummaries.map((account, index) => (
+              {data.map((account, index) => (
                 <tr
                   key={!filters.companyName && (account as any).companyName 
                     ? `${(account as any).companyName}-${account.accountName}-${index}`
@@ -966,7 +1006,7 @@ ${Math.abs(balance).toLocaleString()}
               </tr>
             </thead>
             <tbody>
-              {subAccountSummaries.map((subAccount, index) => (
+              {data.map((subAccount, index) => (
                 <tr
                   key={`${subAccount.companyName || ''}-${subAccount.subAccount}-${index}`}
                   className={`border-b hover:bg-gray-50 ${
@@ -1156,7 +1196,7 @@ ${Math.abs(balance).toLocaleString()}
               label='Company Name'
               value={filters.companyName}
               onChange={value => handleFilterChange('companyName', value)}
-              options={companies}
+              options={companyOptions}
               placeholder='Search company...'
             />
 
@@ -1164,7 +1204,7 @@ ${Math.abs(balance).toLocaleString()}
               label='Main Account'
               value={filters.mainAccount}
               onChange={value => handleFilterChange('mainAccount', value)}
-              options={accounts}
+              options={accountOptions}
               placeholder='Search main account...'
             />
 
@@ -1172,7 +1212,7 @@ ${Math.abs(balance).toLocaleString()}
               label='Sub Account'
               value={filters.subAccount}
               onChange={value => handleFilterChange('subAccount', value)}
-              options={subAccounts}
+              options={subAccountOptions}
               placeholder='Search sub account...'
             />
 
@@ -1180,7 +1220,7 @@ ${Math.abs(balance).toLocaleString()}
               label='Staff'
               value={filters.staff}
               onChange={value => handleFilterChange('staff', value)}
-              options={staffList}
+              options={staffOptions}
               placeholder='Search staff...'
             />
           </div>
@@ -1210,6 +1250,25 @@ ${Math.abs(balance).toLocaleString()}
             </Button>
           </div>
           */}
+        </div>
+      </Card>
+
+      {/* Search Bar */}
+      <Card className='bg-gray-50'>
+        <div className='flex items-center gap-4'>
+          <div className='relative flex-1'>
+            <Search className='w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400' />
+            <input
+              type='text'
+              placeholder='Search in summary entries...'
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className='pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500'
+            />
+          </div>
+          <div className='text-sm text-gray-600 bg-white px-3 py-2 rounded-lg border'>
+            <strong>{getCurrentData().length}</strong> records found
+          </div>
         </div>
       </Card>
 

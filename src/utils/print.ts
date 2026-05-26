@@ -1051,42 +1051,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       return sum + (isNaN(numValue) ? 0 : numValue);
     }, 0) : 0;
     
-    // Generate company summary HTML for print mode
+    // Generate company summary HTML for print mode (kept empty to hide in printed output per user request)
     let printCompanySummaryHTML = '';
-    // Always show company summary if companyBalances are provided (for both preview and print)
-    if (companyBalances && companyBalances.length > 0) {
-      printCompanySummaryHTML = `
-        <div class="print-summary" style="margin-left: auto; margin-right: 0; width: fit-content; text-align: right;">
-          <table class="boxed-table" style="margin-left: auto; margin-right: 0;">
-            <thead>
-              <tr><th colspan="3">Company-wise Opening and Closing Balances</th></tr>
-              <tr>
-                <th>Company</th>
-                <th>Opening Balance</th>
-                <th>Closing Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${companyBalances.map(company => {
-                const openingValue = Math.abs(company.openingBalance);
-                const closingValue = Math.abs(company.closingBalance);
-                const isOpeningDR = company.openingBalance < 0;
-                const isClosingDR = company.closingBalance < 0;
-                const openingText = `${isOpeningDR ? '-' : ''}${openingValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${isOpeningDR ? 'DR' : 'CR'}`;
-                const closingText = `${isClosingDR ? '-' : ''}${closingValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${isClosingDR ? 'DR' : 'CR'}`;
-                return `
-                  <tr>
-                    <td><strong>${company.companyName}</strong></td>
-                    <td style="color: ${isOpeningDR ? '#dc2626' : '#059669'}; font-weight: bold;">${openingText}</td>
-                    <td style="color: ${isClosingDR ? '#dc2626' : '#059669'}; font-weight: bold;">${closingText}</td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
     
     const printModeTableRows = data
       .map((row, index) => {

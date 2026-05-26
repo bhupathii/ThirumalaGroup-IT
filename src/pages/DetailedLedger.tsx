@@ -45,8 +45,68 @@ interface LedgerEntry {
   payment_mode: string;
 }
 
+// Helper function to check if an entry matches the search term across all columns
+const matchDetailedLedgerSearchTerm = (entry: LedgerEntry, searchTerm: string): boolean => {
+  if (!searchTerm) return true;
+  const searchLower = searchTerm.toLowerCase().trim();
+  
+  // Date formatting helpers
+  let dateStr1 = '';
+  let dateStr2 = '';
+  if (entry.date) {
+    try {
+      const dateObj = new Date(entry.date);
+      if (!isNaN(dateObj.getTime())) {
+        dateStr1 = format(dateObj, 'dd/MM/yyyy');
+        dateStr2 = format(dateObj, 'yyyy-MM-dd');
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  
+  // Amount check
+  const creditStr = entry.credit != null ? String(entry.credit) : '';
+  const debitStr = entry.debit != null ? String(entry.debit) : '';
+  
+  // Quantity check
+  const saleQtyStr = entry.saleQuantity != null ? String(entry.saleQuantity) : '';
+  const purchaseQtyStr = entry.purchaseQuantity != null ? String(entry.purchaseQuantity) : '';
+  
+  // Sno
+  const snoStr = entry.sno != null ? String(entry.sno) : '';
+
+  // Payment mode formatting for search
+  const paymentModeStr = entry.payment_mode || '';
+  let paymentModeDisplay = paymentModeStr;
+  if (paymentModeStr === 'Online') {
+    paymentModeDisplay = 'Double';
+  } else if (paymentModeStr === 'Bank Transfer') {
+    paymentModeDisplay = 'Bank';
+  }
+
+  return (
+    (entry.companyName || '').toLowerCase().includes(searchLower) ||
+    (entry.accountName || '').toLowerCase().includes(searchLower) ||
+    (entry.subAccount || '').toLowerCase().includes(searchLower) ||
+    (entry.particulars || '').toLowerCase().includes(searchLower) ||
+    (entry.staff || '').toLowerCase().includes(searchLower) ||
+    (entry.user || '').toLowerCase().includes(searchLower) ||
+    paymentModeStr.toLowerCase().includes(searchLower) ||
+    paymentModeDisplay.toLowerCase().includes(searchLower) ||
+    creditStr.includes(searchLower) ||
+    debitStr.includes(searchLower) ||
+    saleQtyStr.includes(searchLower) ||
+    purchaseQtyStr.includes(searchLower) ||
+    snoStr.includes(searchLower) ||
+    dateStr1.includes(searchLower) ||
+    dateStr2.includes(searchLower)
+  );
+};
+
 const DetailedLedger: React.FC = () => {
   const { user } = useAuth();
+  const [allLedgerEntries, setAllLedgerEntries] = useState<LedgerEntry[]>([]);
 
   const [filters, setFilters] = useState<DetailedLedgerFilters>({
     fromDate: '2016-10-31',
@@ -91,22 +151,70 @@ const DetailedLedger: React.FC = () => {
     return () => window.removeEventListener('dashboard-refresh', handler);
   }, []);
 
-  // Dropdown data
-  const [companies, setCompanies] = useState<
-    { value: string; label: string }[]
-  >([]);
-  const [accounts, setAccounts] = useState<{ value: string; label: string }[]>(
-    []
-  );
-  const [subAccounts, setSubAccounts] = useState<
-    { value: string; label: string }[]
-  >([]);
-  const [staffList, setStaffList] = useState<
-    { value: string; label: string }[]
-  >([]);
-  const [userList, setUserList] = useState<
-    { value: string; label: string }[]
-  >([]);
+  // 1. Get entries within the date range (fromDate to toDate)
+  const entriesInRange = useMemo(() => {
+    if (!filters.betweenDates) return allLedgerEntries;
+    const fromStr = filters.fromDate;
+    const toStr = filters.toDate;
+    return allLedgerEntries.filter(entry => {
+      return entry.date >= fromStr && entry.date <= toStr;
+    });
+  }, [allLedgerEntries, filters.fromDate, filters.toDate, filters.betweenDates]);
+
+  // 2. Companies in range
+  const companyOptions = useMemo(() => {
+    const distinctCompanies = [...new Set(entriesInRange.map(e => e.companyName).filter(Boolean))].sort();
+    return [
+      { value: '', label: 'All Companies' },
+      ...distinctCompanies.map(name => ({ value: name, label: name }))
+    ];
+  }, [entriesInRange]);
+
+  // 3. Accounts in range (filtered by selected company if any)
+  const accountOptions = useMemo(() => {
+    if (!filters.companyName) {
+      return [{ value: '', label: 'Select a company first' }];
+    }
+    const filtered = entriesInRange.filter(e => e.companyName === filters.companyName);
+    const distinctAccounts = [...new Set(filtered.map(e => e.accountName).filter(Boolean))].sort();
+    return [
+      { value: '', label: 'All Accounts' },
+      ...distinctAccounts.map(name => ({ value: name, label: name }))
+    ];
+  }, [entriesInRange, filters.companyName]);
+
+  // 4. Sub Accounts in range (filtered by selected company and main account)
+  const subAccountOptions = useMemo(() => {
+    if (!filters.companyName || !filters.mainAccount) {
+      return [{ value: '', label: 'Select a main account first' }];
+    }
+    const filtered = entriesInRange.filter(
+      e => e.companyName === filters.companyName && e.accountName === filters.mainAccount
+    );
+    const distinctSubAccounts = [...new Set(filtered.map(e => e.subAccount).filter(Boolean))].sort();
+    return [
+      { value: '', label: 'All Sub Accounts' },
+      ...distinctSubAccounts.map(name => ({ value: name, label: name }))
+    ];
+  }, [entriesInRange, filters.companyName, filters.mainAccount]);
+
+  // 5. Staff in range
+  const staffOptions = useMemo(() => {
+    const distinctStaff = [...new Set(entriesInRange.map(e => e.staff).filter(Boolean))].sort();
+    return [
+      { value: '', label: 'All Staff' },
+      ...distinctStaff.map(name => ({ value: name, label: name }))
+    ];
+  }, [entriesInRange]);
+
+  // 6. Users in range
+  const userOptions = useMemo(() => {
+    const distinctUsers = [...new Set(entriesInRange.map(e => e.user).filter(Boolean))].sort();
+    return [
+      { value: '', label: 'All Users' },
+      ...distinctUsers.map(name => ({ value: name, label: name }))
+    ];
+  }, [entriesInRange]);
 
   // Derived totals for top cards
   const totals = useMemo(() => {
@@ -133,7 +241,6 @@ const DetailedLedger: React.FC = () => {
   // Summary data (removed - using totals useMemo instead for better performance)
 
   useEffect(() => {
-    loadDropdownData();
     loadLedgerData();
   }, []);
 
@@ -141,232 +248,48 @@ const DetailedLedger: React.FC = () => {
     applyFilters();
   }, [ledgerEntries, filters, searchTerm]);
 
-  // Update staff and user lists from loaded entries to ensure dropdown values match actual data
+  // Reset child filters if their currently selected values are no longer available in the dynamically filtered lists
   useEffect(() => {
-    if (ledgerEntries.length > 0) {
-      const distinctStaff = [...new Set(ledgerEntries.map(e => String(e.staff || '').trim()).filter(Boolean))].sort();
-      const distinctUsers = [...new Set(ledgerEntries.map(e => String(e.user || '').trim()).filter(Boolean))].sort();
-      
-      const staffData = distinctStaff.map(staff => ({
-        value: staff,
-        label: staff,
-      }));
-      const userData = distinctUsers.map(user => ({
-        value: user,
-        label: user,
-      }));
-      
-      // Update lists with actual values from entries
-      setStaffList([{ value: '', label: 'All Staff' }, ...staffData]);
-      setUserList([{ value: '', label: 'All Users' }, ...userData]);
-    }
-  }, [ledgerEntries]);
+    setFilters(prev => {
+      let updated = false;
+      const newFilters = { ...prev };
 
-  // Filter accounts when company changes
-  useEffect(() => {
-    console.log('Company filter changed:', filters.companyName);
-    if (filters.companyName) {
-      console.log('Loading accounts for company:', filters.companyName);
-      loadAccountsByCompany(filters.companyName);
-      // Reset main account and sub account when company changes
-      setFilters(prev => ({
-        ...prev,
-        mainAccount: '',
-        subAccount: '',
-      }));
-    } else {
-      console.log('No company selected - clearing accounts and sub-accounts');
-      // If no company selected, clear accounts and sub-accounts
-      setAccounts([{ value: '', label: 'Select a company first' }]);
-      setSubAccounts([{ value: '', label: 'Select a company first' }]);
-      // Reset main account and sub account when company is cleared
-      setFilters(prev => ({
-        ...prev,
-        mainAccount: '',
-        subAccount: '',
-      }));
-    }
-  }, [filters.companyName]);
-
-  // Filter sub accounts when main account changes
-  useEffect(() => {
-    if (filters.companyName && filters.mainAccount) {
-      loadSubAccountsByAccount(filters.companyName, filters.mainAccount);
-      // Reset sub account when main account changes
-      setFilters(prev => ({
-        ...prev,
-        subAccount: '',
-      }));
-    } else if (filters.companyName) {
-      // If company is selected but no main account, show all sub accounts for the company
-      loadAllSubAccountsForCompany(filters.companyName);
-    } else {
-      // If no company selected, clear sub accounts
-      setSubAccounts([{ value: '', label: 'Select a company first' }]);
-    }
-  }, [filters.companyName, filters.mainAccount]);
-
-  const loadDropdownData = async () => {
-    try {
-      // Load companies
-      const companies = await supabaseDB.getCompaniesWithData();
-      const companiesData = companies.map(company => ({
-        value: company.company_name,
-        label: company.company_name,
-      }));
-      setCompanies([{ value: '', label: 'All Companies' }, ...companiesData]);
-
-      // Initialize accounts and sub-accounts as empty - they will be loaded when company is selected
-      setAccounts([{ value: '', label: 'Select a company first' }]);
-      setSubAccounts([{ value: '', label: 'Select a company first' }]);
-
-      // Load staff and users from actual cash_book entries
-      try {
-        // Get distinct staff and user values from cash_book
-        const sampleEntries = await supabaseDB.getCashBookEntries(10000, 0); // Load sample to get distinct values
-        const distinctStaff = [...new Set(sampleEntries.map(e => e.staff).filter(Boolean))].sort();
-        const distinctUsers = [...new Set(sampleEntries.map(e => e.users || e.staff).filter(Boolean))].sort();
-        
-        const staffData = distinctStaff.map(staff => ({
-          value: staff,
-          label: staff,
-        }));
-        const userData = distinctUsers.map(user => ({
-          value: user,
-          label: user,
-        }));
-        
-        setStaffList([{ value: '', label: 'All Staff' }, ...staffData]);
-        setUserList([{ value: '', label: 'All Users' }, ...userData]);
-      } catch (error) {
-        console.error('Error loading staff/user from entries, falling back to users table:', error);
-        // Fallback to users table if cash_book query fails
-        const users = await supabaseDB.getUsers();
-        const usersData = users
-          .filter(u => u.is_active)
-          .map(user => ({
-            value: user.username,
-            label: user.username,
-          }));
-        setStaffList([{ value: '', label: 'All Staff' }, ...usersData]);
-        setUserList([{ value: '', label: 'All Users' }, ...usersData]);
+      // 1. Company Name
+      if (newFilters.companyName && !companyOptions.some(c => c.value === newFilters.companyName)) {
+        newFilters.companyName = '';
+        newFilters.mainAccount = '';
+        newFilters.subAccount = '';
+        updated = true;
       }
-    } catch (error) {
-      console.error('Error loading dropdown data:', error);
-      toast.error('Failed to load dropdown data');
-    }
-  };
 
-  // Debug function to check BVR/BVT company data (commented out - available for debugging if needed)
-  // const debugCompanyData = async () => {
-  //   try {
-  //     console.log('🔍 [DEBUG] Starting BVR/BVT company data debug...');
-  //     await supabaseDB.debugCompanyAccountData();
-  //     toast.success('Debug data logged to console. Check browser console for details.');
-  //   } catch (error) {
-  //     console.error('Error in debug:', error);
-  //     toast.error('Debug failed. Check console for details.');
-  //   }
-  // };
+      // 2. Main Account
+      if (newFilters.mainAccount && !accountOptions.some(a => a.value === newFilters.mainAccount)) {
+        newFilters.mainAccount = '';
+        newFilters.subAccount = '';
+        updated = true;
+      }
 
-  const loadAllAccounts = async () => {
-    try {
-      // Use getDistinctAccountNames to get all account names from 67k cash_book records
-      const allAccountNames = await supabaseDB.getDistinctAccountNames();
-      const accountsData = allAccountNames.map((accountName: string) => ({
-        value: accountName,
-        label: accountName,
-      }));
-      setAccounts([{ value: '', label: 'All Accounts' }, ...accountsData]);
-    } catch (error) {
-      console.error('Error loading all accounts:', error);
-      // Fallback to empty state
-      setAccounts([{ value: '', label: 'Select a company first' }]);
-    }
-  };
+      // 3. Sub Account
+      if (newFilters.subAccount && !subAccountOptions.some(s => s.value === newFilters.subAccount)) {
+        newFilters.subAccount = '';
+        updated = true;
+      }
 
-  const loadAllSubAccounts = async () => {
-    try {
-      // Use getDistinctSubAccountNames to get all sub-account names from 67k cash_book records
-      const allSubAccountNames = await supabaseDB.getDistinctSubAccountNames();
-      const subAccountsData = allSubAccountNames.map((subAccountName: string) => ({
-        value: subAccountName,
-        label: subAccountName,
-      }));
-      setSubAccounts([
-        { value: '', label: 'All Sub Accounts' },
-        ...subAccountsData,
-      ]);
-    } catch (error) {
-      console.error('Error loading all sub accounts:', error);
-      // Fallback to empty state
-      setSubAccounts([{ value: '', label: 'Select a company first' }]);
-    }
-  };
+      // 4. Staffwise
+      if (newFilters.staffwise && !staffOptions.some(s => s.value === newFilters.staffwise)) {
+        newFilters.staffwise = '';
+        updated = true;
+      }
 
-  const loadAccountsByCompany = async (companyName: string) => {
-    try {
-      console.log('🔍 [DetailedLedger] Fetching accounts for company:', companyName);
-      const accounts = await supabaseDB.getDistinctAccountNamesByCompany(companyName);
-      console.log('📊 [DetailedLedger] Fetched accounts:', accounts);
-      console.log('📊 [DetailedLedger] Number of accounts found:', accounts.length);
-      
-      const accountsData = accounts.map((account: string) => ({
-        value: account,
-        label: account,
-      }));
-      
-      console.log('📊 [DetailedLedger] Setting accounts dropdown with:', accountsData.length + 1, 'items');
-      setAccounts([{ value: '', label: 'All Accounts' }, ...accountsData]);
-    } catch (error) {
-      console.error('Error loading accounts by company:', error);
-      // Fallback to all accounts if there's an error
-      await loadAllAccounts();
-    }
-  };
+      // 5. User
+      if (newFilters.user && !userOptions.some(u => u.value === newFilters.user)) {
+        newFilters.user = '';
+        updated = true;
+      }
 
-  const loadSubAccountsByAccount = async (
-    companyName: string,
-    accountName: string
-  ) => {
-    try {
-      const subAccounts = await supabaseDB.getSubAccountsByAccountAndCompany(
-        accountName,
-        companyName
-      );
-      const subAccountsData = subAccounts.map((subAcc: string) => ({
-        value: subAcc,
-        label: subAcc,
-      }));
-      setSubAccounts([
-        { value: '', label: 'All Sub Accounts' },
-        ...subAccountsData,
-      ]);
-    } catch (error) {
-      console.error('Error loading sub accounts by account:', error);
-      // Fallback to all sub accounts for the company if there's an error
-      await loadAllSubAccountsForCompany(companyName);
-    }
-  };
-
-  const loadAllSubAccountsForCompany = async (companyName: string) => {
-    try {
-      // Use getDistinctSubAccountNamesByCompany to get all sub-account names for the company from 67k cash_book records
-      const companySubAccountNames = await supabaseDB.getDistinctSubAccountNamesByCompany(companyName);
-      const subAccountsData = companySubAccountNames.map((subAccountName: string) => ({
-        value: subAccountName,
-        label: subAccountName,
-      }));
-      setSubAccounts([
-        { value: '', label: 'All Sub Accounts' },
-        ...subAccountsData,
-      ]);
-    } catch (error) {
-      console.error('Error loading sub accounts for company:', error);
-      // Fallback to all sub accounts if there's an error
-      await loadAllSubAccounts();
-    }
-  };
+      return updated ? newFilters : prev;
+    });
+  }, [companyOptions, accountOptions, subAccountOptions, staffOptions, userOptions]);
 
   const loadLedgerData = async () => {
     setLoading(true);
@@ -433,6 +356,7 @@ const DetailedLedger: React.FC = () => {
       });
 
       setLedgerEntries(ledgerData);
+      setAllLedgerEntries(ledgerData);
       
       // Debug: Log summary of payment_mode values
       const entriesWithPaymentMode = ledgerData.filter(e => e.payment_mode && e.payment_mode.trim());
@@ -503,6 +427,7 @@ const DetailedLedger: React.FC = () => {
       });
       
       setLedgerEntries(prev => [...prev, ...moreLedgerData]);
+      setAllLedgerEntries(prev => [...prev, ...moreLedgerData]);
       
       if (moreEntries.length === 0) {
         toast.success('No more entries to load');
@@ -565,6 +490,7 @@ const DetailedLedger: React.FC = () => {
       });
       
       setLedgerEntries(ledgerData);
+      setAllLedgerEntries(ledgerData);
       setTotalEntries(ledgerData.length);
       setLoadingProgress({ current: ledgerData.length, total: totalCount, message: 'Loading complete!' });
       
@@ -664,17 +590,7 @@ const DetailedLedger: React.FC = () => {
 
     // Search filter
     if (searchTerm) {
-      filtered = filtered.filter(
-        entry =>
-          entry.particulars.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          entry.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          entry.accountName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          entry.subAccount.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          entry.staff.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          entry.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          entry.credit.toString().includes(searchTerm) ||
-          entry.debit.toString().includes(searchTerm)
-      );
+      filtered = filtered.filter(entry => matchDetailedLedgerSearchTerm(entry, searchTerm));
     }
 
     // Calculate summary
@@ -798,9 +714,6 @@ const DetailedLedger: React.FC = () => {
       paymentMode: '',
     });
     setSearchTerm('');
-    // Reset accounts and sub-accounts to initial state
-    setAccounts([{ value: '', label: 'Select a company first' }]);
-    setSubAccounts([{ value: '', label: 'Select a company first' }]);
     toast.success('Filters reset');
   };
 
@@ -888,16 +801,16 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
         <table class="no-repeat-header" style="margin: 0; padding: 0; border-top: 1px solid #000;">
           <thead>
             <tr>
-              <th style="width: 3.5%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">S.No</th>
-              <th style="width: 7%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Date</th>
-              <th style="width: 11%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Company</th>
-              <th style="width: 9%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Account</th>
-              <th style="width: 9%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Sub Account</th>
-              <th style="width: 20%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Particulars</th>
-              <th style="width: 7.5%; text-align: center; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Purchase Qty</th>
-              <th style="width: 7.5%; text-align: center; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Sale Qty</th>
-              <th style="width: 8.5%; text-align: right; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Credit</th>
-              <th style="width: 8.5%; text-align: right; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Debit</th>
+              <th style="width: 4%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">S.No</th>
+              <th style="width: 8%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Date</th>
+              <th style="width: 12%; padding: 2px 1px; font-size: 11px; font-weight: bold; line-height: 1.1;">Company</th>
+              <th style="width: 12%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Account</th>
+              <th style="width: 10%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Sub Account</th>
+              <th style="width: 24%; padding: 2px 1px; font-size: 11px; word-wrap: break-word; line-height: 1.1; font-weight: bold;">Particulars</th>
+              <th style="width: 7%; text-align: center; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Purchase Qty</th>
+              <th style="width: 7%; text-align: center; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Sale Qty</th>
+              <th style="width: 8%; text-align: right; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Credit</th>
+              <th style="width: 8%; text-align: right; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Debit</th>
             </tr>
           </thead>
           <tbody>
@@ -1319,7 +1232,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                 label='Company Name'
                 value={filters.companyName}
                 onChange={value => handleFilterChange('companyName', value)}
-                options={companies}
+                options={companyOptions}
                 placeholder='Search company...'
               />
 
@@ -1327,7 +1240,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                 label='Main Account'
                 value={filters.mainAccount}
                 onChange={value => handleFilterChange('mainAccount', value)}
-                options={accounts}
+                options={accountOptions}
                 disabled={!filters.companyName}
                 placeholder={
                   !filters.companyName
@@ -1340,7 +1253,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                 label='Sub Account'
                 value={filters.subAccount}
                 onChange={value => handleFilterChange('subAccount', value)}
-                options={subAccounts}
+                options={subAccountOptions}
                 disabled={!filters.mainAccount}
                 placeholder={
                   !filters.mainAccount
@@ -1353,7 +1266,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                 label='Staffwise'
                 value={filters.staffwise}
                 onChange={value => handleFilterChange('staffwise', value)}
-                options={staffList}
+                options={staffOptions}
                 placeholder='Search staff...'
               />
 
@@ -1361,7 +1274,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                 label='User'
                 value={filters.user}
                 onChange={value => handleFilterChange('user', value)}
-                options={userList}
+                options={userOptions}
                 placeholder='Search user...'
               />
             </div>
@@ -2663,79 +2576,59 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                   }
                   /* Fixed column widths - prevent shifting */
                   .print-table .col-sno { 
-                    width: 3.5% !important; 
-                    min-width: 3.5% !important;
-                    max-width: 3.5% !important;
+                    width: 4% !important; 
+                    min-width: 4% !important;
+                    max-width: 4% !important;
                     text-align: center !important; 
                   }
                   .print-table .col-date { 
+                    width: 8% !important; 
+                    min-width: 8% !important;
+                    max-width: 8% !important;
+                  }
+                  .print-table .col-company { 
+                    width: 12% !important; 
+                    min-width: 12% !important;
+                    max-width: 12% !important;
+                  }
+                  .print-table .col-account { 
+                    width: 12% !important; 
+                    min-width: 12% !important;
+                    max-width: 12% !important;
+                  }
+                  .print-table .col-subaccount { 
+                    width: 10% !important; 
+                    min-width: 10% !important;
+                    max-width: 10% !important;
+                  }
+                  .print-table .col-particulars { 
+                    width: 24% !important; 
+                    min-width: 24% !important;
+                    max-width: 24% !important;
+                  }
+                  .print-table .col-purchaseqty { 
                     width: 7% !important; 
                     min-width: 7% !important;
                     max-width: 7% !important;
+                    text-align: center !important; 
                   }
-                  .print-table .col-company { 
-                    width: 9% !important; 
-                    min-width: 9% !important;
-                    max-width: 9% !important;
-                  }
-                  .print-table .col-account { 
-                    width: 8% !important; 
-                    min-width: 8% !important;
-                    max-width: 8% !important;
-                  }
-                  .print-table .col-subaccount { 
-                    width: 8% !important; 
-                    min-width: 8% !important;
-                    max-width: 8% !important;
-                  }
-                  .print-table .col-particulars { 
-                    width: 18% !important; 
-                    min-width: 18% !important;
-                    max-width: 18% !important;
+                  .print-table .col-saleqty { 
+                    width: 7% !important; 
+                    min-width: 7% !important;
+                    max-width: 7% !important;
+                    text-align: center !important; 
                   }
                   .print-table .col-credit { 
-                    width: 7.5% !important; 
-                    min-width: 7.5% !important;
-                    max-width: 7.5% !important;
+                    width: 8% !important; 
+                    min-width: 8% !important;
+                    max-width: 8% !important;
                     text-align: right !important; 
                   }
                   .print-table .col-debit { 
-                    width: 7.5% !important; 
-                    min-width: 7.5% !important;
-                    max-width: 7.5% !important;
-                    text-align: right !important; 
-                  }
-                  .print-table .col-saleqty { 
-                    width: 5% !important; 
-                    min-width: 5% !important;
-                    max-width: 5% !important;
-                    text-align: center !important; 
-                  }
-                  .print-table .col-purchaseqty { 
-                    width: 5% !important; 
-                    min-width: 5% !important;
-                    max-width: 5% !important;
-                    text-align: center !important; 
-                  }
-                  .print-table .col-staff { 
-                    width: 7% !important; 
-                    min-width: 7% !important;
-                    max-width: 7% !important;
-                  }
-                  .print-table .col-payment { 
                     width: 8% !important; 
                     min-width: 8% !important;
                     max-width: 8% !important;
-                  }
-                  .print-table .col-user { 
-                    width: 7% !important; 
-                    min-width: 7% !important;
-                    max-width: 7% !important;
-                  }
-                  .print-table .col-entrytime { 
-                    width: 7.5% !important; 
-                    min-width: 7.5% !important;
-                    max-width: 7.5% !important;
+                    text-align: right !important; 
                   }
                 }
                 @media screen {

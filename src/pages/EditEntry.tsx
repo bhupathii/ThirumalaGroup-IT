@@ -73,6 +73,65 @@ const normalizeDate = (date: string | Date | null | undefined): string | null =>
   }
 };
 
+// Helper function to check if an entry matches the search term across all columns
+const matchSearchTerm = (entry: any, searchTerm: string): boolean => {
+  if (!searchTerm) return true;
+  const searchLower = searchTerm.toLowerCase().trim();
+  
+  // Date formatting helpers
+  let dateStr1 = '';
+  let dateStr2 = '';
+  if (entry.c_date) {
+    try {
+      const dateObj = new Date(entry.c_date);
+      if (!isNaN(dateObj.getTime())) {
+        dateStr1 = format(dateObj, 'dd/MM/yyyy');
+        dateStr2 = format(dateObj, 'yyyy-MM-dd');
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  
+  // Amount check
+  const creditStr = entry.credit != null ? String(entry.credit) : '';
+  const debitStr = entry.debit != null ? String(entry.debit) : '';
+  
+  // Quantity check
+  const saleQtyStr = entry.sale_qty != null ? String(entry.sale_qty) : '';
+  const purchaseQtyStr = entry.purchase_qty != null ? String(entry.purchase_qty) : '';
+  
+  // Sno
+  const snoStr = entry.sno != null ? String(entry.sno) : '';
+
+  // Payment mode formatting for search
+  const paymentModeStr = entry.payment_mode || '';
+  let paymentModeDisplay = paymentModeStr;
+  if (paymentModeStr === 'Online') {
+    paymentModeDisplay = 'Double';
+  } else if (paymentModeStr === 'Bank Transfer') {
+    paymentModeDisplay = 'Bank';
+  }
+
+  return (
+    entry.company_name?.toLowerCase().includes(searchLower) ||
+    entry.acc_name?.toLowerCase().includes(searchLower) ||
+    entry.sub_acc_name?.toLowerCase().includes(searchLower) ||
+    entry.particulars?.toLowerCase().includes(searchLower) ||
+    entry.staff?.toLowerCase().includes(searchLower) ||
+    entry.users?.toLowerCase().includes(searchLower) ||
+    paymentModeStr.toLowerCase().includes(searchLower) ||
+    paymentModeDisplay.toLowerCase().includes(searchLower) ||
+    creditStr.includes(searchLower) ||
+    debitStr.includes(searchLower) ||
+    saleQtyStr.includes(searchLower) ||
+    purchaseQtyStr.includes(searchLower) ||
+    snoStr.includes(searchLower) ||
+    dateStr1.includes(searchLower) ||
+    dateStr2.includes(searchLower)
+  );
+};
+
 const EditEntry: React.FC = () => {
   const { user, isAdmin } = useAuth();
   const { mode: tableMode } = useTableMode();
@@ -110,6 +169,12 @@ const EditEntry: React.FC = () => {
   const [filterPaymentMode, setFilterPaymentMode] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterDateInput, setFilterDateInput] = useState('');
+  
+  // States for dependent filters & modal options
+  const [filterAccountOptions, setFilterAccountOptions] = useState<{ value: string; label: string }[]>([]);
+  const [filterSubAccountOptions, setFilterSubAccountOptions] = useState<{ value: string; label: string }[]>([]);
+  const [editAccountOptions, setEditAccountOptions] = useState<{ value: string; label: string }[]>([]);
+  const [editSubAccountOptions, setEditSubAccountOptions] = useState<{ value: string; label: string }[]>([]);
   
   // Memoized filtered entries for better performance
   const filteredEntries = useMemo(() => {
@@ -196,12 +261,7 @@ const EditEntry: React.FC = () => {
     }
     
     if (searchTerm) {
-      filtered = filtered.filter(
-        entry =>
-          entry.particulars?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          entry.acc_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          entry.company_name?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      filtered = filtered.filter(entry => matchSearchTerm(entry, searchTerm));
     }
     
     if (filterDate && !selectedDateFilter) {
@@ -321,9 +381,6 @@ const EditEntry: React.FC = () => {
     const onRefresh = () => {
       // small delay to ensure DB commit
       setTimeout(() => {
-        // Clear date filters so newest entries are visible
-        setSelectedDateFilter('');
-        setFilterDate('');
         loadEntries();
       }, 300);
     };
@@ -422,6 +479,54 @@ const EditEntry: React.FC = () => {
   // Note: Removed useEffect hooks for company-based account loading
   // Now using global cash_book data for dependent dropdowns
 
+  // Update Account options in the filter bar when Company Name filter changes
+  useEffect(() => {
+    const updateFilterAccounts = async () => {
+      if (filterCompanyName) {
+        const accs = await supabaseDB.getDistinctAccountNamesByCompany(filterCompanyName);
+        setFilterAccountOptions(accs.map(name => ({ value: name, label: name })));
+      } else {
+        setFilterAccountOptions(allAccountNames);
+      }
+    };
+    updateFilterAccounts();
+  }, [filterCompanyName, allAccountNames]);
+
+  // Update Sub Account options in the filter bar when Account Name (or Company Name) filter changes
+  useEffect(() => {
+    const updateFilterSubAccounts = async () => {
+      if (filterAccountName) {
+        if (filterCompanyName) {
+          const subs = await supabaseDB.getSubAccountsByAccountAndCompany(filterAccountName, filterCompanyName);
+          setFilterSubAccountOptions(subs.map(name => ({ value: name, label: name })));
+        } else {
+          const subs = await supabaseDB.getSubAccountsByAccountName(filterAccountName);
+          setFilterSubAccountOptions(subs.map(name => ({ value: name, label: name })));
+        }
+      } else if (filterCompanyName) {
+        // If company is selected but no account is selected, show sub accounts under that company (across all accounts)
+        try {
+          const { data, error } = await supabase
+            .from(getTableName('company_main_sub_acc'))
+            .select('sub_acc')
+            .eq('company_name', filterCompanyName)
+            .order('sub_acc');
+          if (!error && data) {
+            const uniqueSubs = [...new Set(data.map(item => item.sub_acc).filter(Boolean))];
+            setFilterSubAccountOptions(uniqueSubs.map(name => ({ value: name, label: name })));
+          } else {
+            setFilterSubAccountOptions([]);
+          }
+        } catch (e) {
+          console.error(e);
+          setFilterSubAccountOptions([]);
+        }
+      } else {
+        setFilterSubAccountOptions(allSubAccounts);
+      }
+    };
+    updateFilterSubAccounts();
+  }, [filterAccountName, filterCompanyName, allSubAccounts]);
 
   const loadDropdownData = async () => {
     try {
@@ -1008,14 +1113,7 @@ const EditEntry: React.FC = () => {
       
       // Apply search filter
       if (searchTerm) {
-        filteredEntries = filteredEntries.filter(
-          entry =>
-            entry.particulars
-              ?.toLowerCase()
-              .includes(searchTerm.toLowerCase()) ||
-            entry.acc_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            entry.company_name?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
+        filteredEntries = filteredEntries.filter(entry => matchSearchTerm(entry, searchTerm));
       }
 
       // SKIP date filter for load more to get data from different dates
@@ -1288,11 +1386,29 @@ const EditEntry: React.FC = () => {
       toast.error('No companies found. Please check your database.');
     }
     
-    // Also load company-specific account names for reference (but edit form will use allAccountNames)
+    // Load options based on selected entry's company/account
     if (entry.company_name) {
-      await loadAccountNamesByCompany(entry.company_name);
+      const accNames = await supabaseDB.getDistinctAccountNamesByCompany(entry.company_name);
+      setEditAccountOptions(accNames.map(name => ({ value: name, label: name })));
+      
+      if (entry.acc_name) {
+        const subAccs = await supabaseDB.getSubAccountsByAccountAndCompany(entry.acc_name, entry.company_name);
+        setEditSubAccountOptions(subAccs.map(name => ({ value: name, label: name })));
+      } else {
+        setEditSubAccountOptions([]);
+      }
+    } else {
+      const allAccs = await supabaseDB.getDistinctAccountNames();
+      setEditAccountOptions(allAccs.map(name => ({ value: name, label: name })));
+      
+      if (entry.acc_name) {
+        const subAccs = await supabaseDB.getSubAccountsByAccountName(entry.acc_name);
+        setEditSubAccountOptions(subAccs.map(name => ({ value: name, label: name })));
+      } else {
+        setEditSubAccountOptions([]);
+      }
     }
-    
+
     // Load dependent dropdown data for the selected entry (for particulars)
     if (entry.acc_name && entry.company_name) {
       await loadSubAccountsByAccountAndCompany(entry.acc_name, entry.company_name);
@@ -1387,7 +1503,6 @@ const EditEntry: React.FC = () => {
     setEditMode(false);
     setSelectedEntry(null);
     setEntriesForSelectedDate([]); // Clear multiple entries selection
-    setSelectedDateFilter(''); // Clear date filter
     // Clear dependent dropdowns
     setDependentSubAccounts([]);
     setDependentParticulars([]);
@@ -1397,46 +1512,54 @@ const EditEntry: React.FC = () => {
   };
 
   const handleInputChange = async (field: string, value: any) => {
-    setSelectedEntry((prev: any) => ({
-      ...prev,
-      [field]: value,
-    }));
+    setSelectedEntry((prev: any) => {
+      const updated = { ...prev, [field]: value };
+      return updated;
+    });
 
-    // Load dependent dropdowns
+    // Load dependent dropdowns & reset child fields when parent changes in the edit form
     if (field === 'company_name') {
-      setFilterCompanyName(value);
-      setFilterAccountName('');
-      // Don't clear acc_name and sub_acc_name - keep them until user manually changes them
-      // Only update the dropdown options available, but preserve the selected values
-      // Load account names for the selected company
+      setSelectedEntry((prev: any) => ({
+        ...prev,
+        company_name: value,
+        acc_name: '',
+        sub_acc_name: '',
+      }));
+      setEditSubAccountOptions([]);
+      
       if (value) {
-        await loadAccountNamesByCompany(value);
+        const accNames = await supabaseDB.getDistinctAccountNamesByCompany(value);
+        setEditAccountOptions(accNames.map(name => ({ value: name, label: name })));
       } else {
-        // If no company selected, load all account names
-        await loadDistinctAccountNames();
+        const allAccs = await supabaseDB.getDistinctAccountNames();
+        setEditAccountOptions(allAccs.map(name => ({ value: name, label: name })));
       }
-      // Note: We don't clear dependent dropdowns or particulars here
-      // They remain until user manually changes them
     }
+    
     if (field === 'acc_name') {
-      setFilterAccountName(value);
-      // Don't clear sub_acc_name - keep it until user manually changes it
-      // Only update the dropdown options available
-      // Load sub accounts for the selected account and company
-      if (value && selectedEntry.company_name) {
-        await loadSubAccountsByAccountAndCompany(value, selectedEntry.company_name);
+      setSelectedEntry((prev: any) => ({
+        ...prev,
+        acc_name: value,
+        sub_acc_name: '',
+      }));
+      
+      if (value) {
+        if (selectedEntry?.company_name) {
+          const subAccs = await supabaseDB.getSubAccountsByAccountAndCompany(value, selectedEntry.company_name);
+          setEditSubAccountOptions(subAccs.map(name => ({ value: name, label: name })));
+        } else {
+          const subAccs = await supabaseDB.getSubAccountsByAccountName(value);
+          setEditSubAccountOptions(subAccs.map(name => ({ value: name, label: name })));
+        }
       } else {
-        // Fallback to global sub accounts if no company
-        await loadDependentSubAccounts(value);
+        setEditSubAccountOptions([]);
       }
-      // Note: We don't clear particulars here - it remains until user manually changes it
     }
+    
     if (field === 'sub_acc_name') {
-      // Load dependent particulars
-      if (selectedEntry.acc_name && value) {
+      if (selectedEntry?.acc_name && value) {
         await loadDependentParticulars(selectedEntry.acc_name, value);
       }
-      // Note: We don't clear particulars here - keep it until user manually changes it
     }
   };
 
@@ -1466,121 +1589,7 @@ const EditEntry: React.FC = () => {
     return datesWithEntries;
   }, [entries]);
 
-  // Custom Calendar Component
-  const CustomCalendar = ({ onDateSelect, selectedDate, onClose }: {
-    onDateSelect: (date: string) => void;
-    selectedDate: string;
-    onClose: () => void;
-  }) => {
-    const today = new Date();
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const startDate = new Date(firstDay);
-    startDate.setDate(startDate.getDate() - firstDay.getDay());
-    
-    const days = [];
-    const currentDate = new Date(startDate);
-    
-    for (let i = 0; i < 42; i++) {
-      days.push(new Date(currentDate));
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    const monthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-
-    const navigateMonth = (direction: 'prev' | 'next') => {
-      setCurrentMonth(prev => {
-        const newDate = new Date(prev);
-        if (direction === 'prev') {
-          newDate.setMonth(newDate.getMonth() - 1);
-        } else {
-          newDate.setMonth(newDate.getMonth() + 1);
-        }
-        return newDate;
-      });
-    };
-
-    const handleDateClick = (date: Date) => {
-      const dateStr = format(date, 'yyyy-MM-dd');
-      onDateSelect(dateStr);
-      onClose();
-    };
-
-    return (
-      <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 p-4 min-w-[280px]">
-        <div className="flex items-center justify-between mb-4">
-          <button
-            onClick={() => navigateMonth('prev')}
-            className="p-1 hover:bg-gray-100 rounded"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <h3 className="font-semibold text-sm">
-            {monthNames[month]} {year}
-          </h3>
-          <button
-            onClick={() => navigateMonth('next')}
-            className="p-1 hover:bg-gray-100 rounded"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-        
-        <div className="grid grid-cols-7 gap-1 text-xs">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <div key={day} className="p-2 text-center font-medium text-gray-500">
-              {day}
-            </div>
-          ))}
-          
-          {days.map((date, index) => {
-            const dateStr = format(date, 'yyyy-MM-dd');
-            const isCurrentMonth = date.getMonth() === month;
-            const isToday = dateStr === format(today, 'yyyy-MM-dd');
-            const isSelected = dateStr === selectedDate;
-            const hasEntries = getDatesWithEntries.has(dateStr);
-            
-            return (
-              <button
-                key={index}
-                onClick={() => handleDateClick(date)}
-                className={`
-                  relative p-2 text-xs rounded hover:bg-blue-100 transition-colors
-                  ${!isCurrentMonth ? 'text-gray-300' : 'text-gray-700'}
-                  ${isToday ? 'bg-blue-200 font-bold' : ''}
-                  ${isSelected ? 'bg-blue-500 text-white' : ''}
-                `}
-              >
-                {date.getDate()}
-                {hasEntries && (
-                  <div className="absolute bottom-0.5 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 bg-green-500 rounded-full opacity-80 shadow-sm"></div>
-                )}
-              </button>
-            );
-          })}
-        </div>
-        
-        <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 bg-green-500 rounded-full opacity-80 shadow-sm"></div>
-            <span>Has entries</span>
-          </div>
-          <button
-            onClick={onClose}
-            className="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    );
-  };
+  // Local calendar component removed to use the imported global CustomCalendar component
 
 
 
@@ -2102,6 +2111,7 @@ const EditEntry: React.FC = () => {
             </div>
             {showCalendar && (
               <CustomCalendar
+                dotColor="red"
                 entries={entries}
                 onDateSelect={(date) => {
                   setFilterDate(date);
@@ -2118,7 +2128,11 @@ const EditEntry: React.FC = () => {
             <SearchableSelect
               label='Company Name'
               value={filterCompanyName}
-              onChange={setFilterCompanyName}
+              onChange={(value) => {
+                setFilterCompanyName(value);
+                setFilterAccountName('');
+                setFilterSubAccountName('');
+              }}
               options={companies.length > 0 ? companies : (filterCompanies.length > 0 ? filterCompanies : [])}
               placeholder={companies.length === 0 && filterCompanies.length === 0 ? 'Loading companies...' : 'Select company...'}
             />
@@ -2129,8 +2143,11 @@ const EditEntry: React.FC = () => {
             <SearchableSelect
               label='Account Name'
               value={filterAccountName}
-              onChange={setFilterAccountName}
-              options={allAccountNames}
+              onChange={(value) => {
+                setFilterAccountName(value);
+                setFilterSubAccountName('');
+              }}
+              options={filterAccountOptions}
               placeholder='Select account...'
             />
           </div>
@@ -2141,7 +2158,7 @@ const EditEntry: React.FC = () => {
               label='Sub Account'
               value={filterSubAccountName}
               onChange={setFilterSubAccountName}
-              options={allSubAccounts}
+              options={filterSubAccountOptions}
               placeholder='Select sub account...'
             />
           </div>
@@ -2813,6 +2830,7 @@ const EditEntry: React.FC = () => {
                         </div>
                         {showCalendar && (
                           <CustomCalendar
+                            dotColor="red"
                             entries={entries}
                             onDateSelect={(date) => {
                               if (editMode) {
@@ -2860,7 +2878,7 @@ const EditEntry: React.FC = () => {
                         label='Main Account'
                         value={selectedEntry?.acc_name || ''}
                         onChange={value => editMode ? handleInputChange('acc_name', value) : undefined}
-                        options={allAccountNames.length > 0 ? allAccountNames : distinctAccountNames}
+                        options={editAccountOptions}
                         disabled={!editMode}
                         placeholder='Select account...'
                       />
@@ -2868,7 +2886,7 @@ const EditEntry: React.FC = () => {
                         label='Sub Account'
                         value={selectedEntry?.sub_acc_name || ''}
                         onChange={value => editMode ? handleInputChange('sub_acc_name', value) : undefined}
-                        options={allSubAccounts.length > 0 ? allSubAccounts : dependentSubAccounts}
+                        options={editSubAccountOptions}
                         disabled={!editMode || !selectedEntry?.acc_name}
                         placeholder='Select sub account...'
                       />

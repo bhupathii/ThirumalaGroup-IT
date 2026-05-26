@@ -24,18 +24,74 @@ interface DailyReportData {
   companyBalances: { [key: string]: number };
 }
 
+// Helper function to check if an entry matches the search term across all columns
+const matchDailyReportSearchTerm = (entry: any, searchTerm: string): boolean => {
+  if (!searchTerm) return true;
+  const searchLower = searchTerm.toLowerCase().trim();
+  
+  // Date formatting helpers
+  let dateStr1 = '';
+  let dateStr2 = '';
+  if (entry.c_date) {
+    try {
+      const dateObj = new Date(entry.c_date);
+      if (!isNaN(dateObj.getTime())) {
+        dateStr1 = format(dateObj, 'dd/MM/yyyy');
+        dateStr2 = format(dateObj, 'yyyy-MM-dd');
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  
+  // Amount check
+  const creditStr = entry.credit != null ? String(entry.credit) : '';
+  const debitStr = entry.debit != null ? String(entry.debit) : '';
+  
+  // Quantity check
+  const saleQtyStr = entry.sale_qty != null ? String(entry.sale_qty) : '';
+  const purchaseQtyStr = entry.purchase_qty != null ? String(entry.purchase_qty) : '';
+  
+  // Sno
+  const snoStr = entry.sno != null ? String(entry.sno) : '';
+
+  // Payment mode formatting for search
+  const paymentModeStr = entry.payment_mode || '';
+  let paymentModeDisplay = paymentModeStr;
+  if (paymentModeStr === 'Online') {
+    paymentModeDisplay = 'Double';
+  } else if (paymentModeStr === 'Bank Transfer') {
+    paymentModeDisplay = 'Bank';
+  }
+
+  return (
+    entry.company_name?.toLowerCase().includes(searchLower) ||
+    entry.acc_name?.toLowerCase().includes(searchLower) ||
+    entry.sub_acc_name?.toLowerCase().includes(searchLower) ||
+    entry.particulars?.toLowerCase().includes(searchLower) ||
+    entry.staff?.toLowerCase().includes(searchLower) ||
+    entry.users?.toLowerCase().includes(searchLower) ||
+    paymentModeStr.toLowerCase().includes(searchLower) ||
+    paymentModeDisplay.toLowerCase().includes(searchLower) ||
+    creditStr.includes(searchLower) ||
+    debitStr.includes(searchLower) ||
+    saleQtyStr.includes(searchLower) ||
+    purchaseQtyStr.includes(searchLower) ||
+    snoStr.includes(searchLower) ||
+    dateStr1.includes(searchLower) ||
+    dateStr2.includes(searchLower)
+  );
+};
+
 const DailyReport: React.FC = () => {
   const { user } = useAuth();
   const { mode: tableMode } = useTableMode();
   
-  // Persisted initial date for stable mount; avoid calling helper before it's defined
-  const initialPersistedDate = ((): string => {
-    const saved = localStorage.getItem('dailyReportDate');
-    return saved || format(new Date(), 'yyyy-MM-dd');
-  })();
-  const [selectedDate, setSelectedDate] = useState(initialPersistedDate);
+  // Default to today's date whenever opened; do not load previously selected date
+  const initialDate = format(new Date(), 'yyyy-MM-dd');
+  const [selectedDate, setSelectedDate] = useState(initialDate);
   const [displayDate, setDisplayDate] = useState(() => {
-    const [y, m, d] = initialPersistedDate.split('-');
+    const [y, m, d] = initialDate.split('-');
     return `${d}/${m}/${y}`;
   });
   const [selectedCompany, setSelectedCompany] = useState(
@@ -124,10 +180,7 @@ const DailyReport: React.FC = () => {
     generateReport();
   }, [selectedDate, selectedCompany, searchTerm]);
 
-  // Persist filters so the page does not jump back to today automatically
-  useEffect(() => {
-    if (selectedDate) localStorage.setItem('dailyReportDate', selectedDate);
-  }, [selectedDate]);
+  // Do not persist date to localStorage per user request
   useEffect(() => {
     localStorage.setItem('dailyReportCompany', selectedCompany || '');
   }, [selectedCompany]);
@@ -250,30 +303,7 @@ const DailyReport: React.FC = () => {
       // Apply search filter - only search in Particulars, Credit, Debit
       if (searchTerm) {
         const beforeSearchFilter = filteredEntries.length;
-        const searchLower = searchTerm.toLowerCase().trim();
-        
-        // Check if search term is numeric (for Credit/Debit search)
-        const isNumeric = !isNaN(parseFloat(searchTerm)) && isFinite(Number(searchTerm));
-        const numericValue = isNumeric ? parseFloat(searchTerm) : null;
-        
-        filteredEntries = filteredEntries.filter(entry => {
-          // Search in Particulars (text search)
-          const matchesParticulars = entry.particulars
-            ?.toLowerCase()
-            .includes(searchLower) || false;
-          
-          // Search in Credit (numeric or text)
-          const matchesCredit = numericValue !== null
-            ? (entry.credit && Math.abs(entry.credit - numericValue) < 0.01) // Exact numeric match
-            : entry.credit?.toString().toLowerCase().includes(searchLower) || false;
-          
-          // Search in Debit (numeric or text)
-          const matchesDebit = numericValue !== null
-            ? (entry.debit && Math.abs(entry.debit - numericValue) < 0.01) // Exact numeric match
-            : entry.debit?.toString().toLowerCase().includes(searchLower) || false;
-          
-          return matchesParticulars || matchesCredit || matchesDebit;
-        });
+        filteredEntries = filteredEntries.filter(entry => matchDailyReportSearchTerm(entry, searchTerm));
         console.log(`🔍 Search filter: ${beforeSearchFilter} → ${filteredEntries.length} entries`);
       }
 
