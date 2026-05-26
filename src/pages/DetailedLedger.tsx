@@ -801,16 +801,16 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
         <table class="no-repeat-header" style="margin: 0; padding: 0; border-top: 1px solid #000;">
           <thead>
             <tr>
-              <th style="width: 4%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">S.No</th>
+              <th style="width: 3%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">S.No</th>
               <th style="width: 8%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Date</th>
-              <th style="width: 12%; padding: 2px 1px; font-size: 11px; font-weight: bold; line-height: 1.1;">Company</th>
-              <th style="width: 12%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Account</th>
-              <th style="width: 10%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Sub Account</th>
-              <th style="width: 24%; padding: 2px 1px; font-size: 11px; word-wrap: break-word; line-height: 1.1; font-weight: bold;">Particulars</th>
-              <th style="width: 7%; text-align: center; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Purchase Qty</th>
-              <th style="width: 7%; text-align: center; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Sale Qty</th>
-              <th style="width: 8%; text-align: right; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Credit</th>
-              <th style="width: 8%; text-align: right; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Debit</th>
+              <th style="width: 15%; padding: 2px 1px; font-size: 11px; font-weight: bold; line-height: 1.1;">Company</th>
+              <th style="width: 15%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Account</th>
+              <th style="width: 12%; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Sub Account</th>
+              <th style="width: 27%; padding: 2px 1px; font-size: 11px; word-wrap: break-word; line-height: 1.1; font-weight: bold;">Particulars</th>
+              <th style="width: 5%; text-align: center; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Purchase Qty</th>
+              <th style="width: 5%; text-align: center; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Sale Qty</th>
+              <th style="width: 5%; text-align: right; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Credit</th>
+              <th style="width: 5%; text-align: right; padding: 2px 1px; font-size: 11px; line-height: 1.1; font-weight: bold;">Debit</th>
             </tr>
           </thead>
           <tbody>
@@ -989,18 +989,17 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
               }
             }
             .no-repeat-header thead {
-                display: table-header-group;
-              }
-              .no-header-table thead {
-                display: none !important;
-              }
-              table {
-                page-break-inside: auto;
-              }
-              tr {
-                page-break-inside: avoid;
-                page-break-after: auto;
-              }
+              display: table-header-group;
+            }
+            .no-header-table thead {
+              display: none !important;
+            }
+            table {
+              page-break-inside: auto;
+            }
+            tr {
+              page-break-inside: avoid;
+              page-break-after: auto;
             }
           </style>
         </head>
@@ -2576,9 +2575,9 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                   }
                   /* Fixed column widths - prevent shifting */
                   .print-table .col-sno { 
-                    width: 4% !important; 
-                    min-width: 4% !important;
-                    max-width: 4% !important;
+                    width: 3% !important; 
+                    min-width: 3% !important;
+                    max-width: 3% !important;
                     text-align: center !important; 
                   }
                   .print-table .col-date { 
@@ -2587,47 +2586,47 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                     max-width: 8% !important;
                   }
                   .print-table .col-company { 
-                    width: 12% !important; 
-                    min-width: 12% !important;
-                    max-width: 12% !important;
+                    width: 15% !important; 
+                    min-width: 15% !important;
+                    max-width: 15% !important;
                   }
                   .print-table .col-account { 
+                    width: 15% !important; 
+                    min-width: 15% !important;
+                    max-width: 15% !important;
+                  }
+                  .print-table .col-subaccount { 
                     width: 12% !important; 
                     min-width: 12% !important;
                     max-width: 12% !important;
                   }
-                  .print-table .col-subaccount { 
-                    width: 10% !important; 
-                    min-width: 10% !important;
-                    max-width: 10% !important;
-                  }
                   .print-table .col-particulars { 
-                    width: 24% !important; 
-                    min-width: 24% !important;
-                    max-width: 24% !important;
+                    width: 27% !important; 
+                    min-width: 27% !important;
+                    max-width: 27% !important;
                   }
                   .print-table .col-purchaseqty { 
-                    width: 7% !important; 
-                    min-width: 7% !important;
-                    max-width: 7% !important;
+                    width: 5% !important; 
+                    min-width: 5% !important;
+                    max-width: 5% !important;
                     text-align: center !important; 
                   }
                   .print-table .col-saleqty { 
-                    width: 7% !important; 
-                    min-width: 7% !important;
-                    max-width: 7% !important;
+                    width: 5% !important; 
+                    min-width: 5% !important;
+                    max-width: 5% !important;
                     text-align: center !important; 
                   }
                   .print-table .col-credit { 
-                    width: 8% !important; 
-                    min-width: 8% !important;
-                    max-width: 8% !important;
+                    width: 5% !important; 
+                    min-width: 5% !important;
+                    max-width: 5% !important;
                     text-align: right !important; 
                   }
                   .print-table .col-debit { 
-                    width: 8% !important; 
-                    min-width: 8% !important;
-                    max-width: 8% !important;
+                    width: 5% !important; 
+                    min-width: 5% !important;
+                    max-width: 5% !important;
                     text-align: right !important; 
                   }
                 }

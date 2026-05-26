@@ -656,7 +656,7 @@ const LedgerSummary: React.FC = () => {
             <h1>Thirumala Group</h1>
             <h2>Ledger Summary Report</h2>
             <div class="company-name">${filters.companyName || 'All Companies'}</div>
-            ${filters.betweenDates ? `<div class="period">Period: <strong>${fromFormatted}</strong> to <strong>${toFormatted}</strong></div>` : ''}
+            <div class="period">Period: <strong>${fromFormatted}</strong> to <strong>${toFormatted}</strong></div>
             <div class="date-time">Generated on ${format(new Date(), 'dd/MM/yyyy')} at ${format(new Date(), 'HH:mm:ss')}</div>
           </div>
 

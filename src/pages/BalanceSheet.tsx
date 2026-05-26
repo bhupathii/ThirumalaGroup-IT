@@ -90,7 +90,7 @@ const BalanceSheet: React.FC = () => {
         value: company.company_name,
         label: company.company_name,
       }));
-      setCompanies(companiesData);
+      setCompanies([{ value: '', label: 'All Companies' }, ...companiesData]);
     } catch (error) {
       console.error('Error loading companies:', error);
       toast.error('Failed to load companies');
@@ -100,18 +100,11 @@ const BalanceSheet: React.FC = () => {
   const generateBalanceSheet = async () => {
     setLoading(true);
     try {
-      // Validate that a company is selected
-      if (!filters.companyName) {
-        toast.error('Please select a company first');
-        setLoading(false);
-        return;
-      }
-
       console.log('🚀 Generating optimized balance sheet...');
       
       // Use the new optimized API endpoint
       const result = await supabaseDB.getOptimizedBalanceSheet({
-        companyName: filters.companyName,
+        companyName: filters.companyName || undefined,
         fromDate: filters.betweenDates ? filters.fromDate : undefined,
         toDate: filters.betweenDates ? filters.toDate : undefined,
         plYesNo: filters.plYesNo || undefined,
@@ -145,12 +138,6 @@ const BalanceSheet: React.FC = () => {
   // Fallback method using the old client-side approach
   const generateBalanceSheetFallback = async () => {
     try {
-      // Validate that a company is selected
-      if (!filters.companyName) {
-        toast.error('Please select a company first');
-        return;
-      }
-
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Get filtered entries - use getAllCashBookEntries to get all 67k records
@@ -460,7 +447,7 @@ const BalanceSheet: React.FC = () => {
           <div class="header">
             <h1>Trial Balance Sheet</h1>
             <h2>Generated on ${format(new Date(), 'dd/MM/yyyy HH:mm')}</h2>
-            ${filters.companyName ? `<h3>Company: ${filters.companyName}</h3>` : ''}
+            <h3>Company: ${filters.companyName || 'All Companies'}</h3>
             <p>Period: ${format(parseISO(filters.fromDate), 'dd/MM/yyyy')} to ${format(parseISO(filters.toDate), 'dd/MM/yyyy')}</p>
           </div>
 
@@ -653,7 +640,7 @@ const BalanceSheet: React.FC = () => {
           <div class="header">
             <h1>Trial Balance Sheet & Profit & Loss Report</h1>
             <h2>Generated on ${format(new Date(), 'dd/MM/yyyy HH:mm')}</h2>
-            ${filters.companyName ? `<h3>Company: ${filters.companyName}</h3>` : ''}
+            <h3>Company: ${filters.companyName || 'All Companies'}</h3>
             <p>Period: ${format(parseISO(filters.fromDate), 'dd/MM/yyyy')} to ${format(parseISO(filters.toDate), 'dd/MM/yyyy')}</p>
           </div>
 

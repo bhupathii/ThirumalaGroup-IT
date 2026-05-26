@@ -583,21 +583,23 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       .join('');
 
     companyTableHTML = `
-      <table style="width:auto;border-collapse:collapse;margin:12px 0 0 auto;font-size:12px;font-weight:bold;">
-        <thead>
-          <tr>
-            <th colspan="3" style="border:1px solid #000;padding:5px 8px;background:#f3f4f6;text-align:center;">
-              Company-wise Opening &amp; Closing Balances
-            </th>
-          </tr>
-          <tr>
-            <th style="border:1px solid #000;padding:5px 8px;background:#f3f4f6;text-align:left;">Company</th>
-            <th style="border:1px solid #000;padding:5px 8px;background:#f3f4f6;text-align:right;">Opening Balance</th>
-            <th style="border:1px solid #000;padding:5px 8px;background:#f3f4f6;text-align:right;">Closing Balance</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <div class="company-balances-container">
+        <table style="width:auto;border-collapse:collapse;margin:12px 0 0 auto;font-size:12px;font-weight:bold;">
+          <thead>
+            <tr>
+              <th colspan="3" style="border:1px solid #000;padding:5px 8px;background:#f3f4f6;text-align:center;">
+                Company-wise Opening &amp; Closing Balances
+              </th>
+            </tr>
+            <tr>
+              <th style="border:1px solid #000;padding:5px 8px;background:#f3f4f6;text-align:left;">Company</th>
+              <th style="border:1px solid #000;padding:5px 8px;background:#f3f4f6;text-align:right;">Opening Balance</th>
+              <th style="border:1px solid #000;padding:5px 8px;background:#f3f4f6;text-align:right;">Closing Balance</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     `;
   }
 
@@ -615,6 +617,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
         margin: ${margins.top} ${margins.right} ${margins.bottom} ${margins.left};
       }
       .no-print { display: none !important; }
+      .company-balances-container { display: none !important; }
       body {
         background: white !important;
         padding: 0 !important;
