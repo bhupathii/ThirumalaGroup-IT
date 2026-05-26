@@ -29,6 +29,7 @@ import {
 
 const Vehicles: React.FC = () => {
   const { user } = useAuth();
+  const { mode: tableMode } = useTableMode();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [filteredVehicles, setFilteredVehicles] = useState<Vehicle[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -68,7 +69,7 @@ const Vehicles: React.FC = () => {
 
   useEffect(() => {
     loadVehicles();
-  }, []);
+  }, [tableMode]);
 
   useEffect(() => {
     applyFilters();

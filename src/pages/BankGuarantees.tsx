@@ -23,6 +23,7 @@ import {
 
 const BankGuarantees: React.FC = () => {
   const { user } = useAuth();
+  const { mode: tableMode } = useTableMode();
   const [bankGuarantees, setBankGuarantees] = useState<BankGuarantee[]>([]);
   const [filteredBGs, setFilteredBGs] = useState<BankGuarantee[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -66,7 +67,7 @@ const BankGuarantees: React.FC = () => {
   useEffect(() => {
     loadBankGuarantees();
     loadCustomDepartments();
-  }, []);
+  }, [tableMode]);
 
   useEffect(() => {
     applyFilters();

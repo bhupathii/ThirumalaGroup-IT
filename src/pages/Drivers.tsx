@@ -14,6 +14,7 @@ import { Edit } from 'lucide-react';
 
 const Drivers: React.FC = () => {
   const { user } = useAuth();
+  const { mode: tableMode } = useTableMode();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
@@ -42,7 +43,7 @@ const Drivers: React.FC = () => {
 
   useEffect(() => {
     loadDrivers();
-  }, []);
+  }, [tableMode]);
 
   const loadDrivers = async () => {
     setLoading(true);

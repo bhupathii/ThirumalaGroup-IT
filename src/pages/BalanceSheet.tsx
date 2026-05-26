@@ -23,6 +23,7 @@ interface BalanceSheetFilters {
 
 const BalanceSheet: React.FC = () => {
   const { user } = useAuth();
+  const { mode: tableMode } = useTableMode();
 
   const [filters, setFilters] = useState<BalanceSheetFilters>({
     companyName: '',
@@ -76,7 +77,7 @@ const BalanceSheet: React.FC = () => {
   useEffect(() => {
     loadDropdownData();
     generateBalanceSheet();
-  }, []);
+  }, [tableMode]);
 
   useEffect(() => {
     generateBalanceSheet();

@@ -4,6 +4,7 @@ import Button from '../components/UI/Button';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
 import CustomCalendar from '../components/UI/CustomCalendar';
@@ -106,6 +107,7 @@ const matchDetailedLedgerSearchTerm = (entry: LedgerEntry, searchTerm: string): 
 
 const DetailedLedger: React.FC = () => {
   const { user } = useAuth();
+  const { mode: tableMode } = useTableMode();
   const [allLedgerEntries, setAllLedgerEntries] = useState<LedgerEntry[]>([]);
 
   const [filters, setFilters] = useState<DetailedLedgerFilters>({
@@ -242,7 +244,7 @@ const DetailedLedger: React.FC = () => {
 
   useEffect(() => {
     loadLedgerData();
-  }, []);
+  }, [tableMode]);
 
   useEffect(() => {
     applyFilters();

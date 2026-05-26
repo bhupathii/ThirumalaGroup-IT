@@ -619,7 +619,7 @@ const LedgerSummary: React.FC = () => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Ledger Summary - ${title}</title>
+          <title></title>
           <style>
             body { font-family: Arial, sans-serif; margin: 20px; }
             .header { text-align: center; margin-bottom: 30px; }
@@ -648,6 +648,10 @@ const LedgerSummary: React.FC = () => {
             @media print {
               body { margin: 0; }
               .no-print { display: none; }
+              @page {
+                size: auto;
+                margin: 10mm 15mm;
+              }
             }
           </style>
         </head>
@@ -657,7 +661,7 @@ const LedgerSummary: React.FC = () => {
             <h2>Ledger Summary Report</h2>
             <div class="company-name">${filters.companyName || 'All Companies'}</div>
             <div class="period">Period: <strong>${fromFormatted}</strong> to <strong>${toFormatted}</strong></div>
-            <div class="date-time">Generated on ${format(new Date(), 'dd/MM/yyyy')} at ${format(new Date(), 'HH:mm:ss')}</div>
+            <div class="date-time">Generated on: ${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}</div>
           </div>
 
           <div class="totals-section">
