@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
@@ -15,7 +16,7 @@ import { useDropdownData, useRecentEntriesByDate } from '../hooks/useDashboardDa
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/queryClient';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { importFromFile } from '../utils/excel';
 import { checkPaymentModeColumnExists, getAddColumnSQL } from '../utils/addPaymentModeColumn';
 import {
@@ -52,6 +53,101 @@ interface NewEntryForm {
 const NewEntry: React.FC = () => {
   const { user } = useAuth();
   const { mode: tableMode } = useTableMode();
+  const navigate = useNavigate();
+  const [vehicleAlerts, setVehicleAlerts] = useState<string | null>(null);
+  const [bgAlerts, setBgAlerts] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkExpiries = async () => {
+      try {
+        const today = new Date();
+        
+        // Check Vehicles
+        const vehiclesData = await supabaseDB.getVehicles();
+        let expiredVCount = 0;
+        let expiringVCount = 0;
+        
+        vehiclesData.forEach(vehicle => {
+          const dates = [
+            vehicle.tax_exp_date,
+            vehicle.insurance_exp_date,
+            vehicle.fitness_exp_date,
+            vehicle.permit_exp_date,
+          ];
+          
+          let hasExpired = false;
+          let hasExpiring = false;
+          
+          dates.forEach(dStr => {
+            if (dStr) {
+              const expiry = new Date(dStr);
+              const diffDays = differenceInDays(expiry, today);
+              if (diffDays < 0) {
+                hasExpired = true;
+              } else if (diffDays <= 30) {
+                hasExpiring = true;
+              }
+            }
+          });
+          
+          if (hasExpired) {
+            expiredVCount++;
+          } else if (hasExpiring) {
+            expiringVCount++;
+          }
+        });
+        
+        // Prepare vehicle alert message
+        let vMsgParts = [];
+        if (expiredVCount > 0) {
+          vMsgParts.push(`${expiredVCount} vehicle document${expiredVCount > 1 ? 's' : ''} expired`);
+        }
+        if (expiringVCount > 0) {
+          vMsgParts.push(`${expiringVCount} vehicle document${expiringVCount > 1 ? 's' : ''} expiring soon`);
+        }
+        if (vMsgParts.length > 0) {
+          setVehicleAlerts(vMsgParts.join(' and '));
+        } else {
+          setVehicleAlerts(null);
+        }
+        
+        // Check Bank Guarantees
+        const bgData = await supabaseDB.getBankGuarantees();
+        let expiredBGCount = 0;
+        let expiringBGCount = 0;
+        
+        bgData.forEach(bg => {
+          if (!bg.cancelled && bg.exp_date) {
+            const expiry = new Date(bg.exp_date);
+            const diffDays = differenceInDays(expiry, today);
+            if (diffDays < 0) {
+              expiredBGCount++;
+            } else if (diffDays <= 30) {
+              expiringBGCount++;
+            }
+          }
+        });
+        
+        // Prepare bg alert message
+        let bgMsgParts = [];
+        if (expiredBGCount > 0) {
+          bgMsgParts.push(`${expiredBGCount} bank guarantee${expiredBGCount > 1 ? 's' : ''} expired`);
+        }
+        if (expiringBGCount > 0) {
+          bgMsgParts.push(`${expiringBGCount} bank guarantee${expiringBGCount > 1 ? 's' : ''} expiring soon`);
+        }
+        if (bgMsgParts.length > 0) {
+          setBgAlerts(bgMsgParts.join(' and '));
+        } else {
+          setBgAlerts(null);
+        }
+      } catch (error) {
+        console.error('Error checking expiries for notifications:', error);
+      }
+    };
+    
+    checkExpiries();
+  }, [tableMode]);
   
   // React Query hooks
   const createEntryMutation = useCreateCashBookEntry();
@@ -1729,6 +1825,40 @@ const NewEntry: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Expiry Notifications Banners */}
+      {(vehicleAlerts || bgAlerts) && (
+        <div className='flex flex-col gap-1.5 p-2 bg-gray-50 border-b border-gray-200 flex-shrink-0'>
+          {vehicleAlerts && (
+            <div 
+              onClick={() => navigate('/vehicles')}
+              className='bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors rounded p-2 flex items-center justify-between cursor-pointer text-amber-800'
+            >
+              <div className='flex items-center gap-2'>
+                <AlertCircle className='w-4 h-4 text-amber-600 flex-shrink-0' />
+                <span className='font-semibold text-xs'>{vehicleAlerts}</span>
+              </div>
+              <span className='text-[10px] text-amber-600 underline flex items-center gap-1 font-bold'>
+                View Vehicles <ExternalLink className='w-3 h-3' />
+              </span>
+            </div>
+          )}
+          {bgAlerts && (
+            <div 
+              onClick={() => navigate('/bank-guarantees')}
+              className='bg-red-50 border border-red-200 hover:bg-red-100 transition-colors rounded p-2 flex items-center justify-between cursor-pointer text-red-800'
+            >
+              <div className='flex items-center gap-2'>
+                <AlertCircle className='w-4 h-4 text-red-600 flex-shrink-0' />
+                <span className='font-semibold text-xs'>{bgAlerts}</span>
+              </div>
+              <span className='text-[10px] text-red-600 underline flex items-center gap-1 font-bold'>
+                View Bank Guarantees <ExternalLink className='w-3 h-3' />
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main Content - Vertical Layout */}
       <div className='flex-1 p-1'>
