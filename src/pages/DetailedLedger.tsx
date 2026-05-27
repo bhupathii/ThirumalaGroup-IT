@@ -831,7 +831,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
           <style>
             @page {
               size: A4 portrait;
-              margin: 0.5cm 0.8cm 0.5cm 0.8cm;
+              margin: 1.2cm 1.0cm 1.2cm 1.0cm;
             }
             * {
               margin: 0;
@@ -842,6 +842,22 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
               font-family: Arial, sans-serif;
               margin: 0;
               padding: 0;
+              background-color: #fff;
+            }
+            @media screen {
+              body {
+                background-color: #f3f4f6;
+                padding: 20px;
+              }
+              .print-page {
+                background: white;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                border-radius: 8px;
+                padding: 1.2cm 1.0cm;
+                margin: 0 auto 20px auto;
+                max-width: 210mm;
+                box-sizing: border-box;
+              }
             }
             .header {
               text-align: center;
