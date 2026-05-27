@@ -750,20 +750,6 @@ const EditEntry: React.FC = () => {
     }
   };
 
-  // Company-based filtering functions
-  const loadAccountNamesByCompany = async (companyName: string) => {
-    try {
-      const accountNames = await supabaseDB.getDistinctAccountNamesByCompany(companyName);
-      const accountNamesData = accountNames.map(name => ({
-        value: name,
-        label: name,
-      }));
-      setDistinctAccountNames(accountNamesData);
-    } catch (error) {
-      console.error('Error loading account names by company:', error);
-      toast.error('Failed to load account names');
-    }
-  };
 
   const loadDependentSubAccounts = async (accountName: string) => {
     try {
@@ -1299,44 +1285,7 @@ const EditEntry: React.FC = () => {
     }
   }, [entries.length, totalEntries, pageSize, isLoadingMore]);
 
-  const loadAllEntries = useCallback(async () => {
-    try {
-      setIsLoadingAll(true);
-      setLoadingProgress({ current: 0, total: 0, message: 'Starting to load all entries...' });
-      
-      // Load all global entries (client-side filtering will handle the rest)
-      console.log('🔄 Loading ALL entries from database...');
-      
-      // First get the total count
-      const totalCount = await supabaseDB.getCashBookEntriesCount();
-      setLoadingProgress({ current: 0, total: totalCount, message: `Found ${totalCount} total records, starting to load...` });
-      
-      if (totalCount === 0) {
-        toast.error('No records found in database');
-        return;
-      }
-      
-      // Load all entries using the pagination helper
-      const allEntries = await supabaseDB.getAllCashBookEntries();
-      console.log(`✅ Loaded ALL ${allEntries.length} entries`);
-      
-      setEntries(allEntries);
-      setTotalEntries(allEntries.length);
-      setLoadingProgress({ current: allEntries.length, total: totalCount, message: 'Loading complete!' });
-      
-      toast.success(`Loaded ALL ${allEntries.length} entries successfully`);
-    } catch (error) {
-      console.error('Error loading all entries:', error);
-      toast.error('Failed to load all entries: ' + (error instanceof Error ? error.message : 'Unknown error'));
-      setLoadingProgress({ current: 0, total: 0, message: 'Loading failed' });
-    } finally {
-      setIsLoadingAll(false);
-      // Clear progress after a delay
-      setTimeout(() => {
-        setLoadingProgress({ current: 0, total: 0, message: '' });
-      }, 3000);
-    }
-  }, []);
+
 
 
 
@@ -2196,8 +2145,8 @@ const EditEntry: React.FC = () => {
                 setFilterAccountName('');
                 setFilterSubAccountName('');
               }}
-              options={companies.length > 0 ? companies : (filterCompanies.length > 0 ? filterCompanies : [])}
-              placeholder={companies.length === 0 && filterCompanies.length === 0 ? 'Loading companies...' : 'Select company...'}
+              options={filterCompanies}
+              placeholder={filterCompanies.length === 0 ? 'Loading companies...' : 'Select company...'}
             />
           </div>
           
