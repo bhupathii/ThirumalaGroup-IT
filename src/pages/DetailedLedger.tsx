@@ -1471,50 +1471,51 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
             No entries found matching your criteria.
           </div>
         ) : (
-          <div className='w-full'>
-            <table className='w-full text-xs table-fixed border-collapse'>
+          <>
+            <div className='w-full overflow-x-auto'>
+              <table className='min-w-[1300px] w-full text-[11px] table-fixed border-collapse'>
               <thead className='sticky top-0 bg-gray-50 z-10'>
                 <tr className='border-b border-gray-200'>
-                  <th className='px-0.5 py-0.5 text-left font-medium text-gray-700 w-[3%]'>
+                  <th className='px-0.5 py-1 text-left font-medium text-gray-700 w-[3%]'>
                     S.No
                   </th>
-                  <th className='px-0.5 py-0.5 text-left font-medium text-gray-700 w-[6%]'>
+                  <th className='px-0.5 py-1 text-left font-medium text-gray-700 w-[6%]'>
                     Date
                   </th>
-                  <th className='px-0.5 py-0.5 text-left font-medium text-gray-700 w-[11%]'>
+                  <th className='px-0.5 py-1 text-left font-medium text-gray-700 w-[11%]'>
                     Company
                   </th>
-                  <th className='px-0.5 py-0.5 text-left font-medium text-gray-700 w-[9%]'>
+                  <th className='px-0.5 py-1 text-left font-medium text-gray-700 w-[9%]'>
                     Account
                   </th>
-                  <th className='px-0.5 py-0.5 text-left font-medium text-gray-700 w-[10%]'>
+                  <th className='px-0.5 py-1 text-left font-medium text-gray-700 w-[10%]'>
                     Sub Account
                   </th>
-                  <th className='px-0.5 py-0.5 text-left font-medium text-gray-700 w-[8%]'>
+                  <th className='px-0.5 py-1 text-left font-medium text-gray-700 w-[8%]'>
                     Particulars
                   </th>
-                  <th className='px-0.5 py-0.5 text-right font-medium text-gray-700 w-[6%]'>
+                  <th className='px-0.5 py-1 text-right font-medium text-gray-700 w-[6%]'>
                     Credit
                   </th>
-                  <th className='px-0.5 py-0.5 text-right font-medium text-gray-700 w-[6%]'>
+                  <th className='px-0.5 py-1 text-right font-medium text-gray-700 w-[6%]'>
                     Debit
                   </th>
-                  <th className='px-0.5 py-0.5 text-center font-medium text-gray-700 w-[6%]'>
+                  <th className='px-0.5 py-1 text-center font-medium text-gray-700 w-[6%]'>
                     Purchase Qty
                   </th>
-                  <th className='px-0.5 py-0.5 text-center font-medium text-gray-700 w-[5%]'>
+                  <th className='px-0.5 py-1 text-center font-medium text-gray-700 w-[5%]'>
                     Sale Qty
                   </th>
-                  <th className='px-0.5 py-0.5 text-left font-medium text-gray-700 w-[9%]'>
+                  <th className='px-0.5 py-1 text-left font-medium text-gray-700 w-[9%]'>
                     Staff
                   </th>
-                  <th className='px-0.5 py-0.5 text-left font-medium text-gray-700 w-[7%]'>
+                  <th className='px-0.5 py-1 text-left font-medium text-gray-700 w-[7%]'>
                     Payment Mode
                   </th>
-                  <th className='px-0.5 py-0.5 text-left font-medium text-gray-700 w-[7%]'>
+                  <th className='px-0.5 py-1 text-left font-medium text-gray-700 w-[7%]'>
                     User
                   </th>
-                  <th className='px-0.5 py-0.5 text-left font-medium text-gray-700 w-[8%]'>
+                  <th className='px-0.5 py-1 text-left font-medium text-gray-700 w-[8%]'>
                     Entry Time
                   </th>
                 </tr>
@@ -1527,67 +1528,67 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                       index % 2 === 0 ? 'bg-white' : 'bg-gray-25'
                     }`}
                   >
-                    <td className='px-0.5 py-0.5 font-medium text-sm font-bold'>{index + 1}</td>
-                    <td className='px-0.5 py-0.5 text-sm font-bold'>
+                    <td className='px-0.5 py-1 font-medium text-gray-500'>{index + 1}</td>
+                    <td className='px-0.5 py-1 text-gray-900 font-medium'>
                       {format(new Date(entry.date), 'dd/MM/yyyy')}
                     </td>
-                    <td className='px-0.5 py-0.5 font-medium text-blue-600 text-sm truncate font-bold' title={entry.companyName}>
+                    <td className='px-0.5 py-1 text-blue-600 truncate font-semibold' title={entry.companyName}>
                       {entry.companyName}
                     </td>
-                    <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.accountName}>
+                    <td className='px-0.5 py-1 text-gray-900 truncate font-medium' title={entry.accountName}>
                       {entry.accountName}
                     </td>
-                    <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.subAccount}>
+                    <td className='px-0.5 py-1 text-gray-500 truncate' title={entry.subAccount}>
                       {entry.subAccount || '-'}
                     </td>
-                    <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.particulars}>
+                    <td className='px-0.5 py-1 text-gray-900 truncate' title={entry.particulars}>
                       {entry.particulars}
                     </td>
-                    <td className='px-0.5 py-0.5 text-right font-medium text-green-600 text-sm font-bold'>
+                    <td className='px-0.5 py-1 text-right font-semibold text-green-600'>
                       {entry.credit > 0
                         ? `${entry.credit.toLocaleString()}`
                         : '-'}
                     </td>
-                    <td className='px-0.5 py-0.5 text-right font-medium text-red-600 text-sm font-bold'>
+                    <td className='px-0.5 py-1 text-right font-semibold text-red-600'>
                       {entry.debit > 0
                         ? `${entry.debit.toLocaleString()}`
                         : '-'}
                     </td>
-                    <td className='px-0.5 py-0.5 text-center text-sm font-bold'>
+                    <td className='px-0.5 py-1 text-center text-gray-900 font-medium'>
                       {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
                     </td>
-                    <td className='px-0.5 py-0.5 text-center text-sm font-bold'>
+                    <td className='px-0.5 py-1 text-center text-gray-900 font-medium'>
                       {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
                     </td>
-                    <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.staff}>
+                    <td className='px-0.5 py-1 text-gray-900 truncate' title={entry.staff}>
                       {entry.staff}
                     </td>
-                    <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.payment_mode || 'No payment mode'}>
+                    <td className='px-0.5 py-1 text-gray-900 truncate' title={entry.payment_mode || 'No payment mode'}>
                       {entry.payment_mode && String(entry.payment_mode).trim() ? (entry.payment_mode === 'Online' ? 'Double' : entry.payment_mode === 'Bank Transfer' ? 'Bank' : String(entry.payment_mode).trim()) : '-'}
                     </td>
-                    <td className='px-0.5 py-0.5 text-sm truncate font-bold' title={entry.user}>
+                    <td className='px-0.5 py-1 text-gray-900 truncate' title={entry.user}>
                       {entry.user}
                     </td>
-                    <td className='px-0.5 py-0.5 text-sm font-bold'>
+                    <td className='px-0.5 py-1 text-gray-500 font-medium'>
                       {format(new Date(entry.entryTime), 'dd/MM/yyyy HH:mm:ss')}
                     </td>
-                    
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
 
-            {/* Summary Footer */}
-            <div className='mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg border'>
-              <div className='bg-green-100 p-3 rounded-lg'>
-                <div className='text-sm font-medium text-green-800'>
-                  Total Credit:
-                </div>
-                <div className='text-lg font-bold text-green-900'>
-{totals.totalCredit.toLocaleString()}
-                </div>
+          {/* Summary Footer */}
+          <div className='mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg border'>
+            <div className='bg-green-100 p-3 rounded-lg'>
+              <div className='text-sm font-medium text-green-800'>
+                Total Credit:
               </div>
-              <div className='bg-red-100 p-3 rounded-lg'>
+              <div className='text-lg font-bold text-green-900'>
+                {totals.totalCredit.toLocaleString()}
+              </div>
+            </div>
+            <div className='bg-red-100 p-3 rounded-lg'>
                 <div className='text-sm font-medium text-red-800'>
                   Total Debit:
                 </div>
@@ -1617,7 +1618,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                 </div>
               </div>
             </div>
-          </div>
+          </>
         )}
         
         {/* Progress Indicator */}
