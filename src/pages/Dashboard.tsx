@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { useLocation } from 'react-router-dom';
 import Card from '../components/UI/Card';
 import Select from '../components/UI/Select';
 import Input from '../components/UI/Input';
@@ -32,13 +31,12 @@ import {
 const Dashboard: React.FC = () => {
   const { user, changePassword } = useAuth();
   const { mode: tableMode, isITRMode } = useTableMode();
-  const location = useLocation();
   const [selectedDate, setSelectedDate] = useState(
     format(new Date(), 'yyyy-MM-dd')
   );
   const [userCredentials, setUserCredentials] = useState<any[]>([]);
   const [showCredentials, setShowCredentials] = useState(true);
-  
+
   // Password change modal state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -52,8 +50,8 @@ const Dashboard: React.FC = () => {
   // React Query hooks for data fetching
   const { data: stats, isLoading: statsLoading, isFetching: statsFetching } = useDashboardStats(selectedDate);
   const { data: companyBalances, isLoading: companyLoading, isFetching: companyFetching } = useCompanyBalances();
-  const { companies, accounts, subAccounts, users, pendingApprovals, uniqueSubAccountsCount, distinctMainAccountsCount, distinctCompaniesCount, activeOperatorCount, isLoading: dropdownLoading } = useDropdownData();
-  const { invalidateAll, invalidateStats, invalidateRecentEntries } = useInvalidateDashboard();
+  const { companies, pendingApprovals, uniqueSubAccountsCount, distinctMainAccountsCount, distinctCompaniesCount, activeOperatorCount, isLoading: dropdownLoading } = useDropdownData();
+  const { invalidateAll } = useInvalidateDashboard();
 
   // Combined loading states
   const loading = statsLoading || companyLoading || dropdownLoading;
@@ -100,22 +98,22 @@ const Dashboard: React.FC = () => {
       } catch (error: any) {
         // Silently handle errors (table might not exist - that's okay)
         // Only log if it's not a table not found error
-        const isTableNotFound = 
-          error?.code === '42P01' || 
+        const isTableNotFound =
+          error?.code === '42P01' ||
           error?.message?.includes('does not exist') ||
           error?.message?.includes('not found') ||
           error?.status === 404;
-        
+
         if (!isTableNotFound) {
           console.log('Could not load credentials from database, using localStorage:', error);
         }
       }
-      
+
       // Fallback to localStorage if database fetch fails or returns empty
       const credentials = JSON.parse(localStorage.getItem('user_credentials') || '[]');
       setUserCredentials(credentials.reverse()); // Show newest first
     };
-    
+
     loadCredentials();
   }, []); // Only run on mount
 
@@ -142,17 +140,17 @@ const Dashboard: React.FC = () => {
       } catch (error: any) {
         // Silently handle errors (table might not exist - that's okay)
         // Only log if it's not a table not found error
-        const isTableNotFound = 
-          error?.code === '42P01' || 
+        const isTableNotFound =
+          error?.code === '42P01' ||
           error?.message?.includes('does not exist') ||
           error?.message?.includes('not found') ||
           error?.status === 404;
-        
+
         if (!isTableNotFound) {
           console.log('Could not load credentials from database, using localStorage:', error);
         }
       }
-      
+
       // Fallback to localStorage
       const credentials = JSON.parse(localStorage.getItem('user_credentials') || '[]');
       setUserCredentials(credentials.reverse()); // Show newest first
@@ -162,7 +160,7 @@ const Dashboard: React.FC = () => {
     return () => window.removeEventListener('dashboard-refresh', handleDashboardRefresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - event listener doesn't need dependencies
-  
+
   // Copy credentials to clipboard
   const copyCredentials = (username: string, password: string) => {
     const text = `Username: ${username}\nPassword: ${password}`;
@@ -172,7 +170,7 @@ const Dashboard: React.FC = () => {
       toast.error('Failed to copy credentials');
     });
   };
-  
+
   // Remove credentials from display
   const removeCredentials = (index: number) => {
     const updated = [...userCredentials];
@@ -180,7 +178,7 @@ const Dashboard: React.FC = () => {
     setUserCredentials(updated);
     localStorage.setItem('user_credentials', JSON.stringify(updated.reverse()));
   };
-  
+
   // Feature names mapping
   const featureNames: { [key: string]: string } = {
     dashboard: 'Dashboard',
@@ -204,9 +202,9 @@ const Dashboard: React.FC = () => {
   // Set up Supabase real-time subscription for automatic updates
   useEffect(() => {
     console.log('🔄 Setting up Supabase real-time subscription for dashboard...');
-    
+
     let isMounted = true;
-    
+
     const subscription = supabase
       .channel('cash_book_changes')
       .on(
@@ -286,17 +284,7 @@ const Dashboard: React.FC = () => {
     setChangingPassword(false);
   };
 
-  const getTransactionColor = (credit: number, debit: number) => {
-    if (credit > 0) return 'text-green-600';
-    if (debit > 0) return 'text-red-600';
-    return 'text-gray-600';
-  };
 
-  const getTransactionBg = (credit: number, debit: number) => {
-    if (credit > 0) return 'bg-green-50 border-green-200';
-    if (debit > 0) return 'bg-red-50 border-red-200';
-    return 'bg-gray-50 border-gray-200';
-  };
 
   const dateOptions = [
     { value: format(new Date(), 'yyyy-MM-dd'), label: 'Today' },
@@ -472,7 +460,7 @@ const Dashboard: React.FC = () => {
               <X className='w-5 h-5' />
             </button>
           </div>
-          
+
           <div className='space-y-3'>
             {userCredentials.map((cred, index) => (
               <div
@@ -493,14 +481,14 @@ const Dashboard: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    
+
                     <div className='flex items-center gap-2 mb-3'>
                       <span className='font-semibold text-gray-900'>Password:</span>
                       <code className='bg-red-50 text-red-700 px-2 py-1 rounded text-sm font-mono'>
                         {cred.password}
                       </code>
                     </div>
-                    
+
                     <div className='mb-2'>
                       <span className='text-sm font-semibold text-gray-700'>Access Features: </span>
                       {cred.is_admin ? (
@@ -520,14 +508,14 @@ const Dashboard: React.FC = () => {
                         <span className='text-sm text-gray-500'>None (Dashboard only)</span>
                       )}
                     </div>
-                    
+
                     {cred.created_at && (
                       <p className='text-xs text-gray-500 mt-2'>
                         Created: {format(new Date(cred.created_at), 'MMM dd, yyyy HH:mm')}
                       </p>
                     )}
                   </div>
-                  
+
                   <div className='flex flex-col gap-2'>
                     <button
                       onClick={() => copyCredentials(cred.username, cred.password)}
@@ -550,16 +538,16 @@ const Dashboard: React.FC = () => {
               </div>
             ))}
           </div>
-          
+
           <div className='mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg'>
             <p className='text-sm text-yellow-800'>
-              <strong>Note:</strong> These credentials are stored locally in your browser. Share them securely with the team member. 
+              <strong>Note:</strong> These credentials are stored locally in your browser. Share them securely with the team member.
               They can use these credentials to login to the system.
             </p>
           </div>
         </Card>
       )}
-      
+
       {/* Show button to display credentials if hidden */}
       {user?.is_admin && userCredentials.length > 0 && !showCredentials && (
         <Card className='bg-blue-50 border border-blue-200'>
@@ -567,7 +555,7 @@ const Dashboard: React.FC = () => {
             <div className='flex items-center gap-2'>
               <Key className='w-5 h-5 text-blue-600' />
               <p className='text-gray-700'>
-                You have {userCredentials.length} created user credential(s). 
+                You have {userCredentials.length} created user credential(s).
               </p>
             </div>
             <button
@@ -648,56 +636,54 @@ const Dashboard: React.FC = () => {
         ) : (
           <div className='overflow-x-auto'>
             <table className='w-full text-xs'>
-                <thead className='sticky top-0 bg-gray-50 z-10'>
-                  <tr className='border-b border-gray-200'>
-                    <th className='text-left py-3 px-4 font-semibold text-gray-700'>
-                      Company Name
-                    </th>
-                    <th className='text-right py-3 px-4 font-semibold text-gray-700'>
-                      Total Credit
-                    </th>
-                    <th className='text-right py-3 px-4 font-semibold text-gray-700'>
-                      Total Debit
-                    </th>
-                    <th className='text-right py-3 px-4 font-semibold text-gray-700'>
-                      Closing Balance
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
+              <thead className='sticky top-0 bg-gray-50 z-10'>
+                <tr className='border-b border-gray-200'>
+                  <th className='text-left py-3 px-4 font-semibold text-gray-700'>
+                    Company Name
+                  </th>
+                  <th className='text-right py-3 px-4 font-semibold text-gray-700'>
+                    Total Credit
+                  </th>
+                  <th className='text-right py-3 px-4 font-semibold text-gray-700'>
+                    Total Debit
+                  </th>
+                  <th className='text-right py-3 px-4 font-semibold text-gray-700'>
+                    Closing Balance
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
                 {companyBalances?.map((company, index) => (
                   <tr
                     key={company.companyName}
-                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                      index % 2 === 0 ? 'bg-white' : 'bg-gray-25'
-                    }`}
+                    className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'
+                      }`}
                   >
                     <td className='py-3 px-4 font-medium text-gray-900'>
                       {company.companyName}
                     </td>
                     <td className='py-3 px-4 text-right text-green-600 font-medium'>
-{company.totalCredit.toLocaleString()}
+                      {company.totalCredit.toLocaleString()}
                     </td>
                     <td className='py-3 px-4 text-right text-red-600 font-medium'>
-{company.totalDebit.toLocaleString()}
+                      {company.totalDebit.toLocaleString()}
                     </td>
                     <td className='py-3 px-4 text-right font-semibold'>
                       <span
-                        className={`px-2 py-1 rounded-full text-sm ${
-                          company.closingBalance > 0
+                        className={`px-2 py-1 rounded-full text-sm ${company.closingBalance > 0
                             ? 'bg-green-100 text-green-800'
                             : company.closingBalance < 0
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
                       >
-{company.closingBalance.toLocaleString()}
+                        {company.closingBalance.toLocaleString()}
                       </span>
                     </td>
                   </tr>
                 ))}
-                </tbody>
-              </table>
+              </tbody>
+            </table>
             {/* Summary Footer */}
             <div className='mt-4 p-4 bg-gray-100 rounded-lg border'>
               <div className='grid grid-cols-4 gap-4 text-sm'>
@@ -705,22 +691,21 @@ const Dashboard: React.FC = () => {
                   Total Companies: {companyBalances?.length || 0}
                 </div>
                 <div className='text-right text-green-600 font-semibold'>
-{companyBalances?.reduce((sum, c) => sum + c.totalCredit, 0)?.toLocaleString() || '0'}
+                  {companyBalances?.reduce((sum, c) => sum + c.totalCredit, 0)?.toLocaleString() || '0'}
                 </div>
                 <div className='text-right text-red-600 font-semibold'>
-{companyBalances?.reduce((sum, c) => sum + c.totalDebit, 0)?.toLocaleString() || '0'}
+                  {companyBalances?.reduce((sum, c) => sum + c.totalDebit, 0)?.toLocaleString() || '0'}
                 </div>
                 <div className='text-right'>
                   <span
-                    className={`px-2 py-1 rounded-full text-sm font-bold ${
-                      (companyBalances?.reduce((sum, c) => sum + c.closingBalance, 0) || 0) > 0
+                    className={`px-2 py-1 rounded-full text-sm font-bold ${(companyBalances?.reduce((sum, c) => sum + c.closingBalance, 0) || 0) > 0
                         ? 'bg-green-100 text-green-800'
                         : (companyBalances?.reduce((sum, c) => sum + c.closingBalance, 0) || 0) < 0
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}
                   >
-{companyBalances?.reduce((sum, c) => sum + c.closingBalance, 0)?.toLocaleString() || '0'}
+                    {companyBalances?.reduce((sum, c) => sum + c.closingBalance, 0)?.toLocaleString() || '0'}
                   </span>
                 </div>
               </div>

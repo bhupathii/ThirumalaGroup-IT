@@ -3,7 +3,6 @@ import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
-import { supabase } from '../lib/supabase';
 import { getTableName } from '../lib/tableNames';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -19,6 +18,7 @@ import {
   XCircle,
   ChevronLeft,
   ChevronRight,
+  Download,
 } from 'lucide-react';
 
 interface DeletedRecord {
@@ -517,6 +517,14 @@ const DeletedRecords: React.FC = () => {
             </p>
           </div>
           <div className='flex gap-2'>
+            <Button
+              variant='secondary'
+              onClick={exportToExcel}
+              className='flex items-center gap-2'
+              icon={Download}
+            >
+              Export
+            </Button>
             <Button
               variant='secondary'
               onClick={loadDeletedRecords}

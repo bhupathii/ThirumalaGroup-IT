@@ -4,16 +4,14 @@ import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import { Driver } from '../lib/supabaseDatabase';
 import { supabaseDB } from '../lib/supabaseDatabase';
-import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
-import { format, differenceInDays } from 'date-fns';
+import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Edit } from 'lucide-react';
 
 const Drivers: React.FC = () => {
-  const { user } = useAuth();
   const { mode: tableMode } = useTableMode();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -58,31 +56,7 @@ const Drivers: React.FC = () => {
     }
   };
 
-  const getExpiryStatus = (expiryDate: string) => {
-    const today = new Date();
-    const expiry = new Date(expiryDate);
-    const daysUntilExpiry = differenceInDays(expiry, today);
 
-    if (daysUntilExpiry < 0) {
-      return {
-        status: 'expired',
-        color: 'text-red-600 bg-red-50',
-        days: Math.abs(daysUntilExpiry),
-      };
-    } else if (daysUntilExpiry <= 30) {
-      return {
-        status: 'expiring',
-        color: 'text-orange-600 bg-orange-50',
-        days: daysUntilExpiry,
-      };
-    } else {
-      return {
-        status: 'valid',
-        color: 'text-green-600 bg-green-50',
-        days: daysUntilExpiry,
-      };
-    }
-  };
 
   const handleInputChange = (field: string, value: string) => {
     if (editingDriver) {
@@ -177,10 +151,6 @@ const Drivers: React.FC = () => {
   const handleEdit = (driver: Driver) => {
     setEditingDriver({ ...driver });
     setShowAddForm(false);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingDriver(null);
   };
 
   return (
