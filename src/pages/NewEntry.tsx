@@ -56,6 +56,7 @@ const NewEntry: React.FC = () => {
   const navigate = useNavigate();
   const [vehicleStats, setVehicleStats] = useState<{ expired: number; expiring: number } | null>(null);
   const [bgStats, setBgStats] = useState<{ expired: number; expiring: number } | null>(null);
+  const [driverStats, setDriverStats] = useState<{ expired: number; expiring: number } | null>(null);
 
   useEffect(() => {
     const checkExpiries = async () => {
@@ -126,6 +127,30 @@ const NewEntry: React.FC = () => {
           setBgStats({ expired: expiredBGCount, expiring: expiringBGCount });
         } else {
           setBgStats(null);
+        }
+
+        // Check Drivers
+        const driversData = await supabaseDB.getDrivers();
+        let expiredDCount = 0;
+        let expiringDCount = 0;
+        
+        driversData.forEach(driver => {
+          if (driver.exp_date) {
+            const expiry = new Date(driver.exp_date);
+            const diffDays = differenceInDays(expiry, today);
+            if (diffDays < 0) {
+              expiredDCount++;
+            } else if (diffDays <= 30) {
+              expiringDCount++;
+            }
+          }
+        });
+        
+        // Set driver stats
+        if (expiredDCount > 0 || expiringDCount > 0) {
+          setDriverStats({ expired: expiredDCount, expiring: expiringDCount });
+        } else {
+          setDriverStats(null);
         }
       } catch (error) {
         console.error('Error checking expiries for notifications:', error);
@@ -1813,7 +1838,7 @@ const NewEntry: React.FC = () => {
       </div>
 
       {/* Persistent Expiry Notifications Box */}
-      {(vehicleStats || bgStats) && (
+      {(vehicleStats || bgStats || driverStats) && (
         <div className='flex flex-wrap gap-2 px-2 py-1.5 bg-gray-50 border-b border-gray-200 flex-shrink-0'>
           {vehicleStats && (
             <div 
@@ -1848,6 +1873,25 @@ const NewEntry: React.FC = () => {
               {bgStats.expiring > 0 && (
                 <span className='text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded'>
                   {bgStats.expiring} expiring soon
+                </span>
+              )}
+              <ExternalLink className='w-3 h-3 text-gray-400 ml-0.5' />
+            </div>
+          )}
+          {driverStats && (
+            <div 
+              onClick={() => navigate('/drivers')}
+              className='bg-white border border-gray-200 hover:border-gray-300 transition-all rounded px-2.5 py-1 flex items-center gap-1.5 cursor-pointer shadow-sm text-[11px]'
+            >
+              <span className='font-bold text-gray-700'>Driver Expiry:</span>
+              {driverStats.expired > 0 && (
+                <span className='text-red-600 font-bold bg-red-50 px-1.5 py-0.5 rounded'>
+                  {driverStats.expired} expired
+                </span>
+              )}
+              {driverStats.expiring > 0 && (
+                <span className='text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded'>
+                  {driverStats.expiring} expiring soon
                 </span>
               )}
               <ExternalLink className='w-3 h-3 text-gray-400 ml-0.5' />

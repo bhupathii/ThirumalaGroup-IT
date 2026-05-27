@@ -1026,7 +1026,7 @@ const Vehicles: React.FC = () => {
                         className='w-full max-w-md h-auto aspect-[4/3] object-cover rounded-xl shadow-lg border-2 border-blue-200 cursor-pointer hover:scale-105 transition-transform'
                         onClick={() =>
                           setImageModal({
-                            url: selectedVehicle.rc_front_url,
+                            url: selectedVehicle.rc_front_url || '',
                             label: 'RC Front Photo',
                           })
                         }
@@ -1044,7 +1044,7 @@ const Vehicles: React.FC = () => {
                         className='w-full max-w-md h-auto aspect-[4/3] object-cover rounded-xl shadow-lg border-2 border-blue-200 cursor-pointer hover:scale-105 transition-transform'
                         onClick={() =>
                           setImageModal({
-                            url: selectedVehicle.rc_back_url,
+                            url: selectedVehicle.rc_back_url || '',
                             label: 'RC Back Photo',
                           })
                         }

@@ -9,6 +9,8 @@ import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
 import { format, parseISO } from 'date-fns';
+import CustomCalendar from '../components/UI/CustomCalendar';
+import { Calendar } from 'lucide-react';
 
 interface BalanceSheetFilters {
   companyName: string;
@@ -40,6 +42,28 @@ const BalanceSheet: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showFinalReport, setShowFinalReport] = useState(false);
   const [usingOptimizedAPI, setUsingOptimizedAPI] = useState(true);
+  
+  const [showFromCalendar, setShowFromCalendar] = useState(false);
+  const [showToCalendar, setShowToCalendar] = useState(false);
+  const [fromDateInput, setFromDateInput] = useState('');
+  const [toDateInput, setToDateInput] = useState('');
+
+  // Sync formatted text inputs with filter date values
+  useEffect(() => {
+    try {
+      setFromDateInput(filters.fromDate ? format(new Date(filters.fromDate), 'dd/MM/yyyy') : '');
+    } catch (e) {
+      console.error('Error formatting fromDate:', e);
+    }
+  }, [filters.fromDate]);
+
+  useEffect(() => {
+    try {
+      setToDateInput(filters.toDate ? format(new Date(filters.toDate), 'dd/MM/yyyy') : '');
+    } catch (e) {
+      console.error('Error formatting toDate:', e);
+    }
+  }, [filters.toDate]);
   
   // State for P&L selection and custom content
   const [selectedAccountsForPL, setSelectedAccountsForPL] = useState<Set<string>>(new Set());
@@ -794,6 +818,84 @@ const BalanceSheet: React.FC = () => {
         </div>
         {/* Responsive filter bar */}
         <div className='flex flex-col md:flex-row gap-4 items-end'>
+          <div className='flex-1 w-full relative'>
+            <label className='block text-sm font-medium text-gray-700 mb-1'>
+              From Date
+            </label>
+            <input
+              type='text'
+              placeholder='DD/MM/YYYY'
+              value={fromDateInput}
+              onChange={(e) => {
+                setFromDateInput(e.target.value);
+                const match = e.target.value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                if (match) {
+                  const isoDate = `${match[3]}-${match[2]}-${match[1]}`;
+                  handleFilterChange('fromDate', isoDate);
+                }
+              }}
+              className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold'
+              style={{ fontWeight: 'bold', fontSize: '14px' }}
+            />
+            <button
+              type='button'
+              tabIndex={-1}
+              onClick={() => setShowFromCalendar(!showFromCalendar)}
+              className='absolute right-2 top-7 p-1 hover:bg-gray-100 rounded'
+            >
+              <Calendar className='w-4 h-4 text-gray-500' />
+            </button>
+            {showFromCalendar && (
+              <CustomCalendar
+                onDateSelect={(date) => {
+                  handleFilterChange('fromDate', date);
+                  setFromDateInput(format(new Date(date), 'dd/MM/yyyy'));
+                  setShowFromCalendar(false);
+                }}
+                selectedDate={filters.fromDate}
+                onClose={() => setShowFromCalendar(false)}
+              />
+            )}
+          </div>
+          <div className='flex-1 w-full relative'>
+            <label className='block text-sm font-medium text-gray-700 mb-1'>
+              To Date
+            </label>
+            <input
+              type='text'
+              placeholder='DD/MM/YYYY'
+              value={toDateInput}
+              onChange={(e) => {
+                setToDateInput(e.target.value);
+                const match = e.target.value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                if (match) {
+                  const isoDate = `${match[3]}-${match[2]}-${match[1]}`;
+                  handleFilterChange('toDate', isoDate);
+                }
+              }}
+              className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold'
+              style={{ fontWeight: 'bold', fontSize: '14px' }}
+            />
+            <button
+              type='button'
+              tabIndex={-1}
+              onClick={() => setShowToCalendar(!showToCalendar)}
+              className='absolute right-2 top-7 p-1 hover:bg-gray-100 rounded'
+            >
+              <Calendar className='w-4 h-4 text-gray-500' />
+            </button>
+            {showToCalendar && (
+              <CustomCalendar
+                onDateSelect={(date) => {
+                  handleFilterChange('toDate', date);
+                  setToDateInput(format(new Date(date), 'dd/MM/yyyy'));
+                  setShowToCalendar(false);
+                }}
+                selectedDate={filters.toDate}
+                onClose={() => setShowToCalendar(false)}
+              />
+            )}
+          </div>
           <div className='flex-1 w-full'>
             <SearchableSelect
               label='Company'
@@ -801,28 +903,6 @@ const BalanceSheet: React.FC = () => {
               onChange={value => handleFilterChange('companyName', value)}
               options={companies}
               placeholder='Select company...'
-              className='w-full'
-            />
-          </div>
-          <div className='flex-1'>
-            <label className='block text-sm font-medium text-gray-700 mb-1'>
-              From Date
-            </label>
-            <Input
-              type='date'
-              value={filters.fromDate}
-              onChange={value => handleFilterChange('fromDate', value)}
-              className='w-full'
-            />
-          </div>
-          <div className='flex-1'>
-            <label className='block text-sm font-medium text-gray-700 mb-1'>
-              To Date
-            </label>
-            <Input
-              type='date'
-              value={filters.toDate}
-              onChange={value => handleFilterChange('toDate', value)}
               className='w-full'
             />
           </div>

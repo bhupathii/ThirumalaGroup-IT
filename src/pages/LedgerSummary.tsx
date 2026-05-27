@@ -72,6 +72,7 @@ const LedgerSummary: React.FC = () => {
     SubAccountSummary[]
   >([]);
   const [loading, setLoading] = useState(false);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [activeTab, setActiveTab] = useState<
     'company' | 'mainAccount' | 'subAccount'
   >('company');
@@ -580,7 +581,7 @@ const LedgerSummary: React.FC = () => {
     toast.success('Summary exported successfully!');
   };
 
-  const printSummary = () => {
+  const handleRealPrint = () => {
     // Create a print-friendly version
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -799,6 +800,10 @@ ${Math.abs(balance).toLocaleString()}
     }, 500);
 
     toast.success('Print dialog opened');
+  };
+
+  const printSummary = () => {
+    setShowPrintPreview(true);
   };
 
   const getCurrentData = () => {
@@ -1054,6 +1059,27 @@ ${Math.abs(balance).toLocaleString()}
 
     return null;
   };
+
+  const currentDataForPreview = getCurrentData();
+  const fromFormattedForPreview = filters.fromDate ? format(new Date(filters.fromDate), 'dd/MM/yyyy') : '';
+  const toFormattedForPreview = filters.toDate ? format(new Date(filters.toDate), 'dd/MM/yyyy') : '';
+  
+  const previewTotals = useMemo(() => {
+    return currentDataForPreview.reduce((acc, item) => {
+      const credit = activeTab === 'company' ? (item as CompanySummary).totalCredit : 
+                    (item as AccountSummary | SubAccountSummary).credit;
+      const debit = activeTab === 'company' ? (item as CompanySummary).totalDebit : 
+                   (item as AccountSummary | SubAccountSummary).debit;
+      const balance = item.balance;
+      
+      acc.totalCredit += credit;
+      acc.totalDebit += debit;
+      acc.totalBalance += balance;
+      acc.recordCount += 1;
+      
+      return acc;
+    }, { totalCredit: 0, totalDebit: 0, totalBalance: 0, recordCount: 0 });
+  }, [currentDataForPreview, activeTab]);
 
   return (
     <div className='space-y-6'>
@@ -1405,6 +1431,151 @@ ${Math.abs(balance).toLocaleString()}
           )}
         </div>
       </Card>
+
+      {/* Print Preview Modal */}
+      {showPrintPreview && (
+        <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50'>
+          <div className='bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto'>
+            <div className='p-6'>
+              <div className='flex items-center justify-between mb-6 no-print'>
+                <h3 className='text-lg font-semibold'>
+                  Print Preview - Ledger Summary
+                </h3>
+                <div className='flex items-center gap-2'>
+                  <Button 
+                    size='sm' 
+                    onClick={handleRealPrint}
+                  >
+                    Print
+                  </Button>
+                  <Button
+                    size='sm'
+                    variant='secondary'
+                    onClick={() => setShowPrintPreview(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+
+              {/* On-screen preview container */}
+              <div className='border p-8 bg-white max-w-4xl mx-auto shadow-sm text-gray-800' style={{ fontFamily: 'Arial, sans-serif' }}>
+                {/* Header */}
+                <div className='text-center border-b-2 border-black pb-4 mb-6'>
+                  <h1 className='text-2xl font-bold uppercase'>Thirumala Group</h1>
+                  <h2 className='text-lg font-semibold mt-1'>Ledger Summary Report</h2>
+                  <div className='text-md font-bold mt-1'>{filters.companyName || 'All Companies'}</div>
+                  <div className='text-sm mt-1'>Period: <strong>{fromFormattedForPreview}</strong> to <strong>{toFormattedForPreview}</strong></div>
+                </div>
+
+                {/* Summary Totals Section */}
+                <div className='border-2 border-gray-200 bg-gray-50 rounded-lg p-4 mb-6'>
+                  <div className='text-md font-bold text-center mb-3'>Summary Totals</div>
+                  <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
+                    <div className='bg-white p-3 rounded border text-center'>
+                      <div className='text-xs text-gray-500 mb-1'>Total Credit</div>
+                      <div className='text-lg font-bold text-green-600'>{previewTotals.totalCredit.toLocaleString()}</div>
+                    </div>
+                    <div className='bg-white p-3 rounded border text-center'>
+                      <div className='text-xs text-gray-500 mb-1'>Total Debit</div>
+                      <div className='text-lg font-bold text-red-600'>{previewTotals.totalDebit.toLocaleString()}</div>
+                    </div>
+                    <div className='bg-white p-3 rounded border text-center'>
+                      <div className='text-xs text-gray-500 mb-1'>Net Balance</div>
+                      <div className='text-lg font-bold'>{Math.abs(previewTotals.totalBalance).toLocaleString()} {previewTotals.totalBalance >= 0 ? 'CR' : 'DR'}</div>
+                    </div>
+                    <div className='bg-white p-3 rounded border text-center'>
+                      <div className='text-xs text-gray-500 mb-1'>Total Records</div>
+                      <div className='text-lg font-bold'>{previewTotals.recordCount}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Table */}
+                <table className='w-full border-collapse border border-black text-sm mb-6'>
+                  <thead>
+                    <tr className='bg-gray-100 border border-black'>
+                      {activeTab === 'subAccount' ? (
+                        <>
+                          {!filters.companyName && <th className='border border-black p-2 text-left font-bold'>Company Name</th>}
+                          <th className='border border-black p-2 text-left font-bold'>Main Account</th>
+                          <th className='border border-black p-2 text-left font-bold'>Sub Account</th>
+                        </>
+                      ) : activeTab === 'company' ? (
+                        <th className='border border-black p-2 text-left font-bold'>Company Name</th>
+                      ) : (
+                        <>
+                          {!filters.companyName && <th className='border border-black p-2 text-left font-bold'>Company Name</th>}
+                          <th className='border border-black p-2 text-left font-bold'>Main Account</th>
+                        </>
+                      )}
+                      <th className='border border-black p-2 text-right font-bold'>Credit</th>
+                      <th className='border border-black p-2 text-right font-bold'>Debit</th>
+                      <th className='border border-black p-2 text-right font-bold'>Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentDataForPreview.map((item, idx) => {
+                      const credit = activeTab === 'company' ? (item as CompanySummary).totalCredit : 
+                                    (item as AccountSummary | SubAccountSummary).credit;
+                      const debit = activeTab === 'company' ? (item as CompanySummary).totalDebit : 
+                                   (item as AccountSummary | SubAccountSummary).debit;
+                      const balance = item.balance;
+
+                      if (activeTab === 'subAccount') {
+                        const subAccount = item as SubAccountSummary;
+                        return (
+                          <tr key={idx} className='border border-black'>
+                            {!filters.companyName && <td className='border border-black p-2'>{subAccount.companyName}</td>}
+                            <td className='border border-black p-2'>{subAccount.mainAccount || '-'}</td>
+                            <td className='border border-black p-2'>{subAccount.subAccount}</td>
+                            <td className='border border-black p-2 text-right text-green-700 font-medium'>{credit.toLocaleString()}</td>
+                            <td className='border border-black p-2 text-right text-red-700 font-medium'>{debit.toLocaleString()}</td>
+                            <td className={`border border-black p-2 text-right font-semibold ${balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                              {Math.abs(balance).toLocaleString()} {balance >= 0 ? 'CR' : 'DR'}
+                            </td>
+                          </tr>
+                        );
+                      } else if (activeTab === 'company') {
+                        const company = item as CompanySummary;
+                        return (
+                          <tr key={idx} className='border border-black'>
+                            <td className='border border-black p-2'>{company.companyName}</td>
+                            <td className='border border-black p-2 text-right text-green-700 font-medium'>{credit.toLocaleString()}</td>
+                            <td className='border border-black p-2 text-right text-red-700 font-medium'>{debit.toLocaleString()}</td>
+                            <td className={`border border-black p-2 text-right font-semibold ${balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                              {Math.abs(balance).toLocaleString()} {balance >= 0 ? 'CR' : 'DR'}
+                            </td>
+                          </tr>
+                        );
+                      } else {
+                        const account = item as AccountSummary;
+                        return (
+                          <tr key={idx} className='border border-black'>
+                            {!filters.companyName && <td className='border border-black p-2'>{(account as any).companyName || ''}</td>}
+                            <td className='border border-black p-2'>{account.accountName}</td>
+                            <td className='border border-black p-2 text-right text-green-700 font-medium'>{credit.toLocaleString()}</td>
+                            <td className='border border-black p-2 text-right text-red-700 font-medium'>{debit.toLocaleString()}</td>
+                            <td className={`border border-black p-2 text-right font-semibold ${balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                              {Math.abs(balance).toLocaleString()} {balance >= 0 ? 'CR' : 'DR'}
+                            </td>
+                          </tr>
+                        );
+                      }
+                    })}
+                  </tbody>
+                </table>
+
+                {/* Footer */}
+                <div className='text-center border-t border-black pt-4 mt-6 text-xs text-gray-500'>
+                  <p>Generated by Thirumala Group Business Management System</p>
+                  <p className='mt-1 font-semibold'>Generated on: {format(new Date(), 'dd/MM/yyyy HH:mm:ss')}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
