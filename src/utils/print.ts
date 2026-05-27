@@ -526,39 +526,36 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
   const grandTotalCredit = creditTotal + openingBalanceValue;
   const grandTotalDebit = debitTotal + closingBalanceValue;
 
-  // Totals summary table
-  const summaryTableHTML = `
-    <table style="width:auto;border-collapse:collapse;margin:12px 0 0 auto;font-size:12px;font-weight:bold;">
-      <thead>
-        <tr>
-          <th style="border:1px solid #000;padding:5px 8px;background:#f3f4f6;text-align:left;">Description</th>
-          <th style="border:1px solid #000;padding:5px 8px;background:#f3f4f6;text-align:right;">Credit</th>
-          <th style="border:1px solid #000;padding:5px 8px;background:#f3f4f6;text-align:right;">Debit</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td style="border:1px solid #000;padding:5px 8px;">Total</td>
-          <td style="border:1px solid #000;padding:5px 8px;text-align:right;color:#059669;">${formatCurrency(creditTotal)}</td>
-          <td style="border:1px solid #000;padding:5px 8px;text-align:right;color:#dc2626;">${formatCurrency(debitTotal)}</td>
-        </tr>
-        <tr>
-          <td style="border:1px solid #000;padding:5px 8px;">Opening Balance</td>
-          <td style="border:1px solid #000;padding:5px 8px;text-align:right;">${formatCurrency(openingBalanceValue)}</td>
-          <td style="border:1px solid #000;padding:5px 8px;text-align:right;"></td>
-        </tr>
-        <tr>
-          <td style="border:1px solid #000;padding:5px 8px;">Closing Balance</td>
-          <td style="border:1px solid #000;padding:5px 8px;text-align:right;"></td>
-          <td style="border:1px solid #000;padding:5px 8px;text-align:right;">${formatCurrency(closingBalanceValue)}</td>
-        </tr>
-        <tr style="background:#f3f4f6;">
-          <td style="border:1px solid #000;padding:5px 8px;font-weight:bold;">Grand Total</td>
-          <td style="border:1px solid #000;padding:5px 8px;text-align:right;font-weight:bold;color:#059669;">${formatCurrency(grandTotalCredit)}</td>
-          <td style="border:1px solid #000;padding:5px 8px;text-align:right;font-weight:bold;color:#dc2626;">${formatCurrency(grandTotalDebit)}</td>
-        </tr>
-      </tbody>
-    </table>
+  // Trailing summary rows in main table (aligned under Particulars, Credit, Debit, Status)
+  const summaryRowsHTML = `
+    <tr style="border-top: 2px solid #000; font-weight: bold;">
+      <td colspan="4" style="border: 1px solid #000; padding: 5px 4px;"></td>
+      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">Total</td>
+      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right; color: #059669;">${formatCurrency(creditTotal)}</td>
+      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right; color: #dc2626;">${formatCurrency(debitTotal)}</td>
+      <td style="border: 1px solid #000; padding: 5px 4px;"></td>
+    </tr>
+    <tr style="font-weight: bold;">
+      <td colspan="4" style="border: 1px solid #000; padding: 5px 4px;"></td>
+      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">Opening Balance</td>
+      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right; color: #059669;">${formatCurrency(openingBalanceValue)}</td>
+      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">-</td>
+      <td style="border: 1px solid #000; padding: 5px 4px;"></td>
+    </tr>
+    <tr style="font-weight: bold;">
+      <td colspan="4" style="border: 1px solid #000; padding: 5px 4px;"></td>
+      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">Closing Balance</td>
+      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">-</td>
+      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right; color: #dc2626;">${formatCurrency(closingBalanceValue)}</td>
+      <td style="border: 1px solid #000; padding: 5px 4px;"></td>
+    </tr>
+    <tr style="background: #f3f4f6; font-weight: bold; border-bottom: 2px solid #000;">
+      <td colspan="4" style="border: 1px solid #000; padding: 5px 4px;"></td>
+      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">Grand Total</td>
+      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right; color: #059669;">${formatCurrency(grandTotalCredit)}</td>
+      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right; color: #dc2626;">${formatCurrency(grandTotalDebit)}</td>
+      <td style="border: 1px solid #000; padding: 5px 4px;"></td>
+    </tr>
   `;
 
   // Company-wise balances (only when provided)
@@ -583,8 +580,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       .join('');
 
     companyTableHTML = `
-      <div class="company-balances-container">
-        <table style="width:auto;border-collapse:collapse;margin:12px 0 0 auto;font-size:12px;font-weight:bold;">
+      <div class="company-balances-container" style="width: 100%; margin-top: 12px;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;font-weight:bold;">
           <thead>
             <tr>
               <th colspan="3" style="border:1px solid #000;padding:5px 8px;background:#f3f4f6;text-align:center;">
@@ -730,13 +727,11 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       </thead>
       <tbody>
         ${tableRows}
+        ${summaryRowsHTML}
       </tbody>
     </table>
 
-    <div style="display:flex;justify-content:flex-end;gap:20px;flex-wrap:wrap;margin-top:8px;">
-      ${summaryTableHTML}
-      ${companyTableHTML}
-    </div>
+    ${companyTableHTML}
 
     ${includeFooter ? `
     <div class="print-footer">
