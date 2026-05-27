@@ -134,11 +134,11 @@ const CustomCalendar = ({
   };
 
   const dotClass =
-    dotColor === 'dark-red'
+    dotColor === 'green'
+      ? 'bg-green-500'
+      : dotColor === 'dark-red'
       ? 'bg-red-800'
-      : dotColor === 'red'
-      ? 'bg-red-500'
-      : 'bg-green-500';
+      : 'bg-red-500';
 
   return (
     <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 p-4 min-w-[280px]">

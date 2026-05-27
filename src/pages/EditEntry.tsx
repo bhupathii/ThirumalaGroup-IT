@@ -528,6 +528,40 @@ const EditEntry: React.FC = () => {
     updateFilterSubAccounts();
   }, [filterAccountName, filterCompanyName, allSubAccounts]);
 
+  // Prepopulate edit modal dropdowns when selectedEntry changes (so options are available in edit/view modal)
+  useEffect(() => {
+    const populateEditOptions = async () => {
+      if (!selectedEntry) return;
+      
+      const company = selectedEntry.company_name;
+      const account = selectedEntry.acc_name;
+      
+      if (company) {
+        const accNames = await supabaseDB.getDistinctAccountNamesByCompany(company);
+        setEditAccountOptions(accNames.map(name => ({ value: name, label: name })));
+        
+        if (account) {
+          const subAccs = await supabaseDB.getSubAccountsByAccountAndCompany(account, company);
+          setEditSubAccountOptions(subAccs.map(name => ({ value: name, label: name })));
+        } else {
+          setEditSubAccountOptions([]);
+        }
+      } else {
+        const allAccs = await supabaseDB.getDistinctAccountNames();
+        setEditAccountOptions(allAccs.map(name => ({ value: name, label: name })));
+        
+        if (account) {
+          const subAccs = await supabaseDB.getSubAccountsByAccountName(account);
+          setEditSubAccountOptions(subAccs.map(name => ({ value: name, label: name })));
+        } else {
+          setEditSubAccountOptions([]);
+        }
+      }
+    };
+    
+    populateEditOptions();
+  }, [selectedEntry?.id, tableMode]);
+
   const loadDropdownData = async () => {
     try {
       console.log('🔄 Loading dropdown data...');
@@ -1032,7 +1066,7 @@ const EditEntry: React.FC = () => {
         const fallback = await supabaseDB.getAllCashBookEntries();
         setEntries(fallback);
         setEntriesForSelectedDate([]);
-        return;
+        return fallback || [];
       }
 
       console.log(
@@ -1058,7 +1092,21 @@ const EditEntry: React.FC = () => {
       // Store ALL entries without filtering - let filteredEntries memo handle filtering
       console.log(`📊 Storing all ${allEntries.length} entries (filtering will be applied by filteredEntries memo)`);
       setEntries(allEntries);
-      setEntriesForSelectedDate([]);
+      
+      // Keep selected date filter active and update its entries list
+      if (selectedDateFilter) {
+        const normalizedFilterDate = normalizeDate(selectedDateFilter);
+        const entriesForDate = allEntries.filter(entry => {
+          if (normalizedFilterDate) {
+            return normalizeDate(entry.c_date) === normalizedFilterDate;
+          }
+          return false;
+        });
+        setEntriesForSelectedDate(entriesForDate);
+      } else {
+        setEntriesForSelectedDate([]);
+      }
+      return allEntries;
     } catch (error) {
       console.error('❌ Error loading entries:', error);
       
@@ -1078,6 +1126,7 @@ const EditEntry: React.FC = () => {
       }
       
       setEntries([]);
+      return [];
     }
   };
 
@@ -1442,7 +1491,7 @@ const EditEntry: React.FC = () => {
       if (updatedEntry) {
         await loadEntries();
         setEditMode(false);
-        setSelectedEntry(null);
+        setSelectedEntry(updatedEntry);
         toast.success('Entry updated successfully!');
         
         // Trigger dashboard refresh
@@ -1479,8 +1528,25 @@ const EditEntry: React.FC = () => {
         if (success) {
           // Optimistic UI: close editor and refresh in background
           setEditMode(false);
-          setSelectedEntry(null);
-          loadEntries();
+          const freshEntries = await loadEntries();
+          
+          if (selectedDateFilter) {
+            const normalizedFilterDate = normalizeDate(selectedDateFilter);
+            const entriesForDate = freshEntries.filter(e => {
+              if (normalizedFilterDate) {
+                return normalizeDate(e.c_date) === normalizedFilterDate;
+              }
+              return false;
+            });
+            if (entriesForDate.length > 0) {
+              setSelectedEntry(entriesForDate[0]);
+            } else {
+              setSelectedEntry(null);
+            }
+          } else {
+            setSelectedEntry(null);
+          }
+          
           toast.success('Entry deleted successfully!');
           
           // Trigger dashboard refresh
@@ -1514,17 +1580,20 @@ const EditEntry: React.FC = () => {
   const handleInputChange = async (field: string, value: any) => {
     setSelectedEntry((prev: any) => {
       const updated = { ...prev, [field]: value };
+      
+      // Reset child dropdown values when parent changes in the edit form
+      if (field === 'company_name') {
+        updated.acc_name = '';
+        updated.sub_acc_name = '';
+      } else if (field === 'acc_name') {
+        updated.sub_acc_name = '';
+      }
+      
       return updated;
     });
 
-    // Load dependent dropdowns & reset child fields when parent changes in the edit form
+    // Load dependent dropdowns & reset child options when parent changes in the edit form
     if (field === 'company_name') {
-      setSelectedEntry((prev: any) => ({
-        ...prev,
-        company_name: value,
-        acc_name: '',
-        sub_acc_name: '',
-      }));
       setEditSubAccountOptions([]);
       
       if (value) {
@@ -1537,15 +1606,10 @@ const EditEntry: React.FC = () => {
     }
     
     if (field === 'acc_name') {
-      setSelectedEntry((prev: any) => ({
-        ...prev,
-        acc_name: value,
-        sub_acc_name: '',
-      }));
-      
       if (value) {
-        if (selectedEntry?.company_name) {
-          const subAccs = await supabaseDB.getSubAccountsByAccountAndCompany(value, selectedEntry.company_name);
+        const currentCompany = selectedEntry?.company_name || '';
+        if (currentCompany) {
+          const subAccs = await supabaseDB.getSubAccountsByAccountAndCompany(value, currentCompany);
           setEditSubAccountOptions(subAccs.map(name => ({ value: name, label: name })));
         } else {
           const subAccs = await supabaseDB.getSubAccountsByAccountName(value);
@@ -2112,7 +2176,6 @@ const EditEntry: React.FC = () => {
             {showCalendar && (
               <CustomCalendar
                 dotColor="red"
-                entries={entries}
                 onDateSelect={(date) => {
                   setFilterDate(date);
                   setFilterDateInput(format(new Date(date), 'dd/MM/yyyy'));
@@ -2831,7 +2894,6 @@ const EditEntry: React.FC = () => {
                         {showCalendar && (
                           <CustomCalendar
                             dotColor="red"
-                            entries={entries}
                             onDateSelect={(date) => {
                               if (editMode) {
                                 handleInputChange('c_date', date);
