@@ -141,8 +141,10 @@ const Drivers: React.FC = () => {
         }
       } else {
         // Add new driver
+        const nextSno = drivers.length > 0 ? Math.max(...drivers.map(d => d.sno || 0)) + 1 : 1;
         const newDriverData = await supabaseDB.addDriver({
           ...newDriver,
+          sno: nextSno,
           license_front_url: licenseFrontUrl,
           license_back_url: licenseBackUrl,
         });
@@ -227,9 +229,9 @@ const Drivers: React.FC = () => {
                 <Input
                   label='License Number'
                   value={
-                    editingDriver
+                    (editingDriver
                       ? editingDriver.license_no
-                      : newDriver.license_no
+                      : newDriver.license_no) ?? ''
                   }
                   onChange={value => handleInputChange('license_no', value)}
                   placeholder='License number'
@@ -240,13 +242,13 @@ const Drivers: React.FC = () => {
                   label='License Expiry Date'
                   type='date'
                   value={
-                    editingDriver ? editingDriver.exp_date : newDriver.exp_date
+                    (editingDriver ? editingDriver.exp_date : newDriver.exp_date) ?? ''
                   }
                   onChange={value => handleInputChange('exp_date', value)}
                 />
                 <Input
                   label='Phone'
-                  value={editingDriver ? editingDriver.phone : newDriver.phone}
+                  value={(editingDriver ? editingDriver.phone : newDriver.phone) ?? ''}
                   onChange={value => handleInputChange('phone', value)}
                   placeholder='Phone number'
                 />
@@ -255,7 +257,7 @@ const Drivers: React.FC = () => {
                 <Input
                   label='Address'
                   value={
-                    editingDriver ? editingDriver.address : newDriver.address
+                    (editingDriver ? editingDriver.address : newDriver.address) ?? ''
                   }
                   onChange={value => handleInputChange('address', value)}
                   placeholder='Driver address...'
@@ -263,9 +265,9 @@ const Drivers: React.FC = () => {
                 <Input
                   label='Particulars'
                   value={
-                    editingDriver
+                    (editingDriver
                       ? editingDriver.particulars
-                      : newDriver.particulars
+                      : newDriver.particulars) ?? ''
                   }
                   onChange={value => handleInputChange('particulars', value)}
                   placeholder='Description...'

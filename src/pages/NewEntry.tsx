@@ -54,19 +54,8 @@ const NewEntry: React.FC = () => {
   const { user } = useAuth();
   const { mode: tableMode } = useTableMode();
   const navigate = useNavigate();
-  const [vehicleAlerts, setVehicleAlerts] = useState<string | null>(null);
-  const [bgAlerts, setBgAlerts] = useState<string | null>(null);
-  const [showNotifications, setShowNotifications] = useState(true);
-
-  useEffect(() => {
-    if (vehicleAlerts || bgAlerts) {
-      setShowNotifications(true);
-      const timer = setTimeout(() => {
-        setShowNotifications(false);
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [vehicleAlerts, bgAlerts]);
+  const [vehicleStats, setVehicleStats] = useState<{ expired: number; expiring: number } | null>(null);
+  const [bgStats, setBgStats] = useState<{ expired: number; expiring: number } | null>(null);
 
   useEffect(() => {
     const checkExpiries = async () => {
@@ -108,18 +97,11 @@ const NewEntry: React.FC = () => {
           }
         });
         
-        // Prepare vehicle alert message
-        let vMsgParts = [];
-        if (expiredVCount > 0) {
-          vMsgParts.push(`${expiredVCount} vehicle document${expiredVCount > 1 ? 's' : ''} expired`);
-        }
-        if (expiringVCount > 0) {
-          vMsgParts.push(`${expiringVCount} vehicle document${expiringVCount > 1 ? 's' : ''} expiring soon`);
-        }
-        if (vMsgParts.length > 0) {
-          setVehicleAlerts(vMsgParts.join(' and '));
+        // Set vehicle stats
+        if (expiredVCount > 0 || expiringVCount > 0) {
+          setVehicleStats({ expired: expiredVCount, expiring: expiringVCount });
         } else {
-          setVehicleAlerts(null);
+          setVehicleStats(null);
         }
         
         // Check Bank Guarantees
@@ -139,18 +121,11 @@ const NewEntry: React.FC = () => {
           }
         });
         
-        // Prepare bg alert message
-        let bgMsgParts = [];
-        if (expiredBGCount > 0) {
-          bgMsgParts.push(`${expiredBGCount} bank guarantee${expiredBGCount > 1 ? 's' : ''} expired`);
-        }
-        if (expiringBGCount > 0) {
-          bgMsgParts.push(`${expiringBGCount} bank guarantee${expiringBGCount > 1 ? 's' : ''} expiring soon`);
-        }
-        if (bgMsgParts.length > 0) {
-          setBgAlerts(bgMsgParts.join(' and '));
+        // Set bg stats
+        if (expiredBGCount > 0 || expiringBGCount > 0) {
+          setBgStats({ expired: expiredBGCount, expiring: expiringBGCount });
         } else {
-          setBgAlerts(null);
+          setBgStats(null);
         }
       } catch (error) {
         console.error('Error checking expiries for notifications:', error);
@@ -1837,35 +1812,45 @@ const NewEntry: React.FC = () => {
         </div>
       </div>
 
-      {/* Floating Expiry Notifications Popup */}
-      {showNotifications && (vehicleAlerts || bgAlerts) && (
-        <div className='fixed top-4 left-1/2 transform -translate-x-1/2 z-50 flex flex-col gap-2 w-full max-w-md px-4 pointer-events-auto'>
-          {vehicleAlerts && (
+      {/* Persistent Expiry Notifications Box */}
+      {(vehicleStats || bgStats) && (
+        <div className='flex flex-wrap gap-2 px-2 py-1.5 bg-gray-50 border-b border-gray-200 flex-shrink-0'>
+          {vehicleStats && (
             <div 
               onClick={() => navigate('/vehicles')}
-              className='bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors rounded-lg p-3 flex items-center justify-between cursor-pointer text-amber-800 shadow-lg'
+              className='bg-white border border-gray-200 hover:border-gray-300 transition-all rounded px-2.5 py-1 flex items-center gap-1.5 cursor-pointer shadow-sm text-[11px]'
             >
-              <div className='flex items-center gap-2'>
-                <AlertCircle className='w-4 h-4 text-amber-600 flex-shrink-0' />
-                <span className='font-semibold text-xs'>{vehicleAlerts}</span>
-              </div>
-              <span className='text-[10px] text-amber-600 underline flex items-center gap-1 font-bold'>
-                View Vehicles <ExternalLink className='w-3 h-3' />
-              </span>
+              <span className='font-bold text-gray-700'>Vehicle Expiry:</span>
+              {vehicleStats.expired > 0 && (
+                <span className='text-red-600 font-bold bg-red-50 px-1.5 py-0.5 rounded'>
+                  {vehicleStats.expired} expired
+                </span>
+              )}
+              {vehicleStats.expiring > 0 && (
+                <span className='text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded'>
+                  {vehicleStats.expiring} expiring soon
+                </span>
+              )}
+              <ExternalLink className='w-3 h-3 text-gray-400 ml-0.5' />
             </div>
           )}
-          {bgAlerts && (
+          {bgStats && (
             <div 
               onClick={() => navigate('/bank-guarantees')}
-              className='bg-red-50 border border-red-200 hover:bg-red-100 transition-colors rounded-lg p-3 flex items-center justify-between cursor-pointer text-red-800 shadow-lg'
+              className='bg-white border border-gray-200 hover:border-gray-300 transition-all rounded px-2.5 py-1 flex items-center gap-1.5 cursor-pointer shadow-sm text-[11px]'
             >
-              <div className='flex items-center gap-2'>
-                <AlertCircle className='w-4 h-4 text-red-600 flex-shrink-0' />
-                <span className='font-semibold text-xs'>{bgAlerts}</span>
-              </div>
-              <span className='text-[10px] text-red-600 underline flex items-center gap-1 font-bold'>
-                View Bank Guarantees <ExternalLink className='w-3 h-3' />
-              </span>
+              <span className='font-bold text-gray-700'>Bank Guarantee Expiry:</span>
+              {bgStats.expired > 0 && (
+                <span className='text-red-600 font-bold bg-red-50 px-1.5 py-0.5 rounded'>
+                  {bgStats.expired} expired
+                </span>
+              )}
+              {bgStats.expiring > 0 && (
+                <span className='text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded'>
+                  {bgStats.expiring} expiring soon
+                </span>
+              )}
+              <ExternalLink className='w-3 h-3 text-gray-400 ml-0.5' />
             </div>
           )}
         </div>

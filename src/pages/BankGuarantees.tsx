@@ -3,11 +3,10 @@ import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import Select from '../components/UI/Select';
-import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
-import { format, differenceInDays, parseISO } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { BankGuarantee } from '../lib/supabaseDatabase';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import {
@@ -22,7 +21,6 @@ import {
 } from 'lucide-react';
 
 const BankGuarantees: React.FC = () => {
-  const { user } = useAuth();
   const { mode: tableMode } = useTableMode();
   const [bankGuarantees, setBankGuarantees] = useState<BankGuarantee[]>([]);
   const [filteredBGs, setFilteredBGs] = useState<BankGuarantee[]>([]);
@@ -378,6 +376,9 @@ const BankGuarantees: React.FC = () => {
         <div className='flex items-center gap-3'>
           <Button variant='secondary' onClick={loadBankGuarantees}>
             Refresh
+          </Button>
+          <Button variant='secondary' onClick={exportToExcel}>
+            Export
           </Button>
           <Button
             onClick={() => {
