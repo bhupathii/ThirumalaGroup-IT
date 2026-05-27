@@ -4276,7 +4276,90 @@ class SupabaseDatabase {
         }
 
         console.log('✅ Successfully removed from deleted_cash_book');
+
+        // Clean up from localStorage if present
+        try {
+          const deletedRecordsStr = localStorage.getItem('deleted_records');
+          if (deletedRecordsStr) {
+            const deletedRecords = JSON.parse(deletedRecordsStr);
+            const foundIndex = deletedRecords.findIndex((r: any) => r.id === deletedId);
+            if (foundIndex !== -1) {
+              deletedRecords.splice(foundIndex, 1);
+              localStorage.setItem('deleted_records', JSON.stringify(deletedRecords));
+              console.log('🧹 Cleaned up from localStorage during DB restore');
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Non-fatal error cleaning up localStorage:', e);
+        }
+
         return true;
+      }
+
+      // Step 1.5: Fallback - Try to restore from localStorage if database fetch failed
+      console.log('📋 Step 1.5: Fallback - Trying localStorage...');
+      try {
+        const deletedRecordsStr = localStorage.getItem('deleted_records');
+        if (deletedRecordsStr) {
+          const deletedRecords = JSON.parse(deletedRecordsStr);
+          const foundIndex = deletedRecords.findIndex((r: any) => r.id === deletedId);
+          if (foundIndex !== -1) {
+            const recordToRestore = deletedRecords[foundIndex];
+            console.log('✅ Found record to restore in localStorage:', recordToRestore);
+
+            // Prepare record for insertion back into cash_book
+            const restoredEntry = {
+              id: recordToRestore.id,
+              sno: recordToRestore.sno,
+              c_date: recordToRestore.c_date,
+              company_name: recordToRestore.company_name,
+              acc_name: recordToRestore.acc_name,
+              sub_acc_name: recordToRestore.sub_acc_name,
+              particulars: recordToRestore.particulars,
+              credit: recordToRestore.credit,
+              debit: recordToRestore.debit,
+              staff: recordToRestore.staff,
+              users: recordToRestore.users,
+              entry_time: recordToRestore.entry_time,
+              approved: recordToRestore.approved || false,
+              created_at: recordToRestore.created_at || new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            };
+
+            console.log('📝 Inserting back into cash_book from localStorage:', restoredEntry);
+            const { error: insertError } = await supabase
+              .from(getTableName('cash_book'))
+              .insert(restoredEntry);
+
+            if (insertError) {
+              console.error('❌ Error inserting into cash_book from localStorage:', insertError);
+              // Fallback to update if insert fails due to duplicate key
+              if (insertError.code === '23505') {
+                console.log('🔄 Record might already exist, attempting update...');
+                const { error: updateError } = await supabase
+                  .from(getTableName('cash_book'))
+                  .update(restoredEntry)
+                  .eq('id', restoredEntry.id);
+                if (updateError) {
+                  console.error('❌ Error updating cash_book from localStorage:', updateError);
+                  return false;
+                }
+              } else {
+                return false;
+              }
+            }
+
+            console.log('✅ Successfully restored to cash_book from localStorage');
+
+            // Remove from localStorage
+            deletedRecords.splice(foundIndex, 1);
+            localStorage.setItem('deleted_records', JSON.stringify(deletedRecords));
+            console.log('✅ Successfully removed from localStorage. Remaining:', deletedRecords.length);
+            return true;
+          }
+        }
+      } catch (err) {
+        console.error('❌ Error in localStorage restore fallback:', err);
       }
 
       // Step 2: Fallback - try to restore from cash_book with [DELETED] prefix
@@ -4356,7 +4439,42 @@ class SupabaseDatabase {
         }
 
         console.log('✅ Successfully permanently deleted from deleted_cash_book');
+
+        // Clean up from localStorage if present
+        try {
+          const deletedRecordsStr = localStorage.getItem('deleted_records');
+          if (deletedRecordsStr) {
+            const deletedRecords = JSON.parse(deletedRecordsStr);
+            const foundIndex = deletedRecords.findIndex((r: any) => r.id === deletedId);
+            if (foundIndex !== -1) {
+              deletedRecords.splice(foundIndex, 1);
+              localStorage.setItem('deleted_records', JSON.stringify(deletedRecords));
+              console.log('🧹 Cleaned up from localStorage during DB permanent deletion');
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Non-fatal error cleaning up localStorage:', e);
+        }
+
         return true;
+      }
+
+      // Step 1.5: Fallback - Try to delete from localStorage if database fetch failed
+      console.log('📋 Step 1.5: Fallback - Trying localStorage...');
+      try {
+        const deletedRecordsStr = localStorage.getItem('deleted_records');
+        if (deletedRecordsStr) {
+          const deletedRecords = JSON.parse(deletedRecordsStr);
+          const foundIndex = deletedRecords.findIndex((r: any) => r.id === deletedId);
+          if (foundIndex !== -1) {
+            deletedRecords.splice(foundIndex, 1);
+            localStorage.setItem('deleted_records', JSON.stringify(deletedRecords));
+            console.log('✅ Successfully permanently deleted from localStorage');
+            return true;
+          }
+        }
+      } catch (err) {
+        console.error('❌ Error in localStorage permanent deletion fallback:', err);
       }
 
       // Step 2: Fallback - try to permanently delete from cash_book with [DELETED] prefix
