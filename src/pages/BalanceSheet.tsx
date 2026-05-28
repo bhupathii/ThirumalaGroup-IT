@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
-import Input from '../components/UI/Input';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB, BalanceSheetAccount } from '../lib/supabaseDatabase';
-import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
@@ -24,7 +22,6 @@ interface BalanceSheetFilters {
 // BalanceSheetAccount interface is now imported from supabaseDatabase
 
 const BalanceSheet: React.FC = () => {
-  const { user } = useAuth();
   const { mode: tableMode } = useTableMode();
 
   const [filters, setFilters] = useState<BalanceSheetFilters>({
@@ -40,7 +37,6 @@ const BalanceSheet: React.FC = () => {
     BalanceSheetAccount[]
   >([]);
   const [loading, setLoading] = useState(false);
-  const [showFinalReport, setShowFinalReport] = useState(false);
   const [usingOptimizedAPI, setUsingOptimizedAPI] = useState(true);
   
   const [showFromCalendar, setShowFromCalendar] = useState(false);
@@ -68,7 +64,6 @@ const BalanceSheet: React.FC = () => {
   // State for P&L selection and custom content
   const [selectedAccountsForPL, setSelectedAccountsForPL] = useState<Set<string>>(new Set());
   const [customRows, setCustomRows] = useState<BalanceSheetAccount[]>([]);
-  const [showAddRow, setShowAddRow] = useState(true);
   const [newRowData, setNewRowData] = useState({
     accountName: '',
     credit: '',
@@ -84,19 +79,7 @@ const BalanceSheet: React.FC = () => {
     { value: string; label: string }[]
   >([]);
 
-  // Summary totals
-  const [totals, setTotals] = useState({
-    totalCredit: 0,
-    totalDebit: 0,
-    balanceRs: 0,
-  });
 
-  const yesNoOptions = [
-    { value: '', label: 'All' },
-    { value: 'YES', label: 'YES' },
-    { value: 'NO', label: 'NO' },
-    { value: 'BOTH', label: 'BOTH' },
-  ];
 
   useEffect(() => {
     loadDropdownData();
@@ -138,7 +121,6 @@ const BalanceSheet: React.FC = () => {
       });
 
       setBalanceSheetData(result.balanceSheetData);
-      setTotals(result.totals);
 
       console.log(`✅ Optimized balance sheet generated: ${result.balanceSheetData.length} accounts from ${result.recordCount} transactions${result.cached ? ' (served from cache)' : ''}`);
       
@@ -231,23 +213,6 @@ const BalanceSheet: React.FC = () => {
 
       setBalanceSheetData(balanceSheetAccounts);
 
-      // Calculate totals
-      const totalCredit = balanceSheetAccounts.reduce(
-        (sum, acc) => sum + acc.credit,
-        0
-      );
-      const totalDebit = balanceSheetAccounts.reduce(
-        (sum, acc) => sum + acc.debit,
-        0
-      );
-      const balanceRs = totalCredit - totalDebit;
-
-      setTotals({
-        totalCredit,
-        totalDebit,
-        balanceRs,
-      });
-
       console.log(`✅ Fallback balance sheet generated: ${balanceSheetAccounts.length} accounts`);
       toast.success(`Balance sheet generated (fallback method) with ${balanceSheetAccounts.length} accounts`);
       setUsingOptimizedAPI(false);
@@ -329,14 +294,8 @@ const BalanceSheet: React.FC = () => {
       plYesNo: 'NO',
       bothYesNo: 'NO',
     });
-    setShowAddRow(false);
     
     toast.success('Custom row added successfully!');
-  };
-
-  const removeCustomRow = (index: number) => {
-    setCustomRows(prev => prev.filter((_, i) => i !== index));
-    toast.success('Custom row removed successfully!');
   };
 
   const refreshData = () => {
@@ -356,42 +315,7 @@ const BalanceSheet: React.FC = () => {
     toast.success('Filters reset');
   };
 
-  const updateBalanceSheetAndPL = () => {
-    // This would update the balance sheet and P&L in the database
-    toast.success('Balance sheet and P&L updated successfully!');
-  };
 
-  const exportToExcel = () => {
-    const allAccounts = [...balanceSheetData, ...customRows];
-    const exportData = allAccounts.map(account => ({
-      'Account Name': account.accountName,
-      Credit: account.credit,
-      Debit: account.debit,
-      Balance: account.balance,
-      'P&L Yes/No': account.plYesNo,
-      'Both Yes/No': account.bothYesNo,
-      Result: account.result,
-    }));
-
-    // Create CSV content
-    const headers = Object.keys(exportData[0] || {});
-    const csvContent = [
-      headers.join(','),
-      ...exportData.map(row =>
-        headers.map(header => `"${row[header as keyof typeof row]}"`).join(',')
-      ),
-    ].join('\n');
-
-    // Download file
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `balance-sheet-${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Balance sheet exported successfully!');
-  };
 
   const printReport = () => {
     // Use the same logic as printCustomReport but for all accounts

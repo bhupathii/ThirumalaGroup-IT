@@ -7,7 +7,7 @@ import { useTableMode } from '../contexts/TableModeContext';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 type AuditLogEntry = {
   id: string;
   cash_book_id: string;
@@ -297,41 +297,7 @@ const EditedRecords = () => {
     page * PAGE_SIZE
   );
 
-  // Export to Excel
-  const handleExportExcel = () => {
-    const rows = filteredLog.map((log, idx) => {
-      const oldObj = log.old_values ? JSON.parse(log.old_values) : {};
-      const newObj = log.new_values ? JSON.parse(log.new_values) : {};
-      return [
-        idx + 1,
-        ...FIELDS.map(f => getFieldDisplay(f.key, oldObj[f.key])),
-        ...FIELDS.map(f => getFieldDisplay(f.key, newObj[f.key])),
-        userMap[log.edited_by] || log.edited_by,
-        log.edited_at && !isNaN(new Date(log.edited_at).getTime())
-          ? format(new Date(log.edited_at), 'dd/MM/yyyy HH:mm')
-          : '',
-      ];
-    });
-    const header = [
-      'S.No',
-      ...FIELDS.map(f => f.label + ' (Before)'),
-      ...FIELDS.map(f => f.label + ' (After)'),
-      'Edited By',
-      'Edited At',
-    ];
-    let csv = '\uFEFF' + header.join(',') + '\n';
-    rows.forEach(row => {
-      csv +=
-        row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(',') + '\n';
-    });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'edit_audit_log.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+
 
   // Print
   const handlePrint = () => {
@@ -382,19 +348,7 @@ const EditedRecords = () => {
     printWindow.print();
   };
 
-  const handleTestConnection = async () => {
-    try {
-      const isConnected = await supabaseDB.testDatabaseConnection();
-      if (isConnected) {
-        toast.success('Database connection successful!');
-      } else {
-        toast.error('Database connection failed!');
-      }
-    } catch (error) {
-      console.error('Test connection error:', error);
-      toast.error('Failed to test database connection');
-    }
-  };
+
 
   // Check if we're showing recent entries instead of actual edits
   const isShowingRecentEntries = filteredLog.some(rec => rec.action === 'SHOWING_RECENT_ENTRIES');

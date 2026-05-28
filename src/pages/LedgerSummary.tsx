@@ -1,14 +1,12 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
-import Input from '../components/UI/Input';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
-import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { Calendar, Search } from 'lucide-react';
 import CustomCalendar from '../components/UI/CustomCalendar';
 
@@ -49,7 +47,6 @@ interface SubAccountSummary {
 }
 
 const LedgerSummary: React.FC = () => {
-  const { user } = useAuth();
   const { mode: tableMode } = useTableMode();
 
   const [filters, setFilters] = useState<LedgerSummaryFilters>({
@@ -142,8 +139,6 @@ const LedgerSummary: React.FC = () => {
   // Visible dd/MM/yyyy inputs + hidden pickers
   const [fromDateInput, setFromDateInput] = useState('');
   const [toDateInput, setToDateInput] = useState('');
-  const fromPickerRef = useRef<HTMLInputElement>(null);
-  const toPickerRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     try {
@@ -477,109 +472,7 @@ const LedgerSummary: React.FC = () => {
     });
   };
 
-  const refreshData = () => {
-    generateSummary();
-    toast.success('Data refreshed successfully!');
-  };
 
-  const resetFilters = () => {
-    setFilters({
-      betweenDates: true,
-      fromDate: '2016-10-31',
-      toDate: format(new Date(), 'yyyy-MM-dd'),
-      companyName: '',
-      mainAccount: '',
-      subAccount: '',
-      staff: '',
-    });
-    toast.success('Filters reset');
-  };
-
-  const closeFilters = () => {
-    // Just a placeholder for close functionality
-    toast.success('Filters panel closed');
-  };
-
-  const exportToExcel = () => {
-    let exportData: any[] = [];
-    let filename = '';
-
-    switch (activeTab) {
-      case 'company':
-        exportData = companySummaries.map(company => ({
-          'Company Name': company.companyName,
-          'Total Credit': company.totalCredit,
-          'Total Debit': company.totalDebit,
-          Balance: company.balance,
-        }));
-        filename = 'company-wise-summary';
-        break;
-      case 'mainAccount':
-        exportData = mainAccountSummaries.map(account => {
-          const baseData = {
-            'Account Name': account.accountName,
-            Credit: account.credit,
-            Debit: account.debit,
-            Balance: account.balance,
-            'Transaction Count': account.transactionCount,
-          };
-          
-          // Add company name column if no company filter is applied
-          if (!filters.companyName && (account as any).companyName) {
-            return {
-              'Company Name': (account as any).companyName,
-              ...baseData,
-            };
-          }
-          
-          return baseData;
-        });
-        filename = 'main-account-summary';
-        break;
-      case 'subAccount':
-        exportData = subAccountSummaries.map(subAccount => {
-          const baseData = {
-            'Main Account': subAccount.mainAccount || '-',
-            'Sub Account': subAccount.subAccount,
-            Credit: subAccount.credit,
-            Debit: subAccount.debit,
-            Balance: subAccount.balance,
-            'Transaction Count': subAccount.transactionCount,
-          };
-          
-          // Add company name column if no company filter is applied
-          if (!filters.companyName && subAccount.companyName) {
-            return {
-              'Company Name': subAccount.companyName,
-              ...baseData,
-            };
-          }
-          
-          return baseData;
-        });
-        filename = 'sub-account-summary';
-        break;
-    }
-
-    // Create CSV content
-    const headers = Object.keys(exportData[0] || {});
-    const csvContent = [
-      headers.join(','),
-      ...exportData.map(row =>
-        headers.map(header => `"${row[header]}"`).join(',')
-      ),
-    ].join('\n');
-
-    // Download file
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${filename}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Summary exported successfully!');
-  };
 
   const handleRealPrint = () => {
     // Create a print-friendly version
@@ -593,12 +486,6 @@ const LedgerSummary: React.FC = () => {
     const toFormatted = format(new Date(filters.toDate), 'dd/MM/yyyy');
 
     const currentData = getCurrentData();
-    const title =
-      activeTab === 'company'
-        ? 'Company Summary'
-        : activeTab === 'mainAccount'
-          ? 'Main Account Summary'
-          : 'Sub Account Summary';
 
     // Calculate totals for the current data
     const totals = currentData.reduce((acc, item) => {
