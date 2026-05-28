@@ -5,6 +5,7 @@ interface CardProps {
   className?: string;
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
 }
 
 const Card: React.FC<CardProps> = ({
@@ -12,9 +13,11 @@ const Card: React.FC<CardProps> = ({
   className = '',
   title,
   subtitle,
+  onClick,
 }) => {
   return (
     <div
+      onClick={onClick}
       className={`bg-white rounded-lg shadow-sm border border-gray-200 ${className}`}
     >
       {(title || subtitle) && (

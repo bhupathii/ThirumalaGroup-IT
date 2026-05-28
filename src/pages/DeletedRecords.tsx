@@ -3,7 +3,6 @@ import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import SearchableSelect from '../components/UI/SearchableSelect';
 import { supabaseDB } from '../lib/supabaseDatabase';
-import { getTableName } from '../lib/tableNames';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';

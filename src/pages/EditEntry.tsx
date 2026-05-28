@@ -18,8 +18,6 @@ import {
   History,
   RefreshCw,
   Plus,
-  ChevronLeft,
-  ChevronRight,
   Eye,
 } from 'lucide-react';
 
@@ -141,7 +139,7 @@ const EditEntry: React.FC = () => {
   
   // Calendar state
   const [showCalendar, setShowCalendar] = useState(false);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [] = useState(new Date());
   const [entriesForSelectedDate, setEntriesForSelectedDate] = useState<any[]>([]);
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -152,8 +150,8 @@ const EditEntry: React.FC = () => {
   const [pageSize] = useState(1000); // Show 1000 entries per page for better data visibility
   const [totalEntries, setTotalEntries] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [isLoadingAll, setIsLoadingAll] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0, message: '' });
+  const [isLoadingAll] = useState(false);
+  const [loadingProgress] = useState({ current: 0, total: 0, message: '' });
   
   // Add filter state variables (moved before memoized filtering)
   const [filterCompanyName, setFilterCompanyName] = useState('');
@@ -324,10 +322,10 @@ const EditEntry: React.FC = () => {
   >([]);
 
   // New state for dependent dropdowns
-  const [distinctAccountNames, setDistinctAccountNames] = useState<
+  const [, setDistinctAccountNames] = useState<
     { value: string; label: string }[]
   >([]);
-  const [dependentSubAccounts, setDependentSubAccounts] = useState<
+  const [, setDependentSubAccounts] = useState<
     { value: string; label: string }[]
   >([]);
   
@@ -338,7 +336,7 @@ const EditEntry: React.FC = () => {
   const [allSubAccounts, setAllSubAccounts] = useState<
     { value: string; label: string }[]
   >([]);
-  const [dependentParticulars, setDependentParticulars] = useState<
+  const [, setDependentParticulars] = useState<
     { value: string; label: string }[]
   >([]);
 
@@ -1291,47 +1289,6 @@ const EditEntry: React.FC = () => {
 
 
   // Debug function to test RLS and data access
-  const testDataAccess = async () => {
-    try {
-      console.log('🔍 Testing data access in EditEntry...');
-
-      // Test direct access
-      const { data, error } = await supabase.from(getTableName('cash_book')).select('count');
-
-      if (error) {
-        console.error('❌ Data access test failed:', error);
-        toast.error('Data access test failed: ' + error.message);
-      } else {
-        console.log('✅ Data access test successful, count:', data);
-        toast.success('Data access test successful! Count: ' + data);
-      }
-
-      // Test RLS status
-      const { data: rlsStatus, error: rlsError } =
-        await supabase.rpc('check_rls_status');
-
-      if (rlsError) {
-        console.log('❌ RLS status check failed:', rlsError);
-      } else {
-        console.log('📊 RLS Status:', rlsStatus);
-        const tablesWithRLS =
-          rlsStatus?.filter((table: any) => table.rls_enabled) || [];
-        if (tablesWithRLS.length > 0) {
-          toast.error(
-            `${tablesWithRLS.length} tables have RLS enabled. Please disable RLS.`
-          );
-        } else {
-          toast.success('No RLS policies are blocking access');
-        }
-      }
-    } catch (error) {
-      console.error('💥 Data access test error:', error);
-      toast.error(
-        'Data access test error: ' +
-          (error instanceof Error ? error.message : 'Unknown error')
-      );
-    }
-  };
 
   const handleEdit = async (entry: any) => {
     // TODO: Implement locked check when Supabase schema supports it
@@ -1577,303 +1534,11 @@ const EditEntry: React.FC = () => {
   };
 
   // Get dates that have entries - Enhanced with better error handling
-  const getDatesWithEntries = useMemo(() => {
-    const datesWithEntries = new Set<string>();
-    entries.forEach(entry => {
-      if (entry.c_date) {
-        try {
-          // Handle different date formats and ensure proper parsing
-          const entryDate = new Date(entry.c_date);
-          if (!isNaN(entryDate.getTime())) {
-            const dateStr = format(entryDate, 'yyyy-MM-dd');
-            datesWithEntries.add(dateStr);
-          }
-        } catch (error) {
-          console.warn('Invalid date format for entry:', entry.c_date, error);
-        }
-      }
-    });
-    
-    // Debug: Log dates with entries for verification
-    if (datesWithEntries.size > 0) {
-      console.log('Calendar: Dates with entries:', Array.from(datesWithEntries).sort());
-    }
-    
-    return datesWithEntries;
-  }, [entries]);
 
   // Local calendar component removed to use the imported global CustomCalendar component
 
 
 
-  const exportData = async (
-    exportFormat: 'json' | 'excel' | 'pdf' | 'csv' = 'json'
-  ) => {
-    try {
-      await supabaseDB.exportData();
-
-      if (exportFormat === 'excel' || exportFormat === 'csv') {
-        // Export to Excel/CSV - use the current filtered entries instead of all data
-        const currentEntries =
-          entries.length > 0 ? entries : await supabaseDB.getAllCashBookEntries();
-
-        // Debug: Log first entry to see date format
-        if (currentEntries.length > 0) {
-          console.log('Sample entry date format:', {
-            c_date: currentEntries[0].c_date,
-            type: typeof currentEntries[0].c_date,
-            entry_time: currentEntries[0].entry_time,
-          });
-        }
-
-        const exportData = currentEntries.map((entry: any) => {
-          // Format date properly for Excel
-          let formattedDate = '';
-          if (entry.c_date) {
-            try {
-              // Handle different date formats
-              if (typeof entry.c_date === 'string') {
-                if (entry.c_date.includes('-')) {
-                  // YYYY-MM-DD format
-                  const [year, month, day] = entry.c_date.split('-');
-                  formattedDate = `${day}/${month}/${year}`;
-                } else if (entry.c_date.includes('/')) {
-                  // Already in DD/MM/YYYY format
-                  formattedDate = entry.c_date;
-                } else {
-                  // Try to parse as Date object
-                  const date = new Date(entry.c_date);
-                  if (!isNaN(date.getTime())) {
-                    formattedDate = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
-                  } else {
-                    formattedDate = entry.c_date;
-                  }
-                }
-              } else if (entry.c_date instanceof Date) {
-                // Date object
-                formattedDate = `${entry.c_date.getDate().toString().padStart(2, '0')}/${(entry.c_date.getMonth() + 1).toString().padStart(2, '0')}/${entry.c_date.getFullYear()}`;
-              } else {
-                formattedDate = String(entry.c_date);
-              }
-            } catch (error) {
-              console.error('Error formatting date:', error, entry.c_date);
-              formattedDate = String(entry.c_date || '');
-            }
-          }
-
-          // Format entry time if available
-          let formattedEntryTime = '';
-          if (entry.entry_time) {
-            try {
-              if (typeof entry.entry_time === 'string') {
-                // If it's already formatted, use as is
-                if (entry.entry_time.includes(':')) {
-                  formattedEntryTime = entry.entry_time;
-                } else {
-                  // Try to parse and format
-                  const time = new Date(entry.entry_time);
-                  if (!isNaN(time.getTime())) {
-                    formattedEntryTime = time.toLocaleTimeString('en-IN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                    });
-                  } else {
-                    formattedEntryTime = entry.entry_time;
-                  }
-                }
-              } else {
-                formattedEntryTime = String(entry.entry_time);
-              }
-            } catch (error) {
-              formattedEntryTime = String(entry.entry_time || '');
-            }
-          }
-
-          return {
-            'S.No': entry.sno || '',
-            Date: formattedDate,
-            Company: entry.company_name || '',
-            'Main Account': entry.acc_name || '',
-            'Sub Account': entry.sub_acc_name || '',
-            Particulars: entry.particulars || '',
-            Credit: entry.credit || 0,
-            Debit: entry.debit || 0,
-            'Sale Qty': entry.sale_qty || 0,
-            'Purchase Qty': entry.purchase_qty || 0,
-            Staff: entry.staff || '',
-            User: entry.users || '',
-            'Entry Time': formattedEntryTime,
-            Approved: entry.approved ? 'Yes' : 'No',
-            Edited: entry.edited ? 'Yes' : 'No',
-          };
-        });
-
-        if (exportData.length === 0) {
-          toast.error('No data to export');
-          return;
-        }
-
-        const headers = Object.keys(exportData[0]);
-        const csvContent = [
-          headers.join(','),
-          ...exportData.map((row: any) =>
-            headers
-              .map(header => {
-                const value = row[header];
-                // Escape quotes and wrap in quotes
-                const escapedValue = String(value).replace(/"/g, '""');
-                return `"${escapedValue}"`;
-              })
-              .join(',')
-          ),
-        ].join('\n');
-
-        // Add BOM for Excel to properly recognize UTF-8 and date formats
-        const BOM = '\uFEFF';
-        const csvWithBOM = BOM + csvContent;
-
-        const blob = new Blob([csvWithBOM], {
-          type: 'text/csv;charset=utf-8;',
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `thirumala-entries-${format(new Date(), 'yyyy-MM-dd-HH-mm')}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-        toast.success(`${exportFormat.toUpperCase()} export completed!`);
-      } else if (exportFormat === 'pdf') {
-        // Export to PDF - use the current filtered entries
-        const currentEntries =
-          entries.length > 0 ? entries : await supabaseDB.getAllCashBookEntries();
-
-        if (currentEntries.length === 0) {
-          toast.error('No data to export');
-          return;
-        }
-
-        const jsPDF = await import('jspdf');
-        const doc = new jsPDF.default();
-
-        // Add title
-        doc.setFontSize(16);
-        doc.text('Thirumala Group - Cash Book Entries', 20, 20);
-        doc.setFontSize(12);
-        doc.text(
-          `Generated on: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`,
-          20,
-          30
-        );
-        doc.text(`Total Entries: ${currentEntries.length}`, 20, 40);
-
-        let yPosition = 60;
-
-        // Add cash book entries
-        doc.setFontSize(14);
-        doc.text('Cash Book Entries', 20, yPosition);
-        yPosition += 10;
-
-        doc.setFontSize(8);
-        const headers = [
-          'S.No',
-          'Date',
-          'Company',
-          'Account',
-          'Particulars',
-          'Credit',
-          'Debit',
-        ];
-        let xPosition = 20;
-
-        // Add headers
-        headers.forEach(header => {
-          doc.text(header, xPosition, yPosition);
-          xPosition += 25;
-        });
-        yPosition += 5;
-
-        // Add data (limited to fit on page)
-        currentEntries.slice(0, 25).forEach((entry: any) => {
-          if (yPosition > 250) {
-            doc.addPage();
-            yPosition = 20;
-          }
-
-          xPosition = 20;
-          doc.text(String(entry.sno || ''), xPosition, yPosition);
-          xPosition += 25;
-          doc.text(String(entry.c_date || ''), xPosition, yPosition);
-          xPosition += 25;
-          doc.text(
-            String(entry.company_name || '').substring(0, 12),
-            xPosition,
-            yPosition
-          );
-          xPosition += 25;
-          doc.text(
-            String(entry.acc_name || '').substring(0, 12),
-            xPosition,
-            yPosition
-          );
-          xPosition += 25;
-          doc.text(
-            String(entry.particulars || '').substring(0, 15),
-            xPosition,
-            yPosition
-          );
-          xPosition += 25;
-          doc.text(String(entry.credit || ''), xPosition, yPosition);
-          xPosition += 25;
-          doc.text(String(entry.debit || ''), xPosition, yPosition);
-
-          yPosition += 5;
-        });
-
-        // Add summary
-        if (yPosition < 200) {
-          yPosition += 10;
-          doc.setFontSize(10);
-          doc.text('Summary:', 20, yPosition);
-          yPosition += 5;
-          doc.setFontSize(8);
-          const totalCredit = currentEntries.reduce(
-            (sum, entry) => sum + (entry.credit || 0),
-            0
-          );
-          const totalDebit = currentEntries.reduce(
-            (sum, entry) => sum + (entry.debit || 0),
-            0
-          );
-          doc.text(
-            `Total Credit: ${totalCredit.toLocaleString()}`,
-            25,
-            yPosition
-          );
-          yPosition += 4;
-          doc.text(
-            `Total Debit: ${totalDebit.toLocaleString()}`,
-            25,
-            yPosition
-          );
-          yPosition += 4;
-          doc.text(
-            `Balance: ${(totalCredit - totalDebit).toLocaleString()}`,
-            25,
-            yPosition
-          );
-        }
-
-        doc.save(
-          `thirumala-entries-${format(new Date(), 'yyyy-MM-dd-HH-mm')}.pdf`
-        );
-        toast.success('PDF export completed!');
-      }
-    } catch (error) {
-      console.error('Error exporting data:', error);
-      toast.error('Failed to export data');
-    }
-  };
 
   const getActionColor = (action: string) => {
     switch (action) {
@@ -2763,7 +2428,7 @@ const EditEntry: React.FC = () => {
             Multiple Entries for {selectedEntry?.c_date ? format(new Date(selectedEntry.c_date), 'dd/MM/yyyy') : 'Selected Date'}
           </h4>
           <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2'>
-            {entriesForSelectedDate.map((entry, index) => (
+            {entriesForSelectedDate.map((entry) => (
               <button
                 key={entry.id}
                 onClick={() => setSelectedEntry(entry)}
