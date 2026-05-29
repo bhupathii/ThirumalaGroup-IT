@@ -1,0 +1,238 @@
+import React, { useState } from 'react';
+import Card from '../../components/UI/Card';
+import Input from '../../components/UI/Input';
+import Button from '../../components/UI/Button';
+import { supabaseFinance } from '../../lib/supabaseFinance';
+import { supabase } from '../../lib/supabase';
+import { Search, User, Phone, MapPin, CreditCard, DollarSign } from 'lucide-react';
+import toast from 'react-hot-toast';
+
+interface CustomerAadhaarDetails {
+  customer: any;
+  loans: any[];
+}
+
+const AadhaarSearch: React.FC = () => {
+  const [aadhaar, setAadhaar] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<CustomerAadhaarDetails | null>(null);
+  const [searched, setSearched] = useState(false);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aadhaar.trim()) {
+      toast.error('Please enter an Aadhaar Card Number');
+      return;
+    }
+    const cleanUid = aadhaar.trim();
+
+    setLoading(true);
+    setSearched(true);
+    try {
+      // 1. Fetch customer with matching Aadhaar
+      const { data: customer, error: custError } = await supabase
+        .from('finance_customers')
+        .select('*')
+        .eq('aadhaar', cleanUid)
+        .maybeSingle();
+
+      if (custError) throw custError;
+
+      if (!customer) {
+        setResult(null);
+        toast.error('No customer found matching this Aadhaar UID');
+        return;
+      }
+
+      // 2. Fetch all loans for this customer
+      const { data: loans, error: loansError } = await supabase
+        .from('finance_loans')
+        .select('*')
+        .eq('customer_id', customer.id)
+        .order('date', { ascending: false });
+
+      if (loansError) throw loansError;
+
+      // 3. Fetch transactions to calculate collection ratios for each loan
+      const txs = await supabaseFinance.getTransactions();
+      const enrichedLoans = (loans || []).map(l => {
+        const principal = Number(l.amount);
+        const rate = Number(l.interest_rate);
+        const duration = Number(l.duration_months);
+        const repayable = principal + (principal * (rate / 100) * duration);
+
+        const lCols = txs.filter(t => t.loan_id === l.id && t.type === 'Collection');
+        const collected = lCols.reduce((sum, c) => sum + Number(c.amount), 0);
+        
+        const payRatio = repayable > 0 ? Math.min(100, Math.round((collected / repayable) * 100)) : 0;
+        const outstanding = Math.max(0, repayable - collected);
+
+        return {
+          ...l,
+          totalRepayable: repayable,
+          totalCollected: collected,
+          outstanding,
+          payRatio
+        };
+      });
+
+      setResult({
+        customer,
+        loans: enrichedLoans
+      });
+
+      toast.success('Record found');
+    } catch (err) {
+      console.error(err);
+      toast.error('Error querying Aadhaar database');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 p-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex justify-between items-center border-b border-green-100 pb-4">
+        <div>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Aadhaar Search Engine</h1>
+          <p className="text-gray-500 text-sm mt-1">Look up customer risk profile and full historical loan sheets using Aadhaar UID</p>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <Card title="Query Aadhaar Record" subtitle="Lookup the credit registry database" className="max-w-md">
+        <form onSubmit={handleSearch} className="space-y-4">
+          <Input
+            label="Aadhaar Card Number (12-Digit UID) *"
+            value={aadhaar}
+            onChange={setAadhaar}
+            placeholder="e.g. 123456789012"
+            required
+          />
+          <Button type="submit" variant="success" className="w-full" icon={Search} disabled={loading}>
+            {loading ? 'Searching...' : 'Search Registry'}
+          </Button>
+        </form>
+      </Card>
+
+      {/* Results view */}
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-500"></div>
+        </div>
+      ) : result ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Customer profile */}
+          <Card title="Customer Registry Card" subtitle="Identity details saved in credit registry">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-green-100 text-green-700 flex items-center justify-center">
+                  <User className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-gray-900 text-base">{result.customer.name}</h4>
+                  <p className="text-xs text-gray-400">Created: {new Date(result.customer.created_at).toLocaleDateString('en-IN')}</p>
+                </div>
+              </div>
+              <div className="space-y-2 border-t pt-3">
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-gray-400" />
+                  <span className="font-bold">{result.customer.phone || 'No phone recorded'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-gray-400" />
+                  <span className="font-semibold">{result.customer.address || 'No address recorded'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-gray-400" />
+                  <span className="font-mono font-bold text-gray-900">Aadhaar: {result.customer.aadhaar}</span>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Customer loan list */}
+          <div className="lg:col-span-2 space-y-4">
+            <h3 className="text-lg font-bold text-gray-900">Historical Credit Ledgers</h3>
+            {result.loans.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 border rounded-lg bg-gray-50/50">
+                No credit loan accounts found associated with this Aadhaar profile.
+              </div>
+            ) : (
+              result.loans.map((loan) => (
+                <Card
+                  key={loan.id}
+                  title={
+                    <div className="flex justify-between items-center w-full">
+                      <span className="font-mono font-bold text-gray-900">{loan.loan_id}</span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                        loan.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {loan.status}
+                      </span>
+                    </div>
+                  }
+                  subtitle={`Disbursed Date: ${new Date(loan.date).toLocaleDateString('en-IN')}`}
+                  className="shadow-sm hover:border-green-200 transition-all border border-gray-100"
+                >
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-medium text-gray-600 mb-4">
+                    <div>
+                      <span className="text-[10px] block uppercase text-gray-400">Principal</span>
+                      <span className="text-gray-900 font-bold">₹{Number(loan.amount).toLocaleString('en-IN')}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] block uppercase text-gray-400">Total Repayable</span>
+                      <span className="text-gray-900 font-bold">₹{loan.totalRepayable.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] block uppercase text-gray-400">Paid Collected</span>
+                      <span className="text-green-600 font-bold">₹{loan.totalCollected.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] block uppercase text-gray-400">Remaining Bal</span>
+                      <span className="text-orange-700 font-extrabold">₹{loan.outstanding.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  {/* Payment Ratio Progress Bar */}
+                  <div>
+                    <div className="flex justify-between text-[10px] font-bold text-gray-500 mb-1">
+                      <span>Collection Repayment Progress</span>
+                      <span>{loan.payRatio}% Paid</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden border">
+                      <div
+                        className="bg-green-500 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${loan.payRatio}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Surety details preview */}
+                  {(loan.surety_name || loan.remarks) && (
+                    <div className="mt-4 pt-3 border-t grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-gray-400 font-semibold">
+                      {loan.surety_name && (
+                        <p>Guarantor: <span className="text-gray-600 font-bold">{loan.surety_name}</span></p>
+                      )}
+                      {loan.remarks && (
+                        <p>Remarks: <span className="text-gray-500 font-normal italic">"{loan.remarks}"</span></p>
+                      )}
+                    </div>
+                  )}
+                </Card>
+              ))
+            )}
+          </div>
+        </div>
+      ) : searched ? (
+        <div className="flex flex-col items-center justify-center border border-dashed rounded-lg py-16 bg-gray-50/20">
+          <CreditCard className="w-10 h-10 text-gray-300 mb-2 stroke-1" />
+          <p className="text-gray-400 text-sm">Registry search was negative. Check Aadhaar spacing and digit counts.</p>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+export default AadhaarSearch;

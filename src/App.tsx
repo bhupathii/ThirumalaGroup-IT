@@ -33,6 +33,32 @@ import UserManagement from './pages/UserManagement';
 import CsvUpload from './pages/CsvUpload';
 import DebugInfo from './components/UI/DebugInfo';
 
+// Finance Mode Page Imports
+import FinanceDashboard from './pages/finance/FinanceDashboard';
+import LoanEntry from './pages/finance/LoanEntry';
+import EditLoanEntry from './pages/finance/EditLoanEntry';
+import Partners from './pages/finance/Partners';
+import SearchPage from './pages/finance/Search';
+import GeneralCalculator from './pages/finance/GeneralCalculator';
+import CapitalEntry from './pages/finance/CapitalEntry';
+import Camera from './pages/finance/Camera';
+import Daybook from './pages/finance/Daybook';
+import GeneralLedger from './pages/finance/GeneralLedger';
+import CDLedger from './pages/finance/CDLedger';
+import STBDLedger from './pages/finance/STBDLedger';
+import HPLedger from './pages/finance/HPLedger';
+import TBDLedger from './pages/finance/TBDLedger';
+import DuesLedger from './pages/finance/DuesLedger';
+import ProfitAndLoss from './pages/finance/ProfitAndLoss';
+import FinalStatement from './pages/finance/FinalStatement';
+import BusinessReport from './pages/finance/BusinessReport';
+import PartnerPerformance from './pages/finance/PartnerPerformance';
+import NewCustomers from './pages/finance/NewCustomers';
+import PhoneNumberEditor from './pages/finance/PhoneNumberEditor';
+import AadhaarSearch from './pages/finance/AadhaarSearch';
+import EditedDeletedLogs from './pages/finance/EditedDeletedLogs';
+import UserAccessManagement from './pages/finance/UserAccessManagement';
+
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -178,6 +204,32 @@ const AppContent: React.FC = () => {
           <Route path='drivers' element={<Drivers />} />
           <Route path='user-management' element={<UserManagement />} />
           <Route path='csv-upload' element={<CsvUpload />} />
+
+          {/* Finance Mode Routes */}
+          <Route path='finance' element={<FinanceDashboard />} />
+          <Route path='finance/loan-entry' element={<LoanEntry />} />
+          <Route path='finance/edit-loan-entry' element={<EditLoanEntry />} />
+          <Route path='finance/partners' element={<Partners />} />
+          <Route path='finance/search' element={<SearchPage />} />
+          <Route path='finance/calculator' element={<GeneralCalculator />} />
+          <Route path='finance/capital-entry' element={<CapitalEntry />} />
+          <Route path='finance/camera' element={<Camera />} />
+          <Route path='finance/daybook' element={<Daybook />} />
+          <Route path='finance/general-ledger' element={<GeneralLedger />} />
+          <Route path='finance/cd-ledger' element={<CDLedger />} />
+          <Route path='finance/stbd-ledger' element={<STBDLedger />} />
+          <Route path='finance/hp-ledger' element={<HPLedger />} />
+          <Route path='finance/tbd-ledger' element={<TBDLedger />} />
+          <Route path='finance/dues-ledger' element={<DuesLedger />} />
+          <Route path='finance/pl' element={<ProfitAndLoss />} />
+          <Route path='finance/final-statement' element={<FinalStatement />} />
+          <Route path='finance/business-report' element={<BusinessReport />} />
+          <Route path='finance/partner-performance' element={<PartnerPerformance />} />
+          <Route path='finance/new-customers' element={<NewCustomers />} />
+          <Route path='finance/phone-editor' element={<PhoneNumberEditor />} />
+          <Route path='finance/aadhaar-search' element={<AadhaarSearch />} />
+          <Route path='finance/logs' element={<EditedDeletedLogs />} />
+          <Route path='finance/user-access-management' element={<UserAccessManagement />} />
         </Route>
       </Routes>
     </Router>

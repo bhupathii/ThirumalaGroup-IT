@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-type TableMode = 'regular' | 'itr';
+type TableMode = 'regular' | 'itr' | 'finance';
 
 interface TableModeContextType {
   mode: TableMode;
   toggleMode: () => void;
   setMode: (mode: TableMode) => void;
   isITRMode: boolean;
+  isFinanceMode: boolean;
 }
 
 const TableModeContext = createContext<TableModeContextType | undefined>(undefined);
@@ -25,21 +26,21 @@ export const TableModeProvider: React.FC<{ children: React.ReactNode }> = ({
   // Load mode from localStorage, default to 'regular'
   const [mode, setMode] = useState<TableMode>(() => {
     const saved = localStorage.getItem('table_mode');
-    return (saved === 'itr' ? 'itr' : 'regular') as TableMode;
+    return (saved === 'itr' ? 'itr' : saved === 'finance' ? 'finance' : 'regular') as TableMode;
   });
 
   // Save to localStorage whenever mode changes
   useEffect(() => {
     localStorage.setItem('table_mode', mode);
     window.dispatchEvent(
-      new CustomEvent<'regular' | 'itr'>('table-mode-changed', {
+      new CustomEvent<TableMode>('table-mode-changed', {
         detail: mode,
       })
     );
   }, [mode]);
 
   const toggleMode = () => {
-    setMode(prev => (prev === 'regular' ? 'itr' : 'regular'));
+    setMode(prev => (prev === 'regular' ? 'itr' : prev === 'itr' ? 'finance' : 'regular'));
   };
 
   const setModeDirect = (newMode: TableMode) => {
@@ -51,6 +52,7 @@ export const TableModeProvider: React.FC<{ children: React.ReactNode }> = ({
     toggleMode,
     setMode: setModeDirect,
     isITRMode: mode === 'itr',
+    isFinanceMode: mode === 'finance',
   };
 
   return (

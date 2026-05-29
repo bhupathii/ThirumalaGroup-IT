@@ -31,23 +31,52 @@ const ModeSelection: React.FC = () => {
     { path: '/user-management', key: 'users', adminOnly: true },
   ];
 
+  const financeMenuItems = [
+    { path: '/finance', key: 'finance_dashboard' },
+    { path: '/finance/loan-entry', key: 'loan_entry' },
+    { path: '/finance/edit-loan-entry', key: 'edit_loan_entry' },
+    { path: '/finance/partners', key: 'partners' },
+    { path: '/finance/search', key: 'search' },
+    { path: '/finance/calculator', key: 'calculator' },
+    { path: '/finance/capital-entry', key: 'capital_entry' },
+    { path: '/finance/camera', key: 'camera' },
+    { path: '/finance/daybook', key: 'daybook' },
+    { path: '/finance/general-ledger', key: 'general_ledger' },
+    { path: '/finance/cd-ledger', key: 'cd_ledger' },
+    { path: '/finance/stbd-ledger', key: 'stbd_ledger' },
+    { path: '/finance/hp-ledger', key: 'hp_ledger' },
+    { path: '/finance/tbd-ledger', key: 'tbd_ledger' },
+    { path: '/finance/dues-ledger', key: 'dues_ledger' },
+    { path: '/finance/pl', key: 'pl' },
+    { path: '/finance/final-statement', key: 'final_statement' },
+    { path: '/finance/business-report', key: 'business_report' },
+    { path: '/finance/partner-performance', key: 'partner_performance' },
+    { path: '/finance/new-customers', key: 'new_customers' },
+    { path: '/finance/phone-editor', key: 'phone_editor' },
+    { path: '/finance/aadhaar-search', key: 'aadhaar_search' },
+    { path: '/finance/logs', key: 'logs' },
+    { path: '/finance/user-access-management', key: 'user_access_management', adminOnly: true },
+  ];
+
   // Get the first available feature path for the user
-  const getFirstAvailableFeature = (mode: 'regular' | 'itr') => {
+  const getFirstAvailableFeature = (mode: 'regular' | 'itr' | 'finance') => {
     const isAdmin = user?.is_admin || false;
     const featuresByMode = user?.featuresByMode || {};
     
     // Get features for the selected mode
     const features = isAdmin 
-      ? menuItems.map(item => item.key) // Admins have all features
+      ? (mode === 'finance' ? financeMenuItems : menuItems).map(item => item.key) // Admins have all features
       : (featuresByMode[mode] || []);
     
+    const activeItems = mode === 'finance' ? financeMenuItems : menuItems;
+    
     // Find the first menu item that matches a user feature (skip dashboard)
-    for (const item of menuItems) {
+    for (const item of activeItems) {
       // Skip admin-only items for non-admins
       if (item.adminOnly && !isAdmin) continue;
       
       // Skip dashboard - we want the first actual feature
-      if (item.key === 'dashboard') continue;
+      if (item.key === 'dashboard' || item.key === 'finance_dashboard') continue;
       
       // If user has this feature, return its path
       if (features.includes(item.key)) {
@@ -55,8 +84,8 @@ const ModeSelection: React.FC = () => {
       }
     }
     
-    // Fallback to dashboard if no features found (shouldn't happen)
-    return '/';
+    // Fallback to dashboard
+    return mode === 'finance' ? '/finance' : '/';
   };
 
   const handleRegularMode = () => {
@@ -72,9 +101,8 @@ const ModeSelection: React.FC = () => {
   };
 
   const handleFinanceMode = () => {
-    // Finance mode - navigate to first available feature
-    setMode('regular'); // Finance uses regular mode
-    const firstFeature = getFirstAvailableFeature('regular');
+    setMode('finance');
+    const firstFeature = getFirstAvailableFeature('finance');
     navigate(firstFeature);
   };
 
@@ -88,8 +116,8 @@ const ModeSelection: React.FC = () => {
   // Check if user has features in ITR mode
   const hasITRFeatures = isAdmin || (featuresByMode.itr && featuresByMode.itr.length > 0);
   
-  // Show Finance option only for admin users
-  const showFinance = isAdmin;
+  // Show Finance option for admins and users with finance features
+  const showFinance = isAdmin || (featuresByMode.finance && featuresByMode.finance.length > 0);
   
   // Determine grid layout based on number of visible buttons
   const visibleButtons = [hasRegularFeatures, hasITRFeatures, showFinance].filter(Boolean).length;

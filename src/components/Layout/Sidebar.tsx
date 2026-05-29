@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTableMode } from '../../contexts/TableModeContext';
 import {
   Home,
   Edit,
@@ -19,6 +20,11 @@ import {
   Download,
   Calculator,
   Users,
+  Search,
+  Camera,
+  DollarSign,
+  Phone,
+  Shield,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -32,6 +38,7 @@ interface MenuItem {
 
 const Sidebar: React.FC = () => {
   const { user, logout } = useAuth();
+  const { mode: tableMode, isFinanceMode } = useTableMode();
 
   // Debug: Log user features to help diagnose issues
   React.useEffect(() => {
@@ -122,19 +129,66 @@ const Sidebar: React.FC = () => {
     },
   ];
 
+  const financeMenuItems: MenuItem[] = [
+    { icon: Home, label: 'Finance Dashboard', path: '/finance', key: 'finance_dashboard' },
+    { icon: Plus, label: 'Loan Entry', path: '/finance/loan-entry', key: 'loan_entry' },
+    { icon: Edit, label: 'Edit Loan Entry', path: '/finance/edit-loan-entry', key: 'edit_loan_entry' },
+    { icon: Users, label: 'Partners', path: '/finance/partners', key: 'partners' },
+    { icon: Search, label: 'Search', path: '/finance/search', key: 'search' },
+    { icon: Calculator, label: 'General Calculator', path: '/finance/calculator', key: 'calculator' },
+    { icon: DollarSign, label: 'Capital Entry', path: '/finance/capital-entry', key: 'capital_entry' },
+    { icon: Camera, label: 'Camera', path: '/finance/camera', key: 'camera' },
+    { icon: BookOpen, label: 'Daybook', path: '/finance/daybook', key: 'daybook' },
+    { icon: Book, label: 'General Ledger', path: '/finance/general-ledger', key: 'general_ledger' },
+    { icon: Book, label: 'CD Ledger', path: '/finance/cd-ledger', key: 'cd_ledger' },
+    { icon: Book, label: 'STBD Ledger', path: '/finance/stbd-ledger', key: 'stbd_ledger' },
+    { icon: Book, label: 'HP Ledger', path: '/finance/hp-ledger', key: 'hp_ledger' },
+    { icon: Book, label: 'TBD Ledger', path: '/finance/tbd-ledger', key: 'tbd_ledger' },
+    { icon: Book, label: 'Dues Ledger', path: '/finance/dues-ledger', key: 'dues_ledger' },
+    { icon: FileText, label: 'Profit & Loss', path: '/finance/pl', key: 'pl' },
+    { icon: FileText, label: 'Final Statement', path: '/finance/final-statement', key: 'final_statement' },
+    { icon: FileText, label: 'Business Report', path: '/finance/business-report', key: 'business_report' },
+    { icon: FileText, label: 'Partner Performance', path: '/finance/partner-performance', key: 'partner_performance' },
+    { icon: FileText, label: 'New Customers', path: '/finance/new-customers', key: 'new_customers' },
+    { icon: Phone, label: 'Phone Number Editor', path: '/finance/phone-editor', key: 'phone_editor' },
+    { icon: Search, label: 'Aadhaar Search', path: '/finance/aadhaar-search', key: 'aadhaar_search' },
+    { icon: FileEdit, label: 'Edited / Deleted Logs', path: '/finance/logs', key: 'logs' },
+    {
+      icon: Shield,
+      label: 'User Access',
+      path: '/finance/user-access-management',
+      key: 'user_access_management',
+      adminOnly: true,
+    },
+  ];
+
+  const activeMenuItems = isFinanceMode ? financeMenuItems : menuItems;
+
   return (
-    <aside className='w-64 h-screen sticky top-0 left-0 z-30 bg-gradient-to-b from-white via-blue-50 to-blue-100 shadow-xl rounded-r-2xl flex flex-col border-r border-blue-100'>
+    <aside className={`w-64 h-screen sticky top-0 left-0 z-30 shadow-xl rounded-r-2xl flex flex-col border-r ${
+      isFinanceMode
+        ? 'bg-gradient-to-b from-white via-green-50 to-green-100 border-green-100'
+        : 'bg-gradient-to-b from-white via-blue-50 to-blue-100 border-blue-100'
+    }`}>
       {/* Top: Logo/Brand and User Info */}
       <div className='flex flex-col gap-0'>
         {/* Logo/Brand */}
-        <div className='p-4 border-b border-blue-200 bg-gradient-to-br from-orange-50 to-red-50 shadow-sm flex flex-col items-center'>
+        <div className={`p-4 border-b shadow-sm flex flex-col items-center ${
+          isFinanceMode
+            ? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50'
+            : 'border-blue-200 bg-gradient-to-br from-orange-50 to-red-50'
+        }`}>
           <h1 className='text-lg font-bold text-gray-900 tracking-wide'>
-            Thirumala Group
+            Thirumala Group {isFinanceMode ? 'Finance' : ''}
           </h1>
         </div>
         {/* User Info */}
-        <div className='p-4 border-b border-blue-100 bg-blue-50 flex items-center gap-3'>
-          <div className='w-9 h-9 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow'>
+        <div className={`p-4 border-b flex items-center gap-3 ${
+          isFinanceMode ? 'border-green-100 bg-green-50' : 'border-blue-100 bg-blue-50'
+        }`}>
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center shadow bg-gradient-to-br ${
+            isFinanceMode ? 'from-green-500 to-emerald-600' : 'from-blue-500 to-purple-600'
+          }`}>
             <span className='text-base font-bold text-white'>
               {user?.username.charAt(0).toUpperCase()}
             </span>
@@ -143,7 +197,7 @@ const Sidebar: React.FC = () => {
             <p className='text-sm font-semibold text-gray-900 leading-tight'>
               {user?.username}
             </p>
-            <p className='text-xs text-blue-600 font-medium capitalize'>
+            <p className={`text-xs font-medium capitalize ${isFinanceMode ? 'text-green-600' : 'text-blue-600'}`}>
               {user?.is_admin ? 'Admin' : 'User'}
             </p>
           </div>
@@ -152,30 +206,19 @@ const Sidebar: React.FC = () => {
       {/* Scrollable Menu */}
       <nav className='flex-1 overflow-y-auto custom-scrollbar px-2 py-4'>
         <ul className='space-y-1'>
-          {menuItems
+          {activeMenuItems
             .filter(item => {
               // Admin-only items: only show to admins
               if (item.adminOnly) {
                 return user?.is_admin;
               }
               
-              // For non-admin users, check if they have this feature (including dashboard)
+              // For non-admin users, check if they have this feature
               if (!user?.is_admin) {
-                // Ensure features is an array before checking
                 const userFeatures = Array.isArray(user?.features) ? user.features : [];
-                const hasAccess = userFeatures.includes(item.key);
-                
-                // Debug log for missing features
-                if (!hasAccess) {
-                  console.log(`🔒 Access denied: User "${user?.username}" doesn't have feature "${item.key}"`, {
-                    availableFeatures: userFeatures
-                  });
-                }
-                
-                return hasAccess;
+                return userFeatures.includes(item.key);
               }
               
-              // Admins see everything (except items marked adminOnly which are already filtered)
               return true;
             })
             .map(item => (
@@ -186,7 +229,11 @@ const Sidebar: React.FC = () => {
                     `group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all relative
                     ${
                       isActive
-                        ? 'bg-blue-100 text-blue-700 font-bold border-l-4 border-blue-600 shadow-sm'
+                        ? isFinanceMode
+                          ? 'bg-green-100 text-green-700 font-bold border-l-4 border-green-600 shadow-sm'
+                          : 'bg-blue-100 text-blue-700 font-bold border-l-4 border-blue-600 shadow-sm'
+                        : isFinanceMode
+                        ? 'text-gray-600 hover:bg-green-50 hover:text-green-800'
                         : 'text-gray-600 hover:bg-blue-50 hover:text-blue-800'
                     }
                     `

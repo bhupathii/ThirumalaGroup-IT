@@ -4,10 +4,12 @@ import { supabaseDB } from '../lib/supabaseDatabase';
 import toast from 'react-hot-toast';
 import bcrypt from 'bcryptjs';
 
-type ModeKey = 'regular' | 'itr';
-const MODE_VALUES: ModeKey[] = ['regular', 'itr'];
-const getStoredMode = (): ModeKey =>
-  (localStorage.getItem('table_mode') as ModeKey) === 'itr' ? 'itr' : 'regular';
+type ModeKey = 'regular' | 'itr' | 'finance';
+const MODE_VALUES: ModeKey[] = ['regular', 'itr', 'finance'];
+const getStoredMode = (): ModeKey => {
+  const mode = localStorage.getItem('table_mode');
+  return (mode === 'itr' ? 'itr' : mode === 'finance' ? 'finance' : 'regular') as ModeKey;
+};
 const createEmptyModeFeatureMap = () =>
   MODE_VALUES.reduce(
     (acc, mode) => {
@@ -44,6 +46,31 @@ const ADMIN_FEATURES = [
   'drivers',
   'bank_guarantees',
   'users',
+  // Finance Mode Features
+  'finance_dashboard',
+  'loan_entry',
+  'edit_loan_entry',
+  'partners',
+  'search',
+  'calculator',
+  'capital_entry',
+  'camera',
+  'daybook',
+  'general_ledger',
+  'cd_ledger',
+  'stbd_ledger',
+  'hp_ledger',
+  'tbd_ledger',
+  'dues_ledger',
+  'pl',
+  'final_statement',
+  'business_report',
+  'partner_performance',
+  'new_customers',
+  'phone_editor',
+  'aadhaar_search',
+  'logs',
+  'user_access_management',
 ];
 const getFeaturesForMode = (
   featuresByMode: Record<ModeKey, string[]>,
@@ -63,7 +90,7 @@ interface User {
   is_admin: boolean;
   features: string[];
   featuresByMode?: Record<ModeKey, string[]>;
-  mode?: 'regular' | 'itr' | null;
+  mode?: 'regular' | 'itr' | 'finance' | null;
 }
 
 interface AuthContextType {
@@ -72,7 +99,7 @@ interface AuthContextType {
   login: (
     username: string,
     password: string
-  ) => Promise<{ success: boolean; error?: string; userMode?: 'regular' | 'itr' | null }>;
+  ) => Promise<{ success: boolean; error?: string; userMode?: 'regular' | 'itr' | 'finance' | null }>;
   logout: () => Promise<void>;
   changePassword: (
     currentPassword: string,
@@ -153,6 +180,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     });
 
+    // Load finance permissions from finance_user_permissions table
+    try {
+      const { data: financeAccess, error: financeAccessError } = await supabase
+        .from('finance_user_permissions')
+        .select('feature_key')
+        .eq('user_id', userId);
+
+      if (!financeAccessError && financeAccess) {
+        financeAccess.forEach(item => {
+          if (item.feature_key && !map.finance.includes(item.feature_key)) {
+            map.finance.push(item.feature_key);
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Error loading finance permissions:', err);
+    }
+
     return { featuresByMode: map, modeColumnExists };
   };
 
@@ -205,7 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const handleModeChange = (event: Event) => {
       const detail = (event as CustomEvent<ModeKey>).detail;
-      const nextMode = detail === 'itr' ? 'itr' : 'regular';
+      const nextMode = detail === 'itr' ? 'itr' : detail === 'finance' ? 'finance' : 'regular';
       setUser(prev => {
         if (!prev) return prev;
         if (prev.is_admin) {
