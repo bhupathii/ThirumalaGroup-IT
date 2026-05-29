@@ -17,6 +17,10 @@ export interface FinanceCustomer {
   aadhaar: string | null;
   created_at: string;
   updated_at: string;
+  customer_photo_url?: string | null;
+  fingerprint_url?: string | null;
+  fingerprint_template?: string | null;
+  fingerprint_added?: boolean;
 }
 
 export interface FinanceLoan {
@@ -36,6 +40,11 @@ export interface FinanceLoan {
   status: 'Active' | 'Closed';
   created_at: string;
   updated_at: string;
+  customer_photo_url?: string | null;
+  surety_photo_url?: string | null;
+  fingerprint_url?: string | null;
+  fingerprint_template?: string | null;
+  fingerprint_added?: boolean;
 }
 
 export interface FinanceTransaction {
@@ -317,7 +326,17 @@ class SupabaseFinance {
 
   async createLoan(
     loanData: Omit<FinanceLoan, 'id' | 'created_at' | 'updated_at' | 'status'>,
-    customerData: { id?: string; name?: string; phone?: string; address?: string; aadhaar?: string },
+    customerData: { 
+      id?: string; 
+      name?: string; 
+      phone?: string; 
+      address?: string; 
+      aadhaar?: string;
+      customer_photo_url?: string | null;
+      fingerprint_url?: string | null;
+      fingerprint_template?: string | null;
+      fingerprint_added?: boolean;
+    },
     duesData: Omit<FinanceDue, 'id' | 'loan_id' | 'paid_amount' | 'status' | 'created_at' | 'updated_at'>[],
     photosData: { photo_type: 'Customer' | 'Surety'; photo_url: string }[],
     staffName: string
@@ -333,13 +352,29 @@ class SupabaseFinance {
             name: customerData.name || '',
             phone: customerData.phone || '',
             address: customerData.address || '',
-            aadhaar: customerData.aadhaar || null
+            aadhaar: customerData.aadhaar || null,
+            customer_photo_url: customerData.customer_photo_url || null,
+            fingerprint_url: customerData.fingerprint_url || null,
+            fingerprint_template: customerData.fingerprint_template || null,
+            fingerprint_added: customerData.fingerprint_added || false
           }])
           .select()
           .single();
 
         if (customerError) throw customerError;
         customerId = customer.id;
+      } else {
+        // If existing customer, update customer's photo/fingerprint if provided
+        if (customerData.customer_photo_url || customerData.fingerprint_url) {
+          const updatePayload: Partial<FinanceCustomer> = {};
+          if (customerData.customer_photo_url) updatePayload.customer_photo_url = customerData.customer_photo_url;
+          if (customerData.fingerprint_url) {
+            updatePayload.fingerprint_url = customerData.fingerprint_url;
+            updatePayload.fingerprint_template = customerData.fingerprint_template;
+            updatePayload.fingerprint_added = customerData.fingerprint_added;
+          }
+          await this.updateCustomer(customerId, updatePayload, staffName);
+        }
       }
 
       // Create loan record
@@ -348,7 +383,12 @@ class SupabaseFinance {
         .insert([{
           ...loanData,
           customer_id: customerId,
-          status: 'Active'
+          status: 'Active',
+          customer_photo_url: loanData.customer_photo_url || customerData.customer_photo_url || null,
+          surety_photo_url: loanData.surety_photo_url || null,
+          fingerprint_url: loanData.fingerprint_url || customerData.fingerprint_url || null,
+          fingerprint_template: loanData.fingerprint_template || customerData.fingerprint_template || null,
+          fingerprint_added: loanData.fingerprint_added || customerData.fingerprint_added || false
         }])
         .select()
         .single();

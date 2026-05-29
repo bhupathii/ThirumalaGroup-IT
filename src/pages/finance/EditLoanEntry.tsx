@@ -6,6 +6,8 @@ import { supabaseFinance, FinanceLoan, FinanceCustomer } from '../../lib/supabas
 import { Search, Save, X, Edit, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
+import { CameraCapture } from '../../components/finance/CameraCapture';
+import { FingerprintCapture } from '../../components/finance/FingerprintCapture';
 
 const EditLoanEntry: React.FC = () => {
   const { user } = useAuth();
@@ -22,6 +24,10 @@ const EditLoanEntry: React.FC = () => {
   const [custPhone, setCustPhone] = useState('');
   const [custAddress, setCustAddress] = useState('');
   const [custAadhaar, setCustAadhaar] = useState('');
+  const [custPhoto, setCustPhoto] = useState<string | null>(null);
+  const [custFingerprintUrl, setCustFingerprintUrl] = useState<string | null>(null);
+  const [custFingerprintTemplate, setCustFingerprintTemplate] = useState<string | null>(null);
+  const [custFingerprintAdded, setCustFingerprintAdded] = useState(false);
 
   const [date, setDate] = useState('');
   const [amount, setAmount] = useState('');
@@ -35,6 +41,7 @@ const EditLoanEntry: React.FC = () => {
   const [suretyName, setSuretyName] = useState('');
   const [suretyPhone, setSuretyPhone] = useState('');
   const [suretyAadhaar, setSuretyAadhaar] = useState('');
+  const [suretyPhoto, setSuretyPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     fetchLoans();
@@ -78,7 +85,11 @@ const EditLoanEntry: React.FC = () => {
     setCustPhone(loan.customer?.phone || '');
     setCustAddress(loan.customer?.address || '');
     setCustAadhaar(loan.customer?.aadhaar || '');
-
+    setCustPhoto(loan.customer?.customer_photo_url || null);
+    setCustFingerprintUrl(loan.customer?.fingerprint_url || null);
+    setCustFingerprintTemplate(loan.customer?.fingerprint_template || null);
+    setCustFingerprintAdded(!!loan.customer?.fingerprint_added);
+ 
     // Loan
     setDate(loan.date);
     setAmount(String(loan.amount));
@@ -88,11 +99,12 @@ const EditLoanEntry: React.FC = () => {
     setDueAmount(String(loan.due_amount));
     setStatus(loan.status);
     setRemarks(loan.remarks || '');
-
+ 
     // Surety
     setSuretyName(loan.surety_name || '');
     setSuretyPhone(loan.surety_phone || '');
     setSuretyAadhaar(loan.surety_aadhaar || '');
+    setSuretyPhoto(loan.surety_photo_url || null);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -108,7 +120,11 @@ const EditLoanEntry: React.FC = () => {
           name: custName,
           phone: custPhone || null,
           address: custAddress || null,
-          aadhaar: custAadhaar || null
+          aadhaar: custAadhaar || null,
+          customer_photo_url: custPhoto,
+          fingerprint_url: custFingerprintUrl,
+          fingerprint_template: custFingerprintTemplate,
+          fingerprint_added: custFingerprintAdded
         }, staffName);
       }
 
@@ -124,7 +140,12 @@ const EditLoanEntry: React.FC = () => {
         remarks: remarks || null,
         surety_name: suretyName || null,
         surety_phone: suretyPhone || null,
-        surety_aadhaar: suretyAadhaar || null
+        surety_aadhaar: suretyAadhaar || null,
+        customer_photo_url: custPhoto,
+        surety_photo_url: suretyPhoto,
+        fingerprint_url: custFingerprintUrl,
+        fingerprint_template: custFingerprintTemplate,
+        fingerprint_added: custFingerprintAdded
       }, staffName);
 
       if (updatedLoan) {
@@ -183,6 +204,24 @@ const EditLoanEntry: React.FC = () => {
                 <Input label="Phone Number" value={custPhone} onChange={setCustPhone} />
                 <Input label="Address" value={custAddress} onChange={setCustAddress} />
                 <Input label="Aadhaar UID" value={custAadhaar} onChange={setCustAadhaar} />
+                
+                <div className="pt-2 border-t border-gray-100 space-y-3">
+                  <CameraCapture
+                    label="Customer Photo Capture"
+                    existingPhotoUrl={custPhoto}
+                    onPhotoSaved={setCustPhoto}
+                  />
+                  <FingerprintCapture
+                    label="Customer Fingerprint Capture"
+                    existingFingerprintUrl={custFingerprintUrl}
+                    existingTemplate={custFingerprintTemplate}
+                    onFingerprintSaved={(url, template) => {
+                      setCustFingerprintUrl(url);
+                      setCustFingerprintTemplate(template);
+                      setCustFingerprintAdded(!!url || !!template);
+                    }}
+                  />
+                </div>
               </div>
 
               {/* Box 2: Loan parameters */}
@@ -221,6 +260,12 @@ const EditLoanEntry: React.FC = () => {
                 <Input label="Surety Person Name" value={suretyName} onChange={setSuretyName} />
                 <Input label="Surety Phone" value={suretyPhone} onChange={setSuretyPhone} />
                 <Input label="Surety Aadhaar" value={suretyAadhaar} onChange={setSuretyAadhaar} />
+                
+                <CameraCapture
+                  label="Surety Photo Capture"
+                  existingPhotoUrl={suretyPhoto}
+                  onPhotoSaved={setSuretyPhoto}
+                />
                 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
