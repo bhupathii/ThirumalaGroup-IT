@@ -17,7 +17,8 @@ interface DaybookItem {
 }
 
 const Daybook: React.FC = () => {
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [fromDate, setFromDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [toDate, setToDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(true);
   
   const [openingBalance, setOpeningBalance] = useState(0);
@@ -28,12 +29,12 @@ const Daybook: React.FC = () => {
 
   useEffect(() => {
     fetchDaybookData();
-  }, [selectedDate]);
+  }, [fromDate, toDate]);
 
   const fetchDaybookData = async () => {
     setLoading(true);
     try {
-      // 1. Calculate Opening Balance (Net flow before selectedDate)
+      // 1. Calculate Opening Balance (Net flow before fromDate)
       // Receipts: collections & capital credits before date
       // Payments: disbursements & capital debits before date
       const allTx = await supabaseFinance.getTransactions();
@@ -41,7 +42,7 @@ const Daybook: React.FC = () => {
 
       let opBal = 0;
       allTx.forEach(tx => {
-        if (tx.date < selectedDate) {
+        if (tx.date < fromDate) {
           if (tx.type === 'Collection') {
             opBal += Number(tx.amount);
           } else if (tx.type === 'Disbursement') {
@@ -51,7 +52,7 @@ const Daybook: React.FC = () => {
       });
 
       allCapital.forEach(cap => {
-        if (cap.date < selectedDate) {
+        if (cap.date < fromDate) {
           if (cap.type === 'Credit') {
             opBal += Number(cap.amount);
           } else {
@@ -62,14 +63,14 @@ const Daybook: React.FC = () => {
 
       setOpeningBalance(opBal);
 
-      // 2. Fetch items for selectedDate
+      // 2. Fetch items for date range
       const items: DaybookItem[] = [];
       let inSum = 0;
       let outSum = 0;
 
-      // Filter transactions for this date
-      const dateTx = allTx.filter(tx => tx.date === selectedDate);
-      dateTx.forEach(tx => {
+      // Filter transactions for this date range
+      const rangeTx = allTx.filter(tx => tx.date >= fromDate && tx.date <= toDate);
+      rangeTx.forEach(tx => {
         const amt = Number(tx.amount);
         const isCollection = tx.type === 'Collection';
         items.push({
@@ -87,9 +88,9 @@ const Daybook: React.FC = () => {
         else outSum += amt;
       });
 
-      // Filter capital entries for this date
-      const dateCap = allCapital.filter(cap => cap.date === selectedDate);
-      dateCap.forEach(cap => {
+      // Filter capital entries for this date range
+      const rangeCap = allCapital.filter(cap => cap.date >= fromDate && cap.date <= toDate);
+      rangeCap.forEach(cap => {
         const amt = Number(cap.amount);
         const isCredit = cap.type === 'Credit';
         items.push({
@@ -138,12 +139,18 @@ const Daybook: React.FC = () => {
         </div>
       </div>
 
-      <div className="max-w-xs print:hidden">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md print:hidden bg-gray-50 p-4 rounded-xl border">
         <Input
-          label="Select Daybook Date"
+          label="From Date"
           type="date"
-          value={selectedDate}
-          onChange={setSelectedDate}
+          value={fromDate}
+          onChange={setFromDate}
+        />
+        <Input
+          label="To Date"
+          type="date"
+          value={toDate}
+          onChange={setToDate}
         />
       </div>
 
@@ -152,8 +159,8 @@ const Daybook: React.FC = () => {
         title={
           <div className="flex justify-between items-center w-full">
             <span>Daybook Statement</span>
-            <span className="font-mono text-sm text-gray-500">
-              Date: {new Date(selectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+            <span className="font-mono text-sm text-gray-500 text-right">
+              Period: {new Date(fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })} to {new Date(toDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
             </span>
           </div>
         }

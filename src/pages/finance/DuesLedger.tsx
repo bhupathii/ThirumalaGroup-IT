@@ -318,7 +318,7 @@ const DuesLedger: React.FC = () => {
                       <td className="px-3 py-3 text-right text-red-600 font-black">₹{due.pendingAmount.toLocaleString('en-IN')}</td>
                       <td className="px-3 py-3 text-center">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                          due.status === 'Partially Paid' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                           due.status === 'Partially Paid' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
                         }`}>
                           {due.status}
                         </span>
@@ -337,6 +337,16 @@ const DuesLedger: React.FC = () => {
                   );
                 })}
               </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                <tr className="font-extrabold text-gray-900 text-xs md:text-sm">
+                  <td colSpan={3} className="px-3 py-3 text-right uppercase">Total:</td>
+                  <td className="px-3 py-3 text-right">₹{filteredDues.reduce((sum, d) => sum + d.amount, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right text-green-700">₹{filteredDues.reduce((sum, d) => sum + d.paidAmount, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right text-red-700">₹{filteredDues.reduce((sum, d) => sum + d.pendingAmount, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3"></td>
+                  <td className="px-3 py-3 print:hidden"></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

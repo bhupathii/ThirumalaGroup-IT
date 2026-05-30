@@ -7,7 +7,7 @@ import { Search, Save, X, Edit, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { CameraCapture } from '../../components/finance/CameraCapture';
-import { FingerprintCapture } from '../../components/finance/FingerprintCapture';
+import { BiometricScanner } from '../../components/finance/BiometricScanner';
 
 const EditLoanEntry: React.FC = () => {
   const { user } = useAuth();
@@ -28,6 +28,8 @@ const EditLoanEntry: React.FC = () => {
   const [custFingerprintUrl, setCustFingerprintUrl] = useState<string | null>(null);
   const [custFingerprintTemplate, setCustFingerprintTemplate] = useState<string | null>(null);
   const [custFingerprintAdded, setCustFingerprintAdded] = useState(false);
+  const [custFatherHusbandName, setCustFatherHusbandName] = useState('');
+  const [loanCategory, setLoanCategory] = useState<'CD' | 'STBD' | 'HP' | 'TBD' | 'L'>('L');
 
   const [date, setDate] = useState('');
   const [amount, setAmount] = useState('');
@@ -42,6 +44,9 @@ const EditLoanEntry: React.FC = () => {
   const [suretyPhone, setSuretyPhone] = useState('');
   const [suretyAadhaar, setSuretyAadhaar] = useState('');
   const [suretyPhoto, setSuretyPhoto] = useState<string | null>(null);
+  const [suretyFingerprintUrl, setSuretyFingerprintUrl] = useState<string | null>(null);
+  const [suretyFingerprintTemplate, setSuretyFingerprintTemplate] = useState<string | null>(null);
+  const [suretyFingerprintAdded, setSuretyFingerprintAdded] = useState(false);
 
   useEffect(() => {
     fetchLoans();
@@ -86,9 +91,11 @@ const EditLoanEntry: React.FC = () => {
     setCustAddress(loan.customer?.address || '');
     setCustAadhaar(loan.customer?.aadhaar || '');
     setCustPhoto(loan.customer?.customer_photo_url || null);
-    setCustFingerprintUrl(loan.customer?.fingerprint_url || null);
-    setCustFingerprintTemplate(loan.customer?.fingerprint_template || null);
-    setCustFingerprintAdded(!!loan.customer?.fingerprint_added);
+    setCustFingerprintUrl(loan.customer?.customer_fingerprint_image_url || loan.customer?.fingerprint_url || null);
+    setCustFingerprintTemplate(loan.customer?.customer_fingerprint_template || loan.customer?.fingerprint_template || null);
+    setCustFingerprintAdded(!!(loan.customer?.customer_fingerprint_added || loan.customer?.fingerprint_added));
+    setCustFatherHusbandName(loan.customer?.father_husband_name || '');
+    setLoanCategory(loan.loan_category || 'L');
  
     // Loan
     setDate(loan.date);
@@ -105,6 +112,9 @@ const EditLoanEntry: React.FC = () => {
     setSuretyPhone(loan.surety_phone || '');
     setSuretyAadhaar(loan.surety_aadhaar || '');
     setSuretyPhoto(loan.surety_photo_url || null);
+    setSuretyFingerprintUrl(loan.surety_fingerprint_image_url || null);
+    setSuretyFingerprintTemplate(loan.surety_fingerprint_template || null);
+    setSuretyFingerprintAdded(!!loan.surety_fingerprint_added);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -124,7 +134,14 @@ const EditLoanEntry: React.FC = () => {
           customer_photo_url: custPhoto,
           fingerprint_url: custFingerprintUrl,
           fingerprint_template: custFingerprintTemplate,
-          fingerprint_added: custFingerprintAdded
+          fingerprint_added: custFingerprintAdded,
+          customer_fingerprint_template: custFingerprintTemplate,
+          customer_fingerprint_image_url: custFingerprintUrl,
+          customer_fingerprint_added: custFingerprintAdded,
+          surety_fingerprint_template: suretyFingerprintTemplate,
+          surety_fingerprint_image_url: suretyFingerprintUrl,
+          surety_fingerprint_added: suretyFingerprintAdded,
+          father_husband_name: custFatherHusbandName || null
         }, staffName);
       }
 
@@ -145,7 +162,15 @@ const EditLoanEntry: React.FC = () => {
         surety_photo_url: suretyPhoto,
         fingerprint_url: custFingerprintUrl,
         fingerprint_template: custFingerprintTemplate,
-        fingerprint_added: custFingerprintAdded
+        fingerprint_added: custFingerprintAdded,
+        customer_fingerprint_template: custFingerprintTemplate,
+        customer_fingerprint_image_url: custFingerprintUrl,
+        customer_fingerprint_added: custFingerprintAdded,
+        surety_fingerprint_template: suretyFingerprintTemplate,
+        surety_fingerprint_image_url: suretyFingerprintUrl,
+        surety_fingerprint_added: suretyFingerprintAdded,
+        father_husband_name: custFatherHusbandName || null,
+        loan_category: loanCategory
       }, staffName);
 
       if (updatedLoan) {
@@ -201,6 +226,7 @@ const EditLoanEntry: React.FC = () => {
               <div className="space-y-3">
                 <h4 className="font-extrabold text-sm text-gray-800 border-b pb-1">Customer Profile</h4>
                 <Input label="Customer Name" value={custName} onChange={setCustName} required />
+                <Input label="Father / Husband Name" value={custFatherHusbandName} onChange={setCustFatherHusbandName} />
                 <Input label="Phone Number" value={custPhone} onChange={setCustPhone} />
                 <Input label="Address" value={custAddress} onChange={setCustAddress} />
                 <Input label="Aadhaar UID" value={custAadhaar} onChange={setCustAadhaar} />
@@ -211,14 +237,14 @@ const EditLoanEntry: React.FC = () => {
                     existingPhotoUrl={custPhoto}
                     onPhotoSaved={setCustPhoto}
                   />
-                  <FingerprintCapture
+                  <BiometricScanner
                     label="Customer Fingerprint Capture"
-                    existingFingerprintUrl={custFingerprintUrl}
+                    existingImageUrl={custFingerprintUrl}
                     existingTemplate={custFingerprintTemplate}
-                    onFingerprintSaved={(url, template) => {
+                    onFingerprintSaved={(url, template, added) => {
                       setCustFingerprintUrl(url);
                       setCustFingerprintTemplate(template);
-                      setCustFingerprintAdded(!!url || !!template);
+                      setCustFingerprintAdded(added);
                     }}
                   />
                 </div>
@@ -228,6 +254,22 @@ const EditLoanEntry: React.FC = () => {
               <div className="space-y-3">
                 <h4 className="font-extrabold text-sm text-gray-800 border-b pb-1">Loan Parameters</h4>
                 <Input label="Disbursed Date" type="date" value={date} onChange={setDate} required />
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1" style={{ fontFamily: 'Times New Roman' }}>
+                    Loan Category
+                  </label>
+                  <select
+                    value={loanCategory}
+                    onChange={(e) => setLoanCategory(e.target.value as any)}
+                    className="w-full border border-gray-300 rounded-lg p-1.5 font-bold text-xs focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="L">Regular Loan (L)</option>
+                    <option value="CD">Chit Fund (CD)</option>
+                    <option value="STBD">Short Term Business Deposit (STBD)</option>
+                    <option value="HP">Hire Purchase (HP)</option>
+                    <option value="TBD">Term Business Deposit (TBD)</option>
+                  </select>
+                </div>
                 <Input label="Principal Amount (₹)" type="number" value={amount} onChange={setAmount} required />
                 
                 <div className="grid grid-cols-2 gap-2">
@@ -265,6 +307,16 @@ const EditLoanEntry: React.FC = () => {
                   label="Surety Photo Capture"
                   existingPhotoUrl={suretyPhoto}
                   onPhotoSaved={setSuretyPhoto}
+                />
+                <BiometricScanner
+                  label="Surety Fingerprint Capture"
+                  existingImageUrl={suretyFingerprintUrl}
+                  existingTemplate={suretyFingerprintTemplate}
+                  onFingerprintSaved={(url, template, added) => {
+                    setSuretyFingerprintUrl(url);
+                    setSuretyFingerprintTemplate(template);
+                    setSuretyFingerprintAdded(added);
+                  }}
                 />
                 
                 <div className="grid grid-cols-2 gap-2">

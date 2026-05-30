@@ -7,7 +7,7 @@ import { Plus, ArrowRight, DollarSign, Calendar, User, FileText, CheckCircle } f
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { CameraCapture } from '../../components/finance/CameraCapture';
-import { FingerprintCapture } from '../../components/finance/FingerprintCapture';
+import { BiometricScanner } from '../../components/finance/BiometricScanner';
 
 const LoanEntry: React.FC = () => {
   const { user } = useAuth();
@@ -22,6 +22,8 @@ const LoanEntry: React.FC = () => {
   const [custPhone, setCustPhone] = useState('');
   const [custAddress, setCustAddress] = useState('');
   const [custAadhaar, setCustAadhaar] = useState('');
+  const [custFatherHusbandName, setCustFatherHusbandName] = useState('');
+  const [loanCategory, setLoanCategory] = useState<'CD' | 'STBD' | 'HP' | 'TBD' | 'L'>('L');
   
   // Loan Specific Fields
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -42,6 +44,9 @@ const LoanEntry: React.FC = () => {
   const [custFingerprintTemplate, setCustFingerprintTemplate] = useState<string | null>(null);
   const [custFingerprintAdded, setCustFingerprintAdded] = useState(false);
   const [suretyPhoto, setSuretyPhoto] = useState<string | null>(null);
+  const [suretyFingerprintUrl, setSuretyFingerprintUrl] = useState<string | null>(null);
+  const [suretyFingerprintTemplate, setSuretyFingerprintTemplate] = useState<string | null>(null);
+  const [suretyFingerprintAdded, setSuretyFingerprintAdded] = useState(false);
   
   // List/Search state
   const [customers, setCustomers] = useState<FinanceCustomer[]>([]);
@@ -70,15 +75,23 @@ const LoanEntry: React.FC = () => {
       const selected = customers.find(c => c.id === selectedCustomerId);
       if (selected) {
         setCustPhoto(selected.customer_photo_url || null);
-        setCustFingerprintUrl(selected.fingerprint_url || null);
-        setCustFingerprintTemplate(selected.fingerprint_template || null);
-        setCustFingerprintAdded(!!selected.fingerprint_added);
+        setCustFingerprintUrl(selected.customer_fingerprint_image_url || selected.fingerprint_url || null);
+        setCustFingerprintTemplate(selected.customer_fingerprint_template || selected.fingerprint_template || null);
+        setCustFingerprintAdded(!!(selected.customer_fingerprint_added || selected.fingerprint_added));
+        setCustFatherHusbandName(selected.father_husband_name || '');
+        setSuretyFingerprintUrl(selected.surety_fingerprint_image_url || null);
+        setSuretyFingerprintTemplate(selected.surety_fingerprint_template || null);
+        setSuretyFingerprintAdded(!!selected.surety_fingerprint_added);
       }
     } else if (customerMode === 'new') {
       setCustPhoto(null);
       setCustFingerprintUrl(null);
       setCustFingerprintTemplate(null);
       setCustFingerprintAdded(false);
+      setCustFatherHusbandName('');
+      setSuretyFingerprintUrl(null);
+      setSuretyFingerprintTemplate(null);
+      setSuretyFingerprintAdded(false);
     }
   }, [customerMode, selectedCustomerId, customers]);
 
@@ -101,6 +114,19 @@ const LoanEntry: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const generateSequentialId = (loansList: any[], category: string) => {
+    const prefix = category === 'L' ? 'L' : category;
+    const matchingLoans = loansList.filter(l => l.loan_id.toUpperCase().startsWith(`${prefix}-`));
+    const count = matchingLoans.length;
+    setLoanId(`${prefix}-${1001 + count}`);
+  };
+
+  useEffect(() => {
+    if (activeLoans.length > 0) {
+      generateSequentialId(activeLoans, loanCategory);
+    }
+  }, [loanCategory, activeLoans]);
 
   const calculateDuesValue = () => {
     const P = Number(amount);
@@ -179,7 +205,14 @@ const LoanEntry: React.FC = () => {
             customer_photo_url: custPhoto,
             fingerprint_url: custFingerprintUrl,
             fingerprint_template: custFingerprintTemplate,
-            fingerprint_added: custFingerprintAdded
+            fingerprint_added: custFingerprintAdded,
+            customer_fingerprint_template: custFingerprintTemplate,
+            customer_fingerprint_image_url: custFingerprintUrl,
+            customer_fingerprint_added: custFingerprintAdded,
+            surety_fingerprint_template: suretyFingerprintTemplate,
+            surety_fingerprint_image_url: suretyFingerprintUrl,
+            surety_fingerprint_added: suretyFingerprintAdded,
+            father_husband_name: custFatherHusbandName || null
           } 
         : {
             name: custName,
@@ -189,7 +222,14 @@ const LoanEntry: React.FC = () => {
             customer_photo_url: custPhoto,
             fingerprint_url: custFingerprintUrl,
             fingerprint_template: custFingerprintTemplate,
-            fingerprint_added: custFingerprintAdded
+            fingerprint_added: custFingerprintAdded,
+            customer_fingerprint_template: custFingerprintTemplate,
+            customer_fingerprint_image_url: custFingerprintUrl,
+            customer_fingerprint_added: custFingerprintAdded,
+            surety_fingerprint_template: suretyFingerprintTemplate,
+            surety_fingerprint_image_url: suretyFingerprintUrl,
+            surety_fingerprint_added: suretyFingerprintAdded,
+            father_husband_name: custFatherHusbandName || null
           };
 
       // 2. Prepare dues list based on dueDates
@@ -232,7 +272,15 @@ const LoanEntry: React.FC = () => {
         surety_photo_url: suretyPhoto,
         fingerprint_url: custFingerprintUrl,
         fingerprint_template: custFingerprintTemplate,
-        fingerprint_added: custFingerprintAdded
+        fingerprint_added: custFingerprintAdded,
+        customer_fingerprint_template: custFingerprintTemplate,
+        customer_fingerprint_image_url: custFingerprintUrl,
+        customer_fingerprint_added: custFingerprintAdded,
+        surety_fingerprint_template: suretyFingerprintTemplate,
+        surety_fingerprint_image_url: suretyFingerprintUrl,
+        surety_fingerprint_added: suretyFingerprintAdded,
+        father_husband_name: custFatherHusbandName || null,
+        loan_category: loanCategory
       };
 
       const result = await supabaseFinance.createLoan(
@@ -250,6 +298,8 @@ const LoanEntry: React.FC = () => {
         setCustPhone('');
         setCustAddress('');
         setCustAadhaar('');
+        setCustFatherHusbandName('');
+        setLoanCategory('L');
         setAmount('');
         setRemarks('');
         setSuretyName('');
@@ -260,6 +310,9 @@ const LoanEntry: React.FC = () => {
         setCustFingerprintTemplate(null);
         setCustFingerprintAdded(false);
         setSuretyPhoto(null);
+        setSuretyFingerprintUrl(null);
+        setSuretyFingerprintTemplate(null);
+        setSuretyFingerprintAdded(false);
         fetchData();
       } else {
         toast.error('Failed to disburse loan. Check if Loan ID or Aadhaar is duplicate.');
@@ -331,19 +384,25 @@ const LoanEntry: React.FC = () => {
                   
                   {selectedCustomerId && (
                     <div className="space-y-3 pt-2 border-t border-gray-100">
+                      <Input
+                        label="Father / Husband Name"
+                        value={custFatherHusbandName}
+                        onChange={setCustFatherHusbandName}
+                        placeholder="Father's or Husband's name"
+                      />
                       <CameraCapture
                         label="Update Customer Photo"
                         existingPhotoUrl={custPhoto}
                         onPhotoSaved={setCustPhoto}
                       />
-                      <FingerprintCapture
+                      <BiometricScanner
                         label="Update Customer Fingerprint"
-                        existingFingerprintUrl={custFingerprintUrl}
                         existingTemplate={custFingerprintTemplate}
-                        onFingerprintSaved={(url, template) => {
+                        existingImageUrl={custFingerprintUrl}
+                        onFingerprintSaved={(url, template, added) => {
                           setCustFingerprintUrl(url);
                           setCustFingerprintTemplate(template);
-                          setCustFingerprintAdded(!!url || !!template);
+                          setCustFingerprintAdded(added);
                         }}
                       />
                     </div>
@@ -356,6 +415,12 @@ const LoanEntry: React.FC = () => {
                     value={custName}
                     onChange={setCustName}
                     placeholder="e.g. Ramesh Kumar"
+                  />
+                  <Input
+                    label="Father / Husband Name"
+                    value={custFatherHusbandName}
+                    onChange={setCustFatherHusbandName}
+                    placeholder="Father's or Husband's name"
                   />
                   <Input
                     label="Phone Number"
@@ -382,14 +447,14 @@ const LoanEntry: React.FC = () => {
                       existingPhotoUrl={custPhoto}
                       onPhotoSaved={setCustPhoto}
                     />
-                    <FingerprintCapture
-                      label="Customer Fingerprint Capture / Upload"
-                      existingFingerprintUrl={custFingerprintUrl}
+                    <BiometricScanner
+                      label="Customer Fingerprint Capture"
                       existingTemplate={custFingerprintTemplate}
-                      onFingerprintSaved={(url, template) => {
+                      existingImageUrl={custFingerprintUrl}
+                      onFingerprintSaved={(url, template, added) => {
                         setCustFingerprintUrl(url);
                         setCustFingerprintTemplate(template);
-                        setCustFingerprintAdded(!!url || !!template);
+                        setCustFingerprintAdded(added);
                       }}
                     />
                   </div>
@@ -401,13 +466,32 @@ const LoanEntry: React.FC = () => {
           {/* Card 2: Loan Parameters */}
           <Card title="Loan Parameters" subtitle="Specify terms, rates, and duration">
             <div className="space-y-4">
-              <Input
-                label="Loan ID *"
-                value={loanId}
-                onChange={setLoanId}
-                placeholder="e.g. L-1001"
-                required
-              />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1" style={{ fontFamily: 'Times New Roman', fontSize: '14px' }}>
+                    Loan Category *
+                  </label>
+                  <select
+                    value={loanCategory}
+                    onChange={(e) => setLoanCategory(e.target.value as any)}
+                    className="w-full border border-gray-300 rounded-lg p-2 font-bold focus:outline-none focus:ring-2 focus:ring-green-500 text-base"
+                    style={{ fontFamily: 'Times New Roman', fontSize: '14px' }}
+                  >
+                    <option value="L">Regular Loan (L)</option>
+                    <option value="CD">Chit Fund (CD)</option>
+                    <option value="STBD">Short Term Business Deposit (STBD)</option>
+                    <option value="HP">Hire Purchase (HP)</option>
+                    <option value="TBD">Term Business Deposit (TBD)</option>
+                  </select>
+                </div>
+                <Input
+                  label="Loan ID *"
+                  value={loanId}
+                  onChange={setLoanId}
+                  placeholder="e.g. L-1001"
+                  required
+                />
+              </div>
 
               <Input
                 label="Disbursement Date"
@@ -492,11 +576,21 @@ const LoanEntry: React.FC = () => {
                 placeholder="Guarantor Aadhaar"
               />
               
-              <div className="pt-2 border-t border-gray-100">
+              <div className="pt-2 border-t border-gray-100 space-y-3">
                 <CameraCapture
                   label="Surety Person Photo Capture"
                   existingPhotoUrl={suretyPhoto}
                   onPhotoSaved={setSuretyPhoto}
+                />
+                <BiometricScanner
+                  label="Surety Fingerprint Capture"
+                  existingTemplate={suretyFingerprintTemplate}
+                  existingImageUrl={suretyFingerprintUrl}
+                  onFingerprintSaved={(url, template, added) => {
+                    setSuretyFingerprintUrl(url);
+                    setSuretyFingerprintTemplate(template);
+                    setSuretyFingerprintAdded(added);
+                  }}
                 />
               </div>
 

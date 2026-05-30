@@ -4,12 +4,15 @@ import Button from '../../components/UI/Button';
 import { supabaseFinance, FinanceEditedLog, FinanceDeletedLog } from '../../lib/supabaseFinance';
 import { ShieldAlert, Trash2, Edit2, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../contexts/AuthContext';
 
 const EditedDeletedLogs: React.FC = () => {
+  const { user } = useAuth();
   const [logType, setLogType] = useState<'edited' | 'deleted'>('edited');
   const [editedLogs, setEditedLogs] = useState<FinanceEditedLog[]>([]);
   const [deletedLogs, setDeletedLogs] = useState<FinanceDeletedLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [restoring, setRestoring] = useState<string | null>(null);
 
   useEffect(() => {
     fetchLogs();
@@ -28,6 +31,26 @@ const EditedDeletedLogs: React.FC = () => {
       toast.error('Failed to load logs registry');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRestore = async (log: FinanceDeletedLog) => {
+    if (!window.confirm(`Are you sure you want to restore this deleted record back to ${log.table_name}?`)) return;
+    setRestoring(log.id);
+    try {
+      const staffName = user?.username || 'Staff';
+      const success = await supabaseFinance.restoreDeletedRecord(log.id, log.table_name, log.old_values, staffName);
+      if (success) {
+        toast.success('Record successfully restored!');
+        fetchLogs();
+      } else {
+        toast.error('Failed to restore record');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Restoration error');
+    } finally {
+      setRestoring(null);
     }
   };
 
@@ -137,6 +160,7 @@ const EditedDeletedLogs: React.FC = () => {
                     <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Table</th>
                     <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Operator</th>
                     <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Old Values</th>
+                    <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Action</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
@@ -153,6 +177,16 @@ const EditedDeletedLogs: React.FC = () => {
                       </td>
                       <td className="px-3 py-3 max-w-md">
                         {renderJsonValue(log.old_values)}
+                      </td>
+                      <td className="px-3 py-3 text-right whitespace-nowrap">
+                        <Button
+                          onClick={() => handleRestore(log)}
+                          variant="success"
+                          size="sm"
+                          disabled={restoring === log.id}
+                        >
+                          {restoring === log.id ? 'Restoring...' : 'Restore'}
+                        </Button>
                       </td>
                     </tr>
                   ))}

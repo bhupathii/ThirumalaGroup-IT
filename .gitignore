@@ -102,3 +102,6 @@ temp/
 
 # Supabase
 .supabase/
+
+#docs
+.docx

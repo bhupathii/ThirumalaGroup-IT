@@ -10,6 +10,8 @@ const TBDLedger: React.FC = () => {
   const [ledgerRows, setLedgerRows] = useState<any[]>([]);
   const [filteredRows, setFilteredRows] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,13 +20,19 @@ const TBDLedger: React.FC = () => {
 
   useEffect(() => {
     const q = searchQuery.toLowerCase();
-    const filtered = ledgerRows.filter(row => 
+    let filtered = ledgerRows.filter(row => 
       (row.loanId.toLowerCase().includes(q) ||
       row.customerName.toLowerCase().includes(q) ||
       (row.phone && row.phone.includes(q)))
     );
+    if (startDate) {
+      filtered = filtered.filter(row => row.date >= startDate);
+    }
+    if (endDate) {
+      filtered = filtered.filter(row => row.date <= endDate);
+    }
     setFilteredRows(filtered);
-  }, [searchQuery, ledgerRows]);
+  }, [searchQuery, ledgerRows, startDate, endDate]);
 
   const fetchLedgerData = async () => {
     setLoading(true);
@@ -32,8 +40,9 @@ const TBDLedger: React.FC = () => {
       const loans = await supabaseFinance.getLoans();
       const txs = await supabaseFinance.getTransactions();
 
-      // Filter for Term Business Deposit prefix "TBD" or "T-"
+      // Filter for Term Business Deposit prefix "TBD" or "T-" or category "TBD"
       const tbdLoans = loans.filter(l => 
+        l.loan_category === 'TBD' || 
         l.loan_id.toUpperCase().startsWith('TBD') || 
         l.loan_id.toUpperCase().startsWith('T-')
       );
@@ -89,13 +98,31 @@ const TBDLedger: React.FC = () => {
         </Button>
       </div>
 
-      <div className="max-w-md print:hidden">
-        <Input
-          label="Filter TBD Accounts"
-          value={searchQuery}
-          onChange={setSearchQuery}
-          placeholder="Search by ID, Name, Phone..."
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl print:hidden bg-gray-50 p-4 rounded-xl border">
+        <div>
+          <Input
+            label="Filter TBD Accounts"
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Search by ID, Name, Phone..."
+          />
+        </div>
+        <div>
+          <Input
+            label="From Date"
+            type="date"
+            value={startDate}
+            onChange={setStartDate}
+          />
+        </div>
+        <div>
+          <Input
+            label="To Date"
+            type="date"
+            value={endDate}
+            onChange={setEndDate}
+          />
+        </div>
       </div>
 
       <Card title="TBD Ledger Index" subtitle="Term Business Deposit receivables summary" className="shadow-md">
@@ -157,6 +184,17 @@ const TBDLedger: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                <tr className="font-extrabold text-gray-900 text-xs md:text-sm">
+                  <td colSpan={3} className="px-3 py-3 text-right uppercase">Total:</td>
+                  <td className="px-3 py-3 text-right">₹{filteredRows.reduce((sum, r) => sum + r.principal, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right text-gray-500">₹{filteredRows.reduce((sum, r) => sum + r.interestAmount, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right">₹{filteredRows.reduce((sum, r) => sum + r.totalRepayable, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right text-green-700">₹{filteredRows.reduce((sum, r) => sum + r.totalCollected, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right text-orange-700">₹{filteredRows.reduce((sum, r) => sum + r.outstanding, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3"></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

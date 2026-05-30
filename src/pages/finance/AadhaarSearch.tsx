@@ -53,6 +53,20 @@ const AadhaarSearch: React.FC = () => {
 
       if (loansError) throw loansError;
 
+      // Fetch all dues for these loans
+      const loanIds = (loans || []).map(l => l.id);
+      let duesList: any[] = [];
+      if (loanIds.length > 0) {
+        const { data: duesData, error: duesError } = await supabase
+          .from('finance_dues')
+          .select('*')
+          .in('loan_id', loanIds)
+          .order('due_date', { ascending: true });
+        if (!duesError && duesData) {
+          duesList = duesData;
+        }
+      }
+
       // 3. Fetch transactions to calculate collection ratios for each loan
       const txs = await supabaseFinance.getTransactions();
       const enrichedLoans = (loans || []).map(l => {
@@ -66,13 +80,15 @@ const AadhaarSearch: React.FC = () => {
         
         const payRatio = repayable > 0 ? Math.min(100, Math.round((collected / repayable) * 100)) : 0;
         const outstanding = Math.max(0, repayable - collected);
+        const loanDues = duesList.filter(d => d.loan_id === l.id);
 
         return {
           ...l,
           totalRepayable: repayable,
           totalCollected: collected,
           outstanding,
-          payRatio
+          payRatio,
+          dues: loanDues
         };
       });
 
@@ -218,6 +234,26 @@ const AadhaarSearch: React.FC = () => {
                       {loan.remarks && (
                         <p>Remarks: <span className="text-gray-500 font-normal italic">"{loan.remarks}"</span></p>
                       )}
+                    </div>
+                  )}
+
+                  {/* Dues Schedule */}
+                  {loan.dues && loan.dues.length > 0 && (
+                    <div className="mt-4 pt-3 border-t">
+                      <p className="text-xs font-bold text-gray-700 mb-2">Instalment Dues Schedule</p>
+                      <div className="max-h-32 overflow-y-auto border rounded divide-y">
+                        {loan.dues.map((due: any) => (
+                          <div key={due.id} className="flex justify-between p-2 text-[10px] font-semibold">
+                            <span>{new Date(due.due_date).toLocaleDateString('en-IN')}</span>
+                            <span>Due: ₹{Number(due.amount).toLocaleString('en-IN')}</span>
+                            <span className={`px-2 py-0.5 rounded-full font-bold ${
+                              due.status === 'Paid' ? 'bg-green-100 text-green-800' :
+                              due.status === 'Partially Paid' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>{due.status}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </Card>

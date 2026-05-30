@@ -21,6 +21,13 @@ export interface FinanceCustomer {
   fingerprint_url?: string | null;
   fingerprint_template?: string | null;
   fingerprint_added?: boolean;
+  customer_fingerprint_template?: string | null;
+  customer_fingerprint_image_url?: string | null;
+  customer_fingerprint_added?: boolean;
+  surety_fingerprint_template?: string | null;
+  surety_fingerprint_image_url?: string | null;
+  surety_fingerprint_added?: boolean;
+  father_husband_name?: string | null;
 }
 
 export interface FinanceLoan {
@@ -45,6 +52,14 @@ export interface FinanceLoan {
   fingerprint_url?: string | null;
   fingerprint_template?: string | null;
   fingerprint_added?: boolean;
+  customer_fingerprint_template?: string | null;
+  customer_fingerprint_image_url?: string | null;
+  customer_fingerprint_added?: boolean;
+  surety_fingerprint_template?: string | null;
+  surety_fingerprint_image_url?: string | null;
+  surety_fingerprint_added?: boolean;
+  father_husband_name?: string | null;
+  loan_category?: string;
 }
 
 export interface FinanceTransaction {
@@ -236,6 +251,42 @@ class SupabaseFinance {
         .single();
       if (error) throw error;
 
+      // Sync to finance_fingerprints
+      if (customer.customer_fingerprint_template !== undefined) {
+        await supabase
+          .from('finance_fingerprints')
+          .delete()
+          .eq('customer_id', id)
+          .eq('fingerprint_type', 'Customer');
+        if (customer.customer_fingerprint_template) {
+          await supabase
+            .from('finance_fingerprints')
+            .insert([{
+              customer_id: id,
+              fingerprint_type: 'Customer',
+              fingerprint_template: customer.customer_fingerprint_template,
+              fingerprint_image_url: customer.customer_fingerprint_image_url
+            }]);
+        }
+      }
+      if (customer.surety_fingerprint_template !== undefined) {
+        await supabase
+          .from('finance_fingerprints')
+          .delete()
+          .eq('customer_id', id)
+          .eq('fingerprint_type', 'Surety');
+        if (customer.surety_fingerprint_template) {
+          await supabase
+            .from('finance_fingerprints')
+            .insert([{
+              customer_id: id,
+              fingerprint_type: 'Surety',
+              fingerprint_template: customer.surety_fingerprint_template,
+              fingerprint_image_url: customer.surety_fingerprint_image_url
+            }]);
+        }
+      }
+
       if (oldData) {
         await this.logEdit('finance_customers', id, oldData, data, editedBy);
       }
@@ -329,13 +380,20 @@ class SupabaseFinance {
     customerData: { 
       id?: string; 
       name?: string; 
-      phone?: string; 
-      address?: string; 
-      aadhaar?: string;
+      phone?: string | null; 
+      address?: string | null; 
+      aadhaar?: string | null;
       customer_photo_url?: string | null;
       fingerprint_url?: string | null;
       fingerprint_template?: string | null;
       fingerprint_added?: boolean;
+      customer_fingerprint_template?: string | null;
+      customer_fingerprint_image_url?: string | null;
+      customer_fingerprint_added?: boolean;
+      surety_fingerprint_template?: string | null;
+      surety_fingerprint_image_url?: string | null;
+      surety_fingerprint_added?: boolean;
+      father_husband_name?: string | null;
     },
     duesData: Omit<FinanceDue, 'id' | 'loan_id' | 'paid_amount' | 'status' | 'created_at' | 'updated_at'>[],
     photosData: { photo_type: 'Customer' | 'Surety'; photo_url: string }[],
@@ -356,7 +414,14 @@ class SupabaseFinance {
             customer_photo_url: customerData.customer_photo_url || null,
             fingerprint_url: customerData.fingerprint_url || null,
             fingerprint_template: customerData.fingerprint_template || null,
-            fingerprint_added: customerData.fingerprint_added || false
+            fingerprint_added: customerData.fingerprint_added || false,
+            customer_fingerprint_template: customerData.customer_fingerprint_template || null,
+            customer_fingerprint_image_url: customerData.customer_fingerprint_image_url || null,
+            customer_fingerprint_added: customerData.customer_fingerprint_added || false,
+            surety_fingerprint_template: customerData.surety_fingerprint_template || null,
+            surety_fingerprint_image_url: customerData.surety_fingerprint_image_url || null,
+            surety_fingerprint_added: customerData.surety_fingerprint_added || false,
+            father_husband_name: customerData.father_husband_name || null
           }])
           .select()
           .single();
@@ -365,13 +430,30 @@ class SupabaseFinance {
         customerId = customer.id;
       } else {
         // If existing customer, update customer's photo/fingerprint if provided
-        if (customerData.customer_photo_url || customerData.fingerprint_url) {
+        if (
+          customerData.customer_photo_url || 
+          customerData.fingerprint_url || 
+          customerData.customer_fingerprint_template || 
+          customerData.surety_fingerprint_template ||
+          customerData.father_husband_name
+        ) {
           const updatePayload: Partial<FinanceCustomer> = {};
           if (customerData.customer_photo_url) updatePayload.customer_photo_url = customerData.customer_photo_url;
+          if (customerData.father_husband_name) updatePayload.father_husband_name = customerData.father_husband_name;
           if (customerData.fingerprint_url) {
             updatePayload.fingerprint_url = customerData.fingerprint_url;
             updatePayload.fingerprint_template = customerData.fingerprint_template;
             updatePayload.fingerprint_added = customerData.fingerprint_added;
+          }
+          if (customerData.customer_fingerprint_template) {
+            updatePayload.customer_fingerprint_template = customerData.customer_fingerprint_template;
+            updatePayload.customer_fingerprint_image_url = customerData.customer_fingerprint_image_url;
+            updatePayload.customer_fingerprint_added = customerData.customer_fingerprint_added;
+          }
+          if (customerData.surety_fingerprint_template) {
+            updatePayload.surety_fingerprint_template = customerData.surety_fingerprint_template;
+            updatePayload.surety_fingerprint_image_url = customerData.surety_fingerprint_image_url;
+            updatePayload.surety_fingerprint_added = customerData.surety_fingerprint_added;
           }
           await this.updateCustomer(customerId, updatePayload, staffName);
         }
@@ -388,7 +470,15 @@ class SupabaseFinance {
           surety_photo_url: loanData.surety_photo_url || null,
           fingerprint_url: loanData.fingerprint_url || customerData.fingerprint_url || null,
           fingerprint_template: loanData.fingerprint_template || customerData.fingerprint_template || null,
-          fingerprint_added: loanData.fingerprint_added || customerData.fingerprint_added || false
+          fingerprint_added: loanData.fingerprint_added || customerData.fingerprint_added || false,
+          customer_fingerprint_template: loanData.customer_fingerprint_template || customerData.customer_fingerprint_template || null,
+          customer_fingerprint_image_url: loanData.customer_fingerprint_image_url || customerData.customer_fingerprint_image_url || null,
+          customer_fingerprint_added: loanData.customer_fingerprint_added || customerData.customer_fingerprint_added || false,
+          surety_fingerprint_template: loanData.surety_fingerprint_template || customerData.surety_fingerprint_template || null,
+          surety_fingerprint_image_url: loanData.surety_fingerprint_image_url || customerData.surety_fingerprint_image_url || null,
+          surety_fingerprint_added: loanData.surety_fingerprint_added || customerData.surety_fingerprint_added || false,
+          father_husband_name: loanData.father_husband_name || customerData.father_husband_name || null,
+          loan_category: loanData.loan_category || 'Regular'
         }])
         .select()
         .single();
@@ -441,6 +531,30 @@ class SupabaseFinance {
         if (photosError) throw photosError;
       }
 
+      // Save fingerprints to finance_fingerprints table
+      if (loanData.customer_fingerprint_template || customerData.customer_fingerprint_template) {
+        await supabase
+          .from('finance_fingerprints')
+          .insert([{
+            customer_id: customerId,
+            loan_id: loan.id,
+            fingerprint_type: 'Customer',
+            fingerprint_template: loanData.customer_fingerprint_template || customerData.customer_fingerprint_template,
+            fingerprint_image_url: loanData.customer_fingerprint_image_url || customerData.customer_fingerprint_image_url
+          }]);
+      }
+      if (loanData.surety_fingerprint_template || customerData.surety_fingerprint_template) {
+        await supabase
+          .from('finance_fingerprints')
+          .insert([{
+            customer_id: customerId,
+            loan_id: loan.id,
+            fingerprint_type: 'Surety',
+            fingerprint_template: loanData.surety_fingerprint_template || customerData.surety_fingerprint_template,
+            fingerprint_image_url: loanData.surety_fingerprint_image_url || customerData.surety_fingerprint_image_url
+          }]);
+      }
+
       return loan;
     } catch (error) {
       console.error('Error creating finance loan:', error);
@@ -463,6 +577,44 @@ class SupabaseFinance {
         .select()
         .single();
       if (error) throw error;
+
+      // Sync to finance_fingerprints
+      if (loan.customer_fingerprint_template !== undefined) {
+        await supabase
+          .from('finance_fingerprints')
+          .delete()
+          .eq('loan_id', id)
+          .eq('fingerprint_type', 'Customer');
+        if (loan.customer_fingerprint_template) {
+          await supabase
+            .from('finance_fingerprints')
+            .insert([{
+              customer_id: oldData?.customer_id,
+              loan_id: id,
+              fingerprint_type: 'Customer',
+              fingerprint_template: loan.customer_fingerprint_template,
+              fingerprint_image_url: loan.customer_fingerprint_image_url
+            }]);
+        }
+      }
+      if (loan.surety_fingerprint_template !== undefined) {
+        await supabase
+          .from('finance_fingerprints')
+          .delete()
+          .eq('loan_id', id)
+          .eq('fingerprint_type', 'Surety');
+        if (loan.surety_fingerprint_template) {
+          await supabase
+            .from('finance_fingerprints')
+            .insert([{
+              customer_id: oldData?.customer_id,
+              loan_id: id,
+              fingerprint_type: 'Surety',
+              fingerprint_template: loan.surety_fingerprint_template,
+              fingerprint_image_url: loan.surety_fingerprint_image_url
+            }]);
+        }
+      }
 
       if (oldData) {
         await this.logEdit('finance_loans', id, oldData, data, editedBy);
@@ -826,6 +978,26 @@ class SupabaseFinance {
       return true;
     } catch (error) {
       console.error('Error updating finance user permissions:', error);
+      return false;
+    }
+  }
+
+  async restoreDeletedRecord(logId: string, tableName: string, oldValues: any, staffName: string): Promise<boolean> {
+    try {
+      const { error: insertError } = await supabase
+        .from(tableName)
+        .insert([oldValues]);
+      if (insertError) throw insertError;
+
+      const { error: logDeleteError } = await supabase
+        .from('finance_deleted_logs')
+        .delete()
+        .eq('id', logId);
+      if (logDeleteError) throw logDeleteError;
+
+      return true;
+    } catch (error) {
+      console.error('Error restoring deleted record:', error);
       return false;
     }
   }
