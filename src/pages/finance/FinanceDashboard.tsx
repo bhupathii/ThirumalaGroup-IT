@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { Wallet, DollarSign, Users, Landmark, FileText, TrendingUp, AlertCircle, ArrowUpRight, ArrowDownRight } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { Wallet, DollarSign, Users, Landmark, FileText, TrendingUp, AlertCircle, ArrowUpRight } from 'lucide-react';
 
 const FinanceDashboard: React.FC = () => {
   const [metrics, setMetrics] = useState({
@@ -26,7 +25,6 @@ const FinanceDashboard: React.FC = () => {
     setLoading(true);
     try {
       // 1. Fetch Partners & Capital Entries
-      const partners = await supabaseFinance.getPartners();
       const capitalEntries = await supabaseFinance.getCapitalEntries();
       
       let totalCapital = 0;

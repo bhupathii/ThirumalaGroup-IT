@@ -2,9 +2,8 @@ import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
-import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
-import { Printer, Calendar, User, Phone, MapPin, Search } from 'lucide-react';
+import { Printer, User, Phone, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface NewCustItem {

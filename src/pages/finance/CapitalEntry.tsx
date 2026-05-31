@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
-import Select from '../../components/UI/Select';
 import Button from '../../components/UI/Button';
 import { supabaseFinance, FinancePartner, FinanceCapitalEntry } from '../../lib/supabaseFinance';
-import { Plus, Trash2, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 

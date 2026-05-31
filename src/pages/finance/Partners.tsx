@@ -3,7 +3,7 @@ import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { supabaseFinance, FinancePartner } from '../../lib/supabaseFinance';
-import { Plus, Edit2, Trash2, User, Phone, DollarSign } from 'lucide-react';
+import { Edit2, Trash2, User, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 

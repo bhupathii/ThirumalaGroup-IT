@@ -4,7 +4,7 @@ import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
-import { Search, User, Phone, MapPin, CreditCard, DollarSign } from 'lucide-react';
+import { Search, User, Phone, MapPin, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface CustomerAadhaarDetails {

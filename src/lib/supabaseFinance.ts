@@ -13,6 +13,8 @@ export interface FinanceCustomer {
   id: string;
   name: string;
   phone: string | null;
+  phone2?: string | null;
+  partner_name?: string | null;
   address: string | null;
   aadhaar: string | null;
   created_at: string;
@@ -43,6 +45,8 @@ export interface FinanceLoan {
   surety_name: string | null;
   surety_phone: string | null;
   surety_aadhaar: string | null;
+  surety_address?: string | null;
+  surety_relation?: string | null;
   remarks: string | null;
   status: 'Active' | 'Closed';
   created_at: string;
@@ -70,6 +74,7 @@ export interface FinanceTransaction {
   type: 'Collection' | 'Disbursement' | 'Interest Charge' | 'Other';
   collected_by: string | null;
   remarks: string | null;
+  payment_mode?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -103,6 +108,15 @@ export interface FinancePhoto {
   photo_url: string;
   created_at: string;
 }
+
+export interface FinanceDocument {
+  id: string;
+  loan_id: string;
+  document_type: string;
+  document_url: string;
+  created_at: string;
+}
+
 
 export interface FinanceEditedLog {
   id: string;
@@ -336,7 +350,7 @@ class SupabaseFinance {
     }
   }
 
-  async getLoanById(id: string): Promise<(FinanceLoan & { customer: FinanceCustomer; transactions: FinanceTransaction[]; photos: FinancePhoto[]; dues: FinanceDue[] }) | null> {
+  async getLoanById(id: string): Promise<(FinanceLoan & { customer: FinanceCustomer; transactions: FinanceTransaction[]; photos: FinancePhoto[]; dues: FinanceDue[]; documents: FinanceDocument[] }) | null> {
     try {
       const { data: loan, error: loanError } = await supabase
         .from('finance_loans')
@@ -363,11 +377,26 @@ class SupabaseFinance {
         .eq('loan_id', id)
         .order('due_date', { ascending: true });
 
+      let documents: FinanceDocument[] = [];
+      try {
+        const { data: docs, error: docsError } = await supabase
+          .from('finance_documents')
+          .select('*')
+          .eq('loan_id', id)
+          .order('created_at', { ascending: false });
+        if (!docsError && docs) {
+          documents = docs;
+        }
+      } catch (docErr) {
+        console.warn('Could not fetch finance_documents (table might not exist yet):', docErr);
+      }
+
       return {
         ...loan,
         transactions: transactions || [],
         photos: photos || [],
         dues: dues || [],
+        documents
       };
     } catch (error) {
       console.error('Error fetching loan by id:', error);
@@ -675,7 +704,7 @@ class SupabaseFinance {
     }
   }
 
-  async createTransaction(transaction: Omit<FinanceTransaction, 'id' | 'created_at' | 'updated_at'>, editedBy: string): Promise<FinanceTransaction | null> {
+  async createTransaction(transaction: Omit<FinanceTransaction, 'id' | 'created_at' | 'updated_at'>, _editedBy: string): Promise<FinanceTransaction | null> {
     try {
       const { data, error } = await supabase
         .from('finance_transactions')
@@ -867,6 +896,51 @@ class SupabaseFinance {
     }
   }
 
+  // --- Documents ---
+  async getDocuments(loanId: string): Promise<FinanceDocument[]> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_documents')
+        .select('*')
+        .eq('loan_id', loanId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching finance documents:', error);
+      return [];
+    }
+  }
+
+  async addDocument(doc: Omit<FinanceDocument, 'id' | 'created_at'>): Promise<FinanceDocument | null> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_documents')
+        .insert([doc])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error adding finance document:', error);
+      return null;
+    }
+  }
+
+  async deleteDocument(id: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('finance_documents')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting finance document:', error);
+      return false;
+    }
+  }
+
   // --- Audit Logs ---
   async logEdit(tableName: string, recordId: string, oldValues: any, newValues: any, editedBy: string): Promise<void> {
     try {
@@ -982,7 +1056,7 @@ class SupabaseFinance {
     }
   }
 
-  async restoreDeletedRecord(logId: string, tableName: string, oldValues: any, staffName: string): Promise<boolean> {
+  async restoreDeletedRecord(logId: string, tableName: string, oldValues: any, _staffName: string): Promise<boolean> {
     try {
       const { error: insertError } = await supabase
         .from(tableName)

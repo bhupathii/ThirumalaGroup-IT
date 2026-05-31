@@ -3,7 +3,7 @@ import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
-import { Shield, CheckSquare, Square, Save, RefreshCw, Users } from 'lucide-react';
+import { CheckSquare, Square, Save, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface UserItem {

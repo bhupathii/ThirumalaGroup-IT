@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
-import { Calculator, Printer, Calendar, RefreshCw } from 'lucide-react';
+import { Calculator, Printer, RefreshCw } from 'lucide-react';
 
 interface CalculatedScheduleItem {
   sno: number;
@@ -53,23 +53,19 @@ const GeneralCalculator: React.FC = () => {
 
     // Calculate number of dues based on dueType and duration
     let totalDuesCount = 0;
-    let daysStep = 1;
 
     if (dueType === 'Daily') {
       if (durationType === 'days') totalDuesCount = D;
       else if (durationType === 'weeks') totalDuesCount = D * 7;
       else totalDuesCount = D * 30;
-      daysStep = 1;
     } else if (dueType === 'Weekly') {
       if (durationType === 'days') totalDuesCount = Math.ceil(D / 7);
       else if (durationType === 'weeks') totalDuesCount = D;
       else totalDuesCount = Math.ceil(D * 4.33);
-      daysStep = 7;
     } else {
       if (durationType === 'days') totalDuesCount = Math.ceil(D / 30);
       else if (durationType === 'weeks') totalDuesCount = Math.ceil(D / 4.33);
       else totalDuesCount = D;
-      daysStep = 30;
     }
 
     const dueAmount = totalRepayment / totalDuesCount;

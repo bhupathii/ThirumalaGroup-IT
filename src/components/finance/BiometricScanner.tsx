@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Fingerprint, CheckCircle2, AlertCircle, RefreshCw, Cpu, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
+import { Fingerprint, CheckCircle2, RefreshCw, Cpu, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { financeFingerprintService } from '../../lib/financeFingerprintService';
 import toast from 'react-hot-toast';

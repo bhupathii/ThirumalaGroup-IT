@@ -38,7 +38,7 @@ interface MenuItem {
 
 const Sidebar: React.FC = () => {
   const { user, logout } = useAuth();
-  const { mode: tableMode, isFinanceMode } = useTableMode();
+  const { isFinanceMode } = useTableMode();
 
   // Debug: Log user features to help diagnose issues
   React.useEffect(() => {

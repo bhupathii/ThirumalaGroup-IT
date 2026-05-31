@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import { supabaseFinance, FinanceEditedLog, FinanceDeletedLog } from '../../lib/supabaseFinance';
-import { ShieldAlert, Trash2, Edit2, Calendar } from 'lucide-react';
+import { Trash2, Edit2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 

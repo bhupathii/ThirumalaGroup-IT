@@ -3,7 +3,7 @@ import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { Printer, TrendingUp, DollarSign, PieChart } from 'lucide-react';
+import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const ProfitAndLoss: React.FC = () => {
@@ -76,7 +76,6 @@ const ProfitAndLoss: React.FC = () => {
       });
 
       // Bad Debt estimate (loans that are active and overdue by 30+ days)
-      const today = new Date().toISOString().split('T')[0];
       const overdueLimit = new Date();
       overdueLimit.setDate(overdueLimit.getDate() - 30);
       const overdueLimitStr = overdueLimit.toISOString().split('T')[0];

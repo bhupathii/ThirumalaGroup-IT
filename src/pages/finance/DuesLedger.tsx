@@ -4,7 +4,7 @@ import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
-import { Printer, Calendar, Clock, DollarSign, CheckCircle } from 'lucide-react';
+import { Printer, Calendar, Clock, DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
-import { supabaseFinance, FinanceLoan, FinanceCustomer } from '../../lib/supabaseFinance';
-import { Printer, Calendar, ShieldAlert, Phone, Clock } from 'lucide-react';
+import { supabaseFinance } from '../../lib/supabaseFinance';
+import { Printer, ShieldAlert, Phone, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface ExpiredLoanItem {

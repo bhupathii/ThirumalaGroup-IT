@@ -3,7 +3,7 @@ import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { supabaseFinance, FinanceLoan, FinanceCustomer } from '../../lib/supabaseFinance';
-import { Search, Save, X, Edit, Trash2 } from 'lucide-react';
+import { Save, X, Edit, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { CameraCapture } from '../../components/finance/CameraCapture';

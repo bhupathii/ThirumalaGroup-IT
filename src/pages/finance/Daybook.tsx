@@ -3,7 +3,7 @@ import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { Calendar, Printer, FileText, ArrowRight } from 'lucide-react';
+import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface DaybookItem {

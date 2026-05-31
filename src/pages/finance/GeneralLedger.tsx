@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
-import { supabaseFinance, FinanceLoan, FinanceCustomer, FinanceTransaction } from '../../lib/supabaseFinance';
-import { Book, Search, Download, Printer } from 'lucide-react';
+import { supabaseFinance } from '../../lib/supabaseFinance';
+import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const GeneralLedger: React.FC = () => {
@@ -41,8 +41,6 @@ const GeneralLedger: React.FC = () => {
       const txs = await supabaseFinance.getTransactions();
 
       const rows = loans.map(loan => {
-        // Find disbursement
-        const disb = txs.find(t => t.loan_id === loan.id && t.type === 'Disbursement');
         // Find collections
         const cols = txs.filter(t => t.loan_id === loan.id && t.type === 'Collection');
         const totalCollected = cols.reduce((sum, c) => sum + Number(c.amount), 0);

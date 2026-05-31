@@ -3,7 +3,7 @@ import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { supabaseFinance, FinanceLoan, FinanceCustomer, FinanceTransaction, FinanceDue, FinancePhoto } from '../../lib/supabaseFinance';
-import { Search as SearchIcon, DollarSign, Calendar, FileText, CheckCircle, Clock, Trash2, ShieldAlert } from 'lucide-react';
+import { Search as SearchIcon, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -23,7 +23,6 @@ const SearchPage: React.FC = () => {
   const [collectAmount, setCollectAmount] = useState('');
   const [collectDate, setCollectDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [collectRemarks, setCollectRemarks] = useState('');
-  const [loading, setLoading] = useState(true);
   const [collecting, setCollecting] = useState(false);
 
   useEffect(() => {
@@ -55,15 +54,12 @@ const SearchPage: React.FC = () => {
   }, [selectedLoanId]);
 
   const fetchLoansList = async () => {
-    setLoading(true);
     try {
       const data = await supabaseFinance.getLoans();
       setLoans(data);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load active loan accounts list');
-    } finally {
-      setLoading(false);
     }
   };
 

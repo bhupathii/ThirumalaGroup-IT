@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
-import { supabaseFinance, FinancePartner } from '../../lib/supabaseFinance';
-import { Printer, TrendingUp, PieChart, Landmark } from 'lucide-react';
+import { supabaseFinance } from '../../lib/supabaseFinance';
+import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface PartnerPerfRow {

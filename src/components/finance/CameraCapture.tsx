@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera as CameraIcon, RefreshCw, Check, Video, AlertCircle, FileImage } from 'lucide-react';
+import { Camera as CameraIcon, RefreshCw, Check, Video, FileImage } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -135,7 +135,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
     } catch (err: any) {
       console.error('Storage upload failed, falling back to base64:', err);
       // Fallback: save Base64 directly
-      toast.warn('Storage bucket not accessible. Saving directly in database.');
+      toast('Storage bucket not accessible. Saving directly in database.', { icon: '⚠️' });
       onPhotoSaved(capturedImage);
     } finally {
       setUploading(false);
@@ -169,7 +169,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
         onPhotoSaved(publicUrl);
       } catch (err) {
         console.error('File upload failed, falling back to base64:', err);
-        toast.warn('Using base64 image encoding fallback.');
+        toast('Using base64 image encoding fallback.', { icon: '⚠️' });
         // Fallback to reading file base64 data
         const base64Reader = new FileReader();
         base64Reader.onloadend = () => {

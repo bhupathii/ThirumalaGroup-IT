@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import { supabaseFinance, FinanceLoan, FinanceCustomer, FinancePhoto } from '../../lib/supabaseFinance';
-import { Camera as CameraIcon, RefreshCw, Trash2, Check, Video, AlertCircle } from 'lucide-react';
+import { Camera as CameraIcon, Trash2, Check, Video, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Camera: React.FC = () => {
@@ -12,7 +12,6 @@ const Camera: React.FC = () => {
   const [existingPhotos, setExistingPhotos] = useState<FinancePhoto[]>([]);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -34,15 +33,12 @@ const Camera: React.FC = () => {
   }, [selectedLoanId]);
 
   const fetchLoans = async () => {
-    setLoading(true);
     try {
       const data = await supabaseFinance.getLoans();
       setLoans(data.filter(l => l.status === 'Active'));
     } catch (err) {
       console.error(err);
       toast.error('Failed to load active loans list');
-    } finally {
-      setLoading(false);
     }
   };
 

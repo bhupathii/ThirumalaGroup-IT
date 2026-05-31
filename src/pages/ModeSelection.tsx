@@ -61,7 +61,7 @@ const ModeSelection: React.FC = () => {
   // Get the first available feature path for the user
   const getFirstAvailableFeature = (mode: 'regular' | 'itr' | 'finance') => {
     const isAdmin = user?.is_admin || false;
-    const featuresByMode = user?.featuresByMode || {};
+    const featuresByMode = user?.featuresByMode || { regular: [], itr: [], finance: [] };
     
     // Get features for the selected mode
     const features = isAdmin 
@@ -109,7 +109,7 @@ const ModeSelection: React.FC = () => {
   // Determine which modes the user can access based on their features
   // Admins have access to all modes
   const isAdmin = user?.is_admin || false;
-  const featuresByMode = user?.featuresByMode || {};
+  const featuresByMode = user?.featuresByMode || { regular: [], itr: [], finance: [] };
   
   // Check if user has features in regular mode
   const hasRegularFeatures = isAdmin || (featuresByMode.regular && featuresByMode.regular.length > 0);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Fingerprint, Upload, CheckCircle2, RefreshCw, X, FileCheck } from 'lucide-react';
+import { Fingerprint, Upload, CheckCircle2, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -18,14 +18,12 @@ export const FingerprintCapture: React.FC<FingerprintCaptureProps> = ({
 }) => {
   const [scanning, setScanning] = useState(false);
   const [fingerprintAdded, setFingerprintAdded] = useState(!!existingFingerprintUrl || !!existingTemplate);
-  const [fingerprintUrl, setFingerprintUrl] = useState<string | null>(existingFingerprintUrl);
   const [fingerprintTemplate, setFingerprintTemplate] = useState<string | null>(existingTemplate);
   const [uploading, setUploading] = useState(false);
 
   // Sync state if props change
   useEffect(() => {
     setFingerprintAdded(!!existingFingerprintUrl || !!existingTemplate);
-    setFingerprintUrl(existingFingerprintUrl);
     setFingerprintTemplate(existingTemplate);
   }, [existingFingerprintUrl, existingTemplate]);
 
@@ -50,7 +48,6 @@ export const FingerprintCapture: React.FC<FingerprintCaptureProps> = ({
 
       setFingerprintTemplate(mockTemplate);
       // We don't have a file URL for simulated scan, just the template data
-      setFingerprintUrl("biometric://simulated-right-thumb");
       
       onFingerprintSaved("biometric://simulated-right-thumb", mockTemplate);
       toast.success("Fingerprint Captured (Simulated Mantra MFS100)");
@@ -81,7 +78,6 @@ export const FingerprintCapture: React.FC<FingerprintCaptureProps> = ({
           imageUrl: publicUrl
         });
 
-        setFingerprintUrl(publicUrl);
         setFingerprintTemplate(template);
         setFingerprintAdded(true);
         onFingerprintSaved(publicUrl, template);
@@ -99,11 +95,10 @@ export const FingerprintCapture: React.FC<FingerprintCaptureProps> = ({
             uploadedAt: new Date().toISOString()
           });
 
-          setFingerprintUrl(base64Url);
           setFingerprintTemplate(template);
           setFingerprintAdded(true);
           onFingerprintSaved(base64Url, template);
-          toast.warn("Saved fingerprint image locally.");
+          toast("Saved fingerprint image locally.", { icon: '⚠️' });
         };
         reader.readAsDataURL(file);
       } finally {
@@ -114,7 +109,6 @@ export const FingerprintCapture: React.FC<FingerprintCaptureProps> = ({
 
   const handleClear = () => {
     setFingerprintAdded(false);
-    setFingerprintUrl(null);
     setFingerprintTemplate(null);
     onFingerprintSaved(null, null);
   };

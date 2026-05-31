@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase, supabaseHelpers } from '../lib/supabase';
-import { supabaseDB } from '../lib/supabaseDatabase';
-import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 import bcrypt from 'bcryptjs';
 
 type ModeKey = 'regular' | 'itr' | 'finance';
