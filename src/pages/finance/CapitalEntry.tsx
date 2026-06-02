@@ -93,10 +93,10 @@ const CapitalEntry: React.FC = () => {
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center border-b border-green-100 pb-4">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5 mb-6">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Capital Entry</h1>
-          <p className="text-gray-500 text-sm mt-1">Record deposits or withdrawals by investment partners</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">CAPITAL ENTRY</h1>
+          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Record deposits or withdrawals by investment partners</p>
         </div>
       </div>
 

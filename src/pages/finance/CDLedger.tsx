@@ -18,12 +18,8 @@ import {
   User, 
   Phone, 
   MapPin, 
-  File, 
-  ShieldAlert,
-  ArrowRight,
-  TrendingDown,
-  TrendingUp,
-  Image as ImageIcon
+  File as FileIcon, 
+  ShieldAlert
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { exportToExcel, exportToCSV } from '../../utils/excel';
@@ -860,7 +856,7 @@ const CDLedger: React.FC = () => {
                       selectedLoan.documents.map(doc => (
                         <div key={doc.id} className="p-2 border rounded-xl flex items-center justify-between text-xs bg-white hover:bg-gray-50/50">
                           <div className="flex items-center gap-2 overflow-hidden">
-                            <File className="w-4 h-4 text-green-600 shrink-0" />
+                            <FileIcon className="w-4 h-4 text-green-600 shrink-0" />
                             <div className="truncate">
                               <span className="font-bold text-gray-800 block truncate">{doc.document_type}</span>
                               <a 

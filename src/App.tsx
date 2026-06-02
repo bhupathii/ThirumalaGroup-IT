@@ -58,6 +58,11 @@ import PhoneNumberEditor from './pages/finance/PhoneNumberEditor';
 import AadhaarSearch from './pages/finance/AadhaarSearch';
 import EditedDeletedLogs from './pages/finance/EditedDeletedLogs';
 import UserAccessManagement from './pages/finance/UserAccessManagement';
+import OldDataEntry from './pages/finance/OldDataEntry';
+import NewCustomer from './pages/finance/NewCustomer';
+import Customers from './pages/finance/Customers';
+import NewGuarantor from './pages/finance/NewGuarantor';
+import NewPartner from './pages/finance/NewPartner';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
@@ -230,6 +235,12 @@ const AppContent: React.FC = () => {
           <Route path='finance/aadhaar-search' element={<AadhaarSearch />} />
           <Route path='finance/logs' element={<EditedDeletedLogs />} />
           <Route path='finance/user-access-management' element={<UserAccessManagement />} />
+          <Route path='finance/old-data-entry' element={<OldDataEntry />} />
+          <Route path='finance/new-customer' element={<NewCustomer />} />
+          <Route path='finance/customers' element={<Customers />} />
+          <Route path='finance/new-guarantor' element={<NewGuarantor />} />
+          <Route path='finance/new-partner' element={<NewPartner />} />
+          <Route path='finance/cash-book' element={<Daybook />} />
         </Route>
       </Routes>
     </Router>

@@ -1,20 +1,50 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import Card from '../../components/UI/Card';
+import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { Wallet, DollarSign, Users, Landmark, FileText, TrendingUp, AlertCircle, ArrowUpRight } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { 
+  FileText, 
+  TrendingUp, 
+  DollarSign, 
+  AlertCircle,
+  Plus,
+  BookOpen,
+  Edit,
+  UserPlus,
+  Users,
+  ShieldAlert,
+  Calculator,
+  Search,
+  Book,
+  ArrowRight,
+  TrendingDown,
+  Clock
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+
+interface RecentLoanItem {
+  id: string;
+  loan_id: string;
+  customerName: string;
+  amount: number;
+  date: string;
+  due_type: string;
+  status: string;
+}
 
 const FinanceDashboard: React.FC = () => {
-  const [metrics, setMetrics] = useState({
-    totalCapital: 0,
-    totalDisbursed: 0,
-    totalCollected: 0,
-    totalPendingDues: 0,
-    availableCapital: 0,
-    activeLoansCount: 0,
-    closedLoansCount: 0,
-  });
-  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState({
+    disbursedAllTime: 0,
+    loansCount: 0,
+    outstanding: 0,
+    collectedToday: 0,
+    overdueLoansCount: 0,
+  });
+  const [recentLoans, setRecentLoans] = useState<RecentLoanItem[]>([]);
   const [schemaChecked, setSchemaChecked] = useState(true);
 
   useEffect(() => {
@@ -24,79 +54,76 @@ const FinanceDashboard: React.FC = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Partners & Capital Entries
-      const capitalEntries = await supabaseFinance.getCapitalEntries();
-      
-      let totalCapital = 0;
-      capitalEntries.forEach(entry => {
-        const amount = Number(entry.amount);
-        if (entry.type === 'Credit') {
-          totalCapital += amount;
-        } else {
-          totalCapital -= amount;
-        }
-      });
-
-      // 2. Fetch Loans
+      // 1. Fetch Loans
       const loans = await supabaseFinance.getLoans();
-      let totalDisbursed = 0;
-      let activeCount = 0;
-      let closedCount = 0;
+      const loansCount = loans.length;
       
+      let disbursedAllTime = 0;
       loans.forEach(loan => {
-        totalDisbursed += Number(loan.amount);
-        if (loan.status === 'Active') {
-          activeCount++;
-        } else {
-          closedCount++;
-        }
+        disbursedAllTime += Number(loan.amount);
       });
 
-      // 3. Fetch Transactions
+      // 2. Fetch Transactions
       const transactions = await supabaseFinance.getTransactions();
-      let totalCollected = 0;
-      transactions.forEach(tx => {
-        if (tx.type === 'Collection') {
-          totalCollected += Number(tx.amount);
-        }
+      
+      // Calculate collected today
+      const todayStr = new Date().toISOString().split('T')[0];
+      const collectedToday = transactions
+        .filter(tx => tx.type === 'Collection' && tx.date === todayStr)
+        .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+      // Sum of all collections
+      const totalCollected = transactions
+        .filter(tx => tx.type === 'Collection')
+        .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+      // 3. Outstanding calculation (Disbursed + flat interest - collections)
+      let totalRepayableAllLoans = 0;
+      loans.forEach(loan => {
+        const principal = Number(loan.amount);
+        const rate = Number(loan.interest_rate);
+        const duration = Number(loan.duration_months);
+        const interestAmount = principal * (rate / 100) * duration;
+        totalRepayableAllLoans += (principal + interestAmount);
       });
+      const outstanding = Math.max(0, totalRepayableAllLoans - totalCollected);
 
-      // 4. Fetch Dues
-      const today = new Date().toISOString().split('T')[0];
-      const { data: dues, error: duesError } = await supabaseFinance.getLoans().then(async () => {
-        // Query dues from database directly
-        return await require('../../lib/supabase').supabase
-          .from('finance_dues')
-          .select('amount, paid_amount')
-          .lte('due_date', today)
-          .in('status', ['Pending', 'Partially Paid']);
-      }).catch(() => ({ data: null, error: new Error('Dues table check failed') }));
+      // 4. Overdue Loans Count (Active loans with past due date dues that are not fully paid)
+      const { data: dues, error: duesError } = await supabase
+        .from('finance_dues')
+        .select('loan_id')
+        .lt('due_date', todayStr)
+        .in('status', ['Pending', 'Partially Paid']);
 
-      let totalPendingDues = 0;
+      let overdueLoansCount = 0;
       if (dues && !duesError) {
-        dues.forEach((due: any) => {
-          totalPendingDues += (Number(due.amount) - Number(due.paid_amount));
-        });
+        // Get unique loan_ids
+        const uniqueOverdueLoanIds = new Set(dues.map((d: any) => d.loan_id));
+        overdueLoansCount = uniqueOverdueLoanIds.size;
       }
 
-      // Available Capital calculation
-      const availableCapital = totalCapital + totalCollected - totalDisbursed;
-
       setMetrics({
-        totalCapital,
-        totalDisbursed,
-        totalCollected,
-        totalPendingDues,
-        availableCapital,
-        activeLoansCount: activeCount,
-        closedLoansCount: closedCount,
+        disbursedAllTime,
+        loansCount,
+        outstanding,
+        collectedToday,
+        overdueLoansCount,
       });
 
-      setRecentTransactions(transactions.slice(0, 5));
+      // Formatted recent loans (latest 8 disbursals)
+      const formattedRecent = loans.slice(0, 8).map(loan => ({
+        id: loan.id,
+        loan_id: loan.loan_id,
+        customerName: loan.customer?.name || 'N/A',
+        amount: Number(loan.amount),
+        date: loan.date,
+        due_type: loan.due_type,
+        status: loan.status
+      }));
+      setRecentLoans(formattedRecent);
       setSchemaChecked(true);
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      // Check if schema exists, if not, user might need to run the migrations
+      console.error('Error loading finance dashboard metrics:', error);
       setSchemaChecked(false);
     } finally {
       setLoading(false);
@@ -106,215 +133,271 @@ const FinanceDashboard: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-slate-900"></div>
       </div>
     );
   }
 
+  const quickActions = [
+    { label: 'NEW LOAN', path: '/finance/loan-entry', icon: FileText },
+    { label: 'EDIT LOAN', path: '/finance/edit-loan-entry', icon: Edit },
+    { label: 'NEW CUSTOMER', path: '/finance/new-customer', icon: UserPlus },
+    { label: 'NEW GUARANTOR', path: '/finance/new-guarantor', icon: ShieldAlert },
+    { label: 'CASH BOOK', path: '/finance/cash-book', icon: BookOpen },
+    { label: 'CAPITAL', path: '/finance/capital-entry', icon: DollarSign },
+    { label: 'SEARCH', path: '/finance/search', icon: Search },
+    { label: 'CALCULATOR', path: '/finance/calculator', icon: Calculator },
+    { label: 'CD LEDGER', path: '/finance/cd-ledger', icon: Book },
+    { label: 'HP LEDGER', path: '/finance/hp-ledger', icon: Book },
+    { label: 'STBD LEDGER', path: '/finance/stbd-ledger', icon: Book },
+    { label: 'TBD LEDGER', path: '/finance/tbd-ledger', icon: Book },
+  ];
+
+  const reportLinks = [
+    { label: 'DAY BOOK', path: '/finance/daybook' },
+    { label: 'DAILY REPORT', path: '/finance/new-customers' },
+    { label: 'GENERAL LEDGER', path: '/finance/general-ledger' },
+    { label: 'DUES LIST', path: '/finance/dues-ledger' },
+    { label: 'PROFIT & LOSS', path: '/finance/pl' },
+    { label: 'FINAL STATEMENT', path: '/finance/final-statement' },
+    { label: 'BUSINESS DETAILS', path: '/finance/business-report' },
+    { label: 'PARTNER PERFORMANCE', path: '/finance/partner-performance' },
+  ];
+
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto">
-      {/* Schema check notification */}
+    <div className="space-y-6 max-w-7xl mx-auto select-none">
+      
+      {/* Schema Alert Notification */}
       {!schemaChecked && (
-        <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded shadow-sm">
+        <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-xl shadow-sm">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
             <div>
               <h3 className="font-bold text-amber-900 text-sm">Database Schema Incomplete</h3>
               <p className="text-amber-700 text-xs mt-1">
                 It looks like the finance tables do not exist or the RLS policies prevent access. 
-                Please copy the SQL commands in <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-xs">supabase/migrations/20260529000000_finance_schema.sql</code> and execute them in your Supabase SQL Editor, then refresh this page.
+                Please copy the SQL commands in <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-xs">supabase/migrations/20260529000000_finance_schema.sql</code> and execute them in your Supabase SQL Editor.
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Title */}
-      <div className="flex justify-between items-center border-b border-green-100 pb-4">
+      {/* Dashboard Top Header Actions */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Finance Dashboard</h1>
-          <p className="text-gray-500 text-sm mt-1">Overview of partner investments, loan distribution, and collections</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">DASHBOARD</h1>
+          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">OVERVIEW OF TODAY'S CHITFUND OPERATIONS</p>
         </div>
-        <div className="bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-green-200">
-          Finance Mode Active
+        <div className="flex items-center gap-2">
+          <Link
+            to="/finance/loan-entry"
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            NEW LOAN
+          </Link>
+          <Link
+            to="/finance/cash-book"
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold bg-white text-slate-850 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+          >
+            <BookOpen className="w-4 h-4 text-slate-500" />
+            CASH BOOK
+          </Link>
         </div>
       </div>
 
-      {/* Grid Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Available Capital */}
-        <Card className="border-l-4 border-l-emerald-500 bg-gradient-to-br from-white to-emerald-50/20">
-          <div className="flex justify-between items-start">
+      {/* Today at a glance metric cards */}
+      <div className="space-y-3">
+        <h2 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">TODAY AT A GLANCE</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {/* Card 1: Disbursed All-Time */}
+          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-32 relative overflow-hidden">
             <div>
-              <p className="text-gray-500 text-xs font-medium uppercase tracking-wider">Available Capital</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-2">
-                ₹{metrics.availableCapital.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">DISBURSED (ALL-TIME)</p>
+              <h3 className="text-2xl font-black text-slate-900 mt-2 font-sans">
+                ₹{metrics.disbursedAllTime.toLocaleString('en-IN')}
               </h3>
-              <p className="text-gray-400 text-[10px] mt-1">Investments + Collections - Loans</p>
             </div>
-            <div className="p-3 bg-emerald-100 text-emerald-700 rounded-lg shadow-sm">
-              <Wallet className="w-6 h-6" />
+            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">
+              {metrics.loansCount} LOANS ON BOOK
+            </div>
+            <div className="absolute right-4 top-4 p-2 bg-slate-50 text-slate-400 rounded-lg border border-slate-100">
+              <FileText className="w-5 h-5 text-slate-400" />
             </div>
           </div>
-        </Card>
 
-        {/* Invested Capital */}
-        <Card className="border-l-4 border-l-green-500 bg-gradient-to-br from-white to-green-50/20">
-          <div className="flex justify-between items-start">
+          {/* Card 2: Outstanding */}
+          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-32 relative overflow-hidden">
             <div>
-              <p className="text-gray-500 text-xs font-medium uppercase tracking-wider">Total Invested Capital</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-2">
-                ₹{metrics.totalCapital.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">OUTSTANDING</p>
+              <h3 className="text-2xl font-black text-red-650 mt-2 font-sans">
+                ₹{metrics.outstanding.toLocaleString('en-IN')}
               </h3>
-              <p className="text-gray-400 text-[10px] mt-1">Net Partner Credit (Investment)</p>
             </div>
-            <div className="p-3 bg-green-100 text-green-700 rounded-lg shadow-sm">
-              <Landmark className="w-6 h-6" />
+            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">
+              PRINCIPAL + ACCRUED INTEREST
+            </div>
+            <div className="absolute right-4 top-4 p-2 bg-red-50 text-red-500 rounded-lg border border-red-100">
+              <TrendingUp className="w-5 h-5" />
             </div>
           </div>
-        </Card>
 
-        {/* Total Disbursed */}
-        <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-white to-blue-50/20">
-          <div className="flex justify-between items-start">
+          {/* Card 3: Collected Today */}
+          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-32 relative overflow-hidden">
             <div>
-              <p className="text-gray-500 text-xs font-medium uppercase tracking-wider">Total Disbursed Loans</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-2">
-                ₹{metrics.totalDisbursed.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">COLLECTED TODAY</p>
+              <h3 className="text-2xl font-black text-emerald-650 mt-2 font-sans">
+                ₹{metrics.collectedToday.toLocaleString('en-IN')}
               </h3>
-              <p className="text-blue-600 text-xs font-bold mt-1">{metrics.activeLoansCount} Active / {metrics.closedLoansCount} Closed</p>
             </div>
-            <div className="p-3 bg-blue-100 text-blue-700 rounded-lg shadow-sm">
-              <DollarSign className="w-6 h-6" />
+            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">
+              DEBIT SIDE OF CASHBOOK
+            </div>
+            <div className="absolute right-4 top-4 p-2 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100">
+              <DollarSign className="w-5 h-5" />
             </div>
           </div>
-        </Card>
 
-        {/* Total Collected */}
-        <Card className="border-l-4 border-l-indigo-500 bg-gradient-to-br from-white to-indigo-50/20">
-          <div className="flex justify-between items-start">
+          {/* Card 4: Overdue Loans */}
+          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-32 relative overflow-hidden">
             <div>
-              <p className="text-gray-500 text-xs font-medium uppercase tracking-wider">Total Collection Received</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-2">
-                ₹{metrics.totalCollected.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">OVERDUE LOANS</p>
+              <h3 className="text-2xl font-black text-amber-650 mt-2 font-sans">
+                {metrics.overdueLoansCount}
               </h3>
-              <p className="text-indigo-600 text-xs font-bold mt-1">₹{metrics.totalPendingDues.toLocaleString('en-IN')} Dues Overdue</p>
             </div>
-            <div className="p-3 bg-indigo-100 text-indigo-700 rounded-lg shadow-sm">
-              <TrendingUp className="w-6 h-6" />
+            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">
+              PAST DUE DATE
+            </div>
+            <div className="absolute right-4 top-4 p-2 bg-amber-50 text-amber-600 rounded-lg border border-amber-100">
+              <AlertCircle className="w-5 h-5" />
             </div>
           </div>
-        </Card>
+        </div>
       </div>
 
-      {/* Detailed Overview */}
+      {/* Quick Actions Panel */}
+      <div className="space-y-3">
+        <h2 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">QUICK ACTIONS</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          {quickActions.map((action, idx) => (
+            <Link
+              key={idx}
+              to={action.path}
+              className="bg-white border border-slate-150 rounded-xl p-4 shadow-sm hover:border-slate-350 hover:shadow-md transition-all flex flex-col items-start gap-4"
+            >
+              <div className="p-2 border border-slate-150 rounded-lg bg-slate-50 text-slate-700">
+                <action.icon className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-black text-slate-900 tracking-wider">
+                {action.label}
+              </span>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Main content grid: Recent Loans and Reports */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Collections */}
-        <Card title="Recent Transactions" subtitle="The last 5 collections or disbursements recorded" className="lg:col-span-2 shadow">
-          {recentTransactions.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 text-sm">No transactions found</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead>
-                  <tr>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loan ID</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-100">
-                  {recentTransactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-600">
-                        {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        {tx.loan?.customer?.name || 'N/A'}
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 font-mono">
-                        {tx.loan?.loan_id || 'N/A'}
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-sm">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          tx.type === 'Collection' ? 'bg-green-100 text-green-800' :
-                          tx.type === 'Disbursement' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {tx.type}
-                        </span>
-                      </td>
-                      <td className={`px-3 py-3 whitespace-nowrap text-sm font-bold text-right ${
-                        tx.type === 'Collection' ? 'text-green-600' : 'text-blue-600'
-                      }`}>
-                        {tx.type === 'Collection' ? '+' : '-'} ₹{Number(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
+        
+        {/* Recent Loans */}
+        <div className="lg:col-span-2">
+          <Card 
+            title="RECENT LOANS" 
+            subtitle="MOST RECENT 8 DISBURSALS" 
+            className="shadow border-slate-150 rounded-xl h-full flex flex-col justify-between"
+            headerActions={
+              recentLoans.length > 0 ? (
+                <Link
+                  to="/finance/search"
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                >
+                  VIEW ALL <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              ) : undefined
+            }
+          >
+            {recentLoans.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">NO LOANS YET</p>
+                <p className="text-slate-400 text-xs font-bold max-w-xs uppercase tracking-wider">
+                  START BY CREATING YOUR FIRST LOAN ENTRY.
+                </p>
+                <Link
+                  to="/finance/loan-entry"
+                  className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold bg-[#0b1329] text-white rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+                >
+                  CREATE LOAN
+                </Link>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-150">
+                  <thead>
+                    <tr>
+                      <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-450 uppercase tracking-widest">Loan ID</th>
+                      <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-450 uppercase tracking-widest">Customer Name</th>
+                      <th className="px-3 py-3 text-right text-[10px] font-bold text-slate-450 uppercase tracking-widest">Amount</th>
+                      <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-450 uppercase tracking-widest">Mode</th>
+                      <th className="px-3 py-3 text-left text-[10px] font-bold text-slate-450 uppercase tracking-widest">Disbursed Date</th>
+                      <th className="px-3 py-3 text-center text-[10px] font-bold text-slate-450 uppercase tracking-widest">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-
-        {/* Quick Links Card */}
-        <Card title="Quick Action Panel" subtitle="Jump directly to primary finance features" className="shadow">
-          <div className="flex flex-col gap-3">
-            <a href="/finance/loan-entry" className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-green-200 hover:bg-green-50/30 transition-all group">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-50 text-green-700 rounded-md">
-                  <DollarSign className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900 text-sm">Create New Loan</h4>
-                  <p className="text-gray-500 text-xs mt-0.5">Disburse a loan & setup dues</p>
-                </div>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {recentLoans.map((loan) => (
+                      <tr key={loan.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-3 py-3 whitespace-nowrap text-xs font-bold text-slate-900 font-mono">
+                          {loan.loan_id}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-xs font-bold text-slate-900">
+                          {loan.customerName}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-right text-xs font-black text-slate-900">
+                          ₹{loan.amount.toLocaleString('en-IN')}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                          {loan.due_type}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-xs text-slate-500">
+                          {new Date(loan.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-center">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            loan.status === 'Active' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {loan.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <ArrowUpRight className="w-4 h-4 text-gray-400 group-hover:text-green-600 transition-colors" />
-            </a>
+            )}
+          </Card>
+        </div>
 
-            <a href="/finance/search" className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-green-200 hover:bg-green-50/30 transition-all group">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-50 text-blue-700 rounded-md">
-                  <Users className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900 text-sm">Collect Payment</h4>
-                  <p className="text-gray-500 text-xs mt-0.5">Search customer & record collection</p>
-                </div>
-              </div>
-              <ArrowUpRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
-            </a>
-
-            <a href="/finance/partners" className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-green-200 hover:bg-green-50/30 transition-all group">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-50 text-purple-700 rounded-md">
-                  <Users className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900 text-sm">Partners & Capital</h4>
-                  <p className="text-gray-500 text-xs mt-0.5">Manage partner listings & investments</p>
-                </div>
-              </div>
-              <ArrowUpRight className="w-4 h-4 text-gray-400 group-hover:text-purple-600 transition-colors" />
-            </a>
-
-            <a href="/finance/daybook" className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-green-200 hover:bg-green-50/30 transition-all group">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-50 text-amber-700 rounded-md">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900 text-sm">Daybook Report</h4>
-                  <p className="text-gray-500 text-xs mt-0.5">Check today's receipts and payments</p>
-                </div>
-              </div>
-              <ArrowUpRight className="w-4 h-4 text-gray-400 group-hover:text-amber-600 transition-colors" />
-            </a>
-          </div>
-        </Card>
+        {/* Reports Navigation Card */}
+        <div>
+          <Card title="REPORTS" subtitle="PRINTABLE STATEMENTS" className="shadow border-slate-150 rounded-xl">
+            <ul className="divide-y divide-slate-100">
+              {reportLinks.map((report, idx) => (
+                <li key={idx} className="first:pt-0 last:pb-0 py-3">
+                  <Link
+                    to={report.path}
+                    className="flex items-center justify-between group transition-all"
+                  >
+                    <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider group-hover:text-blue-600">
+                      {report.label}
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-1 group-hover:text-blue-600 transition-all" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
       </div>
     </div>
   );
