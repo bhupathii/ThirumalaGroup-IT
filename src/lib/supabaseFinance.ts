@@ -3,8 +3,14 @@ import { supabase } from './supabase';
 // TypeScript Interfaces for Finance Mode
 export interface FinancePartner {
   id: string;
+  partner_id?: number;
   name: string;
+  is_md?: boolean;
   phone: string | null;
+  home_phone?: string | null;
+  village?: string | null;
+  md_name?: string | null;
+  address?: string | null;
   created_at: string;
   updated_at: string;
 }

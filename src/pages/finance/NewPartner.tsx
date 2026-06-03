@@ -1,80 +1,243 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
-import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { ArrowRight } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { ArrowLeft, RotateCcw, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const NewPartner: React.FC = () => {
   const navigate = useNavigate();
+  
+  // Fields state
+  const [partnerId, setPartnerId] = useState<number | string>('...');
+  const [isMd, setIsMd] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [homePhone, setHomePhone] = useState('');
+  const [village, setVillage] = useState('');
+  const [mdName, setMdName] = useState('');
+  const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Fetch next partner sequence ID on load
+  useEffect(() => {
+    fetchNextPartnerId();
+  }, []);
+
+  const fetchNextPartnerId = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('finance_partners')
+        .select('partner_id')
+        .order('partner_id', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setPartnerId((data[0].partner_id || 0) + 1);
+      } else {
+        setPartnerId(1);
+      }
+    } catch (err) {
+      console.error('Error fetching next partner ID:', err);
+      setPartnerId(1); // Default fallback
+    }
+  };
+
+  const handleReset = () => {
+    if (window.confirm('Are you sure you want to clear the form?')) {
+      setName('');
+      setIsMd(false);
+      setPhone('');
+      setHomePhone('');
+      setVillage('');
+      setMdName('');
+      setAddress('');
+      fetchNextPartnerId();
+      toast.success('Form cleared');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
+
     if (!name.trim()) {
-      toast.error('Partner Name is required');
+      toast.error('Name is required');
       return;
     }
 
     setSaving(true);
+    const savingToastId = toast.loading('Registering partner...');
     try {
       const result = await supabaseFinance.createPartner({
-        name,
-        phone: phone || null,
+        name: name.trim(),
+        is_md: isMd,
+        phone: phone.trim() || null,
+        home_phone: homePhone.trim() || null,
+        village: village.trim() || null,
+        md_name: mdName.trim() || null,
+        address: address.trim() || null
       });
 
       if (result) {
-        toast.success(`Partner ${name} registered successfully!`);
+        toast.success(`Partner "${name.trim()}" registered successfully!`, { id: savingToastId });
         navigate('/finance/partners');
       } else {
-        toast.error('Failed to create partner');
+        toast.error('Failed to register partner', { id: savingToastId });
       }
     } catch (err) {
       console.error(err);
-      toast.error('Something went wrong');
+      const errMsg = err instanceof Error ? err.message : 'Error occurred while saving partner data';
+      toast.error(errMsg, { id: savingToastId });
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="space-y-6 p-6 max-w-xl mx-auto">
-      {/* Header */}
-      <div className="flex justify-between items-center border-b border-green-100 pb-4">
+    <div className="space-y-6 p-6 max-w-7xl mx-auto select-none">
+      
+      {/* Top Header Actions Bar */}
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5 print:hidden">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Add New Partner</h1>
-          <p className="text-gray-500 text-sm mt-1">Register a new financing partner for capital sharing and dividends</p>
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+            <span>DASHBOARD</span>
+            <span>/</span>
+            <span>PARTNERS</span>
+            <span>/</span>
+            <span className="text-slate-600">NEW</span>
+          </div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">NEW PARTNER</h1>
+          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">
+            REGISTER A PARTNER OR MD WHO SOURCES BUSINESS
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/finance/partners')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            BACK
+          </button>
+          <button
+            onClick={handleReset}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-slate-550" />
+            RESET
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
+          >
+            <Save className="w-3.5 h-3.5" />
+            {saving ? 'SAVING...' : 'SAVE'}
+          </button>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit}>
-        <Card title="Partner Investment Form" subtitle="Enter partner profile information">
-          <div className="space-y-4">
-            <Input
-              label="Partner Full Name *"
-              value={name}
-              onChange={setName}
-              placeholder="e.g. Anand Sharma"
-              required
-            />
-            <Input
-              label="Phone Number"
-              value={phone}
-              onChange={setPhone}
-              placeholder="10-digit mobile number"
-            />
-            <div className="pt-4 flex justify-end">
-              <Button type="submit" variant="success" className="w-full" icon={ArrowRight} disabled={saving}>
-                {saving ? 'Creating...' : 'Register Partner'}
-              </Button>
+      {/* Main Form Area */}
+      <div className="max-w-4xl">
+        <form onSubmit={handleSubmit}>
+          <Card 
+            title={<span className="text-xs font-black text-slate-900 tracking-wider uppercase">PARTNER DETAILS</span>}
+            className="shadow-sm border-slate-150 rounded-xl"
+          >
+            <div className="space-y-4">
+              
+              {/* Partner ID & Role Checkbox Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="PARTNER ID"
+                  value={partnerId}
+                  readOnly={true}
+                  disabled={true}
+                />
+                
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                    ROLE
+                  </label>
+                  <div className="flex items-center h-10 px-3 bg-white border border-slate-200 rounded-lg shadow-sm">
+                    <label className="inline-flex items-center cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isMd}
+                        onChange={(e) => setIsMd(e.target.checked)}
+                        className="w-4 h-4 text-slate-900 border-slate-300 rounded focus:ring-slate-900 focus:outline-none"
+                      />
+                      <span className="ml-2 text-xs font-bold text-slate-850 uppercase tracking-wide">
+                        IS MD?
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Name (Full Width) */}
+              <Input
+                label="NAME"
+                value={name}
+                onChange={setName}
+                placeholder="Full Name"
+                required
+              />
+
+              {/* Phones (Grid of 2) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="PHONE"
+                  value={phone}
+                  onChange={setPhone}
+                  placeholder="Primary contact number"
+                />
+                <Input
+                  label="HOME PHONE"
+                  value={homePhone}
+                  onChange={setHomePhone}
+                  placeholder="Alternate/Home number"
+                />
+              </div>
+
+              {/* Village & MD Name (Grid of 2) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="VILLAGE"
+                  value={village}
+                  onChange={setVillage}
+                  placeholder="Village / Location"
+                />
+                <Input
+                  label="MD NAME"
+                  value={mdName}
+                  onChange={setMdName}
+                  placeholder="Managing Director Name"
+                />
+              </div>
+
+              {/* Address (Textarea) */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  ADDRESS
+                </label>
+                <textarea
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Residential or Office address"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-855 focus:ring-1 focus:ring-slate-950 focus:outline-none h-24"
+                />
+              </div>
+
             </div>
-          </div>
-        </Card>
-      </form>
+          </Card>
+        </form>
+      </div>
+
     </div>
   );
 };
