@@ -1,386 +1,530 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Card from '../../components/UI/Card';
-import Input from '../../components/UI/Input';
-import Button from '../../components/UI/Button';
-import { Calculator, Printer, RefreshCw } from 'lucide-react';
+import { 
+  ArrowLeft, 
+  Printer, 
+  X 
+} from 'lucide-react';
 
-interface CalculatedScheduleItem {
-  sno: number;
-  dueDate: string;
-  amount: number;
-}
+// Default rates for each ledger type
+const DEFAULT_RATES: Record<string, { label: string; rate: number; overdue: number; doc: number }> = {
+  CD: { label: 'CASH DEPOSIT (CD)', rate: 3, overdue: 0.75, doc: 100 },
+  HP: { label: 'HIRE PURCHASE (HP)', rate: 2, overdue: 0.5, doc: 100 },
+  STBD: { label: 'SHORT TERM BUSINESS DEPOSIT (STBD)', rate: 2.5, overdue: 0.6, doc: 100 },
+  TBD: { label: 'TERM BUSINESS DEPOSIT (TBD)', rate: 2, overdue: 0.5, doc: 100 }
+};
 
 const GeneralCalculator: React.FC = () => {
-  const [principal, setPrincipal] = useState('10000');
-  const [interestRate, setInterestRate] = useState('2'); // 2% per month
-  const [duration, setDuration] = useState('100'); // 100 days default
-  const [durationType, setDurationType] = useState<'days' | 'weeks' | 'months'>('days');
-  const [dueType, setDueType] = useState<'Daily' | 'Weekly' | 'Monthly'>('Daily');
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const navigate = useNavigate();
 
-  const [results, setResults] = useState<{
-    principal: number;
-    interestAmount: number;
-    totalRepayment: number;
-    dueAmount: number;
-    totalDuesCount: number;
-    schedule: CalculatedScheduleItem[];
-  } | null>(null);
+  // Inputs State
+  const [loanType, setLoanType] = useState<string>('CD');
+  const [principal, setPrincipal] = useState<string>('100000');
+  const [loanDate, setLoanDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [periodDays, setPeriodDays] = useState<string>('100');
+  const [rate, setRate] = useState<string>('3');
+  const [overdue, setOverdue] = useState<string>('0.75');
+  const [amountPaid, setAmountPaid] = useState<string>('');
+  const [documentVal, setDocumentVal] = useState<string>('100');
 
-  const calculateLoan = () => {
-    const P = Number(principal);
-    const R = Number(interestRate);
-    const D = Number(duration);
+  // Print Preview Modal State
+  const [showPrintModal, setShowPrintModal] = useState(false);
 
-    if (isNaN(P) || P <= 0 || isNaN(R) || R < 0 || isNaN(D) || D <= 0) {
-      alert('Please fill out all fields with positive numbers.');
-      return;
+  // Update rates when loan type changes
+  const handleLoanTypeChange = (type: string) => {
+    setLoanType(type);
+    const defaults = DEFAULT_RATES[type];
+    if (defaults) {
+      setRate(String(defaults.rate));
+      setOverdue(String(defaults.overdue));
+      setDocumentVal(String(defaults.doc));
     }
-
-    // Convert duration to days for standard local simple flat interest
-    let durationInMonths = 0;
-    if (durationType === 'days') {
-      durationInMonths = D / 30;
-    } else if (durationType === 'weeks') {
-      durationInMonths = D / 4.33;
-    } else {
-      durationInMonths = D;
-    }
-
-    // Flat interest rate model (Rate R is per month)
-    const interestAmount = P * (R / 100) * durationInMonths;
-    const totalRepayment = P + interestAmount;
-
-    // Calculate number of dues based on dueType and duration
-    let totalDuesCount = 0;
-
-    if (dueType === 'Daily') {
-      if (durationType === 'days') totalDuesCount = D;
-      else if (durationType === 'weeks') totalDuesCount = D * 7;
-      else totalDuesCount = D * 30;
-    } else if (dueType === 'Weekly') {
-      if (durationType === 'days') totalDuesCount = Math.ceil(D / 7);
-      else if (durationType === 'weeks') totalDuesCount = D;
-      else totalDuesCount = Math.ceil(D * 4.33);
-    } else {
-      if (durationType === 'days') totalDuesCount = Math.ceil(D / 30);
-      else if (durationType === 'weeks') totalDuesCount = Math.ceil(D / 4.33);
-      else totalDuesCount = D;
-    }
-
-    const dueAmount = totalRepayment / totalDuesCount;
-
-    // Generate schedule
-    const schedule: CalculatedScheduleItem[] = [];
-    const start = new Date(startDate);
-
-    for (let i = 1; i <= totalDuesCount; i++) {
-      const nextDate = new Date(start);
-      if (dueType === 'Daily') {
-        nextDate.setDate(start.getDate() + (i - 1));
-      } else if (dueType === 'Weekly') {
-        nextDate.setDate(start.getDate() + (i - 1) * 7);
-      } else {
-        nextDate.setMonth(start.getMonth() + (i - 1));
-      }
-
-      schedule.push({
-        sno: i,
-        dueDate: nextDate.toISOString().split('T')[0],
-        amount: parseFloat(dueAmount.toFixed(2))
-      });
-    }
-
-    setResults({
-      principal: P,
-      interestAmount: parseFloat(interestAmount.toFixed(2)),
-      totalRepayment: parseFloat(totalRepayment.toFixed(2)),
-      dueAmount: parseFloat(dueAmount.toFixed(2)),
-      totalDuesCount,
-      schedule
-    });
   };
 
-  const handlePrint = () => {
+  // Perform Live Calculation Math
+  const calculation = useMemo(() => {
+    const P = parseFloat(principal) || 0;
+    const doc = parseFloat(documentVal) || 0;
+    const ratePerMonth = parseFloat(rate) || 0;
+    const overdueRatePerMonth = parseFloat(overdue) || 0;
+    const paid = parseFloat(amountPaid) || 0;
+    const periodLimitDays = parseInt(periodDays) || 0;
+
+    // Days elapsed from loanDate to Today
+    const loanDateObj = new Date(loanDate);
+    const todayObj = new Date();
+    
+    // Set time portion to midnight for date diff
+    loanDateObj.setHours(0, 0, 0, 0);
+    todayObj.setHours(0, 0, 0, 0);
+
+    const diffTime = todayObj.getTime() - loanDateObj.getTime();
+    const daysElapsed = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+
+    // Interest = Principal * (Rate / 100) * (Days Elapsed / 30)
+    const interest = P * (ratePerMonth / 100) * (daysElapsed / 30);
+
+    // Overdue Penalty: depends on Overdue %, and overdue days if available
+    const overdueDays = Math.max(0, daysElapsed - periodLimitDays);
+    const penalty = P * (overdueRatePerMonth / 100) * (overdueDays / 30);
+
+    const totalBalance = P + interest + penalty - paid;
+    const forClose = totalBalance;
+    const payout = P - doc;
+
+    return {
+      daysElapsed,
+      interest: Math.round(interest),
+      penalty: Math.round(penalty),
+      totalBalance: Math.round(totalBalance),
+      forClose: Math.round(forClose),
+      payout: Math.round(payout),
+      overdueDays
+    };
+  }, [principal, loanDate, periodDays, rate, overdue, amountPaid, documentVal]);
+
+  const handlePrintTrigger = () => {
     window.print();
   };
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto">
-      {/* Title */}
-      <div className="flex justify-between items-center border-b border-green-100 pb-4 print:hidden">
+    <div className="space-y-6 p-6 max-w-7xl mx-auto select-none print:p-0">
+      
+      {/* Top Header Actions Bar */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5 no-print">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">General Calculator</h1>
-          <p className="text-gray-500 text-sm mt-1">Simulate interest calculations and generate printable payment schedules</p>
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+            <span>DASHBOARD</span>
+            <span>/</span>
+            <span className="text-slate-600">CALCULATOR</span>
+          </div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">GENERAL CALCULATOR</h1>
+          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">
+            TRY ANY LEDGER'S MATH. RATE DEFAULTS COME FROM SETTINGS → LEDGERS.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/finance')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            BACK
+          </button>
+          <button
+            onClick={() => setShowPrintModal(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            PRINT
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:block">
-        {/* Form panel */}
-        <div className="space-y-6 print:hidden">
-          <Card title="Loan Calculator Details" subtitle="Input criteria to calculate loan amortization schedule">
-            <div className="space-y-4">
-              <Input
-                label="Principal Amount (₹)"
-                type="number"
-                value={principal}
-                onChange={setPrincipal}
-                placeholder="e.g. 50000"
-              />
+      {/* Main Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 no-print">
+        
+        {/* Left Column: Inputs Card */}
+        <Card
+          title={
+            <div className="flex justify-between items-center w-full">
+              <span className="text-xs font-black text-slate-900 tracking-wider uppercase">INPUTS</span>
+              <span className="px-2 py-0.5 text-[9px] font-black bg-slate-100 text-slate-800 border border-slate-200 rounded uppercase tracking-wider">
+                {loanType}
+              </span>
+            </div>
+          }
+          subtitle={
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">
+              {DEFAULT_RATES[loanType]?.label || 'CASH DEPOSIT (CD)'}
+            </span>
+          }
+          className="shadow-sm border-slate-150 rounded-xl"
+        >
+          <div className="space-y-4">
+            
+            {/* Loan Type Selector */}
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                LOAN TYPE
+              </label>
+              <select
+                value={loanType}
+                onChange={(e) => handleLoanTypeChange(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-9 shadow-sm"
+              >
+                <option value="CD">CASH DEPOSIT (CD)</option>
+                <option value="HP">HIRE PURCHASE (HP)</option>
+                <option value="STBD">SHORT TERM BUSINESS DEPOSIT (STBD)</option>
+                <option value="TBD">TERM BUSINESS DEPOSIT (TBD)</option>
+              </select>
+            </div>
 
-              <Input
-                label="Flat Interest Rate (% per Month)"
-                type="number"
-                value={interestRate}
-                onChange={setInterestRate}
-                placeholder="e.g. 2"
-              />
-
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  label="Loan Duration"
+            {/* Principal & Date */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  PRINCIPAL (₹)
+                </label>
+                <input
                   type="number"
-                  value={duration}
-                  onChange={setDuration}
-                  placeholder="e.g. 100"
+                  value={principal}
+                  onChange={(e) => setPrincipal(e.target.value)}
+                  placeholder="e.g. 100000"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-9 shadow-sm"
                 />
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1" style={{ fontFamily: 'Times New Roman', fontSize: '14px' }}>
-                    Unit
-                  </label>
-                  <select
-                    value={durationType}
-                    onChange={(e) => setDurationType(e.target.value as any)}
-                    className="w-full border border-gray-300 rounded-lg p-2 font-bold focus:outline-none focus:ring-2 focus:ring-green-500 text-base"
-                    style={{ fontFamily: 'Times New Roman', fontSize: '14px' }}
-                  >
-                    <option value="days">Days</option>
-                    <option value="weeks">Weeks</option>
-                    <option value="months">Months</option>
-                  </select>
-                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1" style={{ fontFamily: 'Times New Roman', fontSize: '14px' }}>
-                  Due Collection Type
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 font-sans">
+                  DATE
                 </label>
-                <select
-                  value={dueType}
-                  onChange={(e) => setDueType(e.target.value as any)}
-                  className="w-full border border-gray-300 rounded-lg p-2 font-bold focus:outline-none focus:ring-2 focus:ring-green-500 text-base"
-                  style={{ fontFamily: 'Times New Roman', fontSize: '14px' }}
-                >
-                  <option value="Daily">Daily Dues</option>
-                  <option value="Weekly">Weekly Dues</option>
-                  <option value="Monthly">Monthly Dues</option>
-                </select>
+                <input
+                  type="date"
+                  value={loanDate}
+                  onChange={(e) => setLoanDate(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-9 shadow-sm"
+                />
+              </div>
+            </div>
+
+            {/* Period Days & Interest Rate */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  PERIOD (DAYS)
+                </label>
+                <input
+                  type="number"
+                  value={periodDays}
+                  onChange={(e) => setPeriodDays(e.target.value)}
+                  placeholder="e.g. 100"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-9 shadow-sm"
+                />
               </div>
 
-              <Input
-                label="Start Date"
-                type="date"
-                value={startDate}
-                onChange={setStartDate}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  RATE (% / MONTH)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={rate}
+                  onChange={(e) => setRate(e.target.value)}
+                  placeholder="e.g. 3"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-9 shadow-sm"
+                />
+              </div>
+            </div>
+
+            {/* Overdue Rate & Amount Paid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  OVERDUE (% / MONTH)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={overdue}
+                  onChange={(e) => setOverdue(e.target.value)}
+                  placeholder="e.g. 0.75"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-9 shadow-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 font-sans">
+                  AMOUNT PAID (₹)
+                </label>
+                <input
+                  type="number"
+                  value={amountPaid}
+                  onChange={(e) => setAmountPaid(e.target.value)}
+                  placeholder="e.g. 0.00"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-9 shadow-sm"
+                />
+              </div>
+            </div>
+
+            {/* Document Charges */}
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                DOCUMENT (₹)
+              </label>
+              <input
+                type="number"
+                value={documentVal}
+                onChange={(e) => setDocumentVal(e.target.value)}
+                placeholder="e.g. 100"
+                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-9 shadow-sm"
               />
-
-              <div className="flex gap-2 pt-2">
-                <Button onClick={calculateLoan} variant="success" className="flex-1" icon={Calculator}>
-                  Calculate Loan
-                </Button>
-                <Button
-                  onClick={() => {
-                    setPrincipal('10000');
-                    setInterestRate('2');
-                    setDuration('100');
-                    setDurationType('days');
-                    setDueType('Daily');
-                    setResults(null);
-                  }}
-                  variant="secondary"
-                  icon={RefreshCw}
-                >
-                  Reset
-                </Button>
-              </div>
             </div>
-          </Card>
-        </div>
 
-        {/* Results / Print View Panel */}
-        <div className="lg:col-span-2 space-y-6 print:col-span-3">
-          {results ? (
-            <div className="space-y-6">
-              {/* Calculation Summary Card */}
-              <Card
-                title={
-                  <div className="flex justify-between items-center w-full">
-                    <span>Calculation Summary</span>
-                    <Button onClick={handlePrint} variant="primary" size="sm" icon={Printer} className="print:hidden">
-                      Print A4 Schedule
-                    </Button>
-                  </div>
-                }
-                subtitle="Calculated simple flat interest summary details"
-                className="shadow border-green-200"
-              >
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <span className="text-gray-500 text-xs font-semibold block">Principal</span>
-                    <span className="text-lg font-bold text-gray-900">₹{results.principal.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <span className="text-gray-500 text-xs font-semibold block">Interest Amount</span>
-                    <span className="text-lg font-bold text-gray-900">₹{results.interestAmount.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <span className="text-gray-500 text-xs font-semibold block">Total Repayment</span>
-                    <span className="text-lg font-bold text-green-700">₹{results.totalRepayment.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="p-3 bg-green-50 rounded-lg border border-green-100 col-span-2 md:col-span-1">
-                    <span className="text-green-700 text-xs font-bold block">{dueType} Due Amount</span>
-                    <span className="text-xl font-extrabold text-green-800">₹{results.dueAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <span className="text-gray-500 text-xs font-semibold block">Total Instalments</span>
-                    <span className="text-lg font-bold text-gray-900">{results.totalDuesCount}</span>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <span className="text-gray-500 text-xs font-semibold block">Rate & Duration</span>
-                    <span className="text-sm font-bold text-gray-900">{interestRate}% pm / {duration} {durationType}</span>
-                  </div>
-                </div>
-              </Card>
-
-              {/* A4 Printable Schedule Sheet */}
-              <div className="bg-white p-8 rounded-lg shadow-md border border-gray-200 printable-schedule print:border-none print:shadow-none print:p-0">
-                {/* Print Header */}
-                <div className="text-center border-b-2 border-gray-800 pb-4 mb-6">
-                  <h2 className="text-2xl font-black text-gray-900 uppercase tracking-wide">श्री तिरुमला कॉटन मिल्स</h2>
-                  <h3 className="text-xl font-bold text-gray-800 mt-1">THIRUMALA GROUP FINANCE</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">LOAN REPAYMENT SCHEDULE & INVOICE</p>
-                </div>
-
-                {/* Meta details */}
-                <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
-                  <div>
-                    <p className="font-bold text-gray-800">Loan Details:</p>
-                    <table className="min-w-full text-xs mt-1">
-                      <tbody>
-                        <tr>
-                          <td className="font-bold text-gray-500 pr-2">Principal Amount:</td>
-                          <td className="font-bold">₹{results.principal.toLocaleString('en-IN')}</td>
-                        </tr>
-                        <tr>
-                          <td className="font-bold text-gray-500 pr-2">Flat Interest:</td>
-                          <td className="font-bold">₹{results.interestAmount.toLocaleString('en-IN')} ({interestRate}% pm)</td>
-                        </tr>
-                        <tr>
-                          <td className="font-bold text-gray-500 pr-2">Total Payable:</td>
-                          <td className="font-extrabold text-green-700">₹{results.totalRepayment.toLocaleString('en-IN')}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-gray-800">Instalment Plan:</p>
-                    <table className="min-w-full text-xs mt-1">
-                      <tbody>
-                        <tr>
-                          <td className="font-bold text-gray-500 pr-2 text-right">Instalment Mode:</td>
-                          <td className="font-bold text-right">{dueType}</td>
-                        </tr>
-                        <tr>
-                          <td className="font-bold text-gray-500 pr-2 text-right">Instalment Amount:</td>
-                          <td className="font-bold text-right text-lg text-gray-900">₹{results.dueAmount.toLocaleString('en-IN')}</td>
-                        </tr>
-                        <tr>
-                          <td className="font-bold text-gray-500 pr-2 text-right">Total Installments:</td>
-                          <td className="font-bold text-right">{results.totalDuesCount}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Dues Schedule Table */}
-                <h4 className="font-bold text-gray-800 text-sm mb-2 border-b pb-1">Due Dates & Payment Schedule</h4>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse border border-gray-300 text-xs">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border border-gray-300 px-2 py-1.5 text-center font-bold">S.No</th>
-                        <th className="border border-gray-300 px-2 py-1.5 text-center font-bold">Due Date</th>
-                        <th className="border border-gray-300 px-2 py-1.5 text-right font-bold">Due Amount</th>
-                        <th className="border border-gray-300 px-2 py-1.5 text-center font-bold">Received (Sign / Date)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {results.schedule.map((item) => (
-                        <tr key={item.sno} className="hover:bg-gray-50">
-                          <td className="border border-gray-300 px-2 py-1 text-center font-bold">{item.sno}</td>
-                          <td className="border border-gray-300 px-2 py-1 text-center">
-                            {new Date(item.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                          </td>
-                          <td className="border border-gray-300 px-2 py-1 text-right font-bold">
-                            ₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="border border-gray-300 px-2 py-1 text-center text-gray-400 font-normal italic">
-                            _________________
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Print Signatures */}
-                <div className="flex justify-between items-center mt-12 pt-6 border-t text-xs">
-                  <div>
-                    <p className="font-bold text-gray-700">Customer Signature</p>
-                    <p className="text-[10px] text-gray-400 mt-8">Authorized Signatory</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-gray-700">For Thirumala Group Finance</p>
-                    <p className="text-[10px] text-gray-400 mt-8">Partner / Cashier Sign</p>
-                  </div>
-                </div>
-              </div>
+            {/* Payout Box Banner */}
+            <div className="bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-lg p-3 flex justify-between items-center text-xs font-black uppercase tracking-widest">
+              <span>PAYOUT  ₹{calculation.payout.toLocaleString('en-IN')}</span>
+              <span className="text-[9px] font-bold text-emerald-600">= PRINCIPAL – DOCUMENT</span>
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center border border-dashed rounded-lg py-16 px-4 bg-gray-50/50">
-              <Calculator className="w-12 h-12 text-gray-400 stroke-1 mb-3" />
-              <p className="text-gray-500 text-sm font-semibold">Amortization sheet will be displayed here</p>
-              <p className="text-gray-400 text-xs mt-1">Please enter loan metrics on the left panel and click Calculate Loan</p>
+
+          </div>
+        </Card>
+
+        {/* Right Column: Summary Card */}
+        <Card
+          title={
+            <span className="text-xs font-black text-slate-900 tracking-wider uppercase">
+              SUMMARY
+            </span>
+          }
+          subtitle={
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">
+              LIVE CALCULATION USING THE SAME ENGINE AS THE LEDGERS
+            </span>
+          }
+          className="shadow-sm border-slate-150 rounded-xl"
+        >
+          <div className="grid grid-cols-2 gap-4">
+            
+            {/* Period Days Elapsed */}
+            <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                PERIOD (DAYS)
+              </span>
+              <span className="text-xl font-black font-mono tracking-tight mt-1 text-slate-900 block">
+                {calculation.daysElapsed}
+              </span>
             </div>
-          )}
-        </div>
+
+            {/* Calculated Interest */}
+            <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                INTEREST
+              </span>
+              <span className="text-xl font-black font-mono tracking-tight mt-1 text-red-650 block">
+                ₹{calculation.interest.toLocaleString('en-IN')}
+              </span>
+            </div>
+
+            {/* Overdue Penalty */}
+            <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                PENALTY
+              </span>
+              <span className="text-xl font-black font-mono tracking-tight mt-1 text-red-650 block">
+                ₹{calculation.penalty.toLocaleString('en-IN')}
+              </span>
+              {calculation.overdueDays > 0 && (
+                <span className="text-[8px] font-bold text-red-500 uppercase tracking-wider block mt-0.5">
+                  {calculation.overdueDays} DAYS OVERDUE
+                </span>
+              )}
+            </div>
+
+            {/* Amount Paid */}
+            <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                AMOUNT PAID
+              </span>
+              <span className="text-xl font-black font-mono tracking-tight mt-1 text-emerald-650 block">
+                ₹{(parseFloat(amountPaid) || 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+
+            {/* Total Balance */}
+            <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100 col-span-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                TOTAL BALANCE
+              </span>
+              <span className="text-xl font-black font-mono tracking-tight mt-1 text-slate-900 block">
+                ₹{calculation.totalBalance.toLocaleString('en-IN')}
+              </span>
+            </div>
+
+            {/* For Close */}
+            <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100 col-span-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                FOR CLOSE
+              </span>
+              <span className="text-xl font-black font-mono tracking-tight mt-1 text-slate-900 block">
+                ₹{calculation.forClose.toLocaleString('en-IN')}
+              </span>
+            </div>
+
+          </div>
+        </Card>
+
       </div>
 
-      {/* Embedded print CSS for rendering beautiful A4 and hiding app layouts */}
+      {/* MODAL: Print Preview Panel */}
+      {showPrintModal && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/60 backdrop-blur-xs overflow-y-auto p-4 md:p-8">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-150 max-w-2xl w-full mx-auto overflow-hidden">
+            
+            {/* Modal Header Actions */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 no-print">
+              <div>
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">PRINT PREVIEW</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">REVIEW THE CALCULATOR SUMMARY REPORT</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePrintTrigger}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  CONFIRM PRINT
+                </button>
+                <button
+                  onClick={() => setShowPrintModal(false)}
+                  className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+                >
+                  <X className="w-4 h-4" />
+                  CLOSE
+                </button>
+              </div>
+            </div>
+
+            {/* Print Document A4 Container */}
+            <div className="p-8 bg-white text-black print-document font-sans">
+              
+              {/* Header */}
+              <div className="text-center pb-6 border-b-2 border-slate-900">
+                <h2 className="text-lg font-black tracking-widest uppercase">TIRUMALA FINANCE</h2>
+                <p className="text-xs font-bold uppercase tracking-wider mt-1">GENERAL CALCULATOR LEDGER SIMULATION</p>
+                <p className="text-[10px] font-semibold text-slate-600 mt-0.5">
+                  PRINTED DATE: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+
+              {/* Simulation Details Table */}
+              <div className="my-6">
+                <h3 className="text-xs font-black uppercase tracking-wider mb-2 border-b border-slate-300 pb-1">1. SIMULATION INPUTS</h3>
+                <table className="min-w-full text-xs border border-slate-300">
+                  <tbody>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">LOAN TYPE</td>
+                      <td className="px-3 py-2 font-semibold uppercase">{DEFAULT_RATES[loanType]?.label || loanType}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">PRINCIPAL</td>
+                      <td className="px-3 py-2 font-mono font-bold">₹{(parseFloat(principal) || 0).toLocaleString('en-IN')}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">DISBURSAL DATE</td>
+                      <td className="px-3 py-2 font-semibold">{loanDate.split('-').reverse().join('/')}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">LOAN PERIOD</td>
+                      <td className="px-3 py-2 font-semibold">{periodDays} DAYS</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">INTEREST RATE</td>
+                      <td className="px-3 py-2 font-semibold">{rate}% / MONTH</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">OVERDUE RATE</td>
+                      <td className="px-3 py-2 font-semibold">{overdue}% / MONTH</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">DOCUMENT CHARGES</td>
+                      <td className="px-3 py-2 font-mono font-semibold">₹{(parseFloat(documentVal) || 0).toLocaleString('en-IN')}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">PAYOUT DISBURSED</td>
+                      <td className="px-3 py-2 font-mono font-bold text-emerald-700">₹{calculation.payout.toLocaleString('en-IN')}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Simulation Summary Table */}
+              <div className="my-6">
+                <h3 className="text-xs font-black uppercase tracking-wider mb-2 border-b border-slate-300 pb-1">2. CALCULATION SUMMARY</h3>
+                <table className="min-w-full text-xs border border-slate-300">
+                  <tbody>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">DAYS ELAPSED</td>
+                      <td className="px-3 py-2 font-semibold">{calculation.daysElapsed} DAYS</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">INTEREST ACCRUED</td>
+                      <td className="px-3 py-2 font-mono font-semibold">₹{calculation.interest.toLocaleString('en-IN')}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">PENALTY CHARGED</td>
+                      <td className="px-3 py-2 font-mono font-semibold">
+                        ₹{calculation.penalty.toLocaleString('en-IN')} 
+                        {calculation.overdueDays > 0 && ` (${calculation.overdueDays} days overdue)`}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">AMOUNT PAID SO FAR</td>
+                      <td className="px-3 py-2 font-mono font-semibold">₹{(parseFloat(amountPaid) || 0).toLocaleString('en-IN')}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">TOTAL OUTSTANDING</td>
+                      <td className="px-3 py-2 font-mono font-bold text-red-700">₹{calculation.totalBalance.toLocaleString('en-IN')}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300 font-sans">FOR CLOSE AMOUNT</td>
+                      <td className="px-3 py-2 font-mono font-black text-slate-900">₹{calculation.forClose.toLocaleString('en-IN')}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Signatures */}
+              <div className="flex justify-between items-center mt-20 pt-8 border-t border-slate-300 text-xs font-bold uppercase tracking-wider">
+                <div>
+                  <p>CUSTOMER SIGNATURE</p>
+                  <p className="text-[10px] text-slate-400 mt-8">VERIFIED INTEREST DETAILS</p>
+                </div>
+                <div className="text-right">
+                  <p>AUDITED BY FINANCE CLERK</p>
+                  <p className="text-[10px] text-slate-400 mt-8">THIRUMALA GROUP OFFICIAL</p>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Global CSS style overrides for print action */}
       <style>{`
         @media print {
-          body * {
-            visibility: hidden;
+          /* Hide all application components */
+          body > div:first-child,
+          #root,
+          main,
+          header,
+          aside,
+          nav,
+          .no-print {
+            display: none !important;
+            height: 0 !important;
+            overflow: hidden !important;
           }
-          .printable-schedule, .printable-schedule * {
-            visibility: visible;
-          }
-          .printable-schedule {
+          
+          /* Only display print document elements */
+          .print-document {
+            display: block !important;
             position: absolute;
             left: 0;
             top: 0;
             width: 100%;
-            border: none !important;
-            box-shadow: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          aside, nav, header, button, .print\\:hidden {
-            display: none !important;
+            background: white !important;
+            color: black !important;
+            font-size: 11px !important;
+            padding: 0px !important;
           }
         }
       `}</style>
+
     </div>
   );
 };

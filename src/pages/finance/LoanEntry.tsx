@@ -220,9 +220,23 @@ const LoanEntry: React.FC = () => {
   // Generate Auto sequential Loan ID
   const generateSequentialId = (loansList: any[], category: string) => {
     const prefix = category === 'L' ? 'L' : category;
-    const matchingLoans = loansList.filter(l => l.loan_id.toUpperCase().startsWith(prefix));
-    const count = matchingLoans.length;
-    const paddedCount = String(count + 1).padStart(3, '0');
+    const matchingLoans = loansList.filter(l => {
+      const lid = (l.loan_id || '').toUpperCase();
+      return lid.startsWith(prefix);
+    });
+    
+    let maxNum = 0;
+    matchingLoans.forEach(l => {
+      const lid = (l.loan_id || '').toUpperCase();
+      const suffix = lid.slice(prefix.length);
+      const num = parseInt(suffix, 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    });
+
+    const nextNum = maxNum + 1;
+    const paddedCount = String(nextNum).padStart(3, '0');
     setLoanId(`${prefix}${paddedCount}`);
   };
 
@@ -780,7 +794,13 @@ const LoanEntry: React.FC = () => {
       if (err.code === '42703' || errorMsg.includes('column') || errorMsg.includes('schema cache')) {
         toast.error('Customer table setup is incomplete. Please run migration.');
       } else if (err.code === '23505' || errorMsg.includes('duplicate') || errorMsg.includes('unique constraint')) {
-        toast.error('Customer with this Aadhaar already exists.');
+        if (errorMsg.toLowerCase().includes('loan_id') || errorMsg.toLowerCase().includes('loans')) {
+          toast.error('Disbursal failed. Duplicate Loan Number.');
+        } else if (errorMsg.toLowerCase().includes('aadhaar')) {
+          toast.error('Customer with this Aadhaar already exists.');
+        } else {
+          toast.error(`Duplicate entry error: ${errorMsg}`);
+        }
       } else {
         toast.error(`Disbursal failed: ${errorMsg || 'Check database connection or RLS rules.'}`);
       }

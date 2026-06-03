@@ -575,10 +575,18 @@ class SupabaseFinance {
       }
 
       // Create loan record
+      const safeLoanData = { ...loanData };
+      delete (safeLoanData as any).customer_fingerprint_template;
+      delete (safeLoanData as any).customer_fingerprint_image_url;
+      delete (safeLoanData as any).customer_fingerprint_added;
+      delete (safeLoanData as any).surety_fingerprint_template;
+      delete (safeLoanData as any).surety_fingerprint_image_url;
+      delete (safeLoanData as any).surety_fingerprint_added;
+
       const { data: loan, error: loanError } = await supabase
         .from('finance_loans')
         .insert([{
-          ...loanData,
+          ...safeLoanData,
           customer_id: customerId,
           status: 'Active',
           customer_photo_url: loanData.customer_photo_url || customerData.customer_photo_url || null,
@@ -586,12 +594,6 @@ class SupabaseFinance {
           fingerprint_url: loanData.fingerprint_url || customerData.fingerprint_url || null,
           fingerprint_template: loanData.fingerprint_template || customerData.fingerprint_template || null,
           fingerprint_added: loanData.fingerprint_added || customerData.fingerprint_added || false,
-          customer_fingerprint_template: loanData.customer_fingerprint_template || customerData.customer_fingerprint_template || null,
-          customer_fingerprint_image_url: loanData.customer_fingerprint_image_url || customerData.customer_fingerprint_image_url || null,
-          customer_fingerprint_added: loanData.customer_fingerprint_added || customerData.customer_fingerprint_added || false,
-          surety_fingerprint_template: loanData.surety_fingerprint_template || customerData.surety_fingerprint_template || null,
-          surety_fingerprint_image_url: loanData.surety_fingerprint_image_url || customerData.surety_fingerprint_image_url || null,
-          surety_fingerprint_added: loanData.surety_fingerprint_added || customerData.surety_fingerprint_added || false,
           father_husband_name: loanData.father_husband_name || customerData.father_husband_name || null,
           loan_category: loanData.loan_category || 'Regular'
         }])
@@ -673,7 +675,7 @@ class SupabaseFinance {
       return loan;
     } catch (error) {
       console.error('Error creating finance loan:', error);
-      return null;
+      throw error;
     }
   }
 
@@ -685,9 +687,17 @@ class SupabaseFinance {
         .eq('id', id)
         .single();
 
+      const safeLoanUpdate = { ...loan };
+      delete (safeLoanUpdate as any).customer_fingerprint_template;
+      delete (safeLoanUpdate as any).customer_fingerprint_image_url;
+      delete (safeLoanUpdate as any).customer_fingerprint_added;
+      delete (safeLoanUpdate as any).surety_fingerprint_template;
+      delete (safeLoanUpdate as any).surety_fingerprint_image_url;
+      delete (safeLoanUpdate as any).surety_fingerprint_added;
+
       const { data, error } = await supabase
         .from('finance_loans')
-        .update({ ...loan, updated_at: new Date().toISOString() })
+        .update({ ...safeLoanUpdate, updated_at: new Date().toISOString() })
         .eq('id', id)
         .select()
         .single();
