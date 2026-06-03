@@ -221,46 +221,98 @@ const NewCustomer: React.FC = () => {
       return;
     }
 
+    const cleanAadhaar = aadhaar.trim();
+    if (cleanAadhaar) {
+      if (!/^\d{12}$/.test(cleanAadhaar)) {
+        toast.error('Aadhaar must be exactly 12 digits.');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
+      // 1. Check duplicate Aadhaar if entered
+      if (cleanAadhaar) {
+        const { data: existingCustomers, error: checkError } = await supabase
+          .from('finance_customers')
+          .select('name, customer_id')
+          .eq('aadhaar', cleanAadhaar)
+          .limit(1);
+
+        if (checkError) {
+          console.error('Error checking duplicate Aadhaar:', checkError);
+        } else if (existingCustomers && existingCustomers.length > 0) {
+          const dup = existingCustomers[0];
+          toast.error(`Customer with this Aadhaar already exists (Name: ${dup.name}, ID: ${dup.customer_id || 'N/A'}).`);
+          setSaving(false);
+          return;
+        }
+      }
+
+      // 2. Insert customer
       const result = await supabaseFinance.createCustomer({
         name: name.trim(),
-        phone: phone1 || null,
-        phone2: phone2 || null,
+        phone: phone1.trim() || null,
+        phone2: phone2.trim() || null,
         partner_name: null,
-        address: presentAddress || null,
-        aadhaar: aadhaar || null,
-        customer_photo_url: photoUrl,
-        father_husband_name: fatherName || null,
+        address: presentAddress.trim() || null,
+        aadhaar: cleanAadhaar || null,
+        customer_photo_url: photoUrl || null,
+        father_husband_name: fatherName.trim() || null,
         
         // Redesign columns
-        father_name: fatherName || null,
-        village: village || null,
-        mandal: mandal || null,
-        district: district || null,
-        aadhaar_address: aadhaarAddress || null,
-        present_address: presentAddress || null,
-        phone_1: phone1 || null,
-        phone_2: phone2 || null,
+        father_name: fatherName.trim() || null,
+        village: village.trim() || null,
+        mandal: mandal.trim() || null,
+        district: district.trim() || null,
+        aadhaar_address: aadhaarAddress.trim() || null,
+        present_address: presentAddress.trim() || null,
+        phone_1: phone1.trim() || null,
+        phone_2: phone2.trim() || null,
 
-        // Fingerprints
+        // Fingerprints (only send standard ones which exist in current schema)
         fingerprint_url: fingerprintUrl || null,
         fingerprint_template: fingerprintTemplate || null,
-        fingerprint_added: fingerprintAdded,
-        customer_fingerprint_template: fingerprintTemplate || null,
-        customer_fingerprint_image_url: fingerprintUrl || null,
-        customer_fingerprint_added: fingerprintAdded
+        fingerprint_added: fingerprintAdded
       });
 
       if (result) {
-        toast.success(`Customer ${name} registered successfully!`);
+        toast.success('Customer registered successfully.');
+        
+        // Reset form state on success
+        setAadhaar('');
+        setName('');
+        setFatherName('');
+        setVillage('');
+        setMandal('');
+        setDistrict('');
+        setAadhaarAddress('');
+        setPresentAddress('');
+        setPhone1('');
+        setPhone2('');
+        handleClearPhoto();
+        setFingerprintUrl(null);
+        setFingerprintTemplate(null);
+        setFingerprintAdded(false);
+
+        // Fetch updated sequence ID
+        fetchNextId();
+
+        // Redirect
         navigate('/finance/customers');
       } else {
-        toast.error('Failed to register customer. Check if Aadhaar is duplicate.');
+        toast.error('Failed to register customer. Check console for details.');
       }
-    } catch (err) {
-      console.error(err);
-      toast.error('Something went wrong');
+    } catch (err: any) {
+      console.error('Customer registration error details:', err);
+      const errorMsg = err.message || '';
+      if (err.code === '42703' || errorMsg.includes('column') || errorMsg.includes('schema cache')) {
+        toast.error('Customer table setup is incomplete. Please run migration.');
+      } else if (err.code === '23505' || errorMsg.includes('duplicate') || errorMsg.includes('unique constraint')) {
+        toast.error('Customer with this Aadhaar already exists.');
+      } else {
+        toast.error(`Failed to register customer: ${errorMsg || 'Check database connection or RLS rules.'}`);
+      }
     } finally {
       setSaving(false);
     }

@@ -303,7 +303,7 @@ class SupabaseFinance {
       return data;
     } catch (error) {
       console.error('Error creating finance customer:', error);
-      return null;
+      throw error;
     }
   }
 

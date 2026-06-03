@@ -1,12 +1,11 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Input from '../../components/UI/Input';
-import { supabaseFinance, FinanceLoan, FinanceCustomer, FinancePartner, FinanceGuarantor, FinanceDue } from '../../lib/supabaseFinance';
+import { supabaseFinance, FinanceLoan, FinanceCustomer, FinancePartner, FinanceGuarantor } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { 
   ArrowLeft, 
   User, 
-  Plus, 
   Calculator, 
   Printer, 
   X, 
@@ -44,7 +43,6 @@ const LoanEntry: React.FC = () => {
   const [loanId, setLoanId] = useState('');
 
   // Form State - Customer
-  const [customerMode] = useState<'new' | 'existing'>('existing');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [custName, setCustName] = useState('');
   const [custFatherName, setCustFatherName] = useState('');
@@ -504,6 +502,36 @@ const LoanEntry: React.FC = () => {
       return;
     }
 
+    // Validate customer Aadhaar format and duplicate if creating inline
+    if (!selectedCustomerId) {
+      const cleanAadhaar = custAadhaar.trim();
+      if (cleanAadhaar) {
+        if (!/^\d{12}$/.test(cleanAadhaar)) {
+          toast.error('Aadhaar must be exactly 12 digits.');
+          return;
+        }
+
+        // Query database directly to check for duplicate Aadhaar
+        try {
+          const { data: existingCustomers, error: checkError } = await supabase
+            .from('finance_customers')
+            .select('name, customer_id')
+            .eq('aadhaar', cleanAadhaar)
+            .limit(1);
+
+          if (checkError) {
+            console.error('Error checking duplicate Aadhaar:', checkError);
+          } else if (existingCustomers && existingCustomers.length > 0) {
+            const dup = existingCustomers[0];
+            toast.error(`Customer with this Aadhaar already exists (Name: ${dup.name}, ID: ${dup.customer_id || 'N/A'}).`);
+            return;
+          }
+        } catch (err) {
+          console.error('Exception checking duplicate Aadhaar:', err);
+        }
+      }
+    }
+
     setSaving(true);
     try {
       const staffName = user?.username || 'Staff';
@@ -746,9 +774,16 @@ const LoanEntry: React.FC = () => {
       } else {
         toast.error('Disbursal failed. Duplicate Loan Number.');
       }
-    } catch (err) {
-      console.error(err);
-      toast.error('Something went wrong during disbursal processing');
+    } catch (err: any) {
+      console.error('Save loan error details:', err);
+      const errorMsg = err.message || '';
+      if (err.code === '42703' || errorMsg.includes('column') || errorMsg.includes('schema cache')) {
+        toast.error('Customer table setup is incomplete. Please run migration.');
+      } else if (err.code === '23505' || errorMsg.includes('duplicate') || errorMsg.includes('unique constraint')) {
+        toast.error('Customer with this Aadhaar already exists.');
+      } else {
+        toast.error(`Disbursal failed: ${errorMsg || 'Check database connection or RLS rules.'}`);
+      }
     } finally {
       setSaving(false);
     }
