@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
-import { supabaseFinance } from '../../lib/supabaseFinance';
+import { supabaseFinance, FinancePartner } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, RotateCcw, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../contexts/AuthContext';
 
 const NewPartner: React.FC = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('edit');
   
   // Fields state
   const [partnerId, setPartnerId] = useState<number | string>('...');
@@ -21,10 +25,14 @@ const NewPartner: React.FC = () => {
   const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Fetch next partner sequence ID on load
+  // Fetch data on load depending on mode
   useEffect(() => {
-    fetchNextPartnerId();
-  }, []);
+    if (editId) {
+      loadPartnerDetails(editId);
+    } else {
+      fetchNextPartnerId();
+    }
+  }, [editId]);
 
   const fetchNextPartnerId = async () => {
     try {
@@ -47,6 +55,32 @@ const NewPartner: React.FC = () => {
     }
   };
 
+  const loadPartnerDetails = async (id: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('finance_partners')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) throw error;
+      
+      if (data) {
+        setPartnerId(data.partner_id || '');
+        setIsMd(data.is_md || false);
+        setName(data.name || '');
+        setPhone(data.phone || '');
+        setHomePhone(data.home_phone || '');
+        setVillage(data.village || '');
+        setMdName(data.md_name || '');
+        setAddress(data.address || '');
+      }
+    } catch (err) {
+      console.error('Error loading partner details:', err);
+      toast.error('Failed to load partner details');
+    }
+  };
+
   const handleReset = () => {
     if (window.confirm('Are you sure you want to clear the form?')) {
       setName('');
@@ -56,8 +90,12 @@ const NewPartner: React.FC = () => {
       setVillage('');
       setMdName('');
       setAddress('');
-      fetchNextPartnerId();
-      toast.success('Form cleared');
+      if (editId) {
+        loadPartnerDetails(editId);
+      } else {
+        fetchNextPartnerId();
+      }
+      toast.success('Form reset');
     }
   };
 
@@ -70,9 +108,10 @@ const NewPartner: React.FC = () => {
     }
 
     setSaving(true);
-    const savingToastId = toast.loading('Registering partner...');
+    const savingToastId = toast.loading(editId ? 'Updating partner details...' : 'Registering partner...');
     try {
-      const result = await supabaseFinance.createPartner({
+      const staffName = user?.username || 'Staff';
+      const payload: Partial<FinancePartner> = {
         name: name.trim(),
         is_md: isMd,
         phone: phone.trim() || null,
@@ -80,13 +119,20 @@ const NewPartner: React.FC = () => {
         village: village.trim() || null,
         md_name: mdName.trim() || null,
         address: address.trim() || null
-      });
+      };
+
+      let result;
+      if (editId) {
+        result = await supabaseFinance.updatePartner(editId, payload, staffName);
+      } else {
+        result = await supabaseFinance.createPartner(payload as any);
+      }
 
       if (result) {
-        toast.success(`Partner "${name.trim()}" registered successfully!`, { id: savingToastId });
+        toast.success(editId ? 'Partner details updated!' : `Partner "${name.trim()}" registered!`, { id: savingToastId });
         navigate('/finance/partners');
       } else {
-        toast.error('Failed to register partner', { id: savingToastId });
+        toast.error(editId ? 'Failed to update partner' : 'Failed to register partner', { id: savingToastId });
       }
     } catch (err) {
       console.error(err);
@@ -108,11 +154,13 @@ const NewPartner: React.FC = () => {
             <span>/</span>
             <span>PARTNERS</span>
             <span>/</span>
-            <span className="text-slate-600">NEW</span>
+            <span className="text-slate-600">{editId ? 'EDIT' : 'NEW'}</span>
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">NEW PARTNER</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">
+            {editId ? 'EDIT PARTNER' : 'NEW PARTNER'}
+          </h1>
           <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">
-            REGISTER A PARTNER OR MD WHO SOURCES BUSINESS
+            {editId ? 'MODIFY PARTNER OR MD PROFILE DETAILS' : 'REGISTER A PARTNER OR MD WHO SOURCES BUSINESS'}
           </p>
         </div>
         <div className="flex items-center gap-2">
