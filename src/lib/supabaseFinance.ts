@@ -30,6 +30,32 @@ export interface FinanceCustomer {
   surety_fingerprint_image_url?: string | null;
   surety_fingerprint_added?: boolean;
   father_husband_name?: string | null;
+  
+  // Redesign fields
+  customer_id?: number;
+  father_name?: string | null;
+  village?: string | null;
+  mandal?: string | null;
+  district?: string | null;
+  aadhaar_address?: string | null;
+  present_address?: string | null;
+  phone_1?: string | null;
+  phone_2?: string | null;
+}
+
+export interface FinanceGuarantor {
+  id: string;
+  guarantor_id?: number;
+  name: string;
+  aadhaar: string | null;
+  phone: string | null;
+  address: string | null;
+  photo_url?: string | null;
+  fingerprint_template?: string | null;
+  fingerprint_image_url?: string | null;
+  fingerprint_added?: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface FinanceLoan {
@@ -64,6 +90,8 @@ export interface FinanceLoan {
   surety_fingerprint_added?: boolean;
   father_husband_name?: string | null;
   loan_category?: string;
+  guarantor_1_id?: string | null;
+  guarantor_2_id?: string | null;
 }
 
 export interface FinanceTransaction {
@@ -216,6 +244,36 @@ class SupabaseFinance {
     } catch (error) {
       console.error('Error deleting finance partner:', error);
       return false;
+    }
+  }
+
+  // --- Guarantors ---
+  async getGuarantors(): Promise<FinanceGuarantor[]> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_guarantors')
+        .select('*')
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching finance guarantors:', error);
+      return [];
+    }
+  }
+
+  async createGuarantor(guarantor: Omit<FinanceGuarantor, 'id' | 'created_at' | 'updated_at'>): Promise<FinanceGuarantor | null> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_guarantors')
+        .insert([guarantor])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error creating finance guarantor:', error);
+      return null;
     }
   }
 

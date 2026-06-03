@@ -4,10 +4,11 @@ interface InputProps {
   label?: string;
   type?: string;
   value: string | number;
-  onChange: (value: string) => void;
+  onChange?: (value: string) => void;
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  readOnly?: boolean;
   className?: string;
   min?: string | number;
   max?: string | number;
@@ -28,6 +29,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       placeholder,
       required = false,
       disabled = false,
+      readOnly = false,
       className = '',
       min,
       max,
@@ -51,16 +53,16 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         setInputValue(val);
         if (dateMode === 'date') {
           // Native date gives ISO; pass through
-          onChange(val);
+          if (onChange) onChange(val);
         } else {
           // Text mode; if dd/MM/yyyy convert to ISO before emitting
           const m = val.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
           if (m) {
             const [, dd, mm, yyyy] = m;
             const iso = `${yyyy}-${mm}-${dd}`;
-            onChange(iso);
+            if (onChange) onChange(iso);
           } else if (val === '') {
-            onChange('');
+            if (onChange) onChange('');
           }
         }
         setShowSuggestions(false);
@@ -75,9 +77,9 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       setInputValue(val);
       if (type === 'number') {
         // Allow decimal values for quantity inputs
-        onChange(val === '' ? '' : val);
+        if (onChange) onChange(val === '' ? '' : val);
       } else {
-        onChange(val);
+        if (onChange) onChange(val);
       }
       setShowSuggestions(true);
     };
@@ -140,6 +142,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           placeholder={type === 'date' ? 'dd/MM/yyyy' : placeholder}
           required={required}
           disabled={disabled}
+          readOnly={readOnly}
           min={min}
           max={max}
           step={step}
@@ -166,7 +169,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
                 className='px-3 py-2 cursor-pointer hover:bg-blue-100'
                 onMouseDown={() => {
                   setInputValue(s);
-                  onChange(String(s));
+                  if (onChange) onChange(String(s));
                   setShowSuggestions(false);
                 }}
               >

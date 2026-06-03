@@ -1,18 +1,12 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
-import Button from '../../components/UI/Button';
-import { supabaseFinance, FinanceLoan, FinanceCustomer, FinancePartner } from '../../lib/supabaseFinance';
+import { supabaseFinance, FinanceLoan, FinanceCustomer, FinancePartner, FinanceGuarantor, FinanceDue } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { 
   ArrowLeft, 
-  FileText, 
   User, 
-  Phone, 
-  MapPin, 
   Plus, 
-  BookOpen, 
   Calculator, 
   Printer, 
   X, 
@@ -20,13 +14,10 @@ import {
   Trash2, 
   Navigation,
   Check,
-  Search,
-  Camera,
-  Fingerprint
+  Search
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
-import { CameraCapture } from '../../components/finance/CameraCapture';
 import { BiometricScanner } from '../../components/finance/BiometricScanner';
 
 interface DocumentItem {
@@ -53,32 +44,56 @@ const LoanEntry: React.FC = () => {
   const [loanId, setLoanId] = useState('');
 
   // Form State - Customer
-  const [customerMode, setCustomerMode] = useState<'new' | 'existing'>('new');
+  const [customerMode] = useState<'new' | 'existing'>('existing');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [custName, setCustName] = useState('');
   const [custFatherName, setCustFatherName] = useState('');
   const [custAadhaar, setCustAadhaar] = useState('');
-  const [custPan, setCustPan] = useState(''); // Saved to remarks or combined
-  const [custAddress, setCustAddress] = useState('');
   const [custPhone, setCustPhone] = useState('');
   const [custPhone2, setCustPhone2] = useState('');
+  const [custVillage, setCustVillage] = useState('');
+  const [custMandal, setCustMandal] = useState('');
+  const [custDistrict, setCustDistrict] = useState('');
+  const [custAadhaarAddress, setCustAadhaarAddress] = useState('');
+  const [custPresentAddress, setCustPresentAddress] = useState('');
   const [custPhoto, setCustPhoto] = useState<string | null>(null);
   const [custFingerprintUrl, setCustFingerprintUrl] = useState<string | null>(null);
   const [custFingerprintTemplate, setCustFingerprintTemplate] = useState<string | null>(null);
   const [custFingerprintAdded, setCustFingerprintAdded] = useState(false);
+  const [custSearch, setCustSearch] = useState('');
+  const [custDropdownOpen, setCustDropdownOpen] = useState(false);
 
-  // Form State - Guarantors (Up to two)
-  const [g1Mode, setG1Mode] = useState<'new' | 'existing'>('new');
+  // Form State - Guarantor 1
   const [g1SelectedId, setG1SelectedId] = useState('');
   const [g1Name, setG1Name] = useState('');
   const [g1Phone, setG1Phone] = useState('');
   const [g1Aadhaar, setG1Aadhaar] = useState('');
+  const [g1Address, setG1Address] = useState('');
+  const [g1Photo, setG1Photo] = useState<string | null>(null);
+  const [g1FingerprintUrl, setG1FingerprintUrl] = useState<string | null>(null);
+  const [g1FingerprintTemplate, setG1FingerprintTemplate] = useState<string | null>(null);
+  const [g1FingerprintAdded, setG1FingerprintAdded] = useState(false);
+  const [g1Search, setG1Search] = useState('');
+  const [g1DropdownOpen, setG1DropdownOpen] = useState(false);
 
-  const [g2Mode, setG2Mode] = useState<'new' | 'existing'>('new');
+  // Form State - Guarantor 2
   const [g2SelectedId, setG2SelectedId] = useState('');
   const [g2Name, setG2Name] = useState('');
   const [g2Phone, setG2Phone] = useState('');
   const [g2Aadhaar, setG2Aadhaar] = useState('');
+  const [g2Address, setG2Address] = useState('');
+  const [g2Photo, setG2Photo] = useState<string | null>(null);
+  const [g2FingerprintUrl, setG2FingerprintUrl] = useState<string | null>(null);
+  const [g2FingerprintTemplate, setG2FingerprintTemplate] = useState<string | null>(null);
+  const [g2FingerprintAdded, setG2FingerprintAdded] = useState(false);
+  const [g2Search, setG2Search] = useState('');
+  const [g2DropdownOpen, setG2DropdownOpen] = useState(false);
+
+  // Reference Data lists
+  const [customers, setCustomers] = useState<FinanceCustomer[]>([]);
+  const [guarantors, setGuarantors] = useState<FinanceGuarantor[]>([]);
+  const [partners, setPartners] = useState<FinancePartner[]>([]);
+  const [activeLoans, setActiveLoans] = useState<(FinanceLoan & { customer: FinanceCustomer })[]>([]);
 
   // Form State - Loan Terms
   const [amount, setAmount] = useState('');
@@ -91,6 +106,61 @@ const LoanEntry: React.FC = () => {
   // Form State - Partner
   const [selectedPartnerId, setSelectedPartnerId] = useState('');
   const [partnerName, setPartnerName] = useState('');
+
+  // Refs for closing dropdowns
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const g1DropdownRef = useRef<HTMLDivElement>(null);
+  const g2DropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setCustDropdownOpen(false);
+      }
+      if (g1DropdownRef.current && !g1DropdownRef.current.contains(e.target as Node)) {
+        setG1DropdownOpen(false);
+      }
+      if (g2DropdownRef.current && !g2DropdownRef.current.contains(e.target as Node)) {
+        setG2DropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const filteredCustomersForSelect = useMemo(() => {
+    if (!custSearch) return customers.slice(0, 10);
+    const q = custSearch.toLowerCase();
+    return customers.filter(c => 
+      c.name.toLowerCase().includes(q) ||
+      (c.customer_id && String(c.customer_id).includes(q)) ||
+      (c.phone && c.phone.includes(q)) ||
+      (c.phone_1 && c.phone_1.includes(q)) ||
+      (c.aadhaar && c.aadhaar.includes(q))
+    );
+  }, [custSearch, customers]);
+
+  const filteredGuarantorsForSelectG1 = useMemo(() => {
+    if (!g1Search) return guarantors.slice(0, 10);
+    const q = g1Search.toLowerCase();
+    return guarantors.filter(g => 
+      g.name.toLowerCase().includes(q) ||
+      (g.guarantor_id && String(g.guarantor_id).includes(q)) ||
+      (g.phone && g.phone.includes(q)) ||
+      (g.aadhaar && g.aadhaar.includes(q))
+    );
+  }, [g1Search, guarantors]);
+
+  const filteredGuarantorsForSelectG2 = useMemo(() => {
+    if (!g2Search) return guarantors.slice(0, 10);
+    const q = g2Search.toLowerCase();
+    return guarantors.filter(g => 
+      g.name.toLowerCase().includes(q) ||
+      (g.guarantor_id && String(g.guarantor_id).includes(q)) ||
+      (g.phone && g.phone.includes(q)) ||
+      (g.aadhaar && g.aadhaar.includes(q))
+    );
+  }, [g2Search, guarantors]);
 
   // Form State - Documents Checklist
   const [documents, setDocuments] = useState<DocumentItem[]>([
@@ -123,11 +193,6 @@ const LoanEntry: React.FC = () => {
   const [remarks, setRemarks] = useState('');
   const [extraDetails, setExtraDetails] = useState('');
 
-  // Reference Data lists
-  const [customers, setCustomers] = useState<FinanceCustomer[]>([]);
-  const [partners, setPartners] = useState<FinancePartner[]>([]);
-  const [activeLoans, setActiveLoans] = useState<(FinanceLoan & { customer: FinanceCustomer })[]>([]);
-
   useEffect(() => {
     fetchReferenceData();
   }, []);
@@ -137,6 +202,9 @@ const LoanEntry: React.FC = () => {
     try {
       const custs = await supabaseFinance.getCustomers();
       setCustomers(custs);
+
+      const guars = await supabaseFinance.getGuarantors();
+      setGuarantors(guars);
 
       const prts = await supabaseFinance.getPartners();
       setPartners(prts);
@@ -151,7 +219,7 @@ const LoanEntry: React.FC = () => {
     }
   };
 
-  // Generate Auto sequential Loan ID: e.g. CD001, HP001 based on selected ledger type
+  // Generate Auto sequential Loan ID
   const generateSequentialId = (loansList: any[], category: string) => {
     const prefix = category === 'L' ? 'L' : category;
     const matchingLoans = loansList.filter(l => l.loan_id.toUpperCase().startsWith(prefix));
@@ -168,19 +236,25 @@ const LoanEntry: React.FC = () => {
 
   // Autofill customer data
   useEffect(() => {
-    if (customerMode === 'existing' && selectedCustomerId) {
+    if (selectedCustomerId) {
       const selected = customers.find(c => c.id === selectedCustomerId);
       if (selected) {
         setCustName(selected.name);
-        setCustFatherName(selected.father_husband_name || '');
-        setCustPhone(selected.phone || '');
-        setCustPhone2(selected.phone2 || '');
-        setCustAddress(selected.address || '');
+        setCustFatherName(selected.father_name || selected.father_husband_name || '');
+        setCustPhone(selected.phone_1 || selected.phone || '');
+        setCustPhone2(selected.phone_2 || selected.phone2 || '');
         setCustAadhaar(selected.aadhaar || '');
         setCustPhoto(selected.customer_photo_url || null);
         setCustFingerprintUrl(selected.customer_fingerprint_image_url || selected.fingerprint_url || null);
         setCustFingerprintTemplate(selected.customer_fingerprint_template || selected.fingerprint_template || null);
         setCustFingerprintAdded(!!(selected.customer_fingerprint_added || selected.fingerprint_added));
+        
+        // Redesign fields
+        setCustVillage(selected.village || '');
+        setCustMandal(selected.mandal || '');
+        setCustDistrict(selected.district || '');
+        setCustAadhaarAddress(selected.aadhaar_address || '');
+        setCustPresentAddress(selected.present_address || selected.address || '');
         
         if (selected.partner_name) {
           const matchPartner = partners.find(p => p.name === selected.partner_name);
@@ -193,31 +267,41 @@ const LoanEntry: React.FC = () => {
         }
       }
     }
-  }, [customerMode, selectedCustomerId, customers]);
+  }, [selectedCustomerId, customers, partners]);
 
   // Autofill guarantor 1 data
   useEffect(() => {
-    if (g1Mode === 'existing' && g1SelectedId) {
-      const selected = customers.find(c => c.id === g1SelectedId);
+    if (g1SelectedId) {
+      const selected = guarantors.find(g => g.id === g1SelectedId);
       if (selected) {
         setG1Name(selected.name);
         setG1Phone(selected.phone || '');
         setG1Aadhaar(selected.aadhaar || '');
+        setG1Address(selected.address || '');
+        setG1Photo(selected.photo_url || null);
+        setG1FingerprintUrl(selected.fingerprint_image_url || null);
+        setG1FingerprintTemplate(selected.fingerprint_template || null);
+        setG1FingerprintAdded(!!selected.fingerprint_added);
       }
     }
-  }, [g1Mode, g1SelectedId, customers]);
+  }, [g1SelectedId, guarantors]);
 
   // Autofill guarantor 2 data
   useEffect(() => {
-    if (g2Mode === 'existing' && g2SelectedId) {
-      const selected = customers.find(c => c.id === g2SelectedId);
+    if (g2SelectedId) {
+      const selected = guarantors.find(g => g.id === g2SelectedId);
       if (selected) {
         setG2Name(selected.name);
         setG2Phone(selected.phone || '');
         setG2Aadhaar(selected.aadhaar || '');
+        setG2Address(selected.address || '');
+        setG2Photo(selected.photo_url || null);
+        setG2FingerprintUrl(selected.fingerprint_image_url || null);
+        setG2FingerprintTemplate(selected.fingerprint_template || null);
+        setG2FingerprintAdded(!!selected.fingerprint_added);
       }
     }
-  }, [g2Mode, g2SelectedId, customers]);
+  }, [g2SelectedId, guarantors]);
 
   // Autofill partner name
   useEffect(() => {
@@ -263,7 +347,6 @@ const LoanEntry: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Set uploading state in checklist array
     setDocuments(prev => prev.map(doc => doc.key === key ? { ...doc, uploading: true } : doc));
     
     try {
@@ -293,7 +376,7 @@ const LoanEntry: React.FC = () => {
     toast.success('Attachment detached');
   };
 
-  // Dynamic calculations (Live Calculations)
+  // Live Calculations
   const liveCalculations = useMemo(() => {
     const P = Number(amount);
     const R = Number(interestRate);
@@ -334,27 +417,49 @@ const LoanEntry: React.FC = () => {
   const handleClearForm = () => {
     if (!window.confirm('Are you sure you want to clear the form? All details will be reset.')) return;
     
-    // Reset basic state
     setDate(new Date().toISOString().split('T')[0]);
     setLoanCategory('CD');
+    setSelectedCustomerId('');
     setCustName('');
     setCustFatherName('');
     setCustPhone('');
     setCustPhone2('');
-    setCustAddress('');
     setCustAadhaar('');
-    setCustPan('');
     setCustPhoto(null);
     setCustFingerprintUrl(null);
     setCustFingerprintTemplate(null);
     setCustFingerprintAdded(false);
+    setCustVillage('');
+    setCustMandal('');
+    setCustDistrict('');
+    setCustAadhaarAddress('');
+    setCustPresentAddress('');
+    setCustSearch('');
+    setCustDropdownOpen(false);
 
+    setG1SelectedId('');
     setG1Name('');
     setG1Phone('');
     setG1Aadhaar('');
+    setG1Address('');
+    setG1Photo(null);
+    setG1FingerprintUrl(null);
+    setG1FingerprintTemplate(null);
+    setG1FingerprintAdded(false);
+    setG1Search('');
+    setG1DropdownOpen(false);
+
+    setG2SelectedId('');
     setG2Name('');
     setG2Phone('');
     setG2Aadhaar('');
+    setG2Address('');
+    setG2Photo(null);
+    setG2FingerprintUrl(null);
+    setG2FingerprintTemplate(null);
+    setG2FingerprintAdded(false);
+    setG2Search('');
+    setG2DropdownOpen(false);
 
     setAmount('');
     setDocCharges('');
@@ -390,11 +495,7 @@ const LoanEntry: React.FC = () => {
       toast.error('Loan Number is required');
       return;
     }
-    if (customerMode === 'existing' && !selectedCustomerId) {
-      toast.error('Please select an existing customer');
-      return;
-    }
-    if (customerMode === 'new' && !custName.trim()) {
+    if (!custName.trim()) {
       toast.error('Customer name is required');
       return;
     }
@@ -407,38 +508,117 @@ const LoanEntry: React.FC = () => {
     try {
       const staffName = user?.username || 'Staff';
 
-      // 1. Customer payload
-      const customerPayload = customerMode === 'existing'
-        ? {
-            id: selectedCustomerId,
-            customer_photo_url: custPhoto,
-            fingerprint_url: custFingerprintUrl,
-            fingerprint_template: custFingerprintTemplate,
-            fingerprint_added: custFingerprintAdded,
-            customer_fingerprint_template: custFingerprintTemplate,
-            customer_fingerprint_image_url: custFingerprintUrl,
-            customer_fingerprint_added: custFingerprintAdded,
-            father_husband_name: custFatherName || null,
-            partner_name: partnerName || null
-          }
-        : {
-            name: custName,
+      // 1. Resolve Customer ID
+      let resolvedCustomerId = selectedCustomerId;
+      if (!resolvedCustomerId) {
+        // Check if customer already exists by Aadhaar, Phone, or exact Name + Father match
+        const match = customers.find(c => 
+          (c.aadhaar && custAadhaar && c.aadhaar === custAadhaar) ||
+          (c.phone_1 && custPhone && c.phone_1 === custPhone) ||
+          (c.phone && custPhone && c.phone === custPhone) ||
+          (c.name.toLowerCase() === custName.toLowerCase().trim() && 
+           (c.father_name || c.father_husband_name || '').toLowerCase() === custFatherName.toLowerCase().trim())
+        );
+
+        if (match) {
+          resolvedCustomerId = match.id;
+        } else {
+          // Create new customer
+          const newCust = await supabaseFinance.createCustomer({
+            name: custName.trim(),
             phone: custPhone || null,
             phone2: custPhone2 || null,
-            address: custAddress || null,
+            address: custPresentAddress || null,
             aadhaar: custAadhaar || null,
             customer_photo_url: custPhoto,
-            fingerprint_url: custFingerprintUrl,
-            fingerprint_template: custFingerprintTemplate,
-            fingerprint_added: custFingerprintAdded,
-            customer_fingerprint_template: custFingerprintTemplate,
-            customer_fingerprint_image_url: custFingerprintUrl,
-            customer_fingerprint_added: custFingerprintAdded,
             father_husband_name: custFatherName || null,
-            partner_name: partnerName || null
-          };
+            father_name: custFatherName || null,
+            village: custVillage || null,
+            mandal: custMandal || null,
+            district: custDistrict || null,
+            aadhaar_address: custAadhaarAddress || null,
+            present_address: custPresentAddress || null,
+            phone_1: custPhone || null,
+            phone_2: custPhone2 || null,
+            fingerprint_url: custFingerprintUrl || null,
+            fingerprint_template: custFingerprintTemplate || null,
+            fingerprint_added: custFingerprintAdded
+          });
+          if (newCust) {
+            resolvedCustomerId = newCust.id;
+          } else {
+            toast.error('Failed to create new customer record.');
+            setSaving(false);
+            return;
+          }
+        }
+      }
 
-      // 2. Dues list
+      // 2. Resolve Guarantor 1 ID
+      let resolvedG1Id = g1SelectedId;
+      if (!resolvedG1Id && g1Name.trim()) {
+        const matchG1 = guarantors.find(g => 
+          (g.aadhaar && g1Aadhaar && g.aadhaar === g1Aadhaar) ||
+          (g.phone && g1Phone && g.phone === g1Phone) ||
+          g.name.toLowerCase() === g1Name.toLowerCase().trim()
+        );
+
+        if (matchG1) {
+          resolvedG1Id = matchG1.id;
+        } else {
+          const newGuar = await supabaseFinance.createGuarantor({
+            name: g1Name.trim(),
+            aadhaar: g1Aadhaar || null,
+            phone: g1Phone || null,
+            address: g1Address || null,
+            photo_url: g1Photo,
+            fingerprint_template: g1FingerprintTemplate || null,
+            fingerprint_image_url: g1FingerprintUrl || null,
+            fingerprint_added: g1FingerprintAdded
+          });
+          if (newGuar) {
+            resolvedG1Id = newGuar.id;
+          } else {
+            toast.error('Failed to create Guarantor 1 record.');
+            setSaving(false);
+            return;
+          }
+        }
+      }
+
+      // 3. Resolve Guarantor 2 ID
+      let resolvedG2Id = g2SelectedId;
+      if (!resolvedG2Id && g2Name.trim()) {
+        const matchG2 = guarantors.find(g => 
+          (g.aadhaar && g2Aadhaar && g.aadhaar === g2Aadhaar) ||
+          (g.phone && g2Phone && g.phone === g2Phone) ||
+          g.name.toLowerCase() === g2Name.toLowerCase().trim()
+        );
+
+        if (matchG2) {
+          resolvedG2Id = matchG2.id;
+        } else {
+          const newGuar = await supabaseFinance.createGuarantor({
+            name: g2Name.trim(),
+            aadhaar: g2Aadhaar || null,
+            phone: g2Phone || null,
+            address: g2Address || null,
+            photo_url: g2Photo,
+            fingerprint_template: g2FingerprintTemplate || null,
+            fingerprint_image_url: g2FingerprintUrl || null,
+            fingerprint_added: g2FingerprintAdded
+          });
+          if (newGuar) {
+            resolvedG2Id = newGuar.id;
+          } else {
+            toast.error('Failed to create Guarantor 2 record.');
+            setSaving(false);
+            return;
+          }
+        }
+      }
+
+      // 4. Create dues schedule
       const duesList: any[] = [];
       const start = new Date(date);
       for (let i = 1; i <= liveCalculations.duesCount; i++) {
@@ -456,38 +636,33 @@ const LoanEntry: React.FC = () => {
         });
       }
 
-      // 3. Surety combined guarantor details
+      // Combined Guarantors Surety details for backward compat
       const combinedSuretyName = [g1Name, g2Name].filter(Boolean).join(' / ') || null;
       const combinedSuretyPhone = [g1Phone, g2Phone].filter(Boolean).join(' / ') || null;
       const combinedSuretyAadhaar = [g1Aadhaar, g2Aadhaar].filter(Boolean).join(' / ') || null;
 
-      // 4. Combined Collateral & Extra features to save into Remarks
-      const collateralJSON = {
-        collateral_address: locAddress,
-        village: locVillage,
-        mandal: locMandal,
-        district: locDistrict,
-        state: locState,
-        pincode: locPincode,
-        landmark: locLandmark,
-        gps_latitude: locLatitude,
-        gps_longitude: locLongitude,
-        google_maps_link: locMapsLink,
-        pan_card: custPan,
-        particulars,
-        extraDetails,
-        document_charges: liveCalculations.docFees
-      };
-
       const finalRemarks = [
-        remarks,
+         remarks,
         `Collateral: ${locAddress || 'N/A'}, GPS: ${locLatitude && locLongitude ? `${locLatitude},${locLongitude}` : 'N/A'}`,
         `Extra: ${extraDetails || 'N/A'}`
       ].filter(Boolean).join(' | ');
 
+      const customerPayload = {
+        id: resolvedCustomerId,
+        customer_photo_url: custPhoto,
+        fingerprint_url: custFingerprintUrl,
+        fingerprint_template: custFingerprintTemplate,
+        fingerprint_added: custFingerprintAdded,
+        customer_fingerprint_template: custFingerprintTemplate,
+        customer_fingerprint_image_url: custFingerprintUrl,
+        customer_fingerprint_added: custFingerprintAdded,
+        father_husband_name: custFatherName || null,
+        partner_name: partnerName || null
+      };
+
       const loanPayload = {
         loan_id: loanId,
-        customer_id: '', // Updated during create loan logic
+        customer_id: resolvedCustomerId,
         date,
         amount: liveCalculations.principal,
         interest_rate: Number(interestRate),
@@ -499,18 +674,22 @@ const LoanEntry: React.FC = () => {
         surety_aadhaar: combinedSuretyAadhaar,
         remarks: finalRemarks,
         customer_photo_url: custPhoto,
-        surety_photo_url: null,
+        surety_photo_url: g1Photo || g2Photo || null,
         fingerprint_url: custFingerprintUrl,
         fingerprint_template: custFingerprintTemplate,
         fingerprint_added: custFingerprintAdded,
         customer_fingerprint_template: custFingerprintTemplate,
         customer_fingerprint_image_url: custFingerprintUrl,
         customer_fingerprint_added: custFingerprintAdded,
+        surety_fingerprint_template: g1FingerprintTemplate || g2FingerprintTemplate || null,
+        surety_fingerprint_image_url: g1FingerprintUrl || g2FingerprintUrl || null,
+        surety_fingerprint_added: g1FingerprintAdded || g2FingerprintAdded || false,
         father_husband_name: custFatherName || null,
-        loan_category: loanCategory
+        loan_category: loanCategory,
+        guarantor_1_id: resolvedG1Id || null,
+        guarantor_2_id: resolvedG2Id || null
       };
 
-      // 5. Submit to database
       const photosArray: any[] = [];
       if (custPhoto) photosArray.push({ photo_type: 'Customer', photo_url: custPhoto });
 
@@ -523,17 +702,7 @@ const LoanEntry: React.FC = () => {
       );
 
       if (savedLoan) {
-        // Update surety location fields dynamically if columns exist (using safe JSON logging inside remarks)
-        try {
-          await supabaseFinance.updateLoan(savedLoan.id, {
-            surety_address: locAddress || null,
-            surety_relation: `Guarantor 1: ${g1Name || 'N/A'}, Guarantor 2: ${g2Name || 'N/A'}`
-          }, staffName);
-        } catch (err) {
-          console.warn('Failed to insert additional collateral address fields directly', err);
-        }
-
-        // 6. Save submitted checklist document links
+        // Save submitted checklist document links
         const linkedDocs = documents.filter(doc => doc.checked && doc.fileUrl);
         for (const doc of linkedDocs) {
           await supabaseFinance.addDocument({
@@ -543,7 +712,23 @@ const LoanEntry: React.FC = () => {
           });
         }
 
-        // 7. Save custom collateral metadata inside custom logs if needed
+        // Save collateral info in logs
+        const collateralJSON = {
+          collateral_address: locAddress,
+          village: locVillage,
+          mandal: locMandal,
+          district: locDistrict,
+          state: locState,
+          pincode: locPincode,
+          landmark: locLandmark,
+          gps_latitude: locLatitude,
+          gps_longitude: locLongitude,
+          google_maps_link: locMapsLink,
+          particulars,
+          extraDetails,
+          document_charges: liveCalculations.docFees
+        };
+
         try {
           await supabase.from('finance_edited_logs').insert([{
             table_name: 'finance_loans_collateral',
@@ -559,7 +744,7 @@ const LoanEntry: React.FC = () => {
         toast.success(`Loan Account ${loanId} created and disbursed successfully!`);
         navigate('/finance');
       } else {
-        toast.error('Disbursal failed. Duplicate Loan Number or Aadhaar index.');
+        toast.error('Disbursal failed. Duplicate Loan Number.');
       }
     } catch (err) {
       console.error(err);
@@ -604,13 +789,6 @@ const LoanEntry: React.FC = () => {
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
           </button>
-          <Link
-            to="/finance/old-data-entry"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            OLD DATA ENTRY
-          </Link>
           <Link
             to="/finance/calculator"
             className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
@@ -686,7 +864,7 @@ const LoanEntry: React.FC = () => {
                   <option value="L">REGULAR LOAN (L)</option>
                 </select>
                 <span className="text-[9px] text-slate-400 font-bold mt-1.5 block uppercase tracking-wide">
-                  TEMPLATES FOR CD, HP, STBD, TBD
+                  CD, HP, STBD, TBD
                 </span>
               </div>
 
@@ -713,129 +891,248 @@ const LoanEntry: React.FC = () => {
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
               <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase">
-                CUSTOMER
+                CUSTOMER DETAILS
               </h3>
-              <div className="flex gap-1.5">
+              {selectedCustomerId && (
                 <button
                   type="button"
-                  onClick={() => setCustomerMode('new')}
-                  className={`px-2.5 py-1 text-[10px] font-bold rounded border transition-all ${
-                    customerMode === 'new'
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                  }`}
+                  onClick={() => {
+                    setSelectedCustomerId('');
+                    setCustName('');
+                    setCustFatherName('');
+                    setCustPhone('');
+                    setCustPhone2('');
+                    setCustAadhaar('');
+                    setCustPhoto(null);
+                    setCustFingerprintUrl(null);
+                    setCustFingerprintTemplate(null);
+                    setCustFingerprintAdded(false);
+                    setCustVillage('');
+                    setCustMandal('');
+                    setCustDistrict('');
+                    setCustAadhaarAddress('');
+                    setCustPresentAddress('');
+                  }}
+                  className="text-[10px] font-black text-red-650 hover:underline uppercase tracking-wider"
                 >
-                  NEW PROFILE
+                  CLEAR SELECTION
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setCustomerMode('existing')}
-                  className={`px-2.5 py-1 text-[10px] font-bold rounded border transition-all ${
-                    customerMode === 'existing'
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  SELECT EXISTING
-                </button>
-              </div>
+              )}
             </div>
 
             <div className="space-y-4">
-              {customerMode === 'existing' && (
-                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
-                    SELECT CUSTOMER TO AUTO-FILL
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={selectedCustomerId}
-                      onChange={(e) => setSelectedCustomerId(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs font-bold text-slate-800 focus:outline-none"
-                    >
-                      <option value="">-- SELECT TO AUTO-FILL --</option>
-                      {customers.map(c => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} {c.phone ? `(${c.phone})` : ''}
-                        </option>
-                      ))}
-                    </select>
+              {/* Search input for existing customer */}
+              <div ref={dropdownRef} className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 print:hidden">
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  SELECT EXISTING CUSTOMER (OR TYPE DETAILS DIRECTLY BELOW)
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-4 w-4 text-slate-400" />
                   </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input
-                  label="CUSTOMER NAME *"
-                  value={custName}
-                  onChange={setCustName}
-                  placeholder="e.g. Ramesh Kumar"
-                  required
-                  readOnly={customerMode === 'existing'}
-                />
-                <Input
-                  label="FATHER'S NAME"
-                  value={custFatherName}
-                  onChange={setCustFatherName}
-                  placeholder="Father or Husband name"
-                  readOnly={customerMode === 'existing'}
-                />
-                <Input
-                  label="AADHAAR"
-                  value={custAadhaar}
-                  onChange={setCustAadhaar}
-                  placeholder="12-digit Aadhaar UID"
-                  readOnly={customerMode === 'existing'}
-                />
-                <Input
-                  label="PAN"
-                  value={custPan}
-                  onChange={setCustPan}
-                  placeholder="10-digit PAN Card"
-                />
-                <div className="sm:col-span-2">
-                  <Input
-                    label="ADDRESS *"
-                    value={custAddress}
-                    onChange={setCustAddress}
-                    placeholder="Residential address details"
-                    required
-                    readOnly={customerMode === 'existing'}
+                  <input
+                    type="text"
+                    value={custSearch}
+                    onChange={(e) => {
+                      setCustSearch(e.target.value);
+                      setCustDropdownOpen(true);
+                    }}
+                    onFocus={() => setCustDropdownOpen(true)}
+                    placeholder="Search by customer name, ID, phone, or Aadhaar..."
+                    className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
                   />
+                  
+                  {custDropdownOpen && (
+                    <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {filteredCustomersForSelect.length === 0 ? (
+                        <div className="px-4 py-3 text-xs text-slate-400 font-bold uppercase tracking-wider text-center">
+                          No matching customers found
+                        </div>
+                      ) : (
+                        filteredCustomersForSelect.map((c) => (
+                          <div
+                            key={c.id}
+                            onClick={() => {
+                              setSelectedCustomerId(c.id);
+                              setCustDropdownOpen(false);
+                              setCustSearch('');
+                            }}
+                            className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
+                          >
+                            <div>
+                              <div className="text-xs font-bold text-slate-900">{c.name}</div>
+                              <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                                ID: #{c.customer_id || 'N/A'} | Aadhaar: {c.aadhaar || 'N/A'}
+                              </div>
+                            </div>
+                            {(c.phone_1 || c.phone) ? (
+                              <div className="text-[10px] text-slate-500 font-bold font-mono">
+                                {c.phone_1 || c.phone}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
-                <Input
-                  label="PHONE 1"
-                  value={custPhone}
-                  onChange={setCustPhone}
-                  placeholder="Primary mobile number"
-                  readOnly={customerMode === 'existing'}
-                />
-                <Input
-                  label="PHONE 2"
-                  value={custPhone2}
-                  onChange={setCustPhone2}
-                  placeholder="Secondary mobile number"
-                  readOnly={customerMode === 'existing'}
-                />
               </div>
 
-              {/* Photo & Biometric */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
-                <CameraCapture
-                  label="Customer Photo Capture"
-                  existingPhotoUrl={custPhoto}
-                  onPhotoSaved={setCustPhoto}
-                />
-                <BiometricScanner
-                  label="Customer Fingerprint Capture"
-                  existingTemplate={custFingerprintTemplate}
-                  existingImageUrl={custFingerprintUrl}
-                  onFingerprintSaved={(url, template, added) => {
-                    setCustFingerprintUrl(url);
-                    setCustFingerprintTemplate(template);
-                    setCustFingerprintAdded(added);
-                  }}
-                />
+              {/* Customer Inputs Panel */}
+              <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-150 space-y-4">
+                <div className="flex gap-4 items-start">
+                  <div className="w-20 h-20 bg-slate-100 rounded-lg border border-slate-200 flex flex-col items-center justify-center overflow-hidden shrink-0 relative">
+                    {custPhoto ? (
+                      <div className="w-full h-full relative">
+                        <img src={custPhoto} alt="Customer" className="w-full h-full object-cover" />
+                        {!selectedCustomerId && (
+                          <button
+                            type="button"
+                            onClick={() => setCustPhoto(null)}
+                            className="absolute top-1 right-1 p-0.5 bg-red-600 text-white rounded-full hover:bg-red-700 shadow-sm"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-1 p-2 text-center text-[9px] font-bold text-slate-400">
+                        <User className="w-5 h-5 text-slate-300 stroke-1" />
+                        <span>NO PHOTO</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <span className="bg-[#0b1329] text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                      {selectedCustomerId ? `ID: #${customers.find(c => c.id === selectedCustomerId)?.customer_id || 'N/A'}` : 'NEW ENTRY'}
+                    </span>
+                    {!selectedCustomerId && (
+                      <div className="flex items-center gap-1.5 pt-1.5">
+                        <label className="text-[9px] font-black bg-white text-slate-700 border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer shadow-sm uppercase tracking-wide">
+                          UPLOAD PHOTO
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  setCustPhoto(reader.result as string);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input 
+                    label="Customer Name *" 
+                    value={custName} 
+                    onChange={setCustName} 
+                    placeholder="Full Name" 
+                    readOnly={!!selectedCustomerId} 
+                    required 
+                  />
+                  <Input 
+                    label="Father Name" 
+                    value={custFatherName} 
+                    onChange={setCustFatherName} 
+                    placeholder="Father Name" 
+                    readOnly={!!selectedCustomerId} 
+                  />
+                  <Input 
+                    label="Aadhaar UID" 
+                    value={custAadhaar} 
+                    onChange={setCustAadhaar} 
+                    placeholder="12-digit Aadhaar UID" 
+                    readOnly={!!selectedCustomerId} 
+                  />
+                  <Input 
+                    label="Phone 1" 
+                    value={custPhone} 
+                    onChange={setCustPhone} 
+                    placeholder="Primary contact" 
+                    readOnly={!!selectedCustomerId} 
+                  />
+                  <Input 
+                    label="Phone 2" 
+                    value={custPhone2} 
+                    onChange={setCustPhone2} 
+                    placeholder="Secondary contact" 
+                    readOnly={!!selectedCustomerId} 
+                  />
+                  <Input 
+                    label="Village" 
+                    value={custVillage} 
+                    onChange={setCustVillage} 
+                    placeholder="Village" 
+                    readOnly={!!selectedCustomerId} 
+                  />
+                  <Input 
+                    label="Mandal" 
+                    value={custMandal} 
+                    onChange={setCustMandal} 
+                    placeholder="Mandal" 
+                    readOnly={!!selectedCustomerId} 
+                  />
+                  <Input 
+                    label="District" 
+                    value={custDistrict} 
+                    onChange={setCustDistrict} 
+                    placeholder="District" 
+                    readOnly={!!selectedCustomerId} 
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-3">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                      Aadhaar Address
+                    </label>
+                    <textarea
+                      value={custAadhaarAddress}
+                      onChange={(e) => setCustAadhaarAddress(e.target.value)}
+                      placeholder="Address printed on Aadhaar"
+                      rows={2}
+                      disabled={!!selectedCustomerId}
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 disabled:bg-slate-50 focus:outline-none resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                      Present Address
+                    </label>
+                    <textarea
+                      value={custPresentAddress}
+                      onChange={(e) => setCustPresentAddress(e.target.value)}
+                      placeholder="Current residential address"
+                      rows={2}
+                      disabled={!!selectedCustomerId}
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 disabled:bg-slate-50 focus:outline-none resize-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Biometrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-3 border-t border-slate-150">
+                  <BiometricScanner
+                    label="Customer Fingerprint Capture"
+                    existingTemplate={custFingerprintTemplate}
+                    existingImageUrl={custFingerprintUrl}
+                    onFingerprintSaved={(url, template, added) => {
+                      setCustFingerprintUrl(url);
+                      setCustFingerprintTemplate(template);
+                      setCustFingerprintAdded(added);
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -852,47 +1149,135 @@ const LoanEntry: React.FC = () => {
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                   GUARANTOR 1
                 </h4>
-                <div className="flex gap-1.5">
+                {g1SelectedId && (
                   <button
                     type="button"
-                    onClick={() => { setG1Mode('new'); setG1SelectedId(''); setG1Name(''); setG1Phone(''); setG1Aadhaar(''); }}
-                    className={`px-2 py-0.5 text-[9px] font-bold rounded border transition-all ${
-                      g1Mode === 'new' ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-700 border-slate-200'
-                    }`}
+                    onClick={() => {
+                      setG1SelectedId('');
+                      setG1Name('');
+                      setG1Phone('');
+                      setG1Aadhaar('');
+                      setG1Address('');
+                      setG1Photo(null);
+                    }}
+                    className="text-[9px] font-black text-red-650 hover:underline uppercase tracking-wider"
                   >
-                    NEW
+                    CLEAR SELECTION
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setG1Mode('existing')}
-                    className={`px-2 py-0.5 text-[9px] font-bold rounded border transition-all ${
-                      g1Mode === 'existing' ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-700 border-slate-200'
-                    }`}
-                  >
-                    EXISTING
-                  </button>
-                </div>
+                )}
               </div>
 
-              {g1Mode === 'existing' && (
-                <div className="bg-slate-50 p-2.5 rounded border">
-                  <select
-                    value={g1SelectedId}
-                    onChange={(e) => setG1SelectedId(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs font-bold text-slate-800"
-                  >
-                    <option value="">-- SELECT TO AUTO-FILL --</option>
-                    {customers.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+              {/* Search select existing guarantor 1 */}
+              <div ref={g1DropdownRef} className="relative print:hidden">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-4 w-4 text-slate-400" />
                 </div>
-              )}
+                <input
+                  type="text"
+                  value={g1Search}
+                  onChange={(e) => {
+                    setG1Search(e.target.value);
+                    setG1DropdownOpen(true);
+                  }}
+                  onFocus={() => setG1DropdownOpen(true)}
+                  placeholder="Select or Search Existing Guarantor 1..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                />
+                
+                {g1DropdownOpen && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                    {filteredGuarantorsForSelectG1.length === 0 ? (
+                      <div className="px-4 py-3 text-xs text-slate-400 font-bold uppercase tracking-wider text-center">
+                        No matching guarantors
+                      </div>
+                    ) : (
+                      filteredGuarantorsForSelectG1.map((g) => (
+                        <div
+                          key={g.id}
+                          onClick={() => {
+                            setG1SelectedId(g.id);
+                            setG1DropdownOpen(false);
+                            setG1Search('');
+                          }}
+                          className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
+                        >
+                          <div>
+                            <div className="text-xs font-bold text-slate-900">{g.name}</div>
+                            <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                              ID: #{g.guarantor_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
+                            </div>
+                          </div>
+                          {g.phone && (
+                            <div className="text-[9px] text-slate-500 font-bold font-mono">
+                              {g.phone}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <Input label="NAME" value={g1Name} onChange={setG1Name} placeholder="Full Name" readOnly={g1Mode === 'existing'} />
-                <Input label="AADHAAR" value={g1Aadhaar} onChange={setG1Aadhaar} placeholder="Aadhaar UID" readOnly={g1Mode === 'existing'} />
-                <Input label="PHONE" value={g1Phone} onChange={setG1Phone} placeholder="Phone No" readOnly={g1Mode === 'existing'} />
+              {/* Guarantor 1 details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <Input label="Name" value={g1Name} onChange={setG1Name} placeholder="Full Name" readOnly={!!g1SelectedId} />
+                <Input label="Aadhaar" value={g1Aadhaar} onChange={setG1Aadhaar} placeholder="Aadhaar UID" readOnly={!!g1SelectedId} />
+                <Input label="Phone" value={g1Phone} onChange={setG1Phone} placeholder="Phone No" readOnly={!!g1SelectedId} />
+                <Input label="Address" value={g1Address} onChange={setG1Address} placeholder="Address details" readOnly={!!g1SelectedId} />
+                <div className="sm:col-span-2">
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Guarantor 1 Photo</span>
+                  {g1Photo ? (
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 bg-slate-100 rounded border overflow-hidden">
+                        <img src={g1Photo} alt="Guarantor 1" className="w-full h-full object-cover" />
+                      </div>
+                      {!g1SelectedId && (
+                        <button
+                          type="button"
+                          onClick={() => setG1Photo(null)}
+                          className="text-[9px] font-black text-red-600 hover:underline uppercase"
+                        >
+                          REMOVE
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    !g1SelectedId && (
+                      <label className="inline-flex px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded cursor-pointer transition-colors">
+                        ATTACH PHOTO
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setG1Photo(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    )
+                  )}
+                </div>
+                
+                <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+                  <BiometricScanner
+                    label="Guarantor 1 Fingerprint Capture"
+                    existingTemplate={g1FingerprintTemplate}
+                    existingImageUrl={g1FingerprintUrl}
+                    onFingerprintSaved={(url, template, added) => {
+                      setG1FingerprintUrl(url);
+                      setG1FingerprintTemplate(template);
+                      setG1FingerprintAdded(added);
+                    }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -902,47 +1287,135 @@ const LoanEntry: React.FC = () => {
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                   GUARANTOR 2
                 </h4>
-                <div className="flex gap-1.5">
+                {g2SelectedId && (
                   <button
                     type="button"
-                    onClick={() => { setG2Mode('new'); setG2SelectedId(''); setG2Name(''); setG2Phone(''); setG2Aadhaar(''); }}
-                    className={`px-2 py-0.5 text-[9px] font-bold rounded border transition-all ${
-                      g2Mode === 'new' ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-700 border-slate-200'
-                    }`}
+                    onClick={() => {
+                      setG2SelectedId('');
+                      setG2Name('');
+                      setG2Phone('');
+                      setG2Aadhaar('');
+                      setG2Address('');
+                      setG2Photo(null);
+                    }}
+                    className="text-[9px] font-black text-red-650 hover:underline uppercase tracking-wider"
                   >
-                    NEW
+                    CLEAR SELECTION
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setG2Mode('existing')}
-                    className={`px-2 py-0.5 text-[9px] font-bold rounded border transition-all ${
-                      g2Mode === 'existing' ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-700 border-slate-200'
-                    }`}
-                  >
-                    EXISTING
-                  </button>
-                </div>
+                )}
               </div>
 
-              {g2Mode === 'existing' && (
-                <div className="bg-slate-50 p-2.5 rounded border">
-                  <select
-                    value={g2SelectedId}
-                    onChange={(e) => setG2SelectedId(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs font-bold text-slate-800"
-                  >
-                    <option value="">-- SELECT TO AUTO-FILL --</option>
-                    {customers.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+              {/* Search select existing guarantor 2 */}
+              <div ref={g2DropdownRef} className="relative print:hidden">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-4 w-4 text-slate-400" />
                 </div>
-              )}
+                <input
+                  type="text"
+                  value={g2Search}
+                  onChange={(e) => {
+                    setG2Search(e.target.value);
+                    setG2DropdownOpen(true);
+                  }}
+                  onFocus={() => setG2DropdownOpen(true)}
+                  placeholder="Select or Search Existing Guarantor 2..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                />
+                
+                {g2DropdownOpen && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                    {filteredGuarantorsForSelectG2.length === 0 ? (
+                      <div className="px-4 py-3 text-xs text-slate-400 font-bold uppercase tracking-wider text-center">
+                        No matching guarantors
+                      </div>
+                    ) : (
+                      filteredGuarantorsForSelectG2.map((g) => (
+                        <div
+                          key={g.id}
+                          onClick={() => {
+                            setG2SelectedId(g.id);
+                            setG2DropdownOpen(false);
+                            setG2Search('');
+                          }}
+                          className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
+                        >
+                          <div>
+                            <div className="text-xs font-bold text-slate-900">{g.name}</div>
+                            <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                              ID: #{g.guarantor_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
+                            </div>
+                          </div>
+                          {g.phone && (
+                            <div className="text-[9px] text-slate-500 font-bold font-mono">
+                              {g.phone}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <Input label="NAME" value={g2Name} onChange={setG2Name} placeholder="Full Name" readOnly={g2Mode === 'existing'} />
-                <Input label="AADHAAR" value={g2Aadhaar} onChange={setG2Aadhaar} placeholder="Aadhaar UID" readOnly={g2Mode === 'existing'} />
-                <Input label="PHONE" value={g2Phone} onChange={setG2Phone} placeholder="Phone No" readOnly={g2Mode === 'existing'} />
+              {/* Guarantor 2 details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <Input label="Name" value={g2Name} onChange={setG2Name} placeholder="Full Name" readOnly={!!g2SelectedId} />
+                <Input label="Aadhaar" value={g2Aadhaar} onChange={setG2Aadhaar} placeholder="Aadhaar UID" readOnly={!!g2SelectedId} />
+                <Input label="Phone" value={g2Phone} onChange={setG2Phone} placeholder="Phone No" readOnly={!!g2SelectedId} />
+                <Input label="Address" value={g2Address} onChange={setG2Address} placeholder="Address details" readOnly={!!g2SelectedId} />
+                <div className="sm:col-span-2">
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Guarantor 2 Photo</span>
+                  {g2Photo ? (
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 bg-slate-100 rounded border overflow-hidden">
+                        <img src={g2Photo} alt="Guarantor 2" className="w-full h-full object-cover" />
+                      </div>
+                      {!g2SelectedId && (
+                        <button
+                          type="button"
+                          onClick={() => setG2Photo(null)}
+                          className="text-[9px] font-black text-red-600 hover:underline uppercase"
+                        >
+                          REMOVE
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    !g2SelectedId && (
+                      <label className="inline-flex px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded cursor-pointer transition-colors">
+                        ATTACH PHOTO
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setG2Photo(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    )
+                  )}
+                </div>
+
+                <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+                  <BiometricScanner
+                    label="Guarantor 2 Fingerprint Capture"
+                    existingTemplate={g2FingerprintTemplate}
+                    existingImageUrl={g2FingerprintUrl}
+                    onFingerprintSaved={(url, template, added) => {
+                      setG2FingerprintUrl(url);
+                      setG2FingerprintTemplate(template);
+                      setG2FingerprintAdded(added);
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -1006,7 +1479,7 @@ const LoanEntry: React.FC = () => {
                   label="PARTICULARS"
                   value={particulars}
                   onChange={setParticulars}
-                  placeholder="e.g. Pledge receipt particulars or gold details"
+                  placeholder="e.g. Gold weight or pledge card particulars"
                 />
               </div>
             </div>
@@ -1036,7 +1509,6 @@ const LoanEntry: React.FC = () => {
               <Input
                 label="PARTNER NAME (READONLY)"
                 value={partnerName}
-                readOnly
                 placeholder="Partner Name"
               />
             </div>
@@ -1080,7 +1552,7 @@ const LoanEntry: React.FC = () => {
                           type="text"
                           value={doc.refNo}
                           onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, refNo: e.target.value } : d))}
-                          placeholder="REF NO, AUTHORITY, REMARKS..."
+                          placeholder="REF NO..."
                           className="bg-white border border-slate-200 rounded p-1 text-[11px] font-bold text-slate-700 w-full sm:w-48 focus:outline-none"
                         />
                         
@@ -1152,7 +1624,7 @@ const LoanEntry: React.FC = () => {
                 <Input label="DISTRICT" value={locDistrict} onChange={setLocDistrict} placeholder="District" />
                 <Input label="STATE" value={locState} onChange={setLocState} placeholder="State" />
                 <Input label="PINCODE" value={locPincode} onChange={setLocPincode} placeholder="Pincode" />
-                <Input label="LANDMARK" value={locLandmark} onChange={setLocLandmark} placeholder="e.g. Next to Ramalayam Temple" />
+                <Input label="LANDMARK" value={locLandmark} onChange={setLocLandmark} placeholder="e.g. Near Ramalayam temple" />
                 <Input label="LATITUDE" value={locLatitude} onChange={setLocLatitude} placeholder="GPS Latitude" readOnly />
                 <Input label="LONGITUDE" value={locLongitude} onChange={setLocLongitude} placeholder="GPS Longitude" readOnly />
               </div>
@@ -1179,7 +1651,7 @@ const LoanEntry: React.FC = () => {
                 <textarea
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="REASON FOR BORROWING, REPAYMENT ARRANGEMENT, DISCUSSIONS WITH CUSTOMER..."
+                  placeholder="REASON FOR BORROWING, REPAYMENT ARRANGEMENT..."
                   rows={3}
                   className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs font-semibold text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none"
                 />
@@ -1192,7 +1664,7 @@ const LoanEntry: React.FC = () => {
                 <textarea
                   value={extraDetails}
                   onChange={(e) => setExtraDetails(e.target.value)}
-                  placeholder="STEPS OF ANY PARTIAL DISBURSAL PLANNED, SPECIAL CONDITIONS, ETC."
+                  placeholder="SPECIAL CONDITIONS, ETC."
                   rows={2}
                   className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs font-semibold text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none"
                 />

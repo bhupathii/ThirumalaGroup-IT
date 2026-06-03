@@ -1,96 +1,231 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Card from '../../components/UI/Card';
-import Input from '../../components/UI/Input';
-import Button from '../../components/UI/Button';
-import { supabaseFinance, FinanceLoan, FinanceCustomer } from '../../lib/supabaseFinance';
-import { ArrowRight, ShieldAlert, User, Phone } from 'lucide-react';
+import { supabaseFinance } from '../../lib/supabaseFinance';
+import { supabase } from '../../lib/supabase';
+import { 
+  ArrowLeft, 
+  RotateCcw, 
+  Save, 
+  Camera, 
+  FileImage, 
+  X, 
+  RefreshCw 
+} from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useAuth } from '../../contexts/AuthContext';
-import { CameraCapture } from '../../components/finance/CameraCapture';
 import { BiometricScanner } from '../../components/finance/BiometricScanner';
 
 const NewGuarantor: React.FC = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
-  const [loans, setLoans] = useState<(FinanceLoan & { customer: FinanceCustomer })[]>([]);
-  const [selectedLoanId, setSelectedLoanId] = useState('');
-  const [suretyName, setSuretyName] = useState('');
-  const [suretyPhone, setSuretyPhone] = useState('');
-  const [suretyAadhaar, setSuretyAadhaar] = useState('');
-  const [suretyPhoto, setSuretyPhoto] = useState<string | null>(null);
-  const [suretyFingerprintUrl, setSuretyFingerprintUrl] = useState<string | null>(null);
-  const [suretyFingerprintTemplate, setSuretyFingerprintTemplate] = useState<string | null>(null);
-  const [suretyFingerprintAdded, setSuretyFingerprintAdded] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [estimatedId, setEstimatedId] = useState<number>(1);
+
+  // Form State
+  const [aadhaar, setAadhaar] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  // Fingerprint State
+  const [fingerprintUrl, setFingerprintUrl] = useState<string | null>(null);
+  const [fingerprintTemplate, setFingerprintTemplate] = useState<string | null>(null);
+  const [fingerprintAdded, setFingerprintAdded] = useState(false);
+
+  // Camera Capture State
+  const [cameraActive, setCameraActive] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
-    fetchLoans();
+    fetchNextId();
+    return () => {
+      stopCamera();
+    };
   }, []);
 
-  const fetchLoans = async () => {
-    setLoading(true);
+  const fetchNextId = async () => {
     try {
-      const data = await supabaseFinance.getLoans();
-      // filter active loans or all loans
-      setLoans(data);
+      const { data, error } = await supabase
+        .from('finance_guarantors')
+        .select('guarantor_id')
+        .order('guarantor_id', { ascending: false })
+        .limit(1);
+      if (!error && data && data.length > 0) {
+        setEstimatedId((data[0].guarantor_id || 0) + 1);
+      } else {
+        setEstimatedId(1);
+      }
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to load active loans directory');
-    } finally {
-      setLoading(false);
+      console.error('Error fetching next guarantor ID:', err);
     }
   };
 
-  useEffect(() => {
-    if (selectedLoanId) {
-      const selected = loans.find(l => l.id === selectedLoanId);
-      if (selected) {
-        setSuretyName(selected.surety_name || '');
-        setSuretyPhone(selected.surety_phone || '');
-        setSuretyAadhaar(selected.surety_aadhaar || '');
-        setSuretyPhoto(selected.surety_photo_url || null);
-        setSuretyFingerprintUrl(selected.surety_fingerprint_image_url || null);
-        setSuretyFingerprintTemplate(selected.surety_fingerprint_template || null);
-        setSuretyFingerprintAdded(!!selected.surety_fingerprint_added);
+  // Webcam Helpers
+  const startCamera = async () => {
+    try {
+      setCapturedImage(null);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: 640, height: 480 },
+        audio: false
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+      setCameraActive(true);
+    } catch (err) {
+      console.error('Camera access error:', err);
+      toast.error('Could not access camera. Please check device permissions.');
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setCameraActive(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+
+      if (context) {
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setCapturedImage(dataUrl);
+        stopCamera();
+        uploadPhoto(dataUrl);
       }
     }
-  }, [selectedLoanId, loans]);
+  };
+
+  const dataURLtoFile = (dataurl: string, filename: string): File => {
+    const arr = dataurl.split(',');
+    const mime = arr[0].match(/:(.*?);/)![1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
+  };
+
+  const uploadPhoto = async (base64Data: string) => {
+    setUploading(true);
+    try {
+      const fileObj = dataURLtoFile(base64Data, `guar-capture-${Date.now()}.jpg`);
+      const { data, error } = await supabase.storage
+        .from('finance-photos')
+        .upload(`photos/${fileObj.name}`, fileObj);
+
+      if (error) throw error;
+
+      const publicUrl = supabase.storage
+        .from('finance-photos')
+        .getPublicUrl(data.path).data.publicUrl;
+
+      setPhotoUrl(publicUrl);
+      toast.success('Photo uploaded successfully!');
+    } catch (err) {
+      console.error('Upload failed, falling back to direct base64:', err);
+      setPhotoUrl(base64Data);
+      toast('Photo saved in database fallback.', { icon: '⚠️' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCapturedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+
+      setUploading(true);
+      try {
+        const { data, error } = await supabase.storage
+          .from('finance-photos')
+          .upload(`photos/guar-upload-${Date.now()}-${file.name}`, file);
+
+        if (error) throw error;
+
+        const publicUrl = supabase.storage
+          .from('finance-photos')
+          .getPublicUrl(data.path).data.publicUrl;
+
+        setPhotoUrl(publicUrl);
+        toast.success('Image uploaded successfully!');
+      } catch (err) {
+        console.error('File upload failed, falling back to base64:', err);
+        const base64Reader = new FileReader();
+        base64Reader.onloadend = () => {
+          setPhotoUrl(base64Reader.result as string);
+        };
+        base64Reader.readAsDataURL(file);
+        toast('Using base64 image encoding fallback.', { icon: '⚠️' });
+      } finally {
+        setUploading(false);
+      }
+    }
+  };
+
+  const handleClearPhoto = () => {
+    stopCamera();
+    setCapturedImage(null);
+    setPhotoUrl(null);
+  };
+
+  const handleResetForm = () => {
+    if (!window.confirm('Are you sure you want to clear the form?')) return;
+    setAadhaar('');
+    setName('');
+    setPhone('');
+    setAddress('');
+    handleClearPhoto();
+    setFingerprintUrl(null);
+    setFingerprintTemplate(null);
+    setFingerprintAdded(false);
+    toast.success('Form reset successfully');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedLoanId) {
-      toast.error('Please select a loan account first');
-      return;
-    }
-    if (!suretyName.trim()) {
+    if (!name.trim()) {
       toast.error('Guarantor Name is required');
       return;
     }
 
     setSaving(true);
     try {
-      const staffName = user?.username || 'Staff';
-      const result = await supabaseFinance.updateLoan(
-        selectedLoanId,
-        {
-          surety_name: suretyName || null,
-          surety_phone: suretyPhone || null,
-          surety_aadhaar: suretyAadhaar || null,
-          surety_photo_url: suretyPhoto,
-          surety_fingerprint_image_url: suretyFingerprintUrl,
-          surety_fingerprint_template: suretyFingerprintTemplate,
-          surety_fingerprint_added: suretyFingerprintAdded,
-        },
-        staffName
-      );
+      const result = await supabaseFinance.createGuarantor({
+        name: name.trim(),
+        phone: phone || null,
+        address: address || null,
+        aadhaar: aadhaar || null,
+        photo_url: photoUrl,
+        fingerprint_template: fingerprintTemplate || null,
+        fingerprint_image_url: fingerprintUrl || null,
+        fingerprint_added: fingerprintAdded
+      });
 
       if (result) {
-        toast.success('Guarantor added/updated successfully!');
+        toast.success(`Guarantor ${name} registered successfully!`);
         navigate('/finance');
       } else {
-        toast.error('Failed to link guarantor details to the loan account.');
+        toast.error('Failed to register guarantor. Check if Aadhaar is duplicate.');
       }
     } catch (err) {
       console.error(err);
@@ -101,98 +236,264 @@ const NewGuarantor: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 p-6 max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="flex justify-between items-center border-b border-green-100 pb-4">
+    <div className="space-y-6 max-w-7xl mx-auto select-none print:p-0">
+      
+      {/* Top Header Actions Bar */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Add / Update Guarantor</h1>
-          <p className="text-gray-500 text-sm mt-1">Assign surety profiles and biometric signatures to loan accounts</p>
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            DASHBOARD / GUARANTORS / NEW
+          </div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">NEW GUARANTOR</h1>
+          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">
+            REGISTER A NEW GUARANTOR IN THE MASTER LIST
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            BACK
+          </button>
+          <button
+            type="button"
+            onClick={handleResetForm}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            RESET
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving || uploading}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
+          >
+            <Save className="w-3.5 h-3.5" />
+            {saving ? 'SAVING...' : 'SAVE'}
+          </button>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit}>
-        <Card title="Guarantor Card Assignment" subtitle="Choose loan account & input surety contact details">
-          {loading ? (
-            <div className="flex justify-center py-6">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-green-500"></div>
-            </div>
-          ) : (
+      {/* Two-Column Grid Layout */}
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left Column: Guarantor Details Form */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
+            <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase border-b border-slate-100 pb-2">
+              GUARANTOR DETAILS
+            </h3>
+            
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1" style={{ fontFamily: 'Times New Roman', fontSize: '14px' }}>
-                  Select Loan Account *
-                </label>
-                <select
-                  value={selectedLoanId}
-                  onChange={(e) => setSelectedLoanId(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg p-2.5 font-bold focus:outline-none focus:ring-2 focus:ring-green-500 text-base"
-                  style={{ fontFamily: 'Times New Roman', fontSize: '14px' }}
-                  required
-                >
-                  <option value="">-- Choose Loan Account --</option>
-                  {loans.map(l => (
-                    <option key={l.id} value={l.id}>
-                      {l.loan_id} - {l.customer?.name} ({l.due_type} Mode)
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                    GUARANTOR ID
+                  </label>
+                  <input
+                    type="text"
+                    value={estimatedId}
+                    readOnly
+                    disabled
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-500 focus:outline-none cursor-not-allowed"
+                  />
+                  <span className="text-[9px] text-slate-400 font-bold mt-1 block uppercase tracking-wide">
+                    AUTO-GENERATED
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                    AADHAAR
+                  </label>
+                  <input
+                    type="text"
+                    value={aadhaar}
+                    onChange={(e) => setAadhaar(e.target.value)}
+                    placeholder="12-digit Aadhaar UID"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                  />
+                </div>
               </div>
 
-              {selectedLoanId && (
-                <div className="space-y-4 pt-4 border-t border-gray-100">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      label="Guarantor Full Name *"
-                      value={suretyName}
-                      onChange={setSuretyName}
-                      placeholder="e.g. Anand Kumar"
-                      required
-                    />
-                    <Input
-                      label="Guarantor Phone"
-                      value={suretyPhone}
-                      onChange={setSuretyPhone}
-                      placeholder="10-digit phone number"
-                    />
-                    <div className="sm:col-span-2">
-                      <Input
-                        label="Guarantor Aadhaar Card UID"
-                        value={suretyAadhaar}
-                        onChange={setSuretyAadhaar}
-                        placeholder="12-digit Aadhaar UID"
-                      />
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  NAME <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Anand Kumar"
+                  required
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  PHONE
+                </label>
+                <input
+                  type="text"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Guarantor contact number"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  ADDRESS
+                </label>
+                <textarea
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Full residential address"
+                  rows={3}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Guarantor Photo Card */}
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
+            <div>
+              <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase">
+                GUARANTOR PHOTO
+              </h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+                UPLOAD OR CAPTURE. SAVED WITH GUARANTOR RECORD.
+              </p>
+            </div>
+
+            {/* Photo Box Container */}
+            <div className="relative border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 p-6 flex flex-col items-center justify-center min-h-[240px] overflow-hidden shadow-inner">
+              
+              {/* Camera Active State */}
+              {cameraActive && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black">
+                  <video
+                    ref={videoRef}
+                    className="w-full h-full object-cover"
+                    playsInline
+                    muted
+                  />
+                  <div className="absolute bottom-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={capturePhoto}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow hover:bg-emerald-700 flex items-center gap-1"
+                    >
+                      <Camera className="w-4 h-4" />
+                      CAPTURE
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stopCamera}
+                      className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold shadow hover:bg-slate-700"
+                    >
+                      CANCEL
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Preview State */}
+              {capturedImage && !cameraActive && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white p-2">
+                  <img
+                    src={capturedImage}
+                    alt="Preview"
+                    className="w-full h-full object-contain rounded-lg"
+                  />
+                  {uploading && (
+                    <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-slate-900"></div>
                     </div>
+                  )}
+                  <div className="absolute bottom-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      className="px-3 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg text-[10px] font-bold shadow-sm hover:bg-orange-100 flex items-center gap-1"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      RETAKE
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearPhoto}
+                      className="px-3 py-1.5 bg-red-50 text-red-650 border border-red-200 rounded-lg text-[10px] font-bold shadow-sm hover:bg-red-100 flex items-center gap-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      CLEAR
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Default Empty State */}
+              {!cameraActive && !capturedImage && (
+                <div className="text-center space-y-4 w-full flex flex-col items-center">
+                  <div 
+                    onClick={startCamera}
+                    className="cursor-pointer group flex flex-col items-center space-y-2 p-4"
+                  >
+                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 text-orange-500 group-hover:scale-105 transition-all">
+                      <Camera className="w-6 h-6 stroke-1.5" />
+                    </div>
+                    <span className="text-[11px] font-extrabold text-slate-800 uppercase tracking-widest block pt-1">
+                      GUARANTOR PHOTO
+                    </span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">
+                      CLICK TO CAPTURE PHOTO
+                    </span>
                   </div>
 
-                  {/* Photo & Biometric attachments */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-gray-150">
-                    <CameraCapture
-                      label="Guarantor Photo Capture"
-                      existingPhotoUrl={suretyPhoto}
-                      onPhotoSaved={setSuretyPhoto}
-                    />
-                    <BiometricScanner
-                      label="Guarantor Fingerprint Scanner"
-                      existingTemplate={suretyFingerprintTemplate}
-                      existingImageUrl={suretyFingerprintUrl}
-                      onFingerprintSaved={(url, template, added) => {
-                        setSuretyFingerprintUrl(url);
-                        setSuretyFingerprintTemplate(template);
-                        setSuretyFingerprintAdded(added);
-                      }}
-                    />
-                  </div>
-
-                  <div className="pt-4 flex justify-end">
-                    <Button type="submit" variant="success" className="w-full sm:w-auto px-8" icon={ArrowRight} disabled={saving}>
-                      {saving ? 'Saving...' : 'Save Guarantor Details'}
-                    </Button>
+                  <div className="w-full flex items-center justify-center gap-2 pt-2 border-t border-slate-100/60">
+                    <label className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg cursor-pointer transition-colors shadow-sm inline-flex items-center gap-1.5 uppercase tracking-wider">
+                      <FileImage className="w-3.5 h-3.5 text-slate-500" />
+                      OR SELECT FROM DEVICE
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                    </label>
                   </div>
                 </div>
               )}
             </div>
-          )}
-        </Card>
+
+            {/* Hidden elements */}
+            <canvas ref={canvasRef} width="640" height="480" className="hidden" />
+          </div>
+
+          {/* Fingerprint Capture Card */}
+          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
+            <BiometricScanner
+              label="Guarantor Fingerprint Capture"
+              existingTemplate={fingerprintTemplate}
+              existingImageUrl={fingerprintUrl}
+              onFingerprintSaved={(url, template, added) => {
+                setFingerprintUrl(url);
+                setFingerprintTemplate(template);
+                setFingerprintAdded(added);
+              }}
+            />
+          </div>
+        </div>
+
       </form>
     </div>
   );
