@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { 
@@ -46,12 +46,51 @@ const NewCustomer: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('edit');
+
   useEffect(() => {
-    fetchNextId();
+    if (editId) {
+      loadCustomerDetails(editId);
+    } else {
+      fetchNextId();
+    }
     return () => {
       stopCamera();
     };
-  }, []);
+  }, [editId]);
+
+  const loadCustomerDetails = async (id: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('finance_customers')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      if (data) {
+        setEstimatedId(data.customer_id || 1);
+        setAadhaar(data.aadhaar || '');
+        setName(data.name || '');
+        setFatherName(data.father_name || data.father_husband_name || '');
+        setVillage(data.village || '');
+        setMandal(data.mandal || '');
+        setDistrict(data.district || '');
+        setAadhaarAddress(data.aadhaar_address || '');
+        setPresentAddress(data.present_address || data.address || '');
+        setPhone1(data.phone_1 || data.phone || '');
+        setPhone2(data.phone_2 || data.phone2 || '');
+        setPhotoUrl(data.customer_photo_url || null);
+        setCapturedImage(data.customer_photo_url || null);
+        setFingerprintUrl(data.fingerprint_url || null);
+        setFingerprintTemplate(data.fingerprint_template || null);
+        setFingerprintAdded(data.fingerprint_added || false);
+      }
+    } catch (err) {
+      console.error('Error loading customer details:', err);
+      toast.error('Failed to load customer details');
+    }
+  };
 
   const fetchNextId = async () => {
     try {
@@ -197,20 +236,25 @@ const NewCustomer: React.FC = () => {
 
   const handleResetForm = () => {
     if (!window.confirm('Are you sure you want to clear the form?')) return;
-    setAadhaar('');
-    setName('');
-    setFatherName('');
-    setVillage('');
-    setMandal('');
-    setDistrict('');
-    setAadhaarAddress('');
-    setPresentAddress('');
-    setPhone1('');
-    setPhone2('');
-    handleClearPhoto();
-    setFingerprintUrl(null);
-    setFingerprintTemplate(null);
-    setFingerprintAdded(false);
+    if (editId) {
+      loadCustomerDetails(editId);
+    } else {
+      setAadhaar('');
+      setName('');
+      setFatherName('');
+      setVillage('');
+      setMandal('');
+      setDistrict('');
+      setAadhaarAddress('');
+      setPresentAddress('');
+      setPhone1('');
+      setPhone2('');
+      handleClearPhoto();
+      setFingerprintUrl(null);
+      setFingerprintTemplate(null);
+      setFingerprintAdded(false);
+      fetchNextId();
+    }
     toast.success('Form reset successfully');
   };
 
@@ -233,11 +277,16 @@ const NewCustomer: React.FC = () => {
     try {
       // 1. Check duplicate Aadhaar if entered
       if (cleanAadhaar) {
-        const { data: existingCustomers, error: checkError } = await supabase
+        let query = supabase
           .from('finance_customers')
           .select('name, customer_id')
-          .eq('aadhaar', cleanAadhaar)
-          .limit(1);
+          .eq('aadhaar', cleanAadhaar);
+        
+        if (editId) {
+          query = query.neq('id', editId);
+        }
+
+        const { data: existingCustomers, error: checkError } = await query.limit(1);
 
         if (checkError) {
           console.error('Error checking duplicate Aadhaar:', checkError);
@@ -249,8 +298,7 @@ const NewCustomer: React.FC = () => {
         }
       }
 
-      // 2. Insert customer
-      const result = await supabaseFinance.createCustomer({
+      const payload = {
         name: name.trim(),
         phone: phone1.trim() || null,
         phone2: phone2.trim() || null,
@@ -274,44 +322,54 @@ const NewCustomer: React.FC = () => {
         fingerprint_url: fingerprintUrl || null,
         fingerprint_template: fingerprintTemplate || null,
         fingerprint_added: fingerprintAdded
-      });
+      };
+
+      let result;
+      if (editId) {
+        // Edit mode
+        const staffName = sessionStorage.getItem('thirumala_user') 
+          ? JSON.parse(sessionStorage.getItem('thirumala_user')!).username 
+          : 'Staff';
+        result = await supabaseFinance.updateCustomer(editId, payload, staffName);
+      } else {
+        // Create mode
+        result = await supabaseFinance.createCustomer(payload);
+      }
 
       if (result) {
-        toast.success('Customer registered successfully.');
+        toast.success(editId ? 'Customer details updated successfully.' : 'Customer registered successfully.');
         
-        // Reset form state on success
-        setAadhaar('');
-        setName('');
-        setFatherName('');
-        setVillage('');
-        setMandal('');
-        setDistrict('');
-        setAadhaarAddress('');
-        setPresentAddress('');
-        setPhone1('');
-        setPhone2('');
-        handleClearPhoto();
-        setFingerprintUrl(null);
-        setFingerprintTemplate(null);
-        setFingerprintAdded(false);
-
-        // Fetch updated sequence ID
-        fetchNextId();
+        if (!editId) {
+          // Reset form state on success
+          setAadhaar('');
+          setName('');
+          setFatherName('');
+          setVillage('');
+          setMandal('');
+          setDistrict('');
+          setAadhaarAddress('');
+          setPresentAddress('');
+          setPhone1('');
+          setPhone2('');
+          handleClearPhoto();
+          setFingerprintUrl(null);
+          setFingerprintTemplate(null);
+          setFingerprintAdded(false);
+          fetchNextId();
+        }
 
         // Redirect
         navigate('/finance/customers');
       } else {
-        toast.error('Failed to register customer. Check console for details.');
+        toast.error(editId ? 'Failed to update customer details.' : 'Failed to register customer. Check console.');
       }
     } catch (err: any) {
-      console.error('Customer registration error details:', err);
+      console.error('Customer save error details:', err);
       const errorMsg = err.message || '';
-      if (err.code === '42703' || errorMsg.includes('column') || errorMsg.includes('schema cache')) {
-        toast.error('Customer table setup is incomplete. Please run migration.');
-      } else if (err.code === '23505' || errorMsg.includes('duplicate') || errorMsg.includes('unique constraint')) {
+      if (err.code === '23505' || errorMsg.includes('duplicate') || errorMsg.includes('unique constraint')) {
         toast.error('Customer with this Aadhaar already exists.');
       } else {
-        toast.error(`Failed to register customer: ${errorMsg || 'Check database connection or RLS rules.'}`);
+        toast.error(`Failed to save customer: ${errorMsg || 'Check database connection.'}`);
       }
     } finally {
       setSaving(false);
@@ -325,11 +383,11 @@ const NewCustomer: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5">
         <div>
           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-            DASHBOARD / CUSTOMERS / NEW
+            DASHBOARD / CUSTOMERS / {editId ? 'EDIT' : 'NEW'}
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">NEW CUSTOMER</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">{editId ? 'EDIT CUSTOMER' : 'NEW CUSTOMER'}</h1>
           <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">
-            REGISTER A NEW CUSTOMER IN THE MASTER LIST
+            {editId ? 'MODIFY CUSTOMER MASTER LIST RECORD' : 'REGISTER A NEW CUSTOMER IN THE MASTER LIST'}
           </p>
         </div>
         <div className="flex items-center gap-2">

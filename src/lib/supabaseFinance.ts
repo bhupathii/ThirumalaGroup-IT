@@ -115,11 +115,13 @@ export interface FinanceTransaction {
 
 export interface FinanceCapitalEntry {
   id: string;
-  date: string;
+  entry_date: string;
   partner_id: string;
-  amount: number;
-  type: 'Credit' | 'Debit';
-  remarks: string | null;
+  partner_name: string | null;
+  particulars: string | null;
+  credit: number;
+  debit: number;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -915,7 +917,7 @@ class SupabaseFinance {
       const { data, error } = await supabase
         .from('finance_capital_entries')
         .select('*, partner:finance_partners(*)')
-        .order('date', { ascending: false })
+        .order('entry_date', { ascending: false })
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
@@ -936,6 +938,50 @@ class SupabaseFinance {
       return data;
     } catch (error) {
       console.error('Error creating finance capital entry:', error);
+      return null;
+    }
+  }
+
+  async createCapitalEntries(entries: Omit<FinanceCapitalEntry, 'id' | 'created_at' | 'updated_at'>[]): Promise<FinanceCapitalEntry[] | null> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_capital_entries')
+        .insert(entries)
+        .select();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error creating bulk finance capital entries:', error);
+      return null;
+    }
+  }
+
+  async updateCapitalEntry(
+    id: string,
+    entry: Partial<Omit<FinanceCapitalEntry, 'id' | 'created_at' | 'updated_at'>>,
+    updatedBy: string
+  ): Promise<FinanceCapitalEntry | null> {
+    try {
+      const { data: oldData } = await supabase
+        .from('finance_capital_entries')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      const { data, error } = await supabase
+        .from('finance_capital_entries')
+        .update(entry)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+
+      if (oldData && data) {
+        await this.logEdit('finance_capital_entries', id, oldData, data, updatedBy);
+      }
+      return data;
+    } catch (error) {
+      console.error('Error updating finance capital entry:', error);
       return null;
     }
   }
