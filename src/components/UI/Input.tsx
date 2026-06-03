@@ -1,4 +1,5 @@
 import React, { useState, forwardRef } from 'react';
+import { Calendar } from 'lucide-react';
 
 interface InputProps {
   label?: string;
@@ -17,6 +18,7 @@ interface InputProps {
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   size?: 'sm' | 'md' | 'lg';
   uppercase?: boolean;
+  style?: React.CSSProperties;
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -38,6 +40,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       onKeyDown,
       size = 'md',
       uppercase = false,
+      style,
     },
     ref
   ) => {
@@ -99,68 +102,75 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label className={`block font-bold text-gray-700 mb-1 ${
             size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-base' : 'text-sm'
-          }`} style={{ fontFamily: 'Times New Roman', fontSize: '14px', fontWeight: 'bold' }}>
+          }`} style={{ fontFamily: style?.fontFamily || 'Times New Roman', fontSize: '14px', fontWeight: 'bold' }}>
             {label}
             {required && <span className='text-red-500 ml-1'>*</span>}
           </label>
         )}
-        <input
-          ref={ref}
-          type={type === 'date' ? (dateMode === 'date' ? 'date' : 'text') : type}
-          value={
-            typeof value === 'number' && isNaN(value)
-              ? ''
-              : value === null || value === undefined
+        <div className="relative">
+          <input
+            ref={ref}
+            type={type === 'date' ? (dateMode === 'date' ? 'date' : 'text') : type}
+            value={
+              typeof value === 'number' && isNaN(value)
                 ? ''
-                : type === 'date'
-                  ? (() => {
-                      const v = String(value || inputValue || '');
-                      const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-                      if (dateMode === 'date') {
-                        // Native date expects ISO
-                        if (m) return v;
-                        const m2 = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-                        if (m2) {
-                          const [, dd, mm, yyyy] = m2;
-                          return `${yyyy}-${mm}-${dd}`;
+                : value === null || value === undefined
+                  ? ''
+                  : type === 'date'
+                    ? (() => {
+                        const v = String(value || inputValue || '');
+                        const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                        if (dateMode === 'date') {
+                          // Native date expects ISO
+                          if (m) return v;
+                          const m2 = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                          if (m2) {
+                            const [, dd, mm, yyyy] = m2;
+                            return `${yyyy}-${mm}-${dd}`;
+                          }
+                          return '';
                         }
-                        return '';
-                      }
-                      // Text mode shows dd/MM/yyyy
-                      if (m) {
-                        const [, yyyy, mm, dd] = m;
-                        return `${dd}/${mm}/${yyyy}`;
-                      }
-                      return v;
-                    })()
-                  : uppercase && type !== 'number' 
-                    ? String(value).toUpperCase()
-                    : value
-          }
-          onChange={handleInputChange}
-          onKeyDown={onKeyDown}
-          placeholder={type === 'date' ? 'dd/MM/yyyy' : placeholder}
-          required={required}
-          disabled={disabled}
-          readOnly={readOnly}
-          min={min}
-          max={max}
-          step={step}
-          className={`w-full border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed font-bold ${
-            size === 'sm' ? 'px-2 py-1 text-sm' : size === 'lg' ? 'px-4 py-3 text-lg' : 'px-3 py-2 text-base'
-          }`}
-          style={{ fontFamily: 'Times New Roman', fontSize: '14px', fontWeight: 'bold' }}
-          inputMode={type === 'date' && dateMode === 'text' ? 'numeric' : undefined}
-          pattern={type === 'date' && dateMode === 'text' ? '\\d{2}/\\d{2}/\\d{4}' : undefined}
-          onFocus={() => {
-            if (type === 'date') setDateMode('date');
-            setShowSuggestions(true);
-          }}
-          onBlur={() => {
-            if (type === 'date') setDateMode('text');
-            setTimeout(() => setShowSuggestions(false), 100);
-          }}
-        />
+                        // Text mode shows dd/MM/yyyy
+                        if (m) {
+                          const [, yyyy, mm, dd] = m;
+                          return `${dd}/${mm}/${yyyy}`;
+                        }
+                        return v;
+                      })()
+                    : uppercase && type !== 'number' 
+                      ? String(value).toUpperCase()
+                      : value
+            }
+            onChange={handleInputChange}
+            onKeyDown={onKeyDown}
+            placeholder={type === 'date' ? 'dd/MM/yyyy' : placeholder}
+            required={required}
+            disabled={disabled}
+            readOnly={readOnly}
+            min={min}
+            max={max}
+            step={step}
+            className={`w-full border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed font-bold ${
+              size === 'sm' ? 'px-2 py-1 text-sm' : size === 'lg' ? 'px-4 py-3 text-lg' : 'px-3 py-2 text-base'
+            }`}
+            style={{ fontFamily: 'Times New Roman', fontSize: '14px', fontWeight: 'bold', paddingRight: type === 'date' ? '2.5rem' : undefined, ...style }}
+            inputMode={type === 'date' && dateMode === 'text' ? 'numeric' : undefined}
+            pattern={type === 'date' && dateMode === 'text' ? '\\d{2}/\\d{2}/\\d{4}' : undefined}
+            onFocus={() => {
+              if (type === 'date') setDateMode('date');
+              setShowSuggestions(true);
+            }}
+            onBlur={() => {
+              if (type === 'date') setDateMode('text');
+              setTimeout(() => setShowSuggestions(false), 100);
+            }}
+          />
+          {type === 'date' && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+              <Calendar className="w-4 h-4" />
+            </div>
+          )}
+        </div>
         {showSuggestions && filteredSuggestions.length > 0 && (
           <ul className='absolute z-10 bg-white border border-gray-200 rounded shadow-md mt-1 w-full max-h-40 overflow-y-auto'>
             {filteredSuggestions.map((s, idx) => (

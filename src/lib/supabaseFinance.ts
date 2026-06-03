@@ -171,6 +171,26 @@ export interface FinanceDeletedLog {
   deleted_at: string;
 }
 
+export interface FinanceCashbookAccount {
+  id: string;
+  account_name: string;
+  account_number: string | null;
+  created_at: string;
+}
+
+export interface FinanceCashbookEntry {
+  id: string;
+  entry_date: string;
+  account_number: string | null;
+  head_of_account: string;
+  particulars: string;
+  credit: number;
+  debit: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 class SupabaseFinance {
   // --- Partners ---
   async getPartners(): Promise<FinancePartner[]> {
@@ -1136,6 +1156,141 @@ class SupabaseFinance {
       return true;
     } catch (error) {
       console.error('Error restoring deleted record:', error);
+      return false;
+    }
+  }
+
+  // --- Cashbook Accounts ---
+  async getCashbookAccounts(): Promise<FinanceCashbookAccount[]> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_cashbook_accounts')
+        .select('*')
+        .order('account_name');
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching cashbook accounts:', error);
+      return [];
+    }
+  }
+
+  async createCashbookAccount(account: Omit<FinanceCashbookAccount, 'id' | 'created_at'>): Promise<FinanceCashbookAccount | null> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_cashbook_accounts')
+        .insert([account])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error creating cashbook account:', error);
+      return null;
+    }
+  }
+
+  // --- Cashbook Entries ---
+  async getCashbookEntries(): Promise<FinanceCashbookEntry[]> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_cashbook_entries')
+        .select('*')
+        .order('entry_date', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching cashbook entries:', error);
+      return [];
+    }
+  }
+
+  async createCashbookEntry(entry: Omit<FinanceCashbookEntry, 'id' | 'created_at' | 'updated_at'>): Promise<FinanceCashbookEntry | null> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_cashbook_entries')
+        .insert([entry])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error creating cashbook entry:', error);
+      return null;
+    }
+  }
+
+  async updateCashbookEntry(id: string, entry: Partial<FinanceCashbookEntry>, editedBy: string): Promise<FinanceCashbookEntry | null> {
+    try {
+      const { data: oldData } = await supabase
+        .from('finance_cashbook_entries')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      const { data, error } = await supabase
+        .from('finance_cashbook_entries')
+        .update({ ...entry, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+
+      if (oldData) {
+        await this.logEdit('finance_cashbook_entries', id, oldData, data, editedBy);
+      }
+      return data;
+    } catch (error) {
+      console.error('Error updating cashbook entry:', error);
+      return null;
+    }
+  }
+
+  async deleteCashbookEntry(id: string, deletedBy: string): Promise<boolean> {
+    try {
+      const { data: oldData } = await supabase
+        .from('finance_cashbook_entries')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      const { error } = await supabase
+        .from('finance_cashbook_entries')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+
+      if (oldData) {
+        await this.logDelete('finance_cashbook_entries', id, oldData, deletedBy);
+      }
+      return true;
+    } catch (error) {
+      console.error('Error deleting cashbook entry:', error);
+      return false;
+    }
+  }
+
+  async deleteAllCashbookEntries(deletedBy: string): Promise<boolean> {
+    try {
+      const { data: oldData } = await supabase
+        .from('finance_cashbook_entries')
+        .select('*');
+
+      const { error } = await supabase
+        .from('finance_cashbook_entries')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (error) throw error;
+
+      if (oldData && oldData.length > 0) {
+        for (const row of oldData) {
+          await this.logDelete('finance_cashbook_entries', row.id, row, deletedBy);
+        }
+      }
+      return true;
+    } catch (error) {
+      console.error('Error deleting all cashbook entries:', error);
       return false;
     }
   }

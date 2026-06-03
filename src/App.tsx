@@ -63,6 +63,7 @@ import NewCustomer from './pages/finance/NewCustomer';
 import Customers from './pages/finance/Customers';
 import NewGuarantor from './pages/finance/NewGuarantor';
 import NewPartner from './pages/finance/NewPartner';
+import CashBook from './pages/finance/CashBook';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
@@ -240,7 +241,7 @@ const AppContent: React.FC = () => {
           <Route path='finance/customers' element={<Customers />} />
           <Route path='finance/new-guarantor' element={<NewGuarantor />} />
           <Route path='finance/new-partner' element={<NewPartner />} />
-          <Route path='finance/cash-book' element={<Daybook />} />
+          <Route path='finance/cash-book' element={<CashBook />} />
         </Route>
       </Routes>
     </Router>
