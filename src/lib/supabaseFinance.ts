@@ -1369,7 +1369,6 @@ class SupabaseFinance {
         supabase.from('finance_transactions').select('date'),
         supabase.from('finance_cashbook_entries').select('entry_date'),
         supabase.from('finance_capital_entries').select('entry_date'),
-        supabase.from('finance_dues').select('due_date'),
         supabase.from('finance_customers').select('created_at'),
         supabase.from('finance_edited_logs').select('edited_at'),
         supabase.from('finance_deleted_logs').select('deleted_at')
@@ -1379,6 +1378,16 @@ class SupabaseFinance {
 
       const addDate = (d: any) => {
         if (typeof d === 'string') {
+          if (d.includes('T')) {
+            const dateObj = new Date(d);
+            if (!isNaN(dateObj.getTime())) {
+               const y = dateObj.getFullYear();
+               const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+               const day = String(dateObj.getDate()).padStart(2, '0');
+               datesSet.add(`${y}-${m}-${day}`);
+               return;
+            }
+          }
           const match = d.match(/^(\d{4}-\d{2}-\d{2})/);
           if (match) {
             datesSet.add(match[1]);
@@ -1390,10 +1399,9 @@ class SupabaseFinance {
       results[1].data?.forEach(r => addDate(r.date));
       results[2].data?.forEach(r => addDate(r.entry_date));
       results[3].data?.forEach(r => addDate(r.entry_date));
-      results[4].data?.forEach(r => addDate(r.due_date));
-      results[5].data?.forEach(r => addDate(r.created_at));
-      results[6].data?.forEach(r => addDate(r.edited_at));
-      results[7].data?.forEach(r => addDate(r.deleted_at));
+      results[4].data?.forEach(r => addDate(r.created_at));
+      results[5].data?.forEach(r => addDate(r.edited_at));
+      results[6].data?.forEach(r => addDate(r.deleted_at));
 
       return Array.from(datesSet).map(d => ({ c_date: d }));
     } catch (error) {
