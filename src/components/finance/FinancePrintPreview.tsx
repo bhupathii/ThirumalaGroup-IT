@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { Printer, X } from 'lucide-react';
-import { Button } from '../UI/Button'; // Assuming Button exists, or I will use standard buttons. Wait, I will use raw HTML buttons to avoid dependency issues if Button is not there.
 
 interface FinancePrintPreviewProps {
   isOpen: boolean;
@@ -37,7 +36,7 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-[100] flex flex-col bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-4 md:p-8 print:p-0 print:bg-white print:block">
+      <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-4 md:p-8 print:p-0 print:bg-white print:block">
         <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-5xl w-full mx-auto overflow-hidden print:max-w-none print:border-none print:shadow-none print:rounded-none">
           
           {/* Header Actions */}
