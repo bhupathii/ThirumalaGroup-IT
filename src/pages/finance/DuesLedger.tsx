@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { Printer, Calendar, Clock, DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
+import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
 
 interface OverdueDueItem {
   id: string;
@@ -36,6 +37,7 @@ const DuesLedger: React.FC = () => {
   const [collectAmount, setCollectAmount] = useState('');
   const [collectRemarks, setCollectRemarks] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   useEffect(() => {
     fetchDuesData();
@@ -175,18 +177,18 @@ const DuesLedger: React.FC = () => {
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
       {/* Header */}
-      <div className="flex justify-between items-center border-b border-green-100 pb-4 print:hidden">
+      <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Dues & Overdue Ledger</h1>
           <p className="text-gray-500 text-sm mt-1">Monitor pending/overdue instalments and execute immediate collections</p>
         </div>
-        <Button onClick={() => window.print()} variant="primary" size="sm" icon={Printer}>
+        <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
           Print Dues Sheet
         </Button>
       </div>
 
       {/* Filter Options */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-100 print:hidden">
+      <div className={`grid grid-cols-1 sm:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-100 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div className="sm:col-span-2">
           <Input
             label="Search Accounts"
@@ -268,7 +270,8 @@ const DuesLedger: React.FC = () => {
       )}
 
       {/* Dues Table list */}
-      <Card title="Dues Statement List" subtitle={`${filteredDues.length} pending instalments listed`} className="shadow-md">
+      <div className={showPrintPreview ? 'print:hidden' : ''}>
+        <Card title="Dues Statement List" subtitle={`${filteredDues.length} pending instalments listed`} className="shadow-md">
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-green-500"></div>
@@ -351,6 +354,77 @@ const DuesLedger: React.FC = () => {
           </div>
         )}
       </Card>
+      </div>
+
+      <FinancePrintPreview
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        title="Dues & Overdue Ledger"
+        documentTitle="DUES AND OVERDUE REPORT"
+      >
+        <div className="space-y-6 mt-6">
+          <Card title="Dues Statement List" subtitle={`${filteredDues.length} pending instalments listed`} className="shadow-none border-0">
+            {filteredDues.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">No pending dues found matching filters</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Due Date</th>
+                      <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Loan ID</th>
+                      <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Customer Name</th>
+                      <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Due Amount</th>
+                      <th className="px-3 py-3 text-right font-bold text-green-700 uppercase">Paid Amount</th>
+                      <th className="px-3 py-3 text-right font-bold text-red-700 uppercase">Pending Amount</th>
+                      <th className="px-3 py-3 text-center font-bold text-gray-700 uppercase">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredDues.map(due => {
+                      const today = new Date().toISOString().split('T')[0];
+                      const isOverdue = due.dueDate <= today;
+                      return (
+                        <tr key={due.id}>
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            <span className={`font-mono font-bold ${isOverdue ? 'text-red-600' : 'text-gray-700'}`}>
+                              {new Date(due.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 whitespace-nowrap font-bold text-gray-900 font-mono">{due.loanId}</td>
+                          <td className="px-3 py-3">
+                            <div className="font-bold text-gray-900">{due.customerName}</div>
+                            {due.phone && <div className="text-[10px] text-gray-400">{due.phone}</div>}
+                          </td>
+                          <td className="px-3 py-3 text-right font-semibold">₹{due.amount.toLocaleString('en-IN')}</td>
+                          <td className="px-3 py-3 text-right text-green-600 font-bold">₹{due.paidAmount.toLocaleString('en-IN')}</td>
+                          <td className="px-3 py-3 text-right text-red-600 font-black">₹{due.pendingAmount.toLocaleString('en-IN')}</td>
+                          <td className="px-3 py-3 text-center">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                               due.status === 'Partially Paid' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {due.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                    <tr className="font-extrabold text-gray-900 text-xs md:text-sm">
+                      <td colSpan={3} className="px-3 py-3 text-right uppercase">Total:</td>
+                      <td className="px-3 py-3 text-right">₹{filteredDues.reduce((sum, d) => sum + d.amount, 0).toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-3 text-right text-green-700">₹{filteredDues.reduce((sum, d) => sum + d.paidAmount, 0).toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-3 text-right text-red-700">₹{filteredDues.reduce((sum, d) => sum + d.pendingAmount, 0).toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-3"></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
+      </FinancePrintPreview>
     </div>
   );
 };

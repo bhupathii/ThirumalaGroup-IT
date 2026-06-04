@@ -18,6 +18,7 @@ import {
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { BiometricScanner } from '../../components/finance/BiometricScanner';
+import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
 
 interface DocumentItem {
   key: string;
@@ -36,6 +37,7 @@ const LoanEntry: React.FC = () => {
   // Loading/Saving states
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   // Form State - Basics
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -814,7 +816,7 @@ const LoanEntry: React.FC = () => {
       toast.error('Please enter valid loan terms to preview statement');
       return;
     }
-    window.print();
+    setShowPrintPreview(true);
   };
 
   if (loading) {
@@ -1808,6 +1810,80 @@ const LoanEntry: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Print Preview Modal */}
+      <FinancePrintPreview
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        title="Loan Entry - Preview"
+      >
+        <div className="space-y-6">
+          {/* Top Header */}
+          <div className="text-center border-b pb-4">
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">THIRUMALA GROUP - LOAN ENTRY</h1>
+            <p className="text-sm font-bold text-slate-500 mt-1">Date: {date} | Loan Type: {loanCategory}</p>
+          </div>
+          
+          {/* Customer Info */}
+          <div>
+            <h3 className="text-sm font-bold bg-slate-100 p-2 uppercase">Customer Details</h3>
+            <div className="grid grid-cols-2 gap-4 mt-2 p-2">
+               <div><span className="font-bold text-gray-500 text-xs">NAME:</span> {custName}</div>
+               <div><span className="font-bold text-gray-500 text-xs">F/W/H:</span> {custFatherName}</div>
+               <div><span className="font-bold text-gray-500 text-xs">PHONE:</span> {custPhone}</div>
+               <div><span className="font-bold text-gray-500 text-xs">AADHAAR:</span> {custAadhaar}</div>
+               <div className="col-span-2"><span className="font-bold text-gray-500 text-xs">ADDRESS:</span> {custPresentAddress}</div>
+            </div>
+          </div>
+
+          {/* Guarantors */}
+          <div>
+            <h3 className="text-sm font-bold bg-slate-100 p-2 uppercase">Guarantor Details</h3>
+            <div className="grid grid-cols-2 gap-4 mt-2 p-2">
+               <div><span className="font-bold text-gray-500 text-xs">G1 NAME:</span> {g1Name}</div>
+               <div><span className="font-bold text-gray-500 text-xs">G1 PHONE:</span> {g1Phone}</div>
+               {g2Name && <div><span className="font-bold text-gray-500 text-xs">G2 NAME:</span> {g2Name}</div>}
+               {g2Phone && <div><span className="font-bold text-gray-500 text-xs">G2 PHONE:</span> {g2Phone}</div>}
+            </div>
+          </div>
+
+          {/* Loan Terms */}
+          <div>
+            <h3 className="text-sm font-bold bg-slate-100 p-2 uppercase">Loan Terms</h3>
+            <div className="grid grid-cols-2 gap-4 mt-2 p-2">
+               <div><span className="font-bold text-gray-500 text-xs">PRINCIPAL:</span> ₹{Number(amount).toLocaleString('en-IN')}</div>
+               <div><span className="font-bold text-gray-500 text-xs">INTEREST RATE:</span> {interestRate}% / MONTH</div>
+               <div><span className="font-bold text-gray-500 text-xs">DURATION:</span> {durationMonths} MONTHS</div>
+               <div><span className="font-bold text-gray-500 text-xs">DUE TYPE:</span> {dueType}</div>
+               <div><span className="font-bold text-gray-500 text-xs">DOC CHARGES:</span> ₹{Number(docCharges).toLocaleString('en-IN')}</div>
+               <div className="col-span-2"><span className="font-bold text-gray-500 text-xs">PARTICULARS:</span> {particulars}</div>
+            </div>
+          </div>
+
+          {/* Live Calculation */}
+          {liveCalculations && (
+          <div>
+            <h3 className="text-sm font-bold bg-slate-100 p-2 uppercase">Calculations</h3>
+            <div className="grid grid-cols-2 gap-4 mt-2 p-2">
+               <div><span className="font-bold text-gray-500 text-xs">NET DISBURSED:</span> ₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</div>
+               <div><span className="font-bold text-gray-500 text-xs">TOTAL REPAYMENT:</span> ₹{liveCalculations.totalRepayment.toLocaleString('en-IN')}</div>
+               <div><span className="font-bold text-gray-500 text-xs">INSTALMENT COUNT:</span> {liveCalculations.duesCount}</div>
+               <div><span className="font-bold text-gray-500 text-xs">INSTALMENT AMOUNT:</span> ₹{liveCalculations.dueAmount.toLocaleString('en-IN')}</div>
+            </div>
+          </div>
+          )}
+          
+          {/* Signatures */}
+          <div className="pt-24 grid grid-cols-2 gap-10 text-center text-sm font-bold text-slate-500">
+            <div>
+              <div className="border-t border-slate-300 pt-2 w-48 mx-auto">Customer Signature</div>
+            </div>
+            <div>
+              <div className="border-t border-slate-300 pt-2 w-48 mx-auto">Authorized Signatory</div>
+            </div>
+          </div>
+        </div>
+      </FinancePrintPreview>
 
     </div>
   );

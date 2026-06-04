@@ -4,6 +4,7 @@ import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer, ShieldAlert, Phone, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
+import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
 
 interface ExpiredLoanItem {
   id: string;
@@ -26,6 +27,7 @@ const BusinessReport: React.FC = () => {
     overdueLoansCount: 0
   });
   const [expiredLoans, setExpiredLoans] = useState<ExpiredLoanItem[]>([]);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   useEffect(() => {
     fetchReportData();
@@ -116,22 +118,22 @@ const BusinessReport: React.FC = () => {
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
       {/* Header */}
-      <div className="flex justify-between items-center border-b border-green-100 pb-4 print:hidden">
+      <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Business & Expiry Report</h1>
           <p className="text-gray-500 text-sm mt-1">Track active loans completion metrics and expiring loan accounts audit</p>
         </div>
-        <Button onClick={() => window.print()} variant="primary" size="sm" icon={Printer}>
+        <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
           Print Report
         </Button>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
+        <div className={`flex justify-center py-12 ${showPrintPreview ? 'print:hidden' : ''}`}>
           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-green-500"></div>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className={`space-y-6 ${showPrintPreview ? 'print:hidden' : ''}`}>
           {/* Quick Metrics Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-3 bg-gray-50 rounded border">
@@ -213,6 +215,95 @@ const BusinessReport: React.FC = () => {
           </Card>
         </div>
       )}
+
+      <FinancePrintPreview
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        title="Business & Expiry Report"
+        documentTitle="BUSINESS & EXPIRY REPORT"
+      >
+        <div className="space-y-6 mt-6">
+          {/* Quick Metrics Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-3 bg-gray-50 rounded border">
+              <span className="text-gray-500 text-xs font-semibold block uppercase">Active Loans Count</span>
+              <span className="text-lg font-bold text-gray-900">{stats.activeLoansCount} Accounts</span>
+            </div>
+            <div className="p-3 bg-gray-50 rounded border">
+              <span className="text-gray-500 text-xs font-semibold block uppercase">Principal Disbursed</span>
+              <span className="text-lg font-bold text-gray-900">₹{stats.totalDisbursed.toLocaleString('en-IN')}</span>
+            </div>
+            <div className="p-3 bg-gray-50 rounded border">
+              <span className="text-gray-500 text-xs font-semibold block uppercase">Outstanding Receivable</span>
+              <span className="text-lg font-bold text-orange-700">₹{stats.outstandingReceivables.toLocaleString('en-IN')}</span>
+            </div>
+            <div className="p-3 bg-red-50 rounded border border-red-100">
+              <span className="text-red-700 text-xs font-bold block uppercase">Overdue Expiries</span>
+              <span className="text-lg font-extrabold text-red-800">{stats.overdueLoansCount} Overdue</span>
+            </div>
+          </div>
+
+          {/* Expired / Overdue Checklist */}
+          <Card
+            title={
+              <div className="flex items-center gap-2 text-red-800">
+                <ShieldAlert className="w-5 h-5" />
+                <span>Expired Active Accounts Checklist</span>
+              </div>
+            }
+            subtitle="Active accounts whose duration months have expired but still have outstanding balances"
+            className="border-red-100 bg-red-50/10 shadow-none"
+          >
+            {expiredLoans.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">No overdue expired loans found. All accounts are within duration terms!</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-red-200 text-xs md:text-sm">
+                  <thead>
+                    <tr className="bg-red-50 text-red-950 font-bold">
+                      <th className="px-3 py-3 text-left">Loan ID</th>
+                      <th className="px-3 py-3 text-left">Customer Name</th>
+                      <th className="px-3 py-3 text-left">Disbursed Date</th>
+                      <th className="px-3 py-3 text-left">Contract Expiry</th>
+                      <th className="px-3 py-3 text-center">Months Overdue</th>
+                      <th className="px-3 py-3 text-right">Outstanding Bal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-red-100">
+                    {expiredLoans.map(loan => (
+                      <tr key={loan.id} className="font-medium">
+                        <td className="px-3 py-3 font-bold text-gray-900 font-mono">{loan.loanId}</td>
+                        <td className="px-3 py-3">
+                          <div className="font-bold text-gray-900">{loan.customerName}</div>
+                          {loan.phone && (
+                            <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                              <Phone className="w-3 h-3" /> {loan.phone}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-gray-600">
+                          {new Date(loan.disbursedDate).toLocaleDateString('en-IN')}
+                        </td>
+                        <td className="px-3 py-3 text-red-600 font-bold">
+                          {new Date(loan.expiryDate).toLocaleDateString('en-IN')}
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <span className="inline-flex items-center gap-1 bg-red-100 text-red-800 px-2 py-0.5 rounded-full font-bold text-xs">
+                            <Clock className="w-3 h-3" /> {loan.monthsOverdue} months
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-right text-red-600 font-black">
+                          ₹{loan.outstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
+      </FinancePrintPreview>
     </div>
   );
 };

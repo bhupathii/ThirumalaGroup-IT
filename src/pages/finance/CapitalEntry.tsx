@@ -9,11 +9,11 @@ import {
   RotateCcw, 
   Trash2, 
   Edit2, 
-  X, 
   Info 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
+import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
 
 interface DisplayCapitalEntry extends FinanceCapitalEntry {
   partner?: FinancePartner;
@@ -299,15 +299,12 @@ const CapitalEntry: React.FC = () => {
     return mapped.reverse();
   }, [entries]);
 
-  const handlePrintTrigger = () => {
-    window.print();
-  };
 
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto select-none print:p-0">
       
       {/* Top Header Actions Bar */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5 no-print">
+      <div className={`flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5 ${showPrintModal ? 'print:hidden' : 'no-print'}`}>
         <div>
           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
             <span>DASHBOARD</span>
@@ -338,7 +335,7 @@ const CapitalEntry: React.FC = () => {
       </div>
 
       {/* Main Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
+      <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 ${showPrintModal ? 'print:hidden' : 'no-print'}`}>
         
         {/* Left Column (Forms & Transactions) */}
         <div className="lg:col-span-2 space-y-6">
@@ -709,181 +706,114 @@ const CapitalEntry: React.FC = () => {
       </div>
 
       {/* MODAL: Print Preview Panel */}
-      {showPrintModal && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/60 backdrop-blur-xs overflow-y-auto p-4 md:p-8">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-150 max-w-4xl w-full mx-auto overflow-hidden">
-            
-            {/* Modal Header Actions */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 no-print">
-              <div>
-                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">PRINT PREVIEW</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">REVIEW THE A4 FORMAT BEFORE CONFIRMING PRINT</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handlePrintTrigger}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  CONFIRM PRINT
-                </button>
-                <button
-                  onClick={() => setShowPrintModal(false)}
-                  className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
-                >
-                  <X className="w-4 h-4" />
-                  CLOSE
-                </button>
-              </div>
-            </div>
+      <FinancePrintPreview
+        isOpen={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        title="Capital Entry Ledger"
+        documentTitle={`PARTNER CAPITAL & DRAWINGS LEDGER STATEMENT`}
+      >
+        <div className="text-center pb-6 border-b-2 border-slate-900">
+          <h2 className="text-lg font-black tracking-widest uppercase">TIRUMALA FINANCE</h2>
+          <p className="text-xs font-bold uppercase tracking-wider mt-1">PARTNER CAPITAL & DRAWINGS LEDGER STATEMENT</p>
+          <p className="text-[10px] font-semibold text-slate-600 mt-0.5">
+            PRINTED DATE: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          </p>
+        </div>
 
-            {/* Print Document A4 Container */}
-            <div className="p-8 bg-white text-black print-document font-sans">
-              
-              {/* Header */}
-              <div className="text-center pb-6 border-b-2 border-slate-900">
-                <h2 className="text-lg font-black tracking-widest uppercase">TIRUMALA FINANCE</h2>
-                <p className="text-xs font-bold uppercase tracking-wider mt-1">PARTNER CAPITAL & DRAWINGS LEDGER STATEMENT</p>
-                <p className="text-[10px] font-semibold text-slate-600 mt-0.5">
-                  PRINTED DATE: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </p>
-              </div>
-
-              {/* Total Summaries Section */}
-              <div className="grid grid-cols-3 gap-4 py-6 border-b border-slate-300 font-sans text-xs">
-                <div>
-                  <p className="font-bold text-slate-500 uppercase tracking-wider">TOTAL CAPITAL IN:</p>
-                  <p className="text-base font-black text-emerald-600 mt-1">₹{summaries.totalCapitalIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-                </div>
-                <div>
-                  <p className="font-bold text-slate-500 uppercase tracking-wider">TOTAL DRAWINGS:</p>
-                  <p className="text-base font-black text-red-600 mt-1">₹{summaries.totalDrawings.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-slate-500 uppercase tracking-wider">NET CAPITAL VALUE:</p>
-                  <p className="text-base font-black text-slate-900 mt-1">₹{summaries.netValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-                </div>
-              </div>
-
-              {/* Table 1: Partner Balances */}
-              <div className="my-6">
-                <h3 className="text-xs font-black uppercase tracking-wider mb-2 border-b border-slate-300 pb-1">1. PARTNER BALANCES</h3>
-                <table className="min-w-full divide-y divide-slate-800 text-xs border border-slate-300">
-                  <thead>
-                    <tr className="bg-slate-100 font-bold uppercase text-slate-800">
-                      <th className="border border-slate-300 px-2 py-2 text-left">Partner</th>
-                      <th className="border border-slate-300 px-2 py-2 text-right">Capital In (Cr)</th>
-                      <th className="border border-slate-300 px-2 py-2 text-right">Drawings (Dr)</th>
-                      <th className="border border-slate-300 px-2 py-2 text-right">Net Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {partnerBalances.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="px-2 py-4 text-center text-slate-400 font-bold uppercase">No partners registered.</td>
-                      </tr>
-                    ) : (
-                      partnerBalances.map(pb => (
-                        <tr key={pb.partnerId} className="font-semibold text-slate-900">
-                          <td className="border border-slate-300 px-2 py-2 uppercase">{pb.partnerName}</td>
-                          <td className="border border-slate-300 px-2 py-2 text-right font-mono">₹{pb.capitalIn.toLocaleString('en-IN')}</td>
-                          <td className="border border-slate-300 px-2 py-2 text-right font-mono">₹{pb.drawings.toLocaleString('en-IN')}</td>
-                          <td className="border border-slate-300 px-2 py-2 text-right font-mono font-bold">₹{pb.netBalance.toLocaleString('en-IN')}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Table 2: Transactions List */}
-              <div className="my-6">
-                <h3 className="text-xs font-black uppercase tracking-wider mb-2 border-b border-slate-300 pb-1">2. TRANSACTION HISTORY</h3>
-                <table className="min-w-full divide-y divide-slate-800 text-xs border border-slate-300">
-                  <thead>
-                    <tr className="bg-slate-100 font-bold uppercase text-slate-800">
-                      <th className="border border-slate-300 px-2 py-2 text-left">Date</th>
-                      <th className="border border-slate-300 px-2 py-2 text-left">Partner</th>
-                      <th className="border border-slate-300 px-2 py-2 text-left">Particulars</th>
-                      <th className="border border-slate-300 px-2 py-2 text-right">Credit (Cr)</th>
-                      <th className="border border-slate-300 px-2 py-2 text-right">Debit (Dr)</th>
-                      <th className="border border-slate-300 px-2 py-2 text-right">Running Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {entriesWithRunningBalance.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-2 py-4 text-center text-slate-400 font-bold uppercase">No transactions logged.</td>
-                      </tr>
-                    ) : (
-                      entriesWithRunningBalance.map(e => (
-                        <tr key={e.id} className="font-semibold text-slate-900">
-                          <td className="border border-slate-300 px-2 py-2 whitespace-nowrap">{e.entry_date.split('-').reverse().join('/')}</td>
-                          <td className="border border-slate-300 px-2 py-2 uppercase">{e.partner_name || e.partner?.name || '—'}</td>
-                          <td className="border border-slate-300 px-2 py-2 max-w-[200px] break-words uppercase">{e.particulars || '—'}</td>
-                          <td className="border border-slate-300 px-2 py-2 text-right font-mono font-bold text-emerald-700">{e.credit > 0 ? `₹${e.credit.toLocaleString('en-IN')}` : '—'}</td>
-                          <td className="border border-slate-300 px-2 py-2 text-right font-mono font-bold text-red-700">{e.debit > 0 ? `₹${e.debit.toLocaleString('en-IN')}` : '—'}</td>
-                          <td className="border border-slate-300 px-2 py-2 text-right font-mono font-bold">₹{(e.running_balance || 0).toLocaleString('en-IN')}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Signatures */}
-              <div className="flex justify-between items-center mt-20 pt-8 border-t border-slate-300 text-xs font-bold uppercase tracking-wider">
-                <div>
-                  <p>CASHIER SIGNATURE</p>
-                  <p className="text-[10px] text-slate-400 mt-8">AUTHORIZED SIGNATORY</p>
-                </div>
-                <div className="text-right">
-                  <p>VERIFIED BY MANAGER</p>
-                  <p className="text-[10px] text-slate-400 mt-8">PARTNER AUDIT SIGN</p>
-                </div>
-              </div>
-
-            </div>
-
+        {/* Total Summaries Section */}
+        <div className="grid grid-cols-3 gap-4 py-6 border-b border-slate-300 font-sans text-xs">
+          <div>
+            <p className="font-bold text-slate-500 uppercase tracking-wider">TOTAL CAPITAL IN:</p>
+            <p className="text-base font-black text-emerald-600 mt-1">₹{summaries.totalCapitalIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+          </div>
+          <div>
+            <p className="font-bold text-slate-500 uppercase tracking-wider">TOTAL DRAWINGS:</p>
+            <p className="text-base font-black text-red-600 mt-1">₹{summaries.totalDrawings.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+          </div>
+          <div className="text-right">
+            <p className="font-bold text-slate-500 uppercase tracking-wider">NET CAPITAL VALUE:</p>
+            <p className="text-base font-black text-slate-900 mt-1">₹{summaries.netValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
           </div>
         </div>
-      )}
 
-      {/* Global CSS style overrides for print action */}
-      <style>{`
-        @media print {
-          /* Hide all application components */
-          body > div:first-child,
-          #root,
-          main,
-          header,
-          aside,
-          nav,
-          .no-print {
-            display: none !important;
-            height: 0 !important;
-            overflow: hidden !important;
-          }
-          
-          /* Only display print document elements */
-          .print-document {
-            display: block !important;
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            background: white !important;
-            color: black !important;
-            font-size: 11px !important;
-            padding: 0px !important;
-          }
-          
-          /* Force page break behavior where needed */
-          tr {
-            page-break-inside: avoid !important;
-          }
-        }
-      `}</style>
+        {/* Table 1: Partner Balances */}
+        <div className="my-6">
+          <h3 className="text-xs font-black uppercase tracking-wider mb-2 border-b border-slate-300 pb-1">1. PARTNER BALANCES</h3>
+          <table className="min-w-full divide-y divide-slate-800 text-xs border border-slate-300">
+            <thead>
+              <tr className="bg-slate-100 font-bold uppercase text-slate-800">
+                <th className="border border-slate-300 px-2 py-2 text-left">Partner</th>
+                <th className="border border-slate-300 px-2 py-2 text-right">Capital In (Cr)</th>
+                <th className="border border-slate-300 px-2 py-2 text-right">Drawings (Dr)</th>
+                <th className="border border-slate-300 px-2 py-2 text-right">Net Balance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {partnerBalances.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-2 py-4 text-center text-slate-400 font-bold uppercase">No partners registered.</td>
+                </tr>
+              ) : (
+                partnerBalances.map(pb => (
+                  <tr key={pb.partnerId} className="font-semibold text-slate-900">
+                    <td className="border border-slate-300 px-2 py-2 uppercase">{pb.partnerName}</td>
+                    <td className="border border-slate-300 px-2 py-2 text-right font-mono">₹{pb.capitalIn.toLocaleString('en-IN')}</td>
+                    <td className="border border-slate-300 px-2 py-2 text-right font-mono">₹{pb.drawings.toLocaleString('en-IN')}</td>
+                    <td className="border border-slate-300 px-2 py-2 text-right font-mono font-bold">₹{pb.netBalance.toLocaleString('en-IN')}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Table 2: Transactions List */}
+        <div className="my-6">
+          <h3 className="text-xs font-black uppercase tracking-wider mb-2 border-b border-slate-300 pb-1">2. TRANSACTION HISTORY</h3>
+          <table className="min-w-full divide-y divide-slate-800 text-xs border border-slate-300">
+            <thead>
+              <tr className="bg-slate-100 font-bold uppercase text-slate-800">
+                <th className="border border-slate-300 px-2 py-2 text-left">Date</th>
+                <th className="border border-slate-300 px-2 py-2 text-left">Partner</th>
+                <th className="border border-slate-300 px-2 py-2 text-left">Particulars</th>
+                <th className="border border-slate-300 px-2 py-2 text-right">Credit (Cr)</th>
+                <th className="border border-slate-300 px-2 py-2 text-right">Debit (Dr)</th>
+                <th className="border border-slate-300 px-2 py-2 text-right">Running Balance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {entriesWithRunningBalance.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-2 py-4 text-center text-slate-400 font-bold uppercase">No transactions logged.</td>
+                </tr>
+              ) : (
+                entriesWithRunningBalance.map(e => (
+                  <tr key={e.id} className="font-semibold text-slate-900">
+                    <td className="border border-slate-300 px-2 py-2 whitespace-nowrap">{e.entry_date.split('-').reverse().join('/')}</td>
+                    <td className="border border-slate-300 px-2 py-2 uppercase">{e.partner_name || e.partner?.name || '—'}</td>
+                    <td className="border border-slate-300 px-2 py-2 max-w-[200px] break-words uppercase">{e.particulars || '—'}</td>
+                    <td className="border border-slate-300 px-2 py-2 text-right font-mono font-bold text-emerald-700">{e.credit > 0 ? `₹${e.credit.toLocaleString('en-IN')}` : '—'}</td>
+                    <td className="border border-slate-300 px-2 py-2 text-right font-mono font-bold text-red-700">{e.debit > 0 ? `₹${e.debit.toLocaleString('en-IN')}` : '—'}</td>
+                    <td className="border border-slate-300 px-2 py-2 text-right font-mono font-bold">₹{(e.running_balance || 0).toLocaleString('en-IN')}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Signatures */}
+        <div className="flex justify-between items-center mt-20 pt-8 border-t border-slate-300 text-xs font-bold uppercase tracking-wider">
+          <div>
+            <p>CASHIER SIGNATURE</p>
+            <p className="text-[10px] text-slate-400 mt-8">AUTHORIZED SIGNATORY</p>
+          </div>
+          <div className="text-right">
+            <p>VERIFIED BY MANAGER</p>
+            <p className="text-[10px] text-slate-400 mt-8">PARTNER AUDIT SIGN</p>
+          </div>
+        </div>
+      </FinancePrintPreview>
 
     </div>
   );

@@ -4,6 +4,7 @@ import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer, Scale } from 'lucide-react';
 import toast from 'react-hot-toast';
+import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
 
 interface BalanceItem {
   name: string;
@@ -12,6 +13,7 @@ interface BalanceItem {
 
 const FinalStatement: React.FC = () => {
   const [loading, setLoading] = useState(true);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
   
   // Liabilities
   const [partnerCapitals, setPartnerCapitals] = useState<BalanceItem[]>([]);
@@ -105,12 +107,12 @@ const FinalStatement: React.FC = () => {
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
       {/* Header */}
-      <div className="flex justify-between items-center border-b border-green-100 pb-4 print:hidden">
+      <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Final Statement (Balance Sheet)</h1>
           <p className="text-gray-500 text-sm mt-1">Double-entry ledger statement matching capital balances to liquid cash and receivables</p>
         </div>
-        <Button onClick={() => window.print()} variant="primary" size="sm" icon={Printer}>
+        <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
           Print Balance Sheet
         </Button>
       </div>
@@ -120,7 +122,7 @@ const FinalStatement: React.FC = () => {
           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-green-500"></div>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className={`space-y-6 ${showPrintPreview ? 'print:hidden' : ''}`}>
           {/* Balancing Check Badge */}
           <div className={`p-4 rounded-xl border flex items-center justify-between shadow-sm ${
             Math.abs(totalAssets - totalLiabilities) < 1 
@@ -198,6 +200,79 @@ const FinalStatement: React.FC = () => {
           </div>
         </div>
       )}
+
+      <FinancePrintPreview
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        title="Final Statement (Balance Sheet)"
+        documentTitle={`BALANCE SHEET STATEMENT`}
+      >
+        <div className="space-y-6">
+          <div className={`p-4 rounded border flex items-center justify-between shadow-sm ${
+            Math.abs(totalAssets - totalLiabilities) < 1 
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
+            <div className="flex items-center gap-2">
+              <Scale className="w-5 h-5" />
+              <span className="font-extrabold text-sm">
+                {Math.abs(totalAssets - totalLiabilities) < 1 
+                  ? 'STATEMENT BALANCED' 
+                  : `UNBALANCED STATEMENT: Difference of ₹${(totalLiabilities - totalAssets).toFixed(2)}`}
+              </span>
+            </div>
+            <span className="font-mono font-black">₹{totalAssets.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-6">
+            <div className="border border-gray-200 rounded p-4">
+              <h3 className="font-bold text-gray-900 mb-4 border-b pb-2">Liabilities & Capital</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between font-bold border-b pb-2 text-xs text-gray-400 uppercase">
+                  <span>Particulars</span>
+                  <span>Credit Balance (₹)</span>
+                </div>
+                {partnerCapitals.map((cap, idx) => (
+                  <div key={idx} className="flex justify-between text-sm font-semibold">
+                    <span className="text-gray-700">{cap.name}</span>
+                    <span className="text-gray-900">₹{cap.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between text-sm font-semibold pt-2 border-t">
+                  <span className="text-gray-700">Retained Earnings (Interest Accrued)</span>
+                  <span className="text-gray-900">₹{netProfit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-base font-black pt-4 border-t-2 border-gray-800 text-gray-900 bg-gray-50 p-2 rounded mt-6">
+                  <span>TOTAL LIABILITIES:</span>
+                  <span>₹{totalLiabilities.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 rounded p-4">
+              <h3 className="font-bold text-gray-900 mb-4 border-b pb-2">Assets & Receivables</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between font-bold border-b pb-2 text-xs text-gray-400 uppercase">
+                  <span>Particulars</span>
+                  <span>Debit Balance (₹)</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold">
+                  <span className="text-gray-700">Liquid Cash in Hand</span>
+                  <span className="text-gray-900 font-extrabold">₹{cashInHand.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold">
+                  <span className="text-gray-700">Outstanding Loan Receivables</span>
+                  <span className="text-gray-900 font-bold">₹{loansReceivable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-base font-black pt-4 border-t-2 border-gray-800 text-gray-900 bg-gray-50 p-2 rounded mt-6">
+                  <span>TOTAL ASSETS:</span>
+                  <span>₹{totalAssets.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </FinancePrintPreview>
     </div>
   );
 };

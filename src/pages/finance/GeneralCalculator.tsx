@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import Card from '../../components/UI/Card';
 import { 
   ArrowLeft, 
-  Printer, 
-  X 
+  Printer 
 } from 'lucide-react';
+import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
 
 // Default rates for each ledger type
 const DEFAULT_RATES: Record<string, { label: string; rate: number; overdue: number; doc: number }> = {
@@ -84,15 +84,12 @@ const GeneralCalculator: React.FC = () => {
     };
   }, [principal, loanDate, periodDays, rate, overdue, amountPaid, documentVal]);
 
-  const handlePrintTrigger = () => {
-    window.print();
-  };
 
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto select-none print:p-0">
       
       {/* Top Header Actions Bar */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5 no-print">
+      <div className={`flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5 ${showPrintModal ? 'print:hidden' : 'no-print'}`}>
         <div>
           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
             <span>DASHBOARD</span>
@@ -123,7 +120,7 @@ const GeneralCalculator: React.FC = () => {
       </div>
 
       {/* Main Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 no-print">
+      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 ${showPrintModal ? 'print:hidden' : 'no-print'}`}>
         
         {/* Left Column: Inputs Card */}
         <Card
@@ -359,171 +356,109 @@ const GeneralCalculator: React.FC = () => {
       </div>
 
       {/* MODAL: Print Preview Panel */}
-      {showPrintModal && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/60 backdrop-blur-xs overflow-y-auto p-4 md:p-8">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-150 max-w-2xl w-full mx-auto overflow-hidden">
-            
-            {/* Modal Header Actions */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 no-print">
-              <div>
-                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">PRINT PREVIEW</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">REVIEW THE CALCULATOR SUMMARY REPORT</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handlePrintTrigger}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  CONFIRM PRINT
-                </button>
-                <button
-                  onClick={() => setShowPrintModal(false)}
-                  className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
-                >
-                  <X className="w-4 h-4" />
-                  CLOSE
-                </button>
-              </div>
-            </div>
+      <FinancePrintPreview
+        isOpen={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        title="General Calculator"
+        documentTitle="GENERAL CALCULATOR LEDGER SIMULATION"
+      >
+        <div className="text-center pb-6 border-b-2 border-slate-900">
+          <h2 className="text-lg font-black tracking-widest uppercase">TIRUMALA FINANCE</h2>
+          <p className="text-xs font-bold uppercase tracking-wider mt-1">GENERAL CALCULATOR LEDGER SIMULATION</p>
+          <p className="text-[10px] font-semibold text-slate-600 mt-0.5">
+            PRINTED DATE: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          </p>
+        </div>
 
-            {/* Print Document A4 Container */}
-            <div className="p-8 bg-white text-black print-document font-sans">
-              
-              {/* Header */}
-              <div className="text-center pb-6 border-b-2 border-slate-900">
-                <h2 className="text-lg font-black tracking-widest uppercase">TIRUMALA FINANCE</h2>
-                <p className="text-xs font-bold uppercase tracking-wider mt-1">GENERAL CALCULATOR LEDGER SIMULATION</p>
-                <p className="text-[10px] font-semibold text-slate-600 mt-0.5">
-                  PRINTED DATE: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </p>
-              </div>
+        {/* Simulation Details Table */}
+        <div className="my-6">
+          <h3 className="text-xs font-black uppercase tracking-wider mb-2 border-b border-slate-300 pb-1">1. SIMULATION INPUTS</h3>
+          <table className="min-w-full text-xs border border-slate-300">
+            <tbody>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">LOAN TYPE</td>
+                <td className="px-3 py-2 font-semibold uppercase">{DEFAULT_RATES[loanType]?.label || loanType}</td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">PRINCIPAL</td>
+                <td className="px-3 py-2 font-mono font-bold">₹{(parseFloat(principal) || 0).toLocaleString('en-IN')}</td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">DISBURSAL DATE</td>
+                <td className="px-3 py-2 font-semibold">{loanDate.split('-').reverse().join('/')}</td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">LOAN PERIOD</td>
+                <td className="px-3 py-2 font-semibold">{periodDays} DAYS</td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">INTEREST RATE</td>
+                <td className="px-3 py-2 font-semibold">{rate}% / MONTH</td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">OVERDUE RATE</td>
+                <td className="px-3 py-2 font-semibold">{overdue}% / MONTH</td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">DOCUMENT CHARGES</td>
+                <td className="px-3 py-2 font-mono font-semibold">₹{(parseFloat(documentVal) || 0).toLocaleString('en-IN')}</td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">PAYOUT DISBURSED</td>
+                <td className="px-3 py-2 font-mono font-bold text-emerald-700">₹{calculation.payout.toLocaleString('en-IN')}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-              {/* Simulation Details Table */}
-              <div className="my-6">
-                <h3 className="text-xs font-black uppercase tracking-wider mb-2 border-b border-slate-300 pb-1">1. SIMULATION INPUTS</h3>
-                <table className="min-w-full text-xs border border-slate-300">
-                  <tbody>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">LOAN TYPE</td>
-                      <td className="px-3 py-2 font-semibold uppercase">{DEFAULT_RATES[loanType]?.label || loanType}</td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">PRINCIPAL</td>
-                      <td className="px-3 py-2 font-mono font-bold">₹{(parseFloat(principal) || 0).toLocaleString('en-IN')}</td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">DISBURSAL DATE</td>
-                      <td className="px-3 py-2 font-semibold">{loanDate.split('-').reverse().join('/')}</td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">LOAN PERIOD</td>
-                      <td className="px-3 py-2 font-semibold">{periodDays} DAYS</td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">INTEREST RATE</td>
-                      <td className="px-3 py-2 font-semibold">{rate}% / MONTH</td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">OVERDUE RATE</td>
-                      <td className="px-3 py-2 font-semibold">{overdue}% / MONTH</td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">DOCUMENT CHARGES</td>
-                      <td className="px-3 py-2 font-mono font-semibold">₹{(parseFloat(documentVal) || 0).toLocaleString('en-IN')}</td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">PAYOUT DISBURSED</td>
-                      <td className="px-3 py-2 font-mono font-bold text-emerald-700">₹{calculation.payout.toLocaleString('en-IN')}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+        {/* Simulation Summary Table */}
+        <div className="my-6">
+          <h3 className="text-xs font-black uppercase tracking-wider mb-2 border-b border-slate-300 pb-1">2. CALCULATION SUMMARY</h3>
+          <table className="min-w-full text-xs border border-slate-300">
+            <tbody>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">DAYS ELAPSED</td>
+                <td className="px-3 py-2 font-semibold">{calculation.daysElapsed} DAYS</td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">INTEREST ACCRUED</td>
+                <td className="px-3 py-2 font-mono font-semibold">₹{calculation.interest.toLocaleString('en-IN')}</td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">PENALTY CHARGED</td>
+                <td className="px-3 py-2 font-mono font-semibold">
+                  ₹{calculation.penalty.toLocaleString('en-IN')} 
+                  {calculation.overdueDays > 0 && ` (${calculation.overdueDays} days overdue)`}
+                </td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">AMOUNT PAID SO FAR</td>
+                <td className="px-3 py-2 font-mono font-semibold">₹{(parseFloat(amountPaid) || 0).toLocaleString('en-IN')}</td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">TOTAL OUTSTANDING</td>
+                <td className="px-3 py-2 font-mono font-bold text-red-700">₹{calculation.totalBalance.toLocaleString('en-IN')}</td>
+              </tr>
+              <tr className="border-b border-slate-200">
+                <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300 font-sans">FOR CLOSE AMOUNT</td>
+                <td className="px-3 py-2 font-mono font-black text-slate-900">₹{calculation.forClose.toLocaleString('en-IN')}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-              {/* Simulation Summary Table */}
-              <div className="my-6">
-                <h3 className="text-xs font-black uppercase tracking-wider mb-2 border-b border-slate-300 pb-1">2. CALCULATION SUMMARY</h3>
-                <table className="min-w-full text-xs border border-slate-300">
-                  <tbody>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">DAYS ELAPSED</td>
-                      <td className="px-3 py-2 font-semibold">{calculation.daysElapsed} DAYS</td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">INTEREST ACCRUED</td>
-                      <td className="px-3 py-2 font-mono font-semibold">₹{calculation.interest.toLocaleString('en-IN')}</td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">PENALTY CHARGED</td>
-                      <td className="px-3 py-2 font-mono font-semibold">
-                        ₹{calculation.penalty.toLocaleString('en-IN')} 
-                        {calculation.overdueDays > 0 && ` (${calculation.overdueDays} days overdue)`}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">AMOUNT PAID SO FAR</td>
-                      <td className="px-3 py-2 font-mono font-semibold">₹{(parseFloat(amountPaid) || 0).toLocaleString('en-IN')}</td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">TOTAL OUTSTANDING</td>
-                      <td className="px-3 py-2 font-mono font-bold text-red-700">₹{calculation.totalBalance.toLocaleString('en-IN')}</td>
-                    </tr>
-                    <tr className="border-b border-slate-200">
-                      <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300 font-sans">FOR CLOSE AMOUNT</td>
-                      <td className="px-3 py-2 font-mono font-black text-slate-900">₹{calculation.forClose.toLocaleString('en-IN')}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Signatures */}
-              <div className="flex justify-between items-center mt-20 pt-8 border-t border-slate-300 text-xs font-bold uppercase tracking-wider">
-                <div>
-                  <p>CUSTOMER SIGNATURE</p>
-                  <p className="text-[10px] text-slate-400 mt-8">VERIFIED INTEREST DETAILS</p>
-                </div>
-                <div className="text-right">
-                  <p>AUDITED BY FINANCE CLERK</p>
-                  <p className="text-[10px] text-slate-400 mt-8">THIRUMALA GROUP OFFICIAL</p>
-                </div>
-              </div>
-
-            </div>
-
+        {/* Signatures */}
+        <div className="flex justify-between items-center mt-20 pt-8 border-t border-slate-300 text-xs font-bold uppercase tracking-wider">
+          <div>
+            <p>CUSTOMER SIGNATURE</p>
+            <p className="text-[10px] text-slate-400 mt-8">VERIFIED INTEREST DETAILS</p>
+          </div>
+          <div className="text-right">
+            <p>AUDITED BY FINANCE CLERK</p>
+            <p className="text-[10px] text-slate-400 mt-8">THIRUMALA GROUP OFFICIAL</p>
           </div>
         </div>
-      )}
-
-      {/* Global CSS style overrides for print action */}
-      <style>{`
-        @media print {
-          /* Hide all application components */
-          body > div:first-child,
-          #root,
-          main,
-          header,
-          aside,
-          nav,
-          .no-print {
-            display: none !important;
-            height: 0 !important;
-            overflow: hidden !important;
-          }
-          
-          /* Only display print document elements */
-          .print-document {
-            display: block !important;
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            background: white !important;
-            color: black !important;
-            font-size: 11px !important;
-            padding: 0px !important;
-          }
-        }
-      `}</style>
+      </FinancePrintPreview>
 
     </div>
   );

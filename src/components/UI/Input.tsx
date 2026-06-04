@@ -1,5 +1,5 @@
 import React, { useState, forwardRef } from 'react';
-import { Calendar } from 'lucide-react';
+
 
 interface InputProps {
   label?: string;
@@ -46,28 +46,13 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
   ) => {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [inputValue, setInputValue] = useState(value);
-    const [dateMode, setDateMode] = useState<'text' | 'date'>(type === 'date' ? 'text' : 'text');
-
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       let val = e.target.value;
 
-      // Special handling: custom dd/MM/yyyy for date with calendar
+      // Special handling for date
       if (type === 'date') {
         setInputValue(val);
-        if (dateMode === 'date') {
-          // Native date gives ISO; pass through
-          if (onChange) onChange(val);
-        } else {
-          // Text mode; if dd/MM/yyyy convert to ISO before emitting
-          const m = val.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-          if (m) {
-            const [, dd, mm, yyyy] = m;
-            const iso = `${yyyy}-${mm}-${dd}`;
-            if (onChange) onChange(iso);
-          } else if (val === '') {
-            if (onChange) onChange('');
-          }
-        }
+        if (onChange) onChange(val);
         setShowSuggestions(false);
         return;
       }
@@ -110,7 +95,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         <div className="relative">
           <input
             ref={ref}
-            type={type === 'date' ? (dateMode === 'date' ? 'date' : 'text') : type}
+            type={type}
             value={
               typeof value === 'number' && isNaN(value)
                 ? ''
@@ -119,23 +104,12 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
                   : type === 'date'
                     ? (() => {
                         const v = String(value || inputValue || '');
-                        const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-                        if (dateMode === 'date') {
-                          // Native date expects ISO
-                          if (m) return v;
-                          const m2 = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-                          if (m2) {
-                            const [, dd, mm, yyyy] = m2;
-                            return `${yyyy}-${mm}-${dd}`;
-                          }
-                          return '';
-                        }
-                        // Text mode shows dd/MM/yyyy
-                        if (m) {
-                          const [, yyyy, mm, dd] = m;
-                          return `${dd}/${mm}/${yyyy}`;
-                        }
-                        return v;
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+                        const m2 = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                        if (m2) return `${m2[3]}-${m2[2]}-${m2[1]}`;
+                        const m3 = v.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+                        if (m3) return `${m3[3]}-${m3[2]}-${m3[1]}`;
+                        return '';
                       })()
                     : uppercase && type !== 'number' 
                       ? String(value).toUpperCase()
@@ -143,7 +117,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             }
             onChange={handleInputChange}
             onKeyDown={onKeyDown}
-            placeholder={type === 'date' ? 'dd/MM/yyyy' : placeholder}
+            placeholder={placeholder}
             required={required}
             disabled={disabled}
             readOnly={readOnly}
@@ -152,24 +126,15 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             step={step}
             className={`w-full border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed font-bold ${
               size === 'sm' ? 'px-2 py-1 text-sm' : size === 'lg' ? 'px-4 py-3 text-lg' : 'px-3 py-2 text-base'
-            }`}
-            style={{ fontFamily: 'Times New Roman', fontSize: '14px', fontWeight: 'bold', paddingRight: type === 'date' ? '2.5rem' : undefined, ...style }}
-            inputMode={type === 'date' && dateMode === 'text' ? 'numeric' : undefined}
-            pattern={type === 'date' && dateMode === 'text' ? '\\d{2}/\\d{2}/\\d{4}' : undefined}
+            } ${type === 'date' ? 'cursor-pointer' : ''}`}
+            style={{ fontFamily: 'Times New Roman', fontSize: '14px', fontWeight: 'bold', ...style }}
             onFocus={() => {
-              if (type === 'date') setDateMode('date');
               setShowSuggestions(true);
             }}
             onBlur={() => {
-              if (type === 'date') setDateMode('text');
               setTimeout(() => setShowSuggestions(false), 100);
             }}
           />
-          {type === 'date' && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-              <Calendar className="w-4 h-4" />
-            </div>
-          )}
         </div>
         {showSuggestions && filteredSuggestions.length > 0 && (
           <ul className='absolute z-10 bg-white border border-gray-200 rounded shadow-md mt-1 w-full max-h-40 overflow-y-auto'>

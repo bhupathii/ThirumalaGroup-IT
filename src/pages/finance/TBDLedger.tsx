@@ -5,6 +5,7 @@ import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
+import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
 
 const TBDLedger: React.FC = () => {
   const [ledgerRows, setLedgerRows] = useState<any[]>([]);
@@ -13,6 +14,7 @@ const TBDLedger: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   useEffect(() => {
     fetchLedgerData();
@@ -88,17 +90,17 @@ const TBDLedger: React.FC = () => {
 
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
-      <div className="flex justify-between items-center border-b border-green-100 pb-4 print:hidden">
+      <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">TBD Ledger</h1>
           <p className="text-gray-500 text-sm mt-1">Review accounts starting with the 'TBD' or 'T-' identifier prefix</p>
         </div>
-        <Button onClick={() => window.print()} variant="primary" size="sm" icon={Printer}>
+        <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
           Print Ledger
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl print:hidden bg-gray-50 p-4 rounded-xl border">
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl bg-gray-50 p-4 rounded-xl border ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
           <Input
             label="Filter TBD Accounts"
@@ -125,7 +127,8 @@ const TBDLedger: React.FC = () => {
         </div>
       </div>
 
-      <Card title="TBD Ledger Index" subtitle="Term Business Deposit receivables summary" className="shadow-md">
+      <div className={showPrintPreview ? 'print:hidden' : ''}>
+        <Card title="TBD Ledger Index" subtitle="Term Business Deposit receivables summary" className="shadow-md">
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-green-500"></div>
@@ -198,29 +201,82 @@ const TBDLedger: React.FC = () => {
             </table>
           </div>
         )}
-      </Card>
-      
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .shadow-md, .shadow-md * {
-            visibility: visible;
-          }
-          .shadow-md {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            box-shadow: none !important;
-            border: none !important;
-          }
-          aside, nav, header, button, input, label, .print\\:hidden {
-            display: none !important;
-          }
-        }
-      `}</style>
+        </Card>
+      </div>
+
+      <FinancePrintPreview
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        title="TBD Ledger"
+        documentTitle="TBD LEDGER REPORT"
+      >
+        {filteredRows.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Loan ID</th>
+                  <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Customer</th>
+                  <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Disbursed</th>
+                  <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Principal</th>
+                  <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Interest</th>
+                  <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Total Repayable</th>
+                  <th className="px-3 py-3 text-right font-bold text-green-700 uppercase">Collected (Cr)</th>
+                  <th className="px-3 py-3 text-right font-bold text-orange-700 uppercase">Receivable (Dr)</th>
+                  <th className="px-3 py-3 text-center font-bold text-gray-700 uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredRows.map(row => (
+                  <tr key={row.id} className="hover:bg-gray-50/50">
+                    <td className="px-3 py-3 font-bold text-gray-900 font-mono">{row.loanId}</td>
+                    <td className="px-3 py-3">
+                      <div className="font-bold text-gray-900">{row.customerName}</div>
+                      {row.phone && <div className="text-[10px] text-gray-400 mt-0.5">{row.phone}</div>}
+                    </td>
+                    <td className="px-3 py-3 text-gray-500">
+                      {new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </td>
+                    <td className="px-3 py-3 text-right font-semibold">
+                      ₹{row.principal.toLocaleString('en-IN')}
+                    </td>
+                    <td className="px-3 py-3 text-right text-gray-500 font-semibold">
+                      ₹{row.interestAmount.toLocaleString('en-IN')} <span className="text-[9px]">({row.interestRate}%)</span>
+                    </td>
+                    <td className="px-3 py-3 text-right font-bold text-gray-900">
+                      ₹{row.totalRepayable.toLocaleString('en-IN')}
+                    </td>
+                    <td className="px-3 py-3 text-right font-bold text-green-600">
+                      ₹{row.totalCollected.toLocaleString('en-IN')}
+                    </td>
+                    <td className="px-3 py-3 text-right font-bold text-orange-700">
+                      ₹{row.outstanding.toLocaleString('en-IN')}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                        row.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {row.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                <tr className="font-extrabold text-gray-900 text-xs md:text-sm">
+                  <td colSpan={3} className="px-3 py-3 text-right uppercase">Total:</td>
+                  <td className="px-3 py-3 text-right">₹{filteredRows.reduce((sum, r) => sum + r.principal, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right text-gray-500">₹{filteredRows.reduce((sum, r) => sum + r.interestAmount, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right">₹{filteredRows.reduce((sum, r) => sum + r.totalRepayable, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right text-green-700">₹{filteredRows.reduce((sum, r) => sum + r.totalCollected, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right text-orange-700">₹{filteredRows.reduce((sum, r) => sum + r.outstanding, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </FinancePrintPreview>
     </div>
   );
 };

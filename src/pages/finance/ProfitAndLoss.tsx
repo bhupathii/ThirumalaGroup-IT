@@ -3,8 +3,10 @@ import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
+import { supabase } from '../../lib/supabase';
 import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
+import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
 
 const ProfitAndLoss: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -14,6 +16,7 @@ const ProfitAndLoss: React.FC = () => {
     return d.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   const [statement, setStatement] = useState({
     loansDisbursedCount: 0,
@@ -82,11 +85,15 @@ const ProfitAndLoss: React.FC = () => {
 
       let badDebtEstimate = 0;
       // Fetch dues that are older than 30 days and unpaid
-      const { data: overdueDues } = await require('../../lib/supabase').supabase
+      const { data: overdueDues, error } = await supabase
         .from('finance_dues')
         .select('amount, paid_amount')
         .lt('due_date', overdueLimitStr)
         .in('status', ['Pending', 'Partially Paid']);
+
+      if (error) {
+        throw error;
+      }
 
       if (overdueDues) {
         overdueDues.forEach((d: any) => {
@@ -116,23 +123,23 @@ const ProfitAndLoss: React.FC = () => {
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
       {/* Header */}
-      <div className="flex justify-between items-center border-b border-green-100 pb-4 print:hidden">
+      <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Profit & Loss Statement</h1>
           <p className="text-gray-500 text-sm mt-1">Review earned and accrued interest margins across date ranges</p>
         </div>
-        <Button onClick={() => window.print()} variant="primary" size="sm" icon={Printer}>
+        <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
           Print P&L
         </Button>
       </div>
 
       {/* Date Filters */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 print:hidden">
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <Input label="From Date" type="date" value={startDate} onChange={setStartDate} />
         <Input label="To Date" type="date" value={endDate} onChange={setEndDate} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 ${showPrintPreview ? 'print:hidden' : ''}`}>
         {/* Accrual Base */}
         <Card
           title="Accrual Basis P&L"
@@ -205,6 +212,71 @@ const ProfitAndLoss: React.FC = () => {
           )}
         </Card>
       </div>
+
+      <FinancePrintPreview
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        title="Profit & Loss Statement"
+        documentTitle={`PROFIT & LOSS STATEMENT: ${new Date(startDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })} to ${new Date(endDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}`}
+      >
+        {!loading && (
+          <div className="grid grid-cols-2 gap-6 mt-6">
+            <div className="border border-emerald-200 rounded p-4">
+              <h3 className="font-bold text-gray-900 mb-1 border-b border-emerald-200 pb-2">Accrual Basis P&L</h3>
+              <p className="text-[10px] text-gray-500 mb-4">Revenue recognized when loans are disbursed (recommended)</p>
+              <div className="space-y-4">
+                <div className="flex justify-between border-b pb-2 text-sm">
+                  <span className="font-bold text-gray-700">Particulars</span>
+                  <span className="font-bold text-gray-700">Amount (₹)</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 font-semibold">Interest Accrued on Loans ({statement.loansDisbursedCount} Loans)</span>
+                  <span className="font-bold text-gray-900">+ ₹{statement.accruedInterest.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 font-semibold">Other Charges / Penalties</span>
+                  <span className="font-bold text-gray-900">+ ₹{statement.otherChargesIncome.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between text-sm border-b pb-2 text-red-600">
+                  <span className="font-semibold">Provision for Bad Debts (Overdue Dues provision)</span>
+                  <span className="font-bold">- ₹{statement.badDebtEstimate.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between text-lg font-black pt-2 text-emerald-800 bg-emerald-50 p-3 rounded">
+                  <span>Net Accrued Profit:</span>
+                  <span>₹{statement.accrualNetProfit.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="border border-green-200 rounded p-4">
+              <h3 className="font-bold text-gray-900 mb-1 border-b border-green-200 pb-2">Cash Basis P&L</h3>
+              <p className="text-[10px] text-gray-500 mb-4">Revenue recognized only when collections are cash received</p>
+              <div className="space-y-4">
+                <div className="flex justify-between border-b pb-2 text-sm">
+                  <span className="font-bold text-gray-700">Particulars</span>
+                  <span className="font-bold text-gray-700">Amount (₹)</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 font-semibold">Realised Interest Portion from Collections</span>
+                  <span className="font-bold text-gray-900">+ ₹{statement.realisedInterest.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 font-semibold">Other Charges / Penalties</span>
+                  <span className="font-bold text-gray-900">+ ₹{statement.otherChargesIncome.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between text-sm border-b pb-2 text-red-600">
+                  <span className="font-semibold">Provision for Bad Debts (Overdue Dues provision)</span>
+                  <span className="font-bold">- ₹{statement.badDebtEstimate.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between text-lg font-black pt-2 text-green-800 bg-green-50 p-3 rounded">
+                  <span>Net Cash Profit:</span>
+                  <span>₹{statement.cashNetProfit.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </FinancePrintPreview>
     </div>
   );
 };

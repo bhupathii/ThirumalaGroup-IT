@@ -5,6 +5,7 @@ import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
+import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
 
 interface DaybookItem {
   id: string;
@@ -26,6 +27,7 @@ const Daybook: React.FC = () => {
   const [totalCashIn, setTotalCashIn] = useState(0);
   const [totalCashOut, setTotalCashOut] = useState(0);
   const [closingBalance, setClosingBalance] = useState(0);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   useEffect(() => {
     fetchDaybookData();
@@ -52,11 +54,11 @@ const Daybook: React.FC = () => {
       });
 
       allCapital.forEach(cap => {
-        if (cap.date < fromDate) {
-          if (cap.type === 'Credit') {
-            opBal += Number(cap.amount);
+        if (cap.entry_date < fromDate) {
+          if (cap.credit > 0) {
+            opBal += Number(cap.credit);
           } else {
-            opBal -= Number(cap.amount);
+            opBal -= Number(cap.debit);
           }
         }
       });
@@ -89,20 +91,20 @@ const Daybook: React.FC = () => {
       });
 
       // Filter capital entries for this date range
-      const rangeCap = allCapital.filter(cap => cap.date >= fromDate && cap.date <= toDate);
+      const rangeCap = allCapital.filter(cap => cap.entry_date >= fromDate && cap.entry_date <= toDate);
       rangeCap.forEach(cap => {
-        const amt = Number(cap.amount);
-        const isCredit = cap.type === 'Credit';
+        const isCredit = cap.credit > 0;
+        const amt = isCredit ? Number(cap.credit) : Number(cap.debit);
         items.push({
           id: cap.id,
           source: 'Capital',
           particulars: isCredit
-            ? `Capital Invested by Partner - ${cap.partner?.name || 'N/A'}`
-            : `Capital Withdrawn by Partner - ${cap.partner?.name || 'N/A'}`,
+            ? `Capital Invested by Partner - ${cap.partner?.name || cap.partner_name || 'N/A'}`
+            : `Capital Withdrawn by Partner - ${cap.partner?.name || cap.partner_name || 'N/A'}`,
           type: isCredit ? 'Capital Deposit' : 'Capital Withdraw',
           cashIn: isCredit ? amt : 0,
           cashOut: !isCredit ? amt : 0,
-          remarks: cap.remarks
+          remarks: cap.particulars
         });
         if (isCredit) inSum += amt;
         else outSum += amt;
@@ -120,26 +122,22 @@ const Daybook: React.FC = () => {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
       {/* Title */}
-      <div className="flex justify-between items-center border-b border-green-100 pb-4 print:hidden">
+      <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Finance Daybook</h1>
           <p className="text-gray-500 text-sm mt-1">Review cash inflow and outflow transactions for any specific business day</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={handlePrint} variant="primary" size="sm" icon={Printer}>
+          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
             Print Daybook
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md print:hidden bg-gray-50 p-4 rounded-xl border">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md bg-gray-50 p-4 rounded-xl border ${showPrintPreview ? 'print:hidden' : ''}`}>
         <Input
           label="From Date"
           type="date"
@@ -154,8 +152,9 @@ const Daybook: React.FC = () => {
         />
       </div>
 
-      {/* Daybook Sheet */}
-      <Card
+      <div className={showPrintPreview ? 'print:hidden' : ''}>
+        {/* Daybook Sheet */}
+        <Card
         title={
           <div className="flex justify-between items-center w-full">
             <span>Daybook Statement</span>
@@ -250,35 +249,92 @@ const Daybook: React.FC = () => {
             </div>
           </div>
         )}
-      </Card>
+        </Card>
+      </div>
 
-      {/* Print helper styles */}
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .shadow-md {
-            box-shadow: none !important;
-            border: none !important;
-          }
-          .p-6 {
-            padding: 0 !important;
-          }
-          .shadow-md * {
-            visibility: visible;
-          }
-          .shadow-md {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-          }
-          aside, nav, header, button, input, label, .print\\:hidden {
-            display: none !important;
-          }
-        }
-      `}</style>
+      <FinancePrintPreview
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        title="Finance Daybook"
+        documentTitle={`DAYBOOK: ${new Date(fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })} to ${new Date(toDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}`}
+      >
+        {!loading && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="p-3 bg-gray-50 rounded border">
+                <span className="text-gray-500 text-xs font-semibold block uppercase">Opening Balance</span>
+                <span className="text-lg font-bold text-gray-900">₹{openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="p-3 bg-green-50 rounded border border-green-100">
+                <span className="text-green-700 text-xs font-bold block uppercase">Total Receipts (+)</span>
+                <span className="text-lg font-bold text-green-800">₹{totalCashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="p-3 bg-red-50 rounded border border-red-100">
+                <span className="text-red-700 text-xs font-bold block uppercase">Total Payments (-)</span>
+                <span className="text-lg font-bold text-red-800">₹{totalCashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="p-3 bg-emerald-100 rounded border border-emerald-200">
+                <span className="text-emerald-800 text-xs font-black block uppercase">Closing Balance</span>
+                <span className="text-xl font-black text-emerald-900">₹{closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-300 text-xs md:text-sm">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Particulars / Account</th>
+                    <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Voucher Type</th>
+                    <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Remarks</th>
+                    <th className="px-3 py-3 text-right font-bold text-green-700 uppercase">Receipts (Cr)</th>
+                    <th className="px-3 py-3 text-right font-bold text-red-700 uppercase">Payments (Dr)</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {daybookItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-8 text-center text-gray-400 font-semibold">
+                        No transactions recorded on this date.
+                      </td>
+                    </tr>
+                  ) : (
+                    daybookItems.map((item) => (
+                      <tr key={item.id} className="hover:bg-gray-50/50">
+                        <td className="px-3 py-3 font-bold text-gray-900">{item.particulars}</td>
+                        <td className="px-3 py-3 font-semibold text-gray-600 capitalize">{item.type}</td>
+                        <td className="px-3 py-3 text-gray-500">{item.remarks || '-'}</td>
+                        <td className="px-3 py-3 text-right font-extrabold text-green-600">
+                          {item.cashIn > 0 ? `₹${item.cashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                        </td>
+                        <td className="px-3 py-3 text-right font-extrabold text-red-600">
+                          {item.cashOut > 0 ? `₹${item.cashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                  {/* Total row */}
+                  <tr className="bg-gray-50 font-extrabold">
+                    <td colSpan={3} className="px-3 py-3 text-right text-gray-800 uppercase">Total Cash Flow:</td>
+                    <td className="px-3 py-3 text-right text-green-700 text-base">₹{totalCashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="px-3 py-3 text-right text-red-700 text-base">₹{totalCashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="flex justify-between items-center mt-20 pt-8 border-t text-xs">
+              <div>
+                <p className="font-bold text-gray-700">Cashier Signature</p>
+                <p className="text-[10px] text-gray-400 mt-8">Authorized Signatory</p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-gray-700">Verified By Manager</p>
+                <p className="text-[10px] text-gray-400 mt-8">Partner Audit Sign</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </FinancePrintPreview>
     </div>
   );
 };
