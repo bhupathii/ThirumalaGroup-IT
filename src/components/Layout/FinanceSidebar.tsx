@@ -20,7 +20,8 @@ import {
   Briefcase,
   BarChart3,
   History,
-  Shield
+  Shield,
+  Settings
 } from 'lucide-react';
 
 interface MenuItem {
@@ -96,6 +97,12 @@ const FinanceSidebar: React.FC = () => {
           key: 'user_access_management',
           adminOnly: true,
         },
+      ],
+    },
+    {
+      title: 'Settings',
+      items: [
+        { icon: Settings, label: 'Ledger Settings', path: '/finance/ledger-settings', key: 'ledger_settings', adminOnly: true },
       ],
     },
   ];

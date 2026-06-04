@@ -7,13 +7,9 @@ import {
 } from 'lucide-react';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
-// Default rates for each ledger type
-const DEFAULT_RATES: Record<string, { label: string; rate: number; overdue: number; doc: number }> = {
-  CD: { label: 'CASH DEPOSIT (CD)', rate: 3, overdue: 0.75, doc: 100 },
-  HP: { label: 'HIRE PURCHASE (HP)', rate: 2, overdue: 0.5, doc: 100 },
-  STBD: { label: 'SHORT TERM BUSINESS DEPOSIT (STBD)', rate: 2.5, overdue: 0.6, doc: 100 },
-  TBD: { label: 'TERM BUSINESS DEPOSIT (TBD)', rate: 2, overdue: 0.5, doc: 100 }
-};
+import { financeLedgerSettingsService, DEFAULT_LEDGER_SETTINGS } from '../../services/financeLedgerSettingsService';
+import { financeCalculationService } from '../../services/financeCalculationService';
+import { FinanceLedgerSetting } from '../../lib/supabaseFinance';
 
 const GeneralCalculator: React.FC = () => {
   const navigate = useNavigate();
@@ -31,14 +27,30 @@ const GeneralCalculator: React.FC = () => {
   // Print Preview Modal State
   const [showPrintModal, setShowPrintModal] = useState(false);
 
+  const [ledgerSettings, setLedgerSettings] = useState<Record<string, FinanceLedgerSetting>>(DEFAULT_LEDGER_SETTINGS);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const settings = await financeLedgerSettingsService.getAllLedgerSettings();
+      setLedgerSettings(settings);
+      
+      // Update inputs for current loanType if they haven't been manually typed yet
+      const activeSetting = settings[loanType] || DEFAULT_LEDGER_SETTINGS[loanType];
+      if (activeSetting) {
+        setRate(String(activeSetting.rate));
+        setOverdue(String(activeSetting.overdue));
+      }
+    };
+    fetchSettings();
+  }, []);
+
   // Update rates when loan type changes
   const handleLoanTypeChange = (type: string) => {
     setLoanType(type);
-    const defaults = DEFAULT_RATES[type];
+    const defaults = ledgerSettings[type] || DEFAULT_LEDGER_SETTINGS[type];
     if (defaults) {
       setRate(String(defaults.rate));
       setOverdue(String(defaults.overdue));
-      setDocumentVal(String(defaults.doc));
     }
   };
 
@@ -62,12 +74,22 @@ const GeneralCalculator: React.FC = () => {
     const diffTime = todayObj.getTime() - loanDateObj.getTime();
     const daysElapsed = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
 
-    // Interest = Principal * (Rate / 100) * (Days Elapsed / 30)
-    const interest = P * (ratePerMonth / 100) * (daysElapsed / 30);
+    // Calculate using financeCalculationService logic
+    // Interest = Principal * (Rate / 100) * (Days Elapsed / 30) (or via formula in service)
+    const activeSetting = ledgerSettings[loanType] || DEFAULT_LEDGER_SETTINGS[loanType];
+    
+    // Create an ephemeral setting using the manual input rates (so the calculator remains a 'what if' calculator)
+    const currentSetting: FinanceLedgerSetting = {
+      ...activeSetting,
+      rate: ratePerMonth,
+      overdue: overdueRatePerMonth
+    };
 
+    const interest = financeCalculationService.calculateInterestFromSetting(P, daysElapsed, currentSetting);
+    
     // Overdue Penalty: depends on Overdue %, and overdue days if available
     const overdueDays = Math.max(0, daysElapsed - periodLimitDays);
-    const penalty = P * (overdueRatePerMonth / 100) * (overdueDays / 30);
+    const penalty = financeCalculationService.calculatePenaltyFromSetting(P, overdueDays, currentSetting);
 
     const totalBalance = P + interest + penalty - paid;
     const forClose = totalBalance;
@@ -82,7 +104,7 @@ const GeneralCalculator: React.FC = () => {
       payout: Math.round(payout),
       overdueDays
     };
-  }, [principal, loanDate, periodDays, rate, overdue, amountPaid, documentVal]);
+  }, [principal, loanDate, periodDays, rate, overdue, amountPaid, documentVal, ledgerSettings, loanType]);
 
 
   return (

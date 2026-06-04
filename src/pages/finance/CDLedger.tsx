@@ -5,6 +5,8 @@ import Button from '../../components/UI/Button';
 import { supabaseFinance, FinanceLoan, FinanceCustomer, FinanceTransaction, FinanceDue, FinanceDocument } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
+import { financeCalculationService } from '../../services/financeCalculationService';
 import { 
   Printer, 
   Download, 
@@ -40,6 +42,9 @@ const CDLedger: React.FC = () => {
   const [searchResults, setSearchResults] = useState<(FinanceLoan & { customer: FinanceCustomer })[]>([]);
   const [selectedLoan, setSelectedLoan] = useState<(FinanceLoan & { customer: FinanceCustomer; transactions: FinanceTransaction[]; photos: any[]; dues: FinanceDue[]; documents: FinanceDocument[] }) | null>(null);
   
+  // Settings state
+  const [ledgerSettings, setLedgerSettings] = useState<any>({});
+  
   // Selected category state (Defaults to 'CD', but user can choose others)
   const [selectedLedgerType, setSelectedLedgerType] = useState('CD');
   
@@ -73,9 +78,26 @@ const CDLedger: React.FC = () => {
 
   useEffect(() => {
     if (hasAccess) {
-      fetchLoans();
+      fetchLedgerData();
     }
   }, [hasAccess]);
+
+  const fetchLedgerData = async () => {
+    setLoading(true);
+    try {
+      const [allLoans, settings] = await Promise.all([
+        supabaseFinance.getLoans(),
+        financeLedgerSettingsService.getAllLedgerSettings()
+      ]);
+      setLedgerSettings(settings);
+      setLoansList(allLoans);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to load ledger data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchLoans = async () => {
     setLoading(true);
@@ -161,7 +183,7 @@ const CDLedger: React.FC = () => {
   };
 
   const handleRefresh = () => {
-    fetchLoans();
+    fetchLedgerData();
     if (selectedLoan) {
       loadLedgerDetails(selectedLoan.id);
     }
@@ -302,62 +324,8 @@ const CDLedger: React.FC = () => {
   // Computations for calculations
   const ledgerComputations = useMemo(() => {
     if (!selectedLoan) return null;
-
-    const principal = Number(selectedLoan.amount);
-    const interestRate = Number(selectedLoan.interest_rate);
-    const duration = Number(selectedLoan.duration_months);
-
-    // Calculate Interest charge and total repayable balance
-    const interestAmount = principal * (interestRate / 100) * duration;
-    const totalRepayable = principal + interestAmount;
-
-    // Filter collection transactions
-    const collections = selectedLoan.transactions.filter(t => t.type === 'Collection');
-    const totalCredit = collections.reduce((sum, c) => sum + Number(c.amount), 0);
-
-    // Disbursements transactions
-    const disbursements = selectedLoan.transactions.filter(t => t.type === 'Disbursement');
-    const totalDebit = disbursements.reduce((sum, d) => sum + Number(d.amount), 0);
-
-    const currentBalance = Math.max(0, totalRepayable - totalCredit);
-
-    // Installment/dues statistics
-    const totalDues = selectedLoan.dues.reduce((sum, d) => sum + Number(d.amount), 0);
-    const paidDues = selectedLoan.dues.reduce((sum, d) => sum + Number(d.paid_amount || 0), 0);
-    const pendingDues = Math.max(0, totalDues - paidDues);
-
-    // Compile transaction list with running balance
-    let runningBalance = totalRepayable;
-    const processedTransactions = selectedLoan.transactions.map((tx) => {
-      let credit = 0;
-      let debit = 0;
-      if (tx.type === 'Collection') {
-        credit = Number(tx.amount);
-        runningBalance = Math.max(0, runningBalance - credit);
-      } else if (tx.type === 'Disbursement') {
-        debit = Number(tx.amount);
-      }
-      return {
-        ...tx,
-        credit,
-        debit,
-        balance: runningBalance
-      };
-    });
-
-    return {
-      principal,
-      interestAmount,
-      totalRepayable,
-      totalCredit,
-      totalDebit,
-      currentBalance,
-      totalDues,
-      paidDues,
-      pendingDues,
-      processedTransactions
-    };
-  }, [selectedLoan]);
+    return financeCalculationService.getLoanCalculations(selectedLoan, ledgerSettings[selectedLedgerType] || null);
+  }, [selectedLoan, ledgerSettings, selectedLedgerType]);
 
   // Export to Excel / CSV
   const handleExport = (format: 'xlsx' | 'csv') => {
@@ -667,9 +635,11 @@ const CDLedger: React.FC = () => {
                     <div className="font-bold text-gray-900">{selectedLoan.interest_rate}% Flat pm</div>
                   </div>
 
-                  <div>
-                    <div className="text-xs text-gray-400 font-bold">Duration</div>
-                    <div className="font-bold text-gray-900">{selectedLoan.duration_months} Months</div>
+                  <div className="flex justify-between items-end border-b border-gray-100 pb-2">
+                    <div>
+                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Duration & Rate</div>
+                      <div className="font-bold text-gray-900">{selectedLoan.duration_months} Months / {selectedLoan.due_type}</div>
+                    </div>
                   </div>
 
                   <div>
@@ -913,7 +883,7 @@ const CDLedger: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
-                    {ledgerComputations?.processedTransactions.map((tx) => (
+                    {ledgerComputations?.processedTransactions.map((tx: any) => (
                       <tr key={tx.id} className="hover:bg-gray-50/30">
                         <td className="px-3 py-3 font-semibold text-gray-700">
                           {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
@@ -1105,8 +1075,8 @@ const CDLedger: React.FC = () => {
                       <td className="font-bold text-gray-900">₹{Number(selectedLoan.amount).toLocaleString('en-IN')}</td>
                     </tr>
                     <tr>
-                      <td className="text-gray-400 font-bold py-0.5 pr-2">Rate/Months:</td>
-                      <td className="font-bold text-gray-800">{selectedLoan.interest_rate}% Flat / {selectedLoan.duration_months} Months</td>
+                      <th className="px-3 py-1 font-bold text-gray-500 uppercase tracking-wider text-[10px] text-left border-r border-gray-200">Rate / Duration</th>
+                      <td className="font-bold text-gray-800">{selectedLoan.duration_months} Months</td>
                     </tr>
                     <tr>
                       <td className="text-gray-400 font-bold py-0.5 pr-2">Repayable:</td>

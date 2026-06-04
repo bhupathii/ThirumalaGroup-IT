@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
+import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
+import { financeCalculationService } from '../../services/financeCalculationService';
 import { Printer, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
@@ -72,6 +74,7 @@ const BusinessReport: React.FC = () => {
   const [totalBusiness, setTotalBusiness] = useState<PartnerBusinessTotal[]>([]);
   const [partnerBusiness, setPartnerBusiness] = useState<PartnerBusinessRow[]>([]);
   const [partnerOutstanding, setPartnerOutstanding] = useState<PartnerOutstandingRow[]>([]);
+  const [ledgerSettings, setLedgerSettings] = useState<any>({});
 
   useEffect(() => {
     fetchBusinessData();
@@ -80,13 +83,15 @@ const BusinessReport: React.FC = () => {
   const fetchBusinessData = async () => {
     setLoading(true);
     try {
-      const [fetchedPartners, loans, txs] = await Promise.all([
+      const [fetchedPartners, loans, txs, ledgerSettings] = await Promise.all([
         supabaseFinance.getPartners(),
         supabaseFinance.getLoans(),
-        supabaseFinance.getTransactions()
+        supabaseFinance.getTransactions(),
+        financeLedgerSettingsService.getAllLedgerSettings()
       ]);
 
       setPartners(fetchedPartners);
+      setLedgerSettings(ledgerSettings);
 
       // Fetch specific dues
       const { data: rawDues } = await supabase
@@ -99,7 +104,6 @@ const BusinessReport: React.FC = () => {
       const loansInDateRange = loans.filter(l => l.date >= startDate && l.date <= endDate);
 
       // 1. Calculate MD Summary & Total Business Table
-      // These are strictly based on loans disbursed in the date range.
       const pTotalsMap = new Map<string, PartnerBusinessTotal>();
 
       fetchedPartners.forEach(p => {
@@ -122,7 +126,9 @@ const BusinessReport: React.FC = () => {
           const pt = pTotalsMap.get(pName)!;
           
           const principal = Number(loan.amount);
-          const interest = principal * (Number(loan.interest_rate) / 100) * Number(loan.duration_months);
+          const cat = loan.loan_category?.trim().toUpperCase() || 'CD';
+          const setting = ledgerSettings[cat] || ledgerSettings['CD'];
+          const interest = setting ? financeCalculationService.calculateInterestFromSetting(principal, Number(loan.duration_months) * 30, setting, Number(loan.duration_months)) : (principal * (Number(loan.interest_rate) / 100) * Number(loan.duration_months));
           
           const loanTxs = txs.filter(t => t.loan_id === loan.id && t.type === 'Collection');
           const paid = loanTxs.reduce((sum, t) => sum + Number(t.amount), 0);
@@ -138,11 +144,8 @@ const BusinessReport: React.FC = () => {
       });
 
       const allTotals = Array.from(pTotalsMap.values());
-      // Filter out partners with 0 loans if you want, but standard is showing all or showing valid ones.
-      // We will show all that have data or just all partners. Let's show all for clarity.
       setTotalBusiness(allTotals);
 
-      // 2. MD Summary is dependent on selectedPartner
       updateDependentViews(allTotals, loansInDateRange, txs, dues, 'ALL');
 
     } catch (err) {
@@ -154,7 +157,6 @@ const BusinessReport: React.FC = () => {
   };
 
   const updateDependentViews = (totalsList: PartnerBusinessTotal[], rangeLoans: any[], allTxs: any[], rawDues: any[], pId: string) => {
-    // 1. MD Summary Update
     const filteredTotals = pId === 'ALL' ? totalsList : totalsList.filter(t => t.partnerId === pId);
     
     const newMd = {
@@ -167,7 +169,6 @@ const BusinessReport: React.FC = () => {
     };
     setMdSummary(newMd);
 
-    // 2. Partner Business Table Update
     const pbList: PartnerBusinessRow[] = [];
     const targetPartnerName = pId === 'ALL' ? '' : totalsList.find(t => t.partnerId === pId)?.partnerName;
     const validLoans = pId === 'ALL' ? rangeLoans : rangeLoans.filter(l => l.customer?.partner_name === targetPartnerName);
@@ -191,19 +192,34 @@ const BusinessReport: React.FC = () => {
     });
     setPartnerBusiness(pbList);
 
-    // 3. Partner Outstanding Table Update
     const outList: PartnerOutstandingRow[] = [];
     const validDues = pId === 'ALL' 
       ? rawDues 
       : rawDues.filter(d => d.finance_loans?.customer?.partner_name === targetPartnerName);
 
+    const today = new Date();
     validDues.forEach(due => {
-      // Only show dues that are pending or partially paid
       if (due.status === 'Pending' || due.status === 'Partially Paid') {
         const principal = Number(due.principal_amount) || 0;
         const interest = Number(due.interest_amount) || 0;
-        const penalty = Number(due.penalty_amount) || 0;
-        const totalDue = Number(due.amount) - Number(due.paid_amount);
+        
+        const dueAmt = Number(due.amount) || 0;
+        const duePaid = Number(due.paid_amount) || 0;
+        const duePending = dueAmt - duePaid;
+
+        const overdueDays = Math.max(0, Math.floor((today.getTime() - new Date(due.due_date).getTime()) / (1000 * 60 * 60 * 24)));
+        let penalty = Number(due.penalty_amount) || 0;
+
+        if (duePending > 0 && overdueDays > 0) {
+           const cat = due.finance_loans?.loan_category?.trim().toUpperCase() || 'CD';
+           const setting = ledgerSettings[cat] || ledgerSettings['CD'];
+           if (setting) {
+              const calcPenalty = financeCalculationService.calculatePenaltyFromSetting(duePending, overdueDays, setting);
+              penalty = calcPenalty > penalty ? Math.round(calcPenalty) : penalty;
+           }
+        }
+        
+        const totalDue = duePending + penalty;
 
         outList.push({
           id: due.id,

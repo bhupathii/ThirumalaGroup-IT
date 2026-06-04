@@ -15,6 +15,16 @@ export interface FinancePartner {
   updated_at: string;
 }
 
+export interface FinanceLedgerSetting {
+  code: string;
+  rate: number;
+  overdue: number;
+  method: string;
+  days_per_year: number;
+  principal_rolls_on_renewal: boolean;
+  updated_at?: string;
+}
+
 export interface FinanceCustomer {
   id: string;
   name: string;

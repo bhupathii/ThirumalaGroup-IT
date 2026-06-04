@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabaseFinance } from '../../lib/supabaseFinance';
+import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
+import { financeCalculationService } from '../../services/financeCalculationService';
 import { 
   FileText, 
   Edit, 
@@ -46,6 +48,7 @@ const FinanceDashboard: React.FC = () => {
       setLoading(true);
       const loans = await supabaseFinance.getLoans();
       const txs = await supabaseFinance.getTransactions();
+      const ledgerSettings = await financeLedgerSettingsService.getAllLedgerSettings();
 
       // Get today's local date string formatted as YYYY-MM-DD
       const today = new Date();
@@ -63,9 +66,10 @@ const FinanceDashboard: React.FC = () => {
 
       loans.forEach(loan => {
         const principal = Number(loan.amount);
-        const rate = Number(loan.interest_rate);
+        const cat = loan.loan_category?.trim().toUpperCase() || 'CD';
+        const setting = ledgerSettings[cat] || ledgerSettings['CD'];
         const duration = Number(loan.duration_months);
-        const interestAmount = principal * (rate / 100) * duration;
+        const interestAmount = setting ? financeCalculationService.calculateInterestFromSetting(principal, duration * 30, setting, duration) : (principal * (Number(loan.interest_rate) / 100) * duration);
         const repayable = principal + interestAmount;
 
         const loanCols = txs.filter(t => t.loan_id === loan.id && t.type === 'Collection');
@@ -336,7 +340,7 @@ const FinanceDashboard: React.FC = () => {
                       <th className="px-4 py-3 text-left">Customer Name</th>
                       <th className="px-4 py-3 text-left">Date</th>
                       <th className="px-4 py-3 text-right">Amount</th>
-                      <th className="px-4 py-3 text-center">Interest</th>
+                      <th className="px-4 py-3 text-center">Category</th>
                       <th className="px-4 py-3 text-center">Status</th>
                     </tr>
                   </thead>
@@ -360,7 +364,7 @@ const FinanceDashboard: React.FC = () => {
                           ₹{Number(loan.amount).toLocaleString('en-IN')}
                         </td>
                         <td className="px-4 py-3 text-center text-slate-600 font-semibold">
-                          {loan.interest_rate}% ({loan.due_type})
+                          {loan.loan_category?.trim().toUpperCase() || 'CD'}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span

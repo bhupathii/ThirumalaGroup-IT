@@ -6,6 +6,8 @@ import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
+import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
+import { financeCalculationService } from '../../services/financeCalculationService';
 
 const HPLedger: React.FC = () => {
   const [ledgerRows, setLedgerRows] = useState<any[]>([]);
@@ -39,8 +41,11 @@ const HPLedger: React.FC = () => {
   const fetchLedgerData = async () => {
     setLoading(true);
     try {
-      const loans = await supabaseFinance.getLoans();
-      const txs = await supabaseFinance.getTransactions();
+      const [loans, txs, settings] = await Promise.all([
+        supabaseFinance.getLoans(),
+        supabaseFinance.getTransactions(),
+        financeLedgerSettingsService.getAllLedgerSettings()
+      ]);
 
       // Filter for Hire Purchase prefix "HP" or "H-" or category "HP"
       const hpLoans = loans.filter(l => 
@@ -50,16 +55,8 @@ const HPLedger: React.FC = () => {
       );
 
       const rows = hpLoans.map(loan => {
-        const cols = txs.filter(t => t.loan_id === loan.id && t.type === 'Collection');
-        const totalCollected = cols.reduce((sum, c) => sum + Number(c.amount), 0);
-
-        const principal = Number(loan.amount);
-        const interestRate = Number(loan.interest_rate);
-        const duration = Number(loan.duration_months);
-        
-        const interestAmount = principal * (interestRate / 100) * duration;
-        const totalRepayable = principal + interestAmount;
-        const outstanding = Math.max(0, totalRepayable - totalCollected);
+        const loanWithTxs = { ...loan, transactions: txs.filter(t => t.loan_id === loan.id) };
+        const calc = financeCalculationService.getLoanCalculations(loanWithTxs, settings['HP'] || null);
 
         return {
           id: loan.id,
@@ -67,13 +64,13 @@ const HPLedger: React.FC = () => {
           customerName: loan.customer?.name || 'N/A',
           phone: loan.customer?.phone || '',
           date: loan.date,
-          principal,
-          interestRate,
-          duration,
-          interestAmount,
-          totalRepayable,
-          totalCollected,
-          outstanding,
+          principal: calc.principal,
+          interestRate: Number(loan.interest_rate),
+          duration: Number(loan.duration_months),
+          interestAmount: calc.interestAmount,
+          totalRepayable: calc.totalRepayable,
+          totalCollected: calc.totalCredit,
+          outstanding: calc.currentBalance,
           status: loan.status
         };
       });

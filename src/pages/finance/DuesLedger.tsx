@@ -5,6 +5,8 @@ import { supabase } from '../../lib/supabase';
 import { Printer, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
+import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
+import { financeCalculationService } from '../../services/financeCalculationService';
 import { useNavigate } from 'react-router-dom';
 
 interface OverdueDueItem {
@@ -80,6 +82,8 @@ const DuesLedger: React.FC = () => {
 
       if (error) throw error;
 
+      const ledgerSettings = await financeLedgerSettingsService.getAllLedgerSettings();
+
       const today = new Date();
       const formatted: OverdueDueItem[] = (data || []).map((d: any) => {
         const amt = Number(d.amount) || 0;
@@ -94,12 +98,16 @@ const DuesLedger: React.FC = () => {
         const isPending = d.status === 'Pending' || d.status === 'Partially Paid';
         const isNPA = isPending && overdueDays > 90;
 
-        // Basic penalty logic: Example 1% per month overdue (placeholder, adjust to true business logic)
+        // Basic penalty logic: Calculate dynamically from settings
         let penalty = 0;
-        if (isPending && overdueDays > 30) {
-           const monthsOverdue = Math.floor(overdueDays / 30);
-           penalty = Math.round(pending * 0.01 * monthsOverdue);
+        if (isPending && overdueDays > 0) {
+          const cat = d.loan?.loan_category?.trim().toUpperCase() || 'CD';
+          const setting = ledgerSettings[cat] || ledgerSettings['CD'];
+          if (setting) {
+             penalty = financeCalculationService.calculatePenaltyFromSetting(pending, overdueDays, setting);
+          }
         }
+        penalty = Math.round(penalty);
 
         return {
           id: d.id,

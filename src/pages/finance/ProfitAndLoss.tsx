@@ -2,9 +2,10 @@ import React, { useEffect, useState, useMemo } from 'react';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
-import { Printer, ArrowLeft, RefreshCw } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { ArrowLeft, RefreshCw, Printer } from 'lucide-react';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
+import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
+import { financeCalculationService } from '../../services/financeCalculationService';
 import { useNavigate } from 'react-router-dom';
 
 interface HeadItem {
@@ -36,11 +37,12 @@ const ProfitAndLoss: React.FC = () => {
   const fetchStatementData = async () => {
     setLoading(true);
     try {
-      const [loans, txs, cashbookEntries, partners] = await Promise.all([
+      const [loans, txs, cashbookEntries, partners, ledgerSettings] = await Promise.all([
         supabaseFinance.getLoans(),
         supabaseFinance.getTransactions(),
         supabaseFinance.getCashbookEntries(),
-        supabaseFinance.getPartners()
+        supabaseFinance.getPartners(),
+        financeLedgerSettingsService.getAllLedgerSettings()
       ]);
 
       setPartnerCount(partners.length || 1); // Avoid division by zero
@@ -55,7 +57,9 @@ const ProfitAndLoss: React.FC = () => {
           const loan = loans.find(l => l.id === tx.loan_id);
           if (loan) {
             const P = Number(loan.amount);
-            const I = P * (Number(loan.interest_rate) / 100) * Number(loan.duration_months);
+            const cat = loan.loan_category?.trim().toUpperCase() || 'CD';
+            const setting = ledgerSettings[cat] || ledgerSettings['CD'];
+            const I = setting ? financeCalculationService.calculateInterestFromSetting(P, Number(loan.duration_months) * 30, setting, Number(loan.duration_months)) : (P * (Number(loan.interest_rate) / 100) * Number(loan.duration_months));
             const totalRepayable = P + I;
             if (totalRepayable > 0) {
               const interestRatio = I / totalRepayable;
