@@ -112,6 +112,18 @@ export interface FinanceLoan {
   guarantor_2_id?: string | null;
 }
 
+export interface FinanceLoanDocument {
+  id: string;
+  loan_id: string;
+  category: string;
+  document_name: string;
+  remarks: string | null;
+  file_url: string | null;
+  is_submitted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface FinanceTransaction {
   id: string;
   loan_id: string;
@@ -541,6 +553,7 @@ class SupabaseFinance {
     },
     duesData: Omit<FinanceDue, 'id' | 'loan_id' | 'paid_amount' | 'status' | 'created_at' | 'updated_at'>[],
     photosData: { photo_type: 'Customer' | 'Surety'; photo_url: string }[],
+    documentsData: Omit<FinanceLoanDocument, 'id' | 'loan_id' | 'created_at' | 'updated_at'>[] | undefined,
     staffName: string
   ): Promise<FinanceLoan | null> {
     try {
@@ -675,6 +688,20 @@ class SupabaseFinance {
           .insert(formattedPhotos);
 
         if (photosError) throw photosError;
+      }
+
+      // Save documents
+      if (documentsData && documentsData.length > 0) {
+        const formattedDocs = documentsData.map(doc => ({
+          ...doc,
+          loan_id: loan.id
+        }));
+
+        const { error: docsError } = await supabase
+          .from('finance_loan_documents')
+          .insert(formattedDocs);
+
+        if (docsError) throw docsError;
       }
 
       // Save fingerprints to finance_fingerprints table

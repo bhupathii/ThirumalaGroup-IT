@@ -37,14 +37,14 @@ const FinanceHeader: React.FC = () => {
           <Menu className="w-5 h-5" />
         </button>
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center tracking-[0.16px] shadow-inner text-white finance-header-time">
+          <div className="w-8 h-8 rounded-lg bg-indigo-500 flex items-center justify-center tracking-[0.16px] shadow-inner text-white font-bold text-sm">
             TF
           </div>
           <div>
-            <h1 className="tracking-[0.16px] text-slate-900 finance-brand">
+            <h1 className="tracking-[0.16px] text-white font-bold text-lg leading-none">
               TIRUMALA FINANCE
             </h1>
-            <p className="text-slate-500 tracking-[0.16px] mt-0.5 finance-small-label uppercase">
+            <p className="text-slate-400 text-[10px] tracking-wider mt-1 font-semibold uppercase leading-none">
               FINANCE MANAGEMENT SYSTEM
             </p>
           </div>

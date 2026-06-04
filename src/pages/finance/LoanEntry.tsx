@@ -186,16 +186,16 @@ const LoanEntry: React.FC = () => {
   // Form State - Documents Checklist
   const [documents, setDocuments] = useState<DocumentItem[]>([
     { key: 'bank_statements', label: 'BANK STATEMENTS', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
-    { key: 'income_proof', label: 'INCOME PROOF / ITR', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
-    { key: 'passbook_copy', label: 'PASSBOOK COPY', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
+    { key: 'income_proof', label: 'INCOME PROOF / SAL', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
+    { key: 'it_returns_gst', label: 'IT RETURNS / GST', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
     
-    { key: 'land_title_deed', label: 'LAND TITLE DEED', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
-    { key: 'property_tax', label: 'PROPERTY TAX REC', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
+    { key: 'land_title_patta', label: 'LAND TITLE / PATTA', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
+    { key: 'property_deed', label: 'PROPERTY DEED', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
     { key: 'vehicle_asset_paper', label: 'VEHICLE / ASSET PAP', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
     
     { key: 'joint_registration', label: 'JOINT REGISTRATION', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
     { key: 'agreement_bond', label: 'AGREEMENT / BOND', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
-    { key: 'pledge_paper', label: 'PLEDGE PAPER', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
+    { key: 'photograph', label: 'PHOTOGRAPH', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
   ]);
 
   // Form State - Collateral Location
@@ -817,24 +817,24 @@ const LoanEntry: React.FC = () => {
       const photosArray: any[] = [];
       if (custPhoto) photosArray.push({ photo_type: 'Customer', photo_url: custPhoto });
 
+      const linkedDocs = documents.filter(doc => doc.checked || doc.fileUrl).map(doc => ({
+        category: doc.category,
+        document_name: doc.label,
+        remarks: doc.refNo || null,
+        file_url: doc.fileUrl || null,
+        is_submitted: doc.checked
+      }));
+
       const savedLoan = await supabaseFinance.createLoan(
         loanPayload,
         customerPayload,
         duesList,
         photosArray,
+        linkedDocs,
         staffName
       );
 
       if (savedLoan) {
-        // Save submitted checklist document links
-        const linkedDocs = documents.filter(doc => doc.checked && doc.fileUrl);
-        for (const doc of linkedDocs) {
-          await supabaseFinance.addDocument({
-            loan_id: savedLoan.id,
-            document_type: `${doc.label} (${doc.refNo || 'No Ref'})`,
-            document_url: doc.fileUrl || ''
-          });
-        }
 
         // Save collateral info in logs
         const collateralJSON = {
@@ -1571,107 +1571,93 @@ const LoanEntry: React.FC = () => {
           </div>
 
           {/* Card 4: LOAN TERMS */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
-              LOAN TERMS
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-5">
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="text-slate-800 font-bold text-base tracking-wide uppercase">
+                LOAN TERMS
+              </h3>
+              <p className="text-slate-500 text-xs uppercase font-bold mt-1 tracking-wider">
+                CASH DEPOSIT (CD) — DEFAULT RATE 3% / MONTH
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
               {/* Row 1 */}
               <div>
-                <label className="peek-label uppercase mb-1 block">LOAN AMOUNT <span className="text-red-500 ml-1">*</span></label>
+                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">LOAN AMOUNT (₹) <span className="text-red-500 ml-0.5">*</span></label>
                 <input
                   type="number"
                   ref={amountRef}
                   value={amount}
                   onChange={(e) => { setAmount(e.target.value); setErrors(p => ({...p, amount: false})) }}
-                  placeholder="e.g. 50000"
-                  className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-button ${errors.amount ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
+                  className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[42px] ${errors.amount ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                   required
                 />
               </div>
               <div>
-                <label className="peek-label uppercase mb-1 block">RATE OF INTEREST (%) <span className="text-red-500 ml-1">*</span></label>
+                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">RATE OF INTEREST (% / MONTH)</label>
                 <input
                   type="number"
                   ref={interestRateRef}
                   value={interestRate}
                   onChange={(e) => { setInterestRate(e.target.value); setErrors(p => ({...p, interestRate: false})) }}
-                  className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-button ${errors.interestRate ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                  required
+                  className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[42px] ${errors.interestRate ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                 />
-                <span className="text-[9px] text-slate-400 mt-1 block peek-button uppercase">DEFAULT: 3%</span>
+                <span className="text-[10px] font-bold tracking-wider text-slate-400 mt-2 block uppercase">DEFAULT: 3%</span>
               </div>
 
               {/* Row 2 */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-2">
-                  <label className="peek-label uppercase mb-1 block">PERIOD <span className="text-red-500 ml-1">*</span></label>
-                  <input
-                    type="number"
-                    ref={durationMonthsRef}
-                    value={durationMonths}
-                    onChange={(e) => { setDurationMonths(e.target.value); setErrors(p => ({...p, durationMonths: false})) }}
-                    className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-button ${errors.durationMonths ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                    required
-                  />
-                  <span className="text-[9px] text-slate-400 mt-1 block peek-button uppercase">DAYS FOR CD/OD, INSTALMENTS FOR HP/STBD, MONTHS FOR TBD</span>
-                </div>
-                <div className="col-span-1">
-                  <label className="peek-label uppercase mb-1 block">DUE TYPE <span className="text-red-500 ml-1">*</span></label>
-                  <select
-                    value={dueType}
-                    onChange={(e) => setDueType(e.target.value as any)}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-button"
-                    required
-                  >
-                    <option value="Daily">Daily</option>
-                    <option value="Weekly">Weekly</option>
-                    <option value="Monthly">Monthly</option>
-                  </select>
-                </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">PERIOD (DAYS / INSTALMENTS)</label>
+                <input
+                  type="number"
+                  ref={durationMonthsRef}
+                  value={durationMonths}
+                  onChange={(e) => { setDurationMonths(e.target.value); setErrors(p => ({...p, durationMonths: false})) }}
+                  className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[42px] ${errors.durationMonths ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
+                />
+                <span className="text-[10px] font-bold tracking-wider text-slate-400 mt-2 block uppercase leading-relaxed">DAYS FOR CD/OD, INSTALMENTS FOR HP/STBD, MONTHS FOR TBD</span>
               </div>
               <div>
-                <label className="peek-label uppercase mb-1 block">DOCUMENT CHARGES (₹)</label>
+                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">DOCUMENT CHARGES (₹)</label>
                 <input
                   type="number"
                   value={docCharges}
                   onChange={(e) => setDocCharges(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-button"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[42px]"
                 />
               </div>
 
               {/* Row 3 */}
               <div>
-                <label className="peek-label uppercase mb-1 block">ANNUAL HOLD %</label>
+                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">ANNUAL HOLD % (3% DEFAULT)</label>
                 <input
                   type="number"
                   value={annualHold}
                   onChange={(e) => setAnnualHold(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-button"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[42px]"
                 />
-                <span className="text-[9px] text-slate-400 mt-1 block peek-button uppercase">PRE-DEDUCTED FROM DISBURSAL, PRORATED OVER TENURE</span>
+                <span className="text-[10px] font-bold tracking-wider text-slate-400 mt-2 block uppercase leading-relaxed">PRE-DEDUCTED FROM DISBURSAL, PRORATED OVER TENURE</span>
               </div>
               <div>
-                <label className="peek-label uppercase mb-1 block">PARTIAL PAID (₹)</label>
+                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">PARTIAL PAID (₹)</label>
                 <input
                   type="number"
                   value={partialPaid}
                   onChange={(e) => setPartialPaid(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-button"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[42px]"
                 />
-                <span className="text-[9px] text-slate-400 mt-1 block peek-button uppercase">ANY AMOUNT ALREADY COLLECTED AT ENTRY</span>
+                <span className="text-[10px] font-bold tracking-wider text-slate-400 mt-2 block uppercase leading-relaxed">ANY AMOUNT ALREADY COLLECTED AT ENTRY</span>
               </div>
 
               {/* Row 4 */}
               <div className="sm:col-span-2">
-                <label className="peek-label uppercase mb-1 block">PARTICULARS</label>
+                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">PARTICULARS</label>
                 <textarea
                   ref={particularsRef}
                   value={particulars}
                   onChange={(e) => { setParticulars(e.target.value); setErrors(p => ({...p, particulars: false})) }}
-                  rows={2}
-                  className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-button resize-none ${errors.particulars ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                  placeholder="e.g. Gold weight or pledge card particulars"
+                  rows={3}
+                  className={`w-full bg-white border rounded-lg p-3 text-sm text-slate-800 focus:outline-none resize-none ${errors.particulars ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                 />
               </div>
             </div>
@@ -1709,129 +1695,157 @@ const LoanEntry: React.FC = () => {
           {/* Card 6: DOCUMENTS SUBMITTED */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-slate-900 peek-h3 uppercase">
-                DOCUMENTS SUBMITTED
-              </h3>
+              <div>
+                <h3 className="text-slate-800 font-bold text-sm uppercase">
+                  DOCUMENTS SUBMITTED
+                </h3>
+                <p className="text-slate-500 text-xs uppercase mt-0.5">
+                  RECORD WHAT THE CUSTOMER HAS PHYSICALLY HANDED OVER
+                </p>
+              </div>
               <div className="flex gap-2">
-                <span className="text-[9px] text-blue-650 bg-blue-50 border border-blue-150 px-2 py-0.5 rounded peek-button uppercase">
-                  FIN: {documents.filter(d => d.category === 'Financial' && (d.checked || d.fileUrl)).length}
+                <span className="text-xs text-blue-500 bg-white border border-blue-200 px-3 py-1 rounded-full font-bold">
+                  FIN - {documents.filter(d => d.category === 'Financial' && (d.checked || d.fileUrl)).length}
                 </span>
-                <span className="text-[9px] text-purple-650 bg-purple-50 border border-purple-150 px-2 py-0.5 rounded peek-button uppercase">
-                  ORIG: {documents.filter(d => d.category === 'Original' && (d.checked || d.fileUrl)).length}
+                <span className="text-xs text-blue-500 bg-white border border-blue-200 px-3 py-1 rounded-full font-bold">
+                  ORIG - {documents.filter(d => d.category === 'Original' && (d.checked || d.fileUrl)).length}
                 </span>
-                <span className="text-[9px] text-amber-650 bg-amber-50 border border-amber-150 px-2 py-0.5 rounded peek-button uppercase">
-                  REG: {documents.filter(d => d.category === 'Registration' && (d.checked || d.fileUrl)).length}
+                <span className="text-xs text-blue-500 bg-white border border-blue-200 px-3 py-1 rounded-full font-bold">
+                  REG - {documents.filter(d => d.category === 'Registration' && (d.checked || d.fileUrl)).length}
                 </span>
               </div>
             </div>
 
             {/* Checklist Category Groups */}
-            {(['Financial', 'Original', 'Registration'] as const).map((cat, catIdx) => (
-              <div key={catIdx} className="space-y-2 pt-2 first:pt-0">
-                <div className="flex justify-between items-center">
-                  <h4 className="text-slate-400 peek-small-10 uppercase">
-                    {catIdx + 1}. {cat.toUpperCase()} DOCUMENTS
-                  </h4>
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      const newDoc: DocumentItem = {
-                        key: `custom_${Date.now()}_${Math.random()}`,
-                        label: '',
-                        category: cat,
-                        checked: true,
-                        refNo: '',
-                        fileUrl: null,
-                        uploading: false,
-                        isCustom: true
-                      };
-                      setDocuments(prev => [...prev, newDoc]);
-                    }}
-                    className="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded hover:bg-slate-200 transition-colors peek-button uppercase font-semibold"
-                  >
-                    + ADD
-                  </button>
-                </div>
-                
-                <div className="space-y-2">
-                  {documents.filter(doc => doc.category === cat).map((doc) => (
-                    <div key={doc.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 border border-slate-100 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors finance-caption">
-                      <div className="flex items-center gap-3 flex-1">
+            {(['Financial', 'Original', 'Registration'] as const).map((cat, catIdx) => {
+              let subtitle = '';
+              if (cat === 'Financial') subtitle = 'BANK STATEMENTS, INCOME PROOF, IT RETURNS, GST FILINGS';
+              if (cat === 'Original') subtitle = 'PATTAS, DEEDS, VEHICLE PAPERS, JEWELLERY RECEIPTS';
+              if (cat === 'Registration') subtitle = 'JOINT REGISTRATION ON THE FINANCE COMPANY, STAMP PAPERS, BONDS';
+              
+              let headerTitle = `${catIdx + 1}. ${cat.toUpperCase()} DOCUMENTS`;
+              if (cat === 'Original') headerTitle += ' (LAND, ASSETS, ETC.)';
+              if (cat === 'Registration') headerTitle += ' (JOINT REGISTRATION, ETC.)';
+
+              return (
+                <div key={catIdx} className="space-y-4 pt-4 first:pt-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="text-slate-800 text-sm font-bold uppercase">
+                        {headerTitle}
+                      </h4>
+                      <p className="text-slate-500 text-[11px] uppercase mt-0.5">
+                        {subtitle}
+                      </p>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const newDoc: DocumentItem = {
+                          key: `custom_${Date.now()}_${Math.random()}`,
+                          label: '',
+                          category: cat,
+                          checked: true,
+                          refNo: '',
+                          fileUrl: null,
+                          uploading: false,
+                          isCustom: true
+                        };
+                        setDocuments(prev => [...prev, newDoc]);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 rounded-md transition-colors text-xs font-bold uppercase"
+                    >
+                      + ADD
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {documents.filter(doc => doc.category === cat).map((doc) => (
+                      <div key={doc.key} className="flex items-center gap-4">
                         <input
                           type="checkbox"
                           checked={doc.checked}
                           onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, checked: e.target.checked } : d))}
-                          className="w-4 h-4 rounded text-slate-900 border-slate-300 focus:ring-slate-900 shrink-0"
+                          className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-600 shrink-0 ml-4"
                         />
-                        {doc.isCustom ? (
+                        <div className="w-[240px] shrink-0">
+                          {doc.isCustom ? (
+                            <input
+                              type="text"
+                              value={doc.label}
+                              onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, label: e.target.value } : d))}
+                              placeholder="DOCUMENT NAME"
+                              className="w-full bg-white border border-slate-200 rounded-md px-4 py-2 text-sm text-slate-800 font-bold focus:outline-none focus:border-slate-300 uppercase h-[42px]"
+                            />
+                          ) : (
+                            <div className="w-full bg-white border border-slate-200 rounded-md px-4 py-2 text-sm text-slate-800 font-bold uppercase truncate select-none flex items-center h-[42px]">
+                              {doc.label}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex-1 shrink-0 min-w-0">
                           <input
                             type="text"
-                            value={doc.label}
-                            onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, label: e.target.value } : d))}
-                            placeholder="DOCUMENT NAME..."
-                            className="bg-white border border-slate-200 rounded p-1 text-[11px] text-slate-700 w-full focus:outline-none peek-button"
+                            value={doc.refNo}
+                            onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, refNo: e.target.value } : d))}
+                            placeholder="REF NO., AUTHORITY, REMARKS..."
+                            className="w-full bg-white border border-slate-200 rounded-md px-4 py-2 text-sm text-slate-600 uppercase focus:outline-none focus:border-slate-300 placeholder:text-slate-300 h-[42px]"
                           />
-                        ) : (
-                          <span className="text-slate-800 select-none peek-button w-full">
-                            {doc.label}
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-2 flex-1 sm:justify-end shrink-0">
-                        <input
-                          type="text"
-                          value={doc.refNo}
-                          onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, refNo: e.target.value } : d))}
-                          placeholder="REF NO..."
-                          className="bg-white border border-slate-200 rounded p-1 text-[11px] text-slate-700 w-full sm:w-48 focus:outline-none peek-button"
-                        />
+                        </div>
                         
-                        {doc.fileUrl ? (
-                          <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0">
+                          {doc.fileUrl ? (
                             <a
                               href={doc.fileUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="px-2 py-1 text-[9px] bg-green-550 text-white rounded hover:bg-green-600 transition-colors shadow-sm peek-button uppercase"
+                              className="px-4 py-2 text-xs font-bold bg-white text-blue-600 border border-blue-200 rounded-md hover:bg-blue-50 transition-colors uppercase h-[42px] flex items-center justify-center min-w-[100px]"
                             >
                               VIEW
                             </a>
-                          </div>
-                        ) : (
-                          <label className="px-2.5 py-1 text-[9px] bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 cursor-pointer rounded shrink-0 transition-colors select-none shadow-sm flex items-center gap-1 peek-button uppercase">
-                            <Upload className="w-3 h-3" />
-                            {doc.uploading ? 'UPLOADING...' : 'UPLOAD'}
-                            <input
-                              type="file"
-                              accept="image/*,.pdf"
-                              onChange={(e) => handleChecklistUpload(doc.key, e)}
-                              className="hidden"
-                              disabled={doc.uploading}
-                            />
-                          </label>
-                        )}
+                          ) : (
+                            <label className="px-4 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 cursor-pointer rounded-md transition-colors select-none flex items-center justify-center gap-2 uppercase h-[42px] min-w-[100px]">
+                              <Upload className="w-3.5 h-3.5 text-slate-500" />
+                              {doc.uploading ? 'UPLOADING...' : 'UPLOAD'}
+                              <input
+                                type="file"
+                                accept="image/*,.pdf"
+                                onChange={(e) => handleChecklistUpload(doc.key, e)}
+                                className="hidden"
+                                disabled={doc.uploading}
+                              />
+                            </label>
+                          )}
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (doc.fileUrl) {
-                              removeChecklistUpload(doc.key);
-                            } else {
-                              setDocuments(prev => prev.filter(d => d.key !== doc.key));
-                            }
-                          }}
-                          className="p-1 text-red-500 hover:bg-red-50 rounded shrink-0 ml-1"
-                          title={doc.fileUrl ? "Remove uploaded file" : "Delete document row"}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (doc.isCustom) {
+                                // For custom rows, remove the row completely
+                                setDocuments(prev => prev.filter(d => d.key !== doc.key));
+                              } else {
+                                // For default rows, reset them
+                                if (doc.fileUrl) {
+                                  removeChecklistUpload(doc.key);
+                                }
+                                setDocuments(prev => prev.map(d => 
+                                  d.key === doc.key ? { ...d, checked: false, refNo: '', fileUrl: null } : d
+                                ));
+                              }
+                            }}
+                            className="w-[42px] h-[42px] text-red-400 hover:text-red-500 hover:bg-red-50 border border-red-100 rounded-md transition-colors shrink-0 flex items-center justify-center"
+                            title="Remove or Reset Document"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Card 7: ASSET / COLLATERAL LOCATION */}
