@@ -113,12 +113,15 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       )
       .slice(0, 5);
 
+      const isFinance = typeof window !== 'undefined' && window.location.pathname.startsWith('/finance');
+      const fontStyle = isFinance ? {} : { fontFamily: style?.fontFamily || 'Times New Roman' };
+
     return (
       <div className={className} style={{ position: 'relative' }} ref={wrapperRef}>
         {label && (
-          <label className={`block font-bold text-gray-700 mb-1 ${
+          <label className={isFinance ? `finance-label ${size === 'lg' ? 'text-[12px]' : ''}` : `block font-bold text-gray-700 mb-1 ${
             size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-base' : 'text-sm'
-          }`} style={{ fontFamily: style?.fontFamily || 'Times New Roman', fontSize: '14px', fontWeight: 'bold' }}>
+          }`} style={isFinance ? {} : { fontFamily: style?.fontFamily || 'Times New Roman', fontSize: '14px', fontWeight: 'bold' }}>
             {label}
             {required && <span className='text-red-500 ml-1'>*</span>}
           </label>
@@ -150,7 +153,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             className={`w-full border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed font-bold ${
               size === 'sm' ? 'px-2 py-1 text-sm' : size === 'lg' ? 'px-4 py-3 text-lg' : 'px-3 py-2 text-base'
             } ${type === 'date' ? 'cursor-pointer' : ''}`}
-            style={{ fontFamily: 'Times New Roman', fontSize: '14px', fontWeight: 'bold', ...style }}
+            style={isFinance ? { ...style } : { fontFamily: 'Times New Roman', fontSize: '14px', fontWeight: 'bold', ...style }}
             onFocus={() => {
               setShowSuggestions(true);
             }}

@@ -117,7 +117,7 @@ export default function LedgerSettings() {
       {/* Header */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Ledger Settings</h1>
+          <h1 className="finance-page-title">Ledger Settings</h1>
           <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mt-1">
             Customize interest, overdue rate, and method for each ledger. Changes apply everywhere.
           </p>

@@ -141,8 +141,8 @@ const UserAccessManagement: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5 mb-6">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">OPERATOR ACCESS CONTROL</h1>
-          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Configure feature access rights for operators in Finance Mode (Admins bypass all rules)</p>
+          <h1 className="finance-page-title">OPERATOR ACCESS CONTROL</h1>
+          <p className="finance-page-subtitle mt-1">Configure feature access rights for operators in Finance Mode (Admins bypass all rules)</p>
         </div>
       </div>
 

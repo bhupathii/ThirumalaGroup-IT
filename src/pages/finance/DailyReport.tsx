@@ -172,7 +172,7 @@ const DailyReportFinance: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Daily Report</h1>
+          <h1 className="finance-page-title">Daily Report</h1>
           <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mt-1">Chronological transaction log with account-summary sidebar</p>
         </div>
         <div className="flex gap-2">

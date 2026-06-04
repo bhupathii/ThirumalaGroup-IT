@@ -155,14 +155,14 @@ const FinanceDashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-xl font-extrabold text-slate-900 tracking-wider">DASHBOARD</h1>
-          <p className="text-[10px] font-black text-slate-400 tracking-widest uppercase mt-0.5">
+          <p className="finance-page-subtitle">
             OVERVIEW OF TODAY'S CHITFUND OPERATIONS
           </p>
         </div>
         <div className="flex items-center gap-2.5">
           <Link
             to="/finance/loan-entry"
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-black bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all shadow-sm uppercase tracking-wider"
+            className="inline-flex items-center gap-2 px-4 py-2.5 finance-button-text bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all shadow-sm uppercase tracking-wider"
           >
             <Plus className="w-3.5 h-3.5 stroke-[3px]" />
             NEW LOAN
@@ -179,7 +179,7 @@ const FinanceDashboard: React.FC = () => {
 
       {/* TODAY AT A GLANCE section */}
       <div className="space-y-3">
-        <h2 className="text-[10px] font-black text-slate-400 tracking-widest uppercase">
+        <h2 className="finance-section-title">
           TODAY AT A GLANCE
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -187,7 +187,7 @@ const FinanceDashboard: React.FC = () => {
           {/* Card 1: Disbursed (All-time) */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[110px]">
             <div className="flex justify-between items-start">
-              <span className="text-[9px] font-black text-slate-450 uppercase tracking-widest">
+              <span className="finance-card-title">
                 DISBURSED (ALL-TIME)
               </span>
               <div className="p-1.5 bg-slate-50 text-slate-500 rounded-lg border border-slate-100/80">
@@ -207,7 +207,7 @@ const FinanceDashboard: React.FC = () => {
           {/* Card 2: Outstanding */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[110px]">
             <div className="flex justify-between items-start">
-              <span className="text-[9px] font-black text-slate-450 uppercase tracking-widest">
+              <span className="finance-card-title">
                 OUTSTANDING
               </span>
               <div className="p-1.5 bg-red-50 text-red-500 rounded-lg border border-red-100/50">
@@ -227,7 +227,7 @@ const FinanceDashboard: React.FC = () => {
           {/* Card 3: Collected Today */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[110px]">
             <div className="flex justify-between items-start">
-              <span className="text-[9px] font-black text-slate-450 uppercase tracking-widest">
+              <span className="finance-card-title">
                 COLLECTED TODAY
               </span>
               <div className="p-1.5 bg-green-50 text-green-600 rounded-lg border border-green-100/50">
@@ -247,7 +247,7 @@ const FinanceDashboard: React.FC = () => {
           {/* Card 4: Overdue Loans */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[110px]">
             <div className="flex justify-between items-start">
-              <span className="text-[9px] font-black text-slate-450 uppercase tracking-widest">
+              <span className="finance-card-title">
                 OVERDUE LOANS
               </span>
               <div className="p-1.5 bg-orange-50 text-orange-500 rounded-lg border border-orange-100/50">
@@ -269,7 +269,7 @@ const FinanceDashboard: React.FC = () => {
 
       {/* QUICK ACTIONS section */}
       <div className="space-y-3">
-        <h2 className="text-[10px] font-black text-slate-400 tracking-widest uppercase">
+        <h2 className="finance-section-title">
           QUICK ACTIONS
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -300,7 +300,7 @@ const FinanceDashboard: React.FC = () => {
         <div className="lg:col-span-2 space-y-3">
           <div className="flex justify-between items-end border-b border-slate-100 pb-2">
             <div>
-              <h2 className="text-sm font-black text-slate-800 tracking-wide uppercase">
+              <h2 className="finance-page-title text-sm">
                 RECENT LOANS
               </h2>
               <p className="text-[9px] font-bold text-slate-400 tracking-wider uppercase mt-0.5">
@@ -325,7 +325,7 @@ const FinanceDashboard: React.FC = () => {
               </div>
               <Link
                 to="/finance/loan-entry"
-                className="inline-flex items-center justify-center px-5 py-2.5 text-xs font-black bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors shadow-sm uppercase tracking-wider"
+                className="inline-flex items-center justify-center px-5 py-2.5 finance-button-text bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors shadow-sm uppercase tracking-wider"
               >
                 CREATE LOAN
               </Link>
@@ -336,9 +336,9 @@ const FinanceDashboard: React.FC = () => {
                 <table className="min-w-full divide-y divide-slate-150 text-xs">
                   <thead>
                     <tr className="bg-slate-50/75 text-slate-500 font-bold uppercase tracking-wider text-[9px]">
-                      <th className="px-4 py-3 text-left">Loan ID</th>
-                      <th className="px-4 py-3 text-left">Customer Name</th>
-                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="finance-table-header">Loan ID</th>
+                      <th className="finance-table-header">Customer Name</th>
+                      <th className="finance-table-header">Date</th>
                       <th className="px-4 py-3 text-right">Amount</th>
                       <th className="px-4 py-3 text-center">Category</th>
                       <th className="px-4 py-3 text-center">Status</th>
@@ -389,7 +389,7 @@ const FinanceDashboard: React.FC = () => {
         {/* Right Column: Reports */}
         <div className="space-y-3">
           <div className="border-b border-slate-100 pb-2">
-            <h2 className="text-sm font-black text-slate-800 tracking-wide uppercase">
+            <h2 className="finance-page-title text-sm">
               REPORTS
             </h2>
             <p className="text-[9px] font-bold text-slate-400 tracking-wider uppercase mt-0.5">

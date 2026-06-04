@@ -833,22 +833,22 @@ const LoanEntry: React.FC = () => {
       {/* Top Header Actions Bar */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5 print:hidden">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">NEW LOAN ENTRY</h1>
-          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">
+          <h1 className="finance-page-title">NEW LOAN ENTRY</h1>
+          <p className="finance-page-subtitle mt-1">
             CAPTURE & DISBURSE GENERAL — LEDGER — DUES CALCULATIONS PREVIEW & FILE
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => navigate('/finance')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
           </button>
           <Link
             to="/finance/calculator"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
           >
             <Calculator className="w-3.5 h-3.5" />
             CALCULATOR
@@ -856,7 +856,7 @@ const LoanEntry: React.FC = () => {
           <button
             onClick={handlePrintPreview}
             disabled={!liveCalculations}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
           >
             <Printer className="w-3.5 h-3.5" />
             PREVIEW & PRINT
@@ -871,7 +871,7 @@ const LoanEntry: React.FC = () => {
           <button
             onClick={handleSaveLoan}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
           >
             <Check className="w-3.5 h-3.5" />
             {saving ? 'SAVING...' : 'SAVE LOAN'}
@@ -892,7 +892,7 @@ const LoanEntry: React.FC = () => {
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                <label className="finance-label">
                   DATE *
                 </label>
                 <input
@@ -905,7 +905,7 @@ const LoanEntry: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                <label className="finance-label">
                   LEDGER TYPE *
                 </label>
                 <select
@@ -926,7 +926,7 @@ const LoanEntry: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                <label className="finance-label">
                   LOAN NUMBER
                 </label>
                 <input
@@ -1517,7 +1517,7 @@ const LoanEntry: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                <label className="finance-label">
                   DUE TYPE *
                 </label>
                 <select
@@ -1549,7 +1549,7 @@ const LoanEntry: React.FC = () => {
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                <label className="finance-label">
                   SELECT PARTNER
                 </label>
                 <select
@@ -1702,7 +1702,7 @@ const LoanEntry: React.FC = () => {
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                <label className="finance-label">
                   REMARKS
                 </label>
                 <textarea
@@ -1715,7 +1715,7 @@ const LoanEntry: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                <label className="finance-label">
                   EXTRA DETAILS
                 </label>
                 <textarea
@@ -1821,7 +1821,7 @@ const LoanEntry: React.FC = () => {
         <div className="space-y-6">
           {/* Top Header */}
           <div className="text-center border-b pb-4">
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">THIRUMALA GROUP - LOAN ENTRY</h1>
+            <h1 className="finance-page-title">THIRUMALA GROUP - LOAN ENTRY</h1>
             <p className="text-sm font-bold text-slate-500 mt-1">Date: {date} | Loan Type: {loanCategory}</p>
           </div>
           

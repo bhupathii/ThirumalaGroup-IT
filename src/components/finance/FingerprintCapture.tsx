@@ -116,7 +116,7 @@ export const FingerprintCapture: React.FC<FingerprintCaptureProps> = ({
   return (
     <div className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-xl">
       <div className="flex justify-between items-center">
-        <label className="block text-xs font-bold text-gray-700" style={{ fontFamily: 'Times New Roman' }}>
+        <label className="block text-xs font-bold text-gray-700" >
           {label}
         </label>
         {fingerprintAdded && (

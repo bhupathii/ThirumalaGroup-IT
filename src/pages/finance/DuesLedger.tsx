@@ -199,7 +199,7 @@ const DuesLedger: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Dues Ledger</h1>
+          <h1 className="finance-page-title">Dues Ledger</h1>
           <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mt-1">
             Outstanding, NPA, and Partner-wise Due Lists with Grace/Penalty already applied
           </p>

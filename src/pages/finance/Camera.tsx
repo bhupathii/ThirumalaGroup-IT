@@ -153,7 +153,7 @@ const Camera: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center border-b border-green-100 pb-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Camera Attachment</h1>
+          <h1 className="finance-page-title">Camera Attachment</h1>
           <p className="text-gray-500 text-sm mt-1">Capture customer/surety photos and link them to active loan records</p>
         </div>
       </div>
@@ -163,14 +163,14 @@ const Camera: React.FC = () => {
         <Card title="Live Camera Capture" subtitle="Record customer profile or surety details">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1" style={{ fontFamily: 'Times New Roman', fontSize: '14px' }}>
+              <label className="finance-label" >
                 Select Active Loan *
               </label>
               <select
                 value={selectedLoanId}
                 onChange={(e) => setSelectedLoanId(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg p-2 font-bold focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-base text-gray-800"
-                style={{ fontFamily: 'Times New Roman', fontSize: '14px' }}
+                
               >
                 <option value="">-- Choose Loan (Customer Name) --</option>
                 {loans.map(l => (
@@ -180,7 +180,7 @@ const Camera: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1" style={{ fontFamily: 'Times New Roman', fontSize: '14px' }}>
+              <label className="finance-label" >
                 Photo Category *
               </label>
               <div className="grid grid-cols-2 gap-2">

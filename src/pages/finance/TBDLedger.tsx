@@ -89,7 +89,7 @@ const TBDLedger: React.FC = () => {
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
       <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">TBD Ledger</h1>
+          <h1 className="finance-page-title">TBD Ledger</h1>
           <p className="text-gray-500 text-sm mt-1">Review accounts starting with the 'TBD' or 'T-' identifier prefix</p>
         </div>
         <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>

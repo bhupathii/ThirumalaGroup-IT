@@ -208,8 +208,8 @@ const EditLoanEntry: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5 mb-6">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">EDIT LOAN LEDGER</h1>
-          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-1">Modify active loan parameters, surety files, and record status updates</p>
+          <h1 className="finance-page-title">EDIT LOAN LEDGER</h1>
+          <p className="finance-page-subtitle mt-1">Modify active loan parameters, surety files, and record status updates</p>
         </div>
       </div>
 
@@ -255,7 +255,7 @@ const EditLoanEntry: React.FC = () => {
                 <h4 className="font-extrabold text-sm text-gray-800 border-b pb-1">Loan Parameters</h4>
                 <Input label="Disbursed Date" type="date" value={date} onChange={setDate} required />
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1" style={{ fontFamily: 'Times New Roman' }}>
+                  <label className="finance-label" >
                     Loan Category
                   </label>
                   <select
@@ -279,7 +279,7 @@ const EditLoanEntry: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1" style={{ fontFamily: 'Times New Roman' }}>
+                    <label className="finance-label" >
                       Instalment Type
                     </label>
                     <select
@@ -321,7 +321,7 @@ const EditLoanEntry: React.FC = () => {
                 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1" style={{ fontFamily: 'Times New Roman' }}>
+                    <label className="finance-label" >
                       Account Status
                     </label>
                     <select
@@ -383,11 +383,11 @@ const EditLoanEntry: React.FC = () => {
                 <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
                   <thead>
                     <tr className="bg-gray-50">
-                      <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Loan ID</th>
-                      <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Customer</th>
-                      <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Aadhaar</th>
+                      <th className="finance-table-header">Loan ID</th>
+                      <th className="finance-table-header">Customer</th>
+                      <th className="finance-table-header">Aadhaar</th>
                       <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Principal</th>
-                      <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Instalment</th>
+                      <th className="finance-table-header">Instalment</th>
                       <th className="px-3 py-3 text-center font-bold text-gray-500 uppercase">Status</th>
                       <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Action</th>
                     </tr>

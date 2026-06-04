@@ -127,7 +127,7 @@ const Daybook: React.FC = () => {
       {/* Title */}
       <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Finance Daybook</h1>
+          <h1 className="finance-page-title">Finance Daybook</h1>
           <p className="text-gray-500 text-sm mt-1">Review cash inflow and outflow transactions for any specific business day</p>
         </div>
         <div className="flex gap-2">

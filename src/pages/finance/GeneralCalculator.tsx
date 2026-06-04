@@ -125,22 +125,22 @@ const GeneralCalculator: React.FC = () => {
             <span>/</span>
             <span className="text-slate-600">CALCULATOR</span>
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">GENERAL CALCULATOR</h1>
-          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">
+          <h1 className="finance-page-title mt-1">GENERAL CALCULATOR</h1>
+          <p className="finance-page-subtitle mt-0.5">
             TRY ANY LEDGER'S MATH. RATE DEFAULTS COME FROM SETTINGS → LEDGERS.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/finance')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
           </button>
           <button
             onClick={() => setShowPrintModal(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
           >
             <Printer className="w-3.5 h-3.5" />
             PRINT
@@ -172,7 +172,7 @@ const GeneralCalculator: React.FC = () => {
             
             {/* Loan Type Selector */}
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+              <label className="finance-label">
                 LOAN TYPE
               </label>
               <select
@@ -190,7 +190,7 @@ const GeneralCalculator: React.FC = () => {
             {/* Principal & Date */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                <label className="finance-label">
                   PRINCIPAL (₹)
                 </label>
                 <input
@@ -218,7 +218,7 @@ const GeneralCalculator: React.FC = () => {
             {/* Period Days & Interest Rate */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                <label className="finance-label">
                   PERIOD (DAYS)
                 </label>
                 <input
@@ -231,7 +231,7 @@ const GeneralCalculator: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                <label className="finance-label">
                   RATE (% / MONTH)
                 </label>
                 <input
@@ -248,7 +248,7 @@ const GeneralCalculator: React.FC = () => {
             {/* Overdue Rate & Amount Paid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                <label className="finance-label">
                   OVERDUE (% / MONTH)
                 </label>
                 <input
@@ -277,7 +277,7 @@ const GeneralCalculator: React.FC = () => {
 
             {/* Document Charges */}
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+              <label className="finance-label">
                 DOCUMENT (₹)
               </label>
               <input

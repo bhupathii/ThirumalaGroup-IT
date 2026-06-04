@@ -111,7 +111,7 @@ const AadhaarSearch: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center border-b border-green-100 pb-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Aadhaar Search Engine</h1>
+          <h1 className="finance-page-title">Aadhaar Search Engine</h1>
           <p className="text-gray-500 text-sm mt-1">Look up customer risk profile and full historical loan sheets using Aadhaar UID</p>
         </div>
       </div>

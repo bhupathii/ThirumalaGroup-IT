@@ -69,7 +69,7 @@ const EditedDeletedLogs: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center border-b border-green-100 pb-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Audit Logs Registry</h1>
+          <h1 className="finance-page-title">Audit Logs Registry</h1>
           <p className="text-gray-500 text-sm mt-1">Review full audit histories of edited or deleted finance entries</p>
         </div>
       </div>
@@ -114,11 +114,11 @@ const EditedDeletedLogs: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-200 text-xs">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Timestamp</th>
-                    <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Table</th>
-                    <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Operator</th>
-                    <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Old Values</th>
-                    <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">New Values</th>
+                    <th className="finance-table-header">Timestamp</th>
+                    <th className="finance-table-header">Table</th>
+                    <th className="finance-table-header">Operator</th>
+                    <th className="finance-table-header">Old Values</th>
+                    <th className="finance-table-header">New Values</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
@@ -156,10 +156,10 @@ const EditedDeletedLogs: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-200 text-xs">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Timestamp</th>
-                    <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Table</th>
-                    <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Operator</th>
-                    <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Old Values</th>
+                    <th className="finance-table-header">Timestamp</th>
+                    <th className="finance-table-header">Table</th>
+                    <th className="finance-table-header">Operator</th>
+                    <th className="finance-table-header">Old Values</th>
                     <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Action</th>
                   </tr>
                 </thead>

@@ -385,8 +385,8 @@ const NewCustomer: React.FC = () => {
           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
             DASHBOARD / CUSTOMERS / {editId ? 'EDIT' : 'NEW'}
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">{editId ? 'EDIT CUSTOMER' : 'NEW CUSTOMER'}</h1>
-          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">
+          <h1 className="finance-page-title mt-1">{editId ? 'EDIT CUSTOMER' : 'NEW CUSTOMER'}</h1>
+          <p className="finance-page-subtitle mt-0.5">
             {editId ? 'MODIFY CUSTOMER MASTER LIST RECORD' : 'REGISTER A NEW CUSTOMER IN THE MASTER LIST'}
           </p>
         </div>
@@ -394,7 +394,7 @@ const NewCustomer: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
@@ -402,7 +402,7 @@ const NewCustomer: React.FC = () => {
           <button
             type="button"
             onClick={handleResetForm}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             RESET
@@ -411,7 +411,7 @@ const NewCustomer: React.FC = () => {
             type="button"
             onClick={handleSubmit}
             disabled={saving || uploading}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
           >
             <Save className="w-3.5 h-3.5" />
             {saving ? 'SAVING...' : 'SAVE'}
@@ -432,7 +432,7 @@ const NewCustomer: React.FC = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  <label className="finance-label">
                     CUSTOMER ID
                   </label>
                   <input
@@ -448,7 +448,7 @@ const NewCustomer: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  <label className="finance-label">
                     AADHAAR
                   </label>
                   <input
@@ -462,7 +462,7 @@ const NewCustomer: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                <label className="finance-label">
                   NAME <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -477,7 +477,7 @@ const NewCustomer: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  <label className="finance-label">
                     FATHER
                   </label>
                   <input
@@ -490,7 +490,7 @@ const NewCustomer: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  <label className="finance-label">
                     VILLAGE
                   </label>
                   <input
@@ -503,7 +503,7 @@ const NewCustomer: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  <label className="finance-label">
                     MANDAL
                   </label>
                   <input
@@ -516,7 +516,7 @@ const NewCustomer: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  <label className="finance-label">
                     DISTRICT
                   </label>
                   <input
@@ -532,7 +532,7 @@ const NewCustomer: React.FC = () => {
               {/* Address Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  <label className="finance-label">
                     AADHAAR ADDRESS
                   </label>
                   <textarea
@@ -545,7 +545,7 @@ const NewCustomer: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  <label className="finance-label">
                     PRESENT ADDRESS
                   </label>
                   <textarea
@@ -561,7 +561,7 @@ const NewCustomer: React.FC = () => {
               {/* Phone Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  <label className="finance-label">
                     PHONE 1
                   </label>
                   <input
@@ -574,7 +574,7 @@ const NewCustomer: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                  <label className="finance-label">
                     PHONE 2
                   </label>
                   <input

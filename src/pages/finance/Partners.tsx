@@ -157,29 +157,29 @@ const Partners: React.FC = () => {
             <span>/</span>
             <span className="text-slate-600">PARTNERS</span>
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1">PARTNERS</h1>
-          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">
+          <h1 className="finance-page-title mt-1">PARTNERS</h1>
+          <p className="finance-page-subtitle mt-0.5">
             VIEW, SEARCH, AND MANAGE REGISTERED PARTNERS / MDS
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/finance')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
           </button>
           <button
             onClick={() => navigate('/finance/new-partner')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
           >
             <UserPlus className="w-3.5 h-3.5" />
             NEW PARTNER
           </button>
           <button
             onClick={fetchData}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
           >
             <RefreshCw className="w-3.5 h-3.5 text-slate-550" />
             REFRESH
@@ -193,7 +193,7 @@ const Partners: React.FC = () => {
           
           {/* Search Box */}
           <div className="relative">
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+            <label className="finance-label">
               SEARCH PARTNERS
             </label>
             <div className="relative">
@@ -210,7 +210,7 @@ const Partners: React.FC = () => {
 
           {/* Role Filter */}
           <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+            <label className="finance-label">
               ROLE FILTER
             </label>
             <select
@@ -226,7 +226,7 @@ const Partners: React.FC = () => {
 
           {/* Village Filter */}
           <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+            <label className="finance-label">
               VILLAGE
             </label>
             <select
@@ -243,7 +243,7 @@ const Partners: React.FC = () => {
 
           {/* Sort By */}
           <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+            <label className="finance-label">
               SORT BY
             </label>
             <select
@@ -272,12 +272,12 @@ const Partners: React.FC = () => {
             <Info className="w-12 h-12 text-slate-350" />
           </div>
           <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">No partners found</h2>
-          <p className="text-slate-400 text-xs font-bold uppercase tracking-wider max-w-sm mx-auto leading-normal">
+          <p className="finance-page-subtitle max-w-sm mx-auto leading-normal">
             No active financing partners match your search query or filters. Click below to add a new partner.
           </p>
           <button
             onClick={() => navigate('/finance/new-partner')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
           >
             <UserPlus className="w-3.5 h-3.5" />
             ADD NEW PARTNER
@@ -293,15 +293,15 @@ const Partners: React.FC = () => {
             <table className="min-w-full divide-y divide-slate-150 text-xs md:text-sm">
               <thead>
                 <tr className="bg-slate-50/50">
-                  <th className="px-3 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">S.No</th>
-                  <th className="px-3 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">Partner ID</th>
-                  <th className="px-3 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">Name</th>
-                  <th className="px-3 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">Role</th>
-                  <th className="px-3 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">Phone</th>
-                  <th className="px-3 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">Home Phone</th>
-                  <th className="px-3 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">Village</th>
-                  <th className="px-3 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">MD Name</th>
-                  <th className="px-3 py-3 text-left font-bold text-slate-500 uppercase tracking-wider">Created Date</th>
+                  <th className="finance-table-header">S.No</th>
+                  <th className="finance-table-header">Partner ID</th>
+                  <th className="finance-table-header">Name</th>
+                  <th className="finance-table-header">Role</th>
+                  <th className="finance-table-header">Phone</th>
+                  <th className="finance-table-header">Home Phone</th>
+                  <th className="finance-table-header">Village</th>
+                  <th className="finance-table-header">MD Name</th>
+                  <th className="finance-table-header">Created Date</th>
                   <th className="px-3 py-3 text-right font-bold text-slate-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -437,7 +437,7 @@ const Partners: React.FC = () => {
 
               {/* Capital balance */}
               <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-150 flex flex-col space-y-1 mt-2">
-                <span className="text-[9px] font-black text-slate-450 uppercase tracking-widest">Capital Invested</span>
+                <span className="finance-card-title">Capital Invested</span>
                 <span className={`text-base font-black ${
                   (partnerBalances[selectedPartner.id] || 0) >= 0 ? 'text-green-600' : 'text-red-655'
                 }`}>

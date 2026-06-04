@@ -350,7 +350,7 @@ const CDLedger: React.FC = () => {
         <div className="p-4 bg-red-50 rounded-full border border-red-200">
           <ShieldAlert className="w-16 h-16 text-red-600 animate-pulse" />
         </div>
-        <h1 className="text-2xl font-black text-gray-900">Access Restricted</h1>
+        <h1 className="finance-page-title">Access Restricted</h1>
         <p className="text-gray-500 max-w-md">
           Only authorized personnel are allowed to view the CD Ledger registry. Please consult your administrator to request access.
         </p>
@@ -861,12 +861,12 @@ const CDLedger: React.FC = () => {
                 <table className="min-w-full divide-y divide-gray-100 text-xs md:text-sm">
                   <thead>
                     <tr className="bg-gray-50/50">
-                      <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Date</th>
-                      <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Credit (Col)</th>
-                      <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Debit (Dis)</th>
-                      <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Balance</th>
-                      <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Mode</th>
-                      <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Staff</th>
+                      <th className="finance-table-header">Date</th>
+                      <th className="finance-table-header">Credit (Col)</th>
+                      <th className="finance-table-header">Debit (Dis)</th>
+                      <th className="finance-table-header">Balance</th>
+                      <th className="finance-table-header">Mode</th>
+                      <th className="finance-table-header">Staff</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
@@ -907,7 +907,7 @@ const CDLedger: React.FC = () => {
                 <table className="min-w-full divide-y divide-gray-100 text-xs md:text-sm">
                   <thead>
                     <tr className="bg-gray-50/50">
-                      <th className="px-3 py-3 text-left font-bold text-gray-500 uppercase">Due Date</th>
+                      <th className="finance-table-header">Due Date</th>
                       <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Amount</th>
                       <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Paid</th>
                       <th className="px-3 py-3 text-center font-bold text-gray-500 uppercase">Status</th>

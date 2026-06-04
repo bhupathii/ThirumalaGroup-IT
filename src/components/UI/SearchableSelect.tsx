@@ -223,14 +223,16 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
       }
     };
 
+    const isFinance = typeof window !== 'undefined' && window.location.pathname.startsWith('/finance');
+
     return (
       <div className={`relative ${className}`} ref={dropdownRef}>
         {label && (
           <label 
-            className={`block font-bold text-gray-700 mb-1 ${
+            className={isFinance ? `finance-label ${size === 'lg' ? 'text-[12px]' : ''}` : `block font-bold text-gray-700 mb-1 ${
               size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-base' : 'text-sm'
             }`} 
-            style={{ fontFamily: 'Times New Roman', fontSize: '14px', fontWeight: 'bold' }}
+            style={isFinance ? {} : { fontFamily: 'Times New Roman', fontSize: '14px', fontWeight: 'bold' }}
           >
             {label}
             {required && <span className='text-red-500 ml-1'>*</span>}
@@ -257,7 +259,7 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
             className={`w-full pr-20 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed font-bold ${
               size === 'sm' ? 'px-2 py-1 text-sm' : size === 'lg' ? 'px-4 py-3 text-lg' : 'px-3 py-2 text-base'
             } ${className.includes('staff-field') ? 'uppercase' : ''}`}
-            style={{ 
+            style={isFinance ? { ...(className.includes('staff-field') ? { textTransform: 'uppercase' } : {}) } : { 
               fontFamily: 'Times New Roman', 
               fontSize: '14px',
               fontWeight: 'bold',

@@ -1,3 +1,28 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  /* Finance Typography System */
+  .finance-page-title {
+    @apply text-xl font-extrabold text-slate-900 tracking-wider uppercase;
+  }
+  .finance-page-subtitle {
+    @apply text-[10px] font-black text-slate-400 tracking-widest uppercase mt-0.5;
+  }
+  .finance-section-title {
+    @apply text-[10px] font-black text-slate-400 tracking-widest uppercase;
+  }
+  .finance-card-title {
+    @apply text-[9px] font-black text-slate-500 uppercase tracking-widest;
+  }
+  .finance-label {
+    @apply text-[10px] font-black text-slate-800 tracking-wider uppercase mb-1.5;
+  }
+  .finance-table-header {
+    @apply text-[9px] font-bold text-slate-500 uppercase tracking-wider text-left px-3 py-3;
+  }
+  .finance-button-text {
+    @apply text-xs font-black uppercase tracking-wider;
+  }
+}

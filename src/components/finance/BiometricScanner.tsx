@@ -151,7 +151,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
   return (
     <div className="p-3 bg-white border border-gray-200 rounded-xl space-y-3 shadow-sm">
       <div className="flex justify-between items-center">
-        <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5" style={{ fontFamily: 'Times New Roman' }}>
+        <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5" >
           <Fingerprint className="w-3.5 h-3.5 text-green-700" />
           {label}
         </label>
