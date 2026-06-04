@@ -108,7 +108,7 @@ const FinanceSidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-150 flex flex-col select-none shrink-0 h-full overflow-y-auto custom-scrollbar">
+    <aside className="w-64 bg-white border-r border-slate-150 flex flex-col select-none shrink-0 h-full overflow-y-auto custom-scrollbar font-outfit">
       <div className="flex-1 py-4 px-3 space-y-6">
         {sections.map((section, sIdx) => {
           // Filter items based on permissions
@@ -127,7 +127,7 @@ const FinanceSidebar: React.FC = () => {
 
           return (
             <div key={sIdx} className="space-y-1.5">
-              <h3 className="px-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+              <h3 className="px-3 text-slate-400 tracking-[0.5px] mb-2 finance-small-label uppercase">
                 {section.title}
               </h3>
               <ul className="space-y-0.5">
@@ -137,7 +137,7 @@ const FinanceSidebar: React.FC = () => {
                       to={item.path}
                       end={item.path === '/finance'}
                       className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-bold transition-all uppercase tracking-wide
+                        `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold transition-all uppercase tracking-[0.16px]
                         ${
                           isActive
                             ? 'bg-[#0f172a] text-white shadow-sm'

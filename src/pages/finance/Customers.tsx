@@ -118,34 +118,34 @@ const Customers: React.FC = () => {
       {/* Top Header Actions Bar */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5">
         <div>
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+          <div className="text-slate-400 flex items-center gap-1.5 finance-small-label uppercase">
             <span>DASHBOARD</span>
             <span>/</span>
             <span className="text-slate-600">CUSTOMERS</span>
           </div>
-          <h1 className="finance-page-title mt-1">CUSTOMERS</h1>
-          <p className="finance-page-subtitle mt-0.5">
+          <h1 className="mt-1 finance-h1">CUSTOMERS</h1>
+          <p className="mt-0.5 finance-small-label uppercase">
             VIEW, SEARCH, AND MANAGE REGISTERED BORROWERS
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/finance')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
           </button>
           <button
             onClick={fetchCustomers}
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             REFRESH
           </button>
           <button
             onClick={() => navigate('/finance/new-customer')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm finance-button uppercase"
           >
             <Plus className="w-3.5 h-3.5" />
             NEW CUSTOMER
@@ -159,7 +159,7 @@ const Customers: React.FC = () => {
           
           {/* Search box */}
           <div className="md:col-span-2 relative">
-            <label className="finance-label">
+            <label className="finance-caption uppercase">
               SEARCH CUSTOMERS
             </label>
             <div className="relative">
@@ -169,20 +169,20 @@ const Customers: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by name, phone, Aadhaar UID, village..."
-                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-850 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-950 shadow-sm"
+                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-slate-850 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-950 shadow-sm finance-header-time"
               />
             </div>
           </div>
 
           {/* Sort selection */}
           <div>
-            <label className="finance-label">
+            <label className="finance-caption uppercase">
               SORT BY
             </label>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as 'Latest' | 'Name' | 'Customer ID')}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-855 focus:ring-1 focus:ring-slate-955 focus:outline-none h-9 shadow-sm"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-855 focus:ring-1 focus:ring-slate-955 focus:outline-none h-9 shadow-sm finance-header-time"
             >
               <option value="Latest">LATEST REGISTERED</option>
               <option value="Name">CUSTOMER NAME</option>
@@ -197,20 +197,20 @@ const Customers: React.FC = () => {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-4">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-slate-900"></div>
-          <p className="text-sm font-semibold text-slate-500">Loading customers database...</p>
+          <p className="text-slate-500 finance-section-heading">Loading customers database...</p>
         </div>
       ) : filteredCustomers.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-xl border border-slate-150 shadow-sm space-y-4">
           <div className="p-4 bg-slate-50 rounded-full border border-slate-100 max-w-fit mx-auto">
             <Info className="w-12 h-12 text-slate-350" />
           </div>
-          <h2 className="finance-section-title">No customers found</h2>
-          <p className="finance-page-subtitle max-w-sm mx-auto leading-normal">
+          <h2 className="finance-section-heading uppercase">No customers found</h2>
+          <p className="max-w-sm mx-auto finance-small-label uppercase">
             No active customer profiles match your search criteria. Click below to add a new borrower.
           </p>
           <button
             onClick={() => navigate('/finance/new-customer')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm finance-button uppercase"
           >
             <Plus className="w-3.5 h-3.5" />
             ADD CUSTOMER
@@ -218,32 +218,32 @@ const Customers: React.FC = () => {
         </div>
       ) : (
         <Card 
-          title={<span className="text-xs font-black text-slate-900 tracking-wider uppercase">BORROWERS DATABASE</span>}
-          subtitle={<span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">LIST OF ACTIVE REGISTERED CUSTOMERS</span>}
+          title={<span className="text-slate-900 finance-header-time uppercase">BORROWERS DATABASE</span>}
+          subtitle={<span className="text-slate-400 finance-small-label uppercase">LIST OF ACTIVE REGISTERED CUSTOMERS</span>}
           className="shadow-sm border-slate-150 rounded-xl"
         >
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-150 text-xs md:text-sm">
+            <table className="min-w-full divide-y divide-slate-150 md:text-sm finance-caption">
               <thead>
                 <tr className="bg-slate-50/50">
-                  <th className="finance-table-header">S.No</th>
-                  <th className="finance-table-header">Customer ID</th>
-                  <th className="finance-table-header">Photo</th>
-                  <th className="finance-table-header">Name</th>
-                  <th className="finance-table-header">Father Name</th>
-                  <th className="finance-table-header">Contact Info</th>
-                  <th className="finance-table-header">Aadhaar UID</th>
-                  <th className="px-3 py-3 text-left font-bold text-slate-500 tracking-wider uppercase">Village/Mandal</th>
-                  <th className="finance-table-header text-right">Actions</th>
+                  <th className="finance-small-label uppercase">S.No</th>
+                  <th className="finance-small-label uppercase">Customer ID</th>
+                  <th className="finance-small-label uppercase">Photo</th>
+                  <th className="finance-small-label uppercase">Name</th>
+                  <th className="finance-small-label uppercase">Father Name</th>
+                  <th className="finance-small-label uppercase">Contact Info</th>
+                  <th className="finance-small-label uppercase">Aadhaar UID</th>
+                  <th className="px-3 py-3 text-left text-slate-500 finance-input uppercase">Village/Mandal</th>
+                  <th className="text-right finance-small-label uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {filteredCustomers.map((cust, index) => (
                   <tr key={cust.id} className="hover:bg-slate-50/20">
-                    <td className="px-3 py-3 font-semibold text-slate-500">
+                    <td className="px-3 py-3 text-slate-500 finance-input">
                       {index + 1}
                     </td>
-                    <td className="px-3 py-3 font-mono font-bold text-slate-800">
+                    <td className="px-3 py-3 font-mono text-slate-800 finance-input">
                       #{cust.customer_id || '—'}
                     </td>
                     <td className="px-3 py-3 whitespace-nowrap">
@@ -259,29 +259,29 @@ const Customers: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-3 font-bold text-slate-900">
+                    <td className="px-3 py-3 text-slate-900 finance-input">
                       {cust.name}
                     </td>
-                    <td className="px-3 py-3 font-semibold text-slate-700">
+                    <td className="px-3 py-3 text-slate-700 finance-input">
                       {cust.father_name || cust.father_husband_name || '—'}
                     </td>
                     <td className="px-3 py-3 whitespace-nowrap">
                       <div className="flex flex-col text-slate-700">
-                        <span className="font-bold flex items-center gap-1">
+                        <span className="flex items-center gap-1 finance-input">
                           <Phone className="w-3 h-3 text-slate-450" />
                           {cust.phone || cust.phone_1 || 'N/A'}
                         </span>
                         {(cust.phone2 || cust.phone_2) && (
-                          <span className="text-[10px] text-slate-400 font-bold mt-0.5">
+                          <span className="text-slate-400 mt-0.5 finance-small-label">
                             {cust.phone2 || cust.phone_2}
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-3 font-mono font-bold text-slate-650">
+                    <td className="px-3 py-3 font-mono text-slate-650 finance-input">
                       {cust.aadhaar ? cust.aadhaar.replace(/(\d{4})/g, '$1 ').trim() : '—'}
                     </td>
-                    <td className="px-3 py-3 font-semibold text-slate-600 max-w-xs truncate">
+                    <td className="px-3 py-3 text-slate-600 max-w-xs truncate finance-input">
                       <div className="flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span>

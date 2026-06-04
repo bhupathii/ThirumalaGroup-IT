@@ -142,19 +142,19 @@ const ProfitAndLoss: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="finance-page-title">Profit & Loss</h1>
-          <p className="finance-page-subtitle">
+          <h1 className="finance-h1">Profit & Loss</h1>
+          <p className="finance-small-label uppercase">
             Income vs Expenses over a date range, with per-partner share
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold uppercase tracking-wider text-xs">
+          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 finance-header-time uppercase">
             Back
           </Button>
-          <Button onClick={fetchStatementData} variant="secondary" size="sm" icon={RefreshCw} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold uppercase tracking-wider text-xs">
+          <Button onClick={fetchStatementData} variant="secondary" size="sm" icon={RefreshCw} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 finance-header-time uppercase">
             Refresh
           </Button>
-          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white font-bold uppercase tracking-wider text-xs">
+          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white finance-header-time uppercase">
             Print
           </Button>
         </div>
@@ -166,21 +166,21 @@ const ProfitAndLoss: React.FC = () => {
         <div className="sm:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-center">
           <div className="grid grid-cols-2 divide-x divide-slate-100 h-full">
             <div className="px-4 py-3 flex flex-col justify-center">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">From</label>
+              <label className="text-slate-400 block mb-1 finance-small-label uppercase">From</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full text-sm font-black text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer uppercase tracking-wider"
+                className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase"
               />
             </div>
             <div className="px-4 py-3 flex flex-col justify-center">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">To</label>
+              <label className="text-slate-400 block mb-1 finance-small-label uppercase">To</label>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full text-sm font-black text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer uppercase tracking-wider"
+                className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase"
               />
             </div>
           </div>
@@ -188,14 +188,14 @@ const ProfitAndLoss: React.FC = () => {
 
         {/* Period Profit Card */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Period Profit</span>
-          <span className="text-3xl font-black text-slate-900 tracking-tight mt-1">₹{totalProfit.toLocaleString('en-IN')}</span>
+          <span className="text-slate-400 block finance-small-label uppercase">Period Profit</span>
+          <span className="text-slate-900 mt-1 finance-money">₹{totalProfit.toLocaleString('en-IN')}</span>
         </div>
 
         {/* Per Partner Card */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Per-Partner</span>
-          <span className="text-3xl font-black text-slate-900 tracking-tight mt-1">₹{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+          <span className="text-slate-400 block finance-small-label uppercase">Per-Partner</span>
+          <span className="text-slate-900 mt-1 finance-money">₹{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
         </div>
       </div>
 
@@ -211,15 +211,15 @@ const ProfitAndLoss: React.FC = () => {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[300px]">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <div>
-                <h2 className="text-lg font-black text-slate-900 uppercase tracking-wider">Incomes</h2>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{incomeHeads.length} Heads</p>
+                <h2 className="text-slate-900 finance-brand">Incomes</h2>
+                <p className="text-slate-500 mt-1 finance-small-label uppercase">{incomeHeads.length} Heads</p>
               </div>
             </div>
             <div className="flex-1 flex flex-col">
               {incomeHeads.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center p-8">
                   <div className="text-center border border-dashed border-slate-200 rounded-xl p-12 w-full max-w-sm bg-slate-50">
-                    <p className="text-sm font-black text-slate-900 uppercase tracking-widest mb-2">No Income</p>
+                    <p className="text-slate-900 mb-2 finance-sidebar-link uppercase">No Income</p>
                   </div>
                 </div>
               ) : (
@@ -227,8 +227,8 @@ const ProfitAndLoss: React.FC = () => {
                   <tbody className="divide-y divide-slate-100">
                     {incomeHeads.map((head, idx) => (
                       <tr key={idx} className="transition-colors hover:bg-slate-50">
-                        <td className="px-4 py-3 text-sm font-bold text-slate-700 uppercase">{head.name}</td>
-                        <td className="px-4 py-3 text-sm font-black text-emerald-600 text-right">₹{head.amount.toLocaleString('en-IN')}</td>
+                        <td className="px-4 py-3 text-slate-700 finance-sidebar-link uppercase">{head.name}</td>
+                        <td className="px-4 py-3 text-emerald-600 text-right finance-sidebar-link">₹{head.amount.toLocaleString('en-IN')}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -241,15 +241,15 @@ const ProfitAndLoss: React.FC = () => {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[300px]">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <div>
-                <h2 className="text-lg font-black text-slate-900 uppercase tracking-wider">Expenses</h2>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{expenseHeads.length} Heads</p>
+                <h2 className="text-slate-900 finance-brand">Expenses</h2>
+                <p className="text-slate-500 mt-1 finance-small-label uppercase">{expenseHeads.length} Heads</p>
               </div>
             </div>
             <div className="flex-1 flex flex-col">
               {expenseHeads.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center p-8">
                   <div className="text-center border border-dashed border-slate-200 rounded-xl p-12 w-full max-w-sm bg-slate-50">
-                    <p className="text-sm font-black text-slate-900 uppercase tracking-widest mb-2">No Expenses</p>
+                    <p className="text-slate-900 mb-2 finance-sidebar-link uppercase">No Expenses</p>
                   </div>
                 </div>
               ) : (
@@ -257,8 +257,8 @@ const ProfitAndLoss: React.FC = () => {
                   <tbody className="divide-y divide-slate-100">
                     {expenseHeads.map((head, idx) => (
                       <tr key={idx} className="transition-colors hover:bg-slate-50">
-                        <td className="px-4 py-3 text-sm font-bold text-slate-700 uppercase">{head.name}</td>
-                        <td className="px-4 py-3 text-sm font-black text-red-600 text-right">₹{head.amount.toLocaleString('en-IN')}</td>
+                        <td className="px-4 py-3 text-slate-700 finance-sidebar-link uppercase">{head.name}</td>
+                        <td className="px-4 py-3 text-red-600 text-right finance-sidebar-link">₹{head.amount.toLocaleString('en-IN')}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -274,26 +274,26 @@ const ProfitAndLoss: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         {/* Total Income */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Total Income</span>
-          <span className="text-2xl font-black text-emerald-600 tracking-tight mt-1">₹{totalIncome.toLocaleString('en-IN')}</span>
+          <span className="text-slate-400 block finance-small-label uppercase">Total Income</span>
+          <span className="text-emerald-600 mt-1 finance-money">₹{totalIncome.toLocaleString('en-IN')}</span>
         </div>
         
         {/* Total Expenses */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Total Expenses</span>
-          <span className="text-2xl font-black text-red-600 tracking-tight mt-1">₹{totalExpenses.toLocaleString('en-IN')}</span>
+          <span className="text-slate-400 block finance-small-label uppercase">Total Expenses</span>
+          <span className="text-red-600 mt-1 finance-money">₹{totalExpenses.toLocaleString('en-IN')}</span>
         </div>
 
         {/* Total Profit */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Total Profit</span>
-          <span className="text-2xl font-black text-[#0b1329] tracking-tight mt-1">₹{totalProfit.toLocaleString('en-IN')}</span>
+          <span className="text-slate-400 block finance-small-label uppercase">Total Profit</span>
+          <span className="text-[#0b1329] mt-1 finance-money">₹{totalProfit.toLocaleString('en-IN')}</span>
         </div>
 
         {/* Share Value */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Share Value</span>
-          <span className="text-2xl font-black text-[#0b1329] tracking-tight mt-1">₹{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+          <span className="text-slate-400 block finance-small-label uppercase">Share Value</span>
+          <span className="text-[#0b1329] mt-1 finance-money">₹{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
         </div>
       </div>
 
@@ -308,20 +308,20 @@ const ProfitAndLoss: React.FC = () => {
           {/* Print Summary */}
           <div className="grid grid-cols-4 gap-4 border-b border-t border-slate-900 py-4 mb-6 text-center">
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase">From Date</p>
-              <p className="text-sm font-black text-slate-900">{new Date(startDate).toLocaleDateString('en-GB')}</p>
+              <p className="text-slate-500 finance-small-label uppercase">From Date</p>
+              <p className="text-slate-900 finance-sidebar-link">{new Date(startDate).toLocaleDateString('en-GB')}</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase">To Date</p>
-              <p className="text-sm font-black text-slate-900">{new Date(endDate).toLocaleDateString('en-GB')}</p>
+              <p className="text-slate-500 finance-small-label uppercase">To Date</p>
+              <p className="text-slate-900 finance-sidebar-link">{new Date(endDate).toLocaleDateString('en-GB')}</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Period Profit</p>
-              <p className="text-sm font-black text-slate-900">₹{totalProfit.toLocaleString('en-IN')}</p>
+              <p className="text-slate-500 finance-small-label uppercase">Period Profit</p>
+              <p className="text-slate-900 finance-sidebar-link">₹{totalProfit.toLocaleString('en-IN')}</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Share ({partnerCount})</p>
-              <p className="text-sm font-black text-slate-900">₹{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+              <p className="text-slate-500 finance-small-label uppercase">Share ({partnerCount})</p>
+              <p className="text-slate-900 finance-sidebar-link">₹{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
             </div>
           </div>
 
@@ -329,19 +329,19 @@ const ProfitAndLoss: React.FC = () => {
             {/* Income Print */}
             <div>
               <div className="bg-slate-100 border-b border-slate-900 px-2 py-1 mb-2">
-                <h4 className="text-[10px] font-black uppercase text-slate-900">Incomes</h4>
+                <h4 className="text-slate-900 finance-small-label uppercase">Incomes</h4>
               </div>
-              <table className="w-full text-left text-[10px]">
+              <table className="w-full text-left finance-small-label">
                 <tbody className="font-mono">
                   {incomeHeads.length === 0 ? (
                     <tr>
-                      <td colSpan={2} className="text-center py-4 text-slate-500 font-sans font-bold uppercase">No Incomes</td>
+                      <td colSpan={2} className="text-center py-4 text-slate-500 font-sans finance-input uppercase">No Incomes</td>
                     </tr>
                   ) : (
                     incomeHeads.map((head, idx) => (
                       <tr key={idx} className="border-b border-slate-200 last:border-0">
-                        <td className="py-1 uppercase text-slate-800">{head.name}</td>
-                        <td className="py-1 text-right text-slate-900 font-bold">{head.amount.toLocaleString('en-IN')}</td>
+                        <td className="py-1 text-slate-800 finance-input uppercase">{head.name}</td>
+                        <td className="py-1 text-right text-slate-900 finance-input">{head.amount.toLocaleString('en-IN')}</td>
                       </tr>
                     ))
                   )}
@@ -352,19 +352,19 @@ const ProfitAndLoss: React.FC = () => {
             {/* Expenses Print */}
             <div>
               <div className="bg-slate-100 border-b border-slate-900 px-2 py-1 mb-2">
-                <h4 className="text-[10px] font-black uppercase text-slate-900">Expenses</h4>
+                <h4 className="text-slate-900 finance-small-label uppercase">Expenses</h4>
               </div>
-              <table className="w-full text-left text-[10px]">
+              <table className="w-full text-left finance-small-label">
                 <tbody className="font-mono">
                   {expenseHeads.length === 0 ? (
                     <tr>
-                      <td colSpan={2} className="text-center py-4 text-slate-500 font-sans font-bold uppercase">No Expenses</td>
+                      <td colSpan={2} className="text-center py-4 text-slate-500 font-sans finance-input uppercase">No Expenses</td>
                     </tr>
                   ) : (
                     expenseHeads.map((head, idx) => (
                       <tr key={idx} className="border-b border-slate-200 last:border-0">
-                        <td className="py-1 uppercase text-slate-800">{head.name}</td>
-                        <td className="py-1 text-right text-slate-900 font-bold">{head.amount.toLocaleString('en-IN')}</td>
+                        <td className="py-1 text-slate-800 finance-input uppercase">{head.name}</td>
+                        <td className="py-1 text-right text-slate-900 finance-input">{head.amount.toLocaleString('en-IN')}</td>
                       </tr>
                     ))
                   )}
@@ -376,20 +376,20 @@ const ProfitAndLoss: React.FC = () => {
           {/* Grand Totals Print */}
           <div className="grid grid-cols-4 gap-4 pt-6 border-t border-slate-900 mt-6">
             <div className="text-center bg-slate-50 p-2 border border-slate-200">
-              <span className="text-[9px] font-bold text-slate-500 uppercase block">Total Income</span>
-              <span className="text-sm font-black text-slate-900">₹{totalIncome.toLocaleString('en-IN')}</span>
+              <span className="text-[9px] text-slate-500 block finance-input uppercase">Total Income</span>
+              <span className="text-slate-900 finance-sidebar-link">₹{totalIncome.toLocaleString('en-IN')}</span>
             </div>
             <div className="text-center bg-slate-50 p-2 border border-slate-200">
-              <span className="text-[9px] font-bold text-slate-500 uppercase block">Total Expenses</span>
-              <span className="text-sm font-black text-slate-900">₹{totalExpenses.toLocaleString('en-IN')}</span>
+              <span className="text-[9px] text-slate-500 block finance-input uppercase">Total Expenses</span>
+              <span className="text-slate-900 finance-sidebar-link">₹{totalExpenses.toLocaleString('en-IN')}</span>
             </div>
             <div className="text-center bg-slate-100 p-2 border border-slate-900">
-              <span className="text-[9px] font-bold text-slate-600 uppercase block">Total Profit</span>
-              <span className="text-sm font-black text-slate-900">₹{totalProfit.toLocaleString('en-IN')}</span>
+              <span className="text-[9px] text-slate-600 block finance-input uppercase">Total Profit</span>
+              <span className="text-slate-900 finance-sidebar-link">₹{totalProfit.toLocaleString('en-IN')}</span>
             </div>
             <div className="text-center bg-slate-100 p-2 border border-slate-900">
-              <span className="text-[9px] font-bold text-slate-600 uppercase block">Share Value</span>
-              <span className="text-sm font-black text-slate-900">₹{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+              <span className="text-[9px] text-slate-600 block finance-input uppercase">Share Value</span>
+              <span className="text-slate-900 finance-sidebar-link">₹{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
             </div>
           </div>
         </div>

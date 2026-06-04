@@ -58,7 +58,7 @@ const EditedDeletedLogs: React.FC = () => {
     if (!val) return '-';
     // Simplified display key values
     return (
-      <pre className="text-[10px] bg-gray-50 border p-2 rounded max-h-32 overflow-y-auto whitespace-pre-wrap font-mono text-gray-700">
+      <pre className="bg-gray-50 border p-2 rounded max-h-32 overflow-y-auto whitespace-pre-wrap font-mono text-gray-700 finance-small-label">
         {JSON.stringify(val, null, 2)}
       </pre>
     );
@@ -69,8 +69,8 @@ const EditedDeletedLogs: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center border-b border-green-100 pb-4">
         <div>
-          <h1 className="finance-page-title">Audit Logs Registry</h1>
-          <p className="finance-page-subtitle">Review full audit histories of edited or deleted finance entries</p>
+          <h1 className="finance-h1">Audit Logs Registry</h1>
+          <p className="finance-small-label uppercase">Review full audit histories of edited or deleted finance entries</p>
         </div>
       </div>
 
@@ -78,22 +78,14 @@ const EditedDeletedLogs: React.FC = () => {
       <div className="flex gap-2 mb-2 max-w-xs">
         <button
           onClick={() => setLogType('edited')}
-          className={`flex-1 py-2 px-4 rounded-lg font-bold border transition-all text-sm flex justify-center items-center gap-2 ${
-            logType === 'edited'
-              ? 'bg-green-100 text-green-700 border-green-300 shadow-sm'
-              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-          }`}
+          className={`flex-1 py-2 px-4 rounded-lg border transition-all flex justify-center items-center gap-2 ${ logType === 'edited' ? 'bg-green-100 text-green-700 border-green-300 shadow-sm' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' } finance-sidebar-link`}
         >
           <Edit2 className="w-4 h-4" />
           Edited Logs
         </button>
         <button
           onClick={() => setLogType('deleted')}
-          className={`flex-1 py-2 px-4 rounded-lg font-bold border transition-all text-sm flex justify-center items-center gap-2 ${
-            logType === 'deleted'
-              ? 'bg-red-100 text-red-700 border-red-300 shadow-sm'
-              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-          }`}
+          className={`flex-1 py-2 px-4 rounded-lg border transition-all flex justify-center items-center gap-2 ${ logType === 'deleted' ? 'bg-red-100 text-red-700 border-red-300 shadow-sm' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' } finance-sidebar-link`}
         >
           <Trash2 className="w-4 h-4" />
           Deleted Logs
@@ -111,14 +103,14 @@ const EditedDeletedLogs: React.FC = () => {
             <div className="text-center py-8 text-gray-400">No edit logs registered yet</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <table className="min-w-full divide-y divide-gray-200 finance-caption">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="finance-table-header">Timestamp</th>
-                    <th className="finance-table-header">Table</th>
-                    <th className="finance-table-header">Operator</th>
-                    <th className="finance-table-header">Old Values</th>
-                    <th className="finance-table-header">New Values</th>
+                    <th className="finance-small-label uppercase">Timestamp</th>
+                    <th className="finance-small-label uppercase">Table</th>
+                    <th className="finance-small-label uppercase">Operator</th>
+                    <th className="finance-small-label uppercase">Old Values</th>
+                    <th className="finance-small-label uppercase">New Values</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
@@ -127,10 +119,10 @@ const EditedDeletedLogs: React.FC = () => {
                       <td className="px-3 py-3 whitespace-nowrap text-gray-500 font-mono">
                         {new Date(log.edited_at).toLocaleString('en-IN')}
                       </td>
-                      <td className="px-3 py-3 font-semibold text-gray-700 font-mono">
+                      <td className="px-3 py-3 text-gray-700 font-mono finance-input">
                         {log.table_name}
                       </td>
-                      <td className="px-3 py-3 font-bold text-gray-900">
+                      <td className="px-3 py-3 text-gray-900 finance-input">
                         {log.edited_by}
                       </td>
                       <td className="px-3 py-3 max-w-sm">
@@ -153,14 +145,14 @@ const EditedDeletedLogs: React.FC = () => {
             <div className="text-center py-8 text-gray-400">No deletion logs registered yet</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <table className="min-w-full divide-y divide-gray-200 finance-caption">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="finance-table-header">Timestamp</th>
-                    <th className="finance-table-header">Table</th>
-                    <th className="finance-table-header">Operator</th>
-                    <th className="finance-table-header">Old Values</th>
-                    <th className="finance-table-header text-right">Action</th>
+                    <th className="finance-small-label uppercase">Timestamp</th>
+                    <th className="finance-small-label uppercase">Table</th>
+                    <th className="finance-small-label uppercase">Operator</th>
+                    <th className="finance-small-label uppercase">Old Values</th>
+                    <th className="text-right finance-small-label uppercase">Action</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
@@ -169,10 +161,10 @@ const EditedDeletedLogs: React.FC = () => {
                       <td className="px-3 py-3 whitespace-nowrap text-gray-500 font-mono">
                         {new Date(log.deleted_at).toLocaleString('en-IN')}
                       </td>
-                      <td className="px-3 py-3 font-semibold text-gray-700 font-mono">
+                      <td className="px-3 py-3 text-gray-700 font-mono finance-input">
                         {log.table_name}
                       </td>
-                      <td className="px-3 py-3 font-bold text-gray-900">
+                      <td className="px-3 py-3 text-gray-900 finance-input">
                         {log.deleted_by}
                       </td>
                       <td className="px-3 py-3 max-w-md">

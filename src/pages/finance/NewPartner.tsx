@@ -149,31 +149,31 @@ const NewPartner: React.FC = () => {
       {/* Top Header Actions Bar */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5 print:hidden">
         <div>
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+          <div className="text-slate-400 flex items-center gap-1.5 finance-small-label uppercase">
             <span>DASHBOARD</span>
             <span>/</span>
             <span>PARTNERS</span>
             <span>/</span>
             <span className="text-slate-600">{editId ? 'EDIT' : 'NEW'}</span>
           </div>
-          <h1 className="finance-page-title mt-1">
+          <h1 className="mt-1 finance-h1">
             {editId ? 'EDIT PARTNER' : 'NEW PARTNER'}
           </h1>
-          <p className="finance-page-subtitle mt-0.5">
+          <p className="mt-0.5 finance-small-label uppercase">
             {editId ? 'MODIFY PARTNER OR MD PROFILE DETAILS' : 'REGISTER A PARTNER OR MD WHO SOURCES BUSINESS'}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/finance/partners')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
           </button>
           <button
             onClick={handleReset}
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
           >
             <RotateCcw className="w-3.5 h-3.5 text-slate-550" />
             RESET
@@ -181,7 +181,7 @@ const NewPartner: React.FC = () => {
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 finance-button uppercase"
           >
             <Save className="w-3.5 h-3.5" />
             {saving ? 'SAVING...' : 'SAVE'}
@@ -193,7 +193,7 @@ const NewPartner: React.FC = () => {
       <div className="max-w-4xl">
         <form onSubmit={handleSubmit}>
           <Card 
-            title={<span className="text-xs font-black text-slate-900 tracking-wider uppercase">PARTNER DETAILS</span>}
+            title={<span className="text-slate-900 finance-header-time uppercase">PARTNER DETAILS</span>}
             className="shadow-sm border-slate-150 rounded-xl"
           >
             <div className="space-y-4">
@@ -208,7 +208,7 @@ const NewPartner: React.FC = () => {
                 />
                 
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     ROLE
                   </label>
                   <div className="flex items-center h-10 px-3 bg-white border border-slate-200 rounded-lg shadow-sm">
@@ -219,7 +219,7 @@ const NewPartner: React.FC = () => {
                         onChange={(e) => setIsMd(e.target.checked)}
                         className="w-4 h-4 text-slate-900 border-slate-300 rounded focus:ring-slate-900 focus:outline-none"
                       />
-                      <span className="ml-2 text-xs font-bold text-slate-850 uppercase tracking-wide">
+                      <span className="ml-2 text-slate-850 finance-header-time uppercase">
                         IS MD?
                       </span>
                     </label>
@@ -270,14 +270,14 @@ const NewPartner: React.FC = () => {
 
               {/* Address (Textarea) */}
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   ADDRESS
                 </label>
                 <textarea
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="Residential or Office address"
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-855 focus:ring-1 focus:ring-slate-950 focus:outline-none h-24"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-855 focus:ring-1 focus:ring-slate-950 focus:outline-none h-24 finance-header-time"
                 />
               </div>
 

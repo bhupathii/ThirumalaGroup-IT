@@ -350,7 +350,7 @@ const CDLedger: React.FC = () => {
         <div className="p-4 bg-red-50 rounded-full border border-red-200">
           <ShieldAlert className="w-16 h-16 text-red-600 animate-pulse" />
         </div>
-        <h1 className="finance-page-title">Access Restricted</h1>
+        <h1 className="finance-h1">Access Restricted</h1>
         <p className="text-gray-500 max-w-md">
           Only authorized personnel are allowed to view the CD Ledger registry. Please consult your administrator to request access.
         </p>
@@ -367,25 +367,25 @@ const CDLedger: React.FC = () => {
         
         <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-4 flex-1">
           <div>
-            <label className="finance-label">
+            <label className="finance-caption uppercase">
               Today Date
             </label>
             <input 
               type="text"
               readOnly
               value={new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-sm font-semibold text-gray-600 outline-none"
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-gray-600 outline-none finance-section-heading"
             />
           </div>
 
           <div>
-            <label className="finance-label">
+            <label className="finance-caption uppercase">
               Ledger Type
             </label>
             <select
               value={selectedLedgerType}
               onChange={(e) => setSelectedLedgerType(e.target.value)}
-              className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none"
+              className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none finance-sidebar-link"
             >
               <option value="CD">CD Ledger (Chit Fund)</option>
               <option value="STBD">STBD Ledger</option>
@@ -395,7 +395,7 @@ const CDLedger: React.FC = () => {
           </div>
 
           <div className="sm:col-span-2">
-            <label className="finance-label">
+            <label className="finance-caption uppercase">
               Search Accounts
             </label>
             <div className="relative">
@@ -404,7 +404,7 @@ const CDLedger: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search Name, ID, Phone, Aadhaar..."
-                className="w-full bg-white border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-sm font-semibold text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                className="w-full bg-white border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none finance-section-heading"
               />
               <Search className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
               
@@ -422,14 +422,14 @@ const CDLedger: React.FC = () => {
                       className="p-3 hover:bg-green-50/50 cursor-pointer flex items-center justify-between border-b last:border-0 transition-colors"
                     >
                       <div>
-                        <div className="font-bold text-sm text-gray-900">{loan.customer?.name}</div>
-                        <div className="text-xs text-gray-500 font-medium">Phone: {loan.customer?.phone || 'N/A'}</div>
+                        <div className="text-gray-900 finance-sidebar-link">{loan.customer?.name}</div>
+                        <div className="text-gray-500 finance-caption">Phone: {loan.customer?.phone || 'N/A'}</div>
                       </div>
                       <div className="text-right">
-                        <span className="font-mono text-xs font-bold bg-gray-100 px-2 py-0.5 rounded text-gray-700">
+                        <span className="font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-700 finance-header-time">
                           {loan.loan_id}
                         </span>
-                        <div className="text-[10px] text-gray-400 mt-1">{loan.loan_category} Mode</div>
+                        <div className="text-gray-400 mt-1 finance-small-label">{loan.loan_category} Mode</div>
                       </div>
                     </div>
                   ))}
@@ -478,13 +478,13 @@ const CDLedger: React.FC = () => {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-4">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-600"></div>
-          <p className="text-sm font-semibold text-gray-500">Compiling CD ledger registry...</p>
+          <p className="text-gray-500 finance-section-heading">Compiling CD ledger registry...</p>
         </div>
       ) : !selectedLoan ? (
         <div className="text-center py-24 bg-white rounded-3xl border border-gray-100 shadow-sm space-y-3">
           <FileText className="w-16 h-16 mx-auto text-gray-300" />
-          <h2 className="text-lg font-bold text-gray-800">No Account Loaded</h2>
-          <p className="finance-page-subtitle">
+          <h2 className="text-gray-800 finance-brand">No Account Loaded</h2>
+          <p className="finance-small-label uppercase">
             Use the search panel above to filter and load customer accounts, view ledger sheets, guarantor cards, and print statements.
           </p>
         </div>
@@ -526,60 +526,60 @@ const CDLedger: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 finance-input">
                     <div className="flex items-center gap-3">
                       <User className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Customer Name</div>
-                        <div className="font-bold text-gray-900">{selectedLoan.customer?.name}</div>
+                        <div className="text-gray-400 finance-header-time">Customer Name</div>
+                        <div className="text-gray-900 finance-input">{selectedLoan.customer?.name}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <User className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Father/Husband Name</div>
-                        <div className="font-bold text-gray-900">{selectedLoan.customer?.father_husband_name || 'N/A'}</div>
+                        <div className="text-gray-400 finance-header-time">Father/Husband Name</div>
+                        <div className="text-gray-900 finance-input">{selectedLoan.customer?.father_husband_name || 'N/A'}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <Phone className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Primary Phone</div>
-                        <div className="font-bold text-gray-900">{selectedLoan.customer?.phone || 'N/A'}</div>
+                        <div className="text-gray-400 finance-header-time">Primary Phone</div>
+                        <div className="text-gray-900 finance-input">{selectedLoan.customer?.phone || 'N/A'}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <Phone className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Secondary Phone</div>
-                        <div className="font-bold text-gray-900">{selectedLoan.customer?.phone2 || 'N/A'}</div>
+                        <div className="text-gray-400 finance-header-time">Secondary Phone</div>
+                        <div className="text-gray-900 finance-input">{selectedLoan.customer?.phone2 || 'N/A'}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <FileText className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Aadhaar Card UID</div>
-                        <div className="font-bold text-gray-900">{selectedLoan.customer?.aadhaar || 'N/A'}</div>
+                        <div className="text-gray-400 finance-header-time">Aadhaar Card UID</div>
+                        <div className="text-gray-900 finance-input">{selectedLoan.customer?.aadhaar || 'N/A'}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <User className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Partner Name</div>
-                        <div className="font-bold text-gray-900">{selectedLoan.customer?.partner_name || 'N/A'}</div>
+                        <div className="text-gray-400 finance-header-time">Partner Name</div>
+                        <div className="text-gray-900 finance-input">{selectedLoan.customer?.partner_name || 'N/A'}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3 sm:col-span-2">
                       <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Residential Address</div>
-                        <div className="font-semibold text-gray-900">{selectedLoan.customer?.address || 'N/A'}</div>
+                        <div className="text-gray-400 finance-header-time">Residential Address</div>
+                        <div className="text-gray-900 finance-input">{selectedLoan.customer?.address || 'N/A'}</div>
                       </div>
                     </div>
                   </div>
@@ -592,75 +592,73 @@ const CDLedger: React.FC = () => {
                 subtitle="Financial terms & active calculations"
                 className="shadow-sm border-gray-100 rounded-3xl"
               >
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 text-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 finance-input">
                   <div>
-                    <div className="text-xs text-gray-400 font-bold">Loan ID / Acc Number</div>
-                    <div className="font-mono font-bold text-gray-900 text-base">{selectedLoan.loan_id}</div>
+                    <div className="text-gray-400 finance-header-time">Loan ID / Acc Number</div>
+                    <div className="font-mono text-gray-900 finance-brand">{selectedLoan.loan_id}</div>
                   </div>
 
                   <div>
-                    <div className="text-xs text-gray-400 font-bold">Category</div>
-                    <div className="font-bold text-gray-900">{selectedLoan.loan_category || 'CD'}</div>
+                    <div className="text-gray-400 finance-header-time">Category</div>
+                    <div className="text-gray-900 finance-input">{selectedLoan.loan_category || 'CD'}</div>
                   </div>
 
                   <div>
-                    <div className="text-xs text-gray-400 font-bold">Status</div>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold mt-1 ${
-                      selectedLoan.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                    }`}>
+                    <div className="text-gray-400 finance-header-time">Status</div>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full mt-1 ${ selectedLoan.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' } finance-header-time`}>
                       {selectedLoan.status}
                     </span>
                   </div>
 
                   <div>
-                    <div className="text-xs text-gray-400 font-bold">Principal Amount</div>
-                    <div className="font-bold text-gray-900 text-base">₹{Number(selectedLoan.amount).toLocaleString('en-IN')}</div>
+                    <div className="text-gray-400 finance-header-time">Principal Amount</div>
+                    <div className="text-gray-900 finance-brand">₹{Number(selectedLoan.amount).toLocaleString('en-IN')}</div>
                   </div>
 
                   <div>
-                    <div className="text-xs text-gray-400 font-bold">Interest Rate</div>
-                    <div className="font-bold text-gray-900">{selectedLoan.interest_rate}% Flat pm</div>
+                    <div className="text-gray-400 finance-header-time">Interest Rate</div>
+                    <div className="text-gray-900 finance-input">{selectedLoan.interest_rate}% Flat pm</div>
                   </div>
 
                   <div className="flex justify-between items-end border-b border-gray-100 pb-2">
                     <div>
-                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Duration & Rate</div>
-                      <div className="font-bold text-gray-900">{selectedLoan.duration_months} Months / {selectedLoan.due_type}</div>
+                      <div className="text-gray-400 mb-0.5 finance-small-label uppercase">Duration & Rate</div>
+                      <div className="text-gray-900 finance-input">{selectedLoan.duration_months} Months / {selectedLoan.due_type}</div>
                     </div>
                   </div>
 
                   <div>
-                    <div className="text-xs text-gray-400 font-bold">Due Mode / Amount</div>
-                    <div className="font-bold text-gray-900">
+                    <div className="text-gray-400 finance-header-time">Due Mode / Amount</div>
+                    <div className="text-gray-900 finance-input">
                       {selectedLoan.due_type} - ₹{Number(selectedLoan.due_amount).toLocaleString('en-IN')}
                     </div>
                   </div>
 
                   <div>
-                    <div className="text-xs text-gray-400 font-bold">Total Repayable (BS)</div>
-                    <div className="font-bold text-gray-900 text-base">₹{ledgerComputations?.totalRepayable.toLocaleString('en-IN')}</div>
+                    <div className="text-gray-400 finance-header-time">Total Repayable (BS)</div>
+                    <div className="text-gray-900 finance-brand">₹{ledgerComputations?.totalRepayable.toLocaleString('en-IN')}</div>
                   </div>
 
                   <div>
-                    <div className="text-xs text-gray-400 font-bold">Total Interest Comp</div>
-                    <div className="font-bold text-gray-900 text-base text-gray-500">₹{ledgerComputations?.interestAmount.toLocaleString('en-IN')}</div>
+                    <div className="text-gray-400 finance-header-time">Total Interest Comp</div>
+                    <div className="text-gray-900 text-gray-500 finance-brand">₹{ledgerComputations?.interestAmount.toLocaleString('en-IN')}</div>
                   </div>
 
                   <div>
-                    <div className="text-xs text-gray-400 font-bold">Disbursement Date</div>
-                    <div className="font-bold text-gray-900">
+                    <div className="text-gray-400 finance-header-time">Disbursement Date</div>
+                    <div className="text-gray-900 finance-input">
                       {new Date(selectedLoan.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </div>
                   </div>
 
                   <div>
-                    <div className="text-xs text-gray-400 font-bold">Amount Paid (Cr)</div>
-                    <div className="font-bold text-green-600 text-base">₹{ledgerComputations?.totalCredit.toLocaleString('en-IN')}</div>
+                    <div className="text-gray-400 finance-header-time">Amount Paid (Cr)</div>
+                    <div className="text-green-600 finance-brand">₹{ledgerComputations?.totalCredit.toLocaleString('en-IN')}</div>
                   </div>
 
                   <div>
-                    <div className="text-xs text-gray-400 font-bold">Outstanding Balance</div>
-                    <div className="font-bold text-orange-700 text-base">₹{ledgerComputations?.currentBalance.toLocaleString('en-IN')}</div>
+                    <div className="text-gray-400 finance-header-time">Outstanding Balance</div>
+                    <div className="text-orange-700 finance-brand">₹{ledgerComputations?.currentBalance.toLocaleString('en-IN')}</div>
                   </div>
                 </div>
               </Card>
@@ -685,52 +683,52 @@ const CDLedger: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 finance-input">
                     <div className="flex items-center gap-3">
                       <User className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Surety Name</div>
-                        <div className="font-bold text-gray-900">{selectedLoan.surety_name || 'N/A'}</div>
+                        <div className="text-gray-400 finance-header-time">Surety Name</div>
+                        <div className="text-gray-900 finance-input">{selectedLoan.surety_name || 'N/A'}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <Phone className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Surety Phone</div>
-                        <div className="font-bold text-gray-900">{selectedLoan.surety_phone || 'N/A'}</div>
+                        <div className="text-gray-400 finance-header-time">Surety Phone</div>
+                        <div className="text-gray-900 finance-input">{selectedLoan.surety_phone || 'N/A'}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <FileText className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Surety Aadhaar No</div>
-                        <div className="font-bold text-gray-900">{selectedLoan.surety_aadhaar || 'N/A'}</div>
+                        <div className="text-gray-400 finance-header-time">Surety Aadhaar No</div>
+                        <div className="text-gray-900 finance-input">{selectedLoan.surety_aadhaar || 'N/A'}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <User className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Surety Relation / Notes</div>
-                        <div className="font-bold text-gray-900">{selectedLoan.surety_relation || 'N/A'}</div>
+                        <div className="text-gray-400 finance-header-time">Surety Relation / Notes</div>
+                        <div className="text-gray-900 finance-input">{selectedLoan.surety_relation || 'N/A'}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3 sm:col-span-2">
                       <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Surety Address</div>
-                        <div className="font-semibold text-gray-900">{selectedLoan.surety_address || 'N/A'}</div>
+                        <div className="text-gray-400 finance-header-time">Surety Address</div>
+                        <div className="text-gray-900 finance-input">{selectedLoan.surety_address || 'N/A'}</div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3 sm:col-span-2 pt-2 border-t border-gray-50">
                       <FileText className="w-5 h-5 text-gray-400 shrink-0" />
                       <div>
-                        <div className="text-xs text-gray-400 font-bold">Account Remarks / Notes</div>
-                        <div className="font-semibold text-gray-600">{selectedLoan.remarks || 'No remarks provided.'}</div>
+                        <div className="text-gray-400 finance-header-time">Account Remarks / Notes</div>
+                        <div className="text-gray-600 finance-input">{selectedLoan.remarks || 'No remarks provided.'}</div>
                       </div>
                     </div>
                   </div>
@@ -754,7 +752,7 @@ const CDLedger: React.FC = () => {
                   ) : (
                     <div className="text-gray-400 space-y-1">
                       <User className="w-12 h-12 mx-auto" />
-                      <div className="text-xs font-bold">No photo attached</div>
+                      <div className="finance-header-time">No photo attached</div>
                     </div>
                   )}
                 </div>
@@ -772,7 +770,7 @@ const CDLedger: React.FC = () => {
                   ) : (
                     <div className="text-gray-400 space-y-1">
                       <User className="w-12 h-12 mx-auto" />
-                      <div className="text-xs font-bold">No photo attached</div>
+                      <div className="finance-header-time">No photo attached</div>
                     </div>
                   )}
                 </div>
@@ -787,7 +785,7 @@ const CDLedger: React.FC = () => {
                       <select
                         value={docType}
                         onChange={(e) => setDocType(e.target.value)}
-                        className="flex-1 bg-white border border-gray-200 rounded-xl p-2 text-xs font-bold text-gray-800"
+                        className="flex-1 bg-white border border-gray-200 rounded-xl p-2 text-gray-800 finance-header-time"
                       >
                         <option value="Pledge Document">Pledge Document</option>
                         <option value="Aadhaar Card Copy">Aadhaar Card Copy</option>
@@ -796,7 +794,7 @@ const CDLedger: React.FC = () => {
                         <option value="Other Attachment">Other Attachment</option>
                       </select>
                       
-                      <label className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer select-none">
+                      <label className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-xl flex items-center gap-1 cursor-pointer select-none finance-header-time">
                         <Upload className="w-3.5 h-3.5" />
                         {uploadingDoc ? 'Uploading...' : 'Upload'}
                         <input
@@ -813,16 +811,16 @@ const CDLedger: React.FC = () => {
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {selectedLoan.documents && selectedLoan.documents.length > 0 ? (
                       selectedLoan.documents.map(doc => (
-                        <div key={doc.id} className="p-2 border rounded-xl flex items-center justify-between text-xs bg-white hover:bg-gray-50/50">
+                        <div key={doc.id} className="p-2 border rounded-xl flex items-center justify-between bg-white hover:bg-gray-50/50 finance-caption">
                           <div className="flex items-center gap-2 overflow-hidden">
                             <FileIcon className="w-4 h-4 text-green-600 shrink-0" />
                             <div className="truncate">
-                              <span className="font-bold text-gray-800 block truncate">{doc.document_type}</span>
+                              <span className="text-gray-800 block truncate finance-input">{doc.document_type}</span>
                               <a 
                                 href={doc.document_url} 
                                 target="_blank" 
                                 rel="noreferrer" 
-                                className="text-[10px] text-green-700 hover:underline block truncate font-medium"
+                                className="text-green-700 hover:underline block truncate finance-small-label"
                               >
                                 View Attachment
                               </a>
@@ -838,7 +836,7 @@ const CDLedger: React.FC = () => {
                         </div>
                       ))
                     ) : (
-                      <div className="text-center py-6 text-gray-400 text-xs">No documents uploaded for this loan</div>
+                      <div className="text-center py-6 text-gray-400 finance-caption">No documents uploaded for this loan</div>
                     )}
                   </div>
                 </div>
@@ -858,36 +856,36 @@ const CDLedger: React.FC = () => {
               className="shadow-sm border-gray-100 rounded-3xl"
             >
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-100 text-xs md:text-sm">
+                <table className="min-w-full divide-y divide-gray-100 md:text-sm finance-caption">
                   <thead>
                     <tr className="bg-gray-50/50">
-                      <th className="finance-table-header">Date</th>
-                      <th className="finance-table-header">Credit (Col)</th>
-                      <th className="finance-table-header">Debit (Dis)</th>
-                      <th className="finance-table-header">Balance</th>
-                      <th className="finance-table-header">Mode</th>
-                      <th className="finance-table-header">Staff</th>
+                      <th className="finance-small-label uppercase">Date</th>
+                      <th className="finance-small-label uppercase">Credit (Col)</th>
+                      <th className="finance-small-label uppercase">Debit (Dis)</th>
+                      <th className="finance-small-label uppercase">Balance</th>
+                      <th className="finance-small-label uppercase">Mode</th>
+                      <th className="finance-small-label uppercase">Staff</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
                     {ledgerComputations?.processedTransactions.map((tx: any) => (
                       <tr key={tx.id} className="hover:bg-gray-50/30">
-                        <td className="px-3 py-3 font-semibold text-gray-700">
+                        <td className="px-3 py-3 text-gray-700 finance-input">
                           {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </td>
-                        <td className="px-3 py-3 text-green-600 font-bold">
+                        <td className="px-3 py-3 text-green-600 finance-input">
                           {tx.credit > 0 ? `₹${tx.credit.toLocaleString('en-IN')}` : '-'}
                         </td>
-                        <td className="px-3 py-3 text-red-600 font-bold">
+                        <td className="px-3 py-3 text-red-600 finance-input">
                           {tx.debit > 0 ? `₹${tx.debit.toLocaleString('en-IN')}` : '-'}
                         </td>
-                        <td className="px-3 py-3 font-mono font-bold text-gray-900">
+                        <td className="px-3 py-3 font-mono text-gray-900 finance-input">
                           ₹{tx.balance.toLocaleString('en-IN')}
                         </td>
-                        <td className="px-3 py-3 font-medium text-gray-500">
+                        <td className="px-3 py-3 text-gray-500 finance-input">
                           {tx.payment_mode || 'Cash'}
                         </td>
-                        <td className="px-3 py-3 text-xs text-gray-400 font-bold">
+                        <td className="px-3 py-3 text-gray-400 finance-header-time">
                           {tx.collected_by || 'N/A'}
                         </td>
                       </tr>
@@ -904,14 +902,14 @@ const CDLedger: React.FC = () => {
               className="shadow-sm border-gray-100 rounded-3xl"
             >
               <div className="overflow-x-auto max-h-96 overflow-y-auto">
-                <table className="min-w-full divide-y divide-gray-100 text-xs md:text-sm">
+                <table className="min-w-full divide-y divide-gray-100 md:text-sm finance-caption">
                   <thead>
                     <tr className="bg-gray-50/50">
-                      <th className="finance-table-header">Due Date</th>
-                      <th className="finance-table-header text-right">Amount</th>
-                      <th className="finance-table-header text-right">Paid</th>
-                      <th className="finance-table-header text-center">Status</th>
-                      <th className="finance-table-header text-right">Balance</th>
+                      <th className="finance-small-label uppercase">Due Date</th>
+                      <th className="text-right finance-small-label uppercase">Amount</th>
+                      <th className="text-right finance-small-label uppercase">Paid</th>
+                      <th className="text-center finance-small-label uppercase">Status</th>
+                      <th className="text-right finance-small-label uppercase">Balance</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
@@ -923,25 +921,21 @@ const CDLedger: React.FC = () => {
                         
                         return (
                           <tr key={due.id} className="hover:bg-gray-50/30">
-                            <td className="px-3 py-3 font-semibold text-gray-700">
+                            <td className="px-3 py-3 text-gray-700 finance-input">
                               {new Date(due.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                             </td>
-                            <td className="px-3 py-3 text-right font-bold text-gray-900">
+                            <td className="px-3 py-3 text-right text-gray-900 finance-input">
                               ₹{amt.toLocaleString('en-IN')}
                             </td>
-                            <td className="px-3 py-3 text-right font-bold text-green-600">
+                            <td className="px-3 py-3 text-right text-green-600 finance-input">
                               ₹{paid.toLocaleString('en-IN')}
                             </td>
                             <td className="px-3 py-3 text-center">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                due.status === 'Paid' ? 'bg-green-100 text-green-800' :
-                                due.status === 'Partially Paid' ? 'bg-amber-100 text-amber-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full ${ due.status === 'Paid' ? 'bg-green-100 text-green-800' : due.status === 'Partially Paid' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800' } finance-small-label`}>
                                 {due.status}
                               </span>
                             </td>
-                            <td className="px-3 py-3 text-right font-mono font-bold text-orange-700">
+                            <td className="px-3 py-3 text-right font-mono text-orange-700 finance-input">
                               ₹{bal.toLocaleString('en-IN')}
                             </td>
                           </tr>
@@ -962,33 +956,33 @@ const CDLedger: React.FC = () => {
           {/* Totals Summary Footer Card */}
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm grid grid-cols-2 md:grid-cols-6 gap-6 text-center">
             <div>
-              <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">Total Credit (Col)</div>
-              <div className="text-lg font-black text-green-600 mt-1">₹{ledgerComputations?.totalCredit.toLocaleString('en-IN')}</div>
+              <div className="text-gray-400 finance-header-time uppercase">Total Credit (Col)</div>
+              <div className="text-green-600 mt-1 finance-brand">₹{ledgerComputations?.totalCredit.toLocaleString('en-IN')}</div>
             </div>
 
             <div>
-              <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">Total Debit (Dis)</div>
-              <div className="text-lg font-black text-red-600 mt-1">₹{ledgerComputations?.totalDebit.toLocaleString('en-IN')}</div>
+              <div className="text-gray-400 finance-header-time uppercase">Total Debit (Dis)</div>
+              <div className="text-red-600 mt-1 finance-brand">₹{ledgerComputations?.totalDebit.toLocaleString('en-IN')}</div>
             </div>
 
             <div>
-              <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">Present Balance</div>
-              <div className="text-lg font-black text-orange-700 mt-1">₹{ledgerComputations?.currentBalance.toLocaleString('en-IN')}</div>
+              <div className="text-gray-400 finance-header-time uppercase">Present Balance</div>
+              <div className="text-orange-700 mt-1 finance-brand">₹{ledgerComputations?.currentBalance.toLocaleString('en-IN')}</div>
             </div>
 
             <div>
-              <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">Total Dues</div>
-              <div className="text-lg font-black text-gray-900 mt-1">₹{ledgerComputations?.totalDues.toLocaleString('en-IN')}</div>
+              <div className="text-gray-400 finance-header-time uppercase">Total Dues</div>
+              <div className="text-gray-900 mt-1 finance-brand">₹{ledgerComputations?.totalDues.toLocaleString('en-IN')}</div>
             </div>
 
             <div>
-              <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">Paid Dues</div>
-              <div className="text-lg font-black text-emerald-600 mt-1">₹{ledgerComputations?.paidDues.toLocaleString('en-IN')}</div>
+              <div className="text-gray-400 finance-header-time uppercase">Paid Dues</div>
+              <div className="text-emerald-600 mt-1 finance-brand">₹{ledgerComputations?.paidDues.toLocaleString('en-IN')}</div>
             </div>
 
             <div>
-              <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">Pending Dues</div>
-              <div className="text-lg font-black text-red-700 mt-1">₹{ledgerComputations?.pendingDues.toLocaleString('en-IN')}</div>
+              <div className="text-gray-400 finance-header-time uppercase">Pending Dues</div>
+              <div className="text-red-700 mt-1 finance-brand">₹{ledgerComputations?.pendingDues.toLocaleString('en-IN')}</div>
             </div>
           </div>
         </>
@@ -1004,11 +998,11 @@ const CDLedger: React.FC = () => {
         documentTitle={`Loan Ledger Card - ${selectedLedgerType} System`}
       >
         {selectedLoan && ledgerComputations && (
-          <div className="space-y-6 text-gray-800 font-sans text-xs md:text-sm">
+          <div className="space-y-6 text-gray-800 font-sans md:text-sm finance-caption">
             
             {/* Header Title */}
             <div className="text-center border-b-2 border-double border-gray-300 pb-4">
-              <div className="flex justify-between items-center text-[10px] text-gray-400 mt-4 font-mono font-bold">
+              <div className="flex justify-between items-center text-gray-400 mt-4 font-mono finance-small-label">
                 <span>PRINTED: {new Date().toLocaleString('en-IN')}</span>
                 <span>ACC ID: {selectedLoan.loan_id}</span>
               </div>
@@ -1019,34 +1013,34 @@ const CDLedger: React.FC = () => {
               
               {/* Borrower details */}
               <div className="space-y-2">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-green-800 border-b pb-1">Borrower Information</h4>
+                <h4 className="text-green-800 border-b pb-1 finance-header-time uppercase">Borrower Information</h4>
                 <table className="w-full text-left">
                   <tbody>
                     <tr>
-                      <td className="text-gray-400 font-bold py-0.5 pr-2 w-28">Name:</td>
-                      <td className="font-bold text-gray-900">{selectedLoan.customer?.name}</td>
+                      <td className="text-gray-400 py-0.5 pr-2 w-28 finance-input">Name:</td>
+                      <td className="text-gray-900 finance-input">{selectedLoan.customer?.name}</td>
                     </tr>
                     <tr>
-                      <td className="text-gray-400 font-bold py-0.5 pr-2">Father/Husband:</td>
-                      <td className="font-bold text-gray-800">{selectedLoan.customer?.father_husband_name || 'N/A'}</td>
+                      <td className="text-gray-400 py-0.5 pr-2 finance-input">Father/Husband:</td>
+                      <td className="text-gray-800 finance-input">{selectedLoan.customer?.father_husband_name || 'N/A'}</td>
                     </tr>
                     <tr>
-                      <td className="text-gray-400 font-bold py-0.5 pr-2">Phones:</td>
-                      <td className="font-bold text-gray-800">
+                      <td className="text-gray-400 py-0.5 pr-2 finance-input">Phones:</td>
+                      <td className="text-gray-800 finance-input">
                         {selectedLoan.customer?.phone || 'N/A'} {selectedLoan.customer?.phone2 ? `, ${selectedLoan.customer.phone2}` : ''}
                       </td>
                     </tr>
                     <tr>
-                      <td className="text-gray-400 font-bold py-0.5 pr-2">Aadhaar:</td>
-                      <td className="font-semibold text-gray-800">{selectedLoan.customer?.aadhaar || 'N/A'}</td>
+                      <td className="text-gray-400 py-0.5 pr-2 finance-input">Aadhaar:</td>
+                      <td className="text-gray-800 finance-input">{selectedLoan.customer?.aadhaar || 'N/A'}</td>
                     </tr>
                     <tr>
-                      <td className="text-gray-400 font-bold py-0.5 pr-2">Partner:</td>
-                      <td className="font-semibold text-gray-800">{selectedLoan.customer?.partner_name || 'N/A'}</td>
+                      <td className="text-gray-400 py-0.5 pr-2 finance-input">Partner:</td>
+                      <td className="text-gray-800 finance-input">{selectedLoan.customer?.partner_name || 'N/A'}</td>
                     </tr>
                     <tr>
-                      <td className="text-gray-400 font-bold py-0.5 pr-2">Address:</td>
-                      <td className="font-medium text-gray-700">{selectedLoan.customer?.address || 'N/A'}</td>
+                      <td className="text-gray-400 py-0.5 pr-2 finance-input">Address:</td>
+                      <td className="text-gray-700 finance-input">{selectedLoan.customer?.address || 'N/A'}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1054,32 +1048,32 @@ const CDLedger: React.FC = () => {
 
               {/* Loan parameters */}
               <div className="space-y-2">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-green-800 border-b pb-1">Loan parameters</h4>
+                <h4 className="text-green-800 border-b pb-1 finance-header-time uppercase">Loan parameters</h4>
                 <table className="w-full text-left">
                   <tbody>
                     <tr>
-                      <td className="text-gray-400 font-bold py-0.5 pr-2 w-28">Principal:</td>
-                      <td className="font-bold text-gray-900">₹{Number(selectedLoan.amount).toLocaleString('en-IN')}</td>
+                      <td className="text-gray-400 py-0.5 pr-2 w-28 finance-input">Principal:</td>
+                      <td className="text-gray-900 finance-input">₹{Number(selectedLoan.amount).toLocaleString('en-IN')}</td>
                     </tr>
                     <tr>
-                      <th className="px-3 py-1 font-bold text-gray-500 uppercase tracking-wider text-[10px] text-left border-r border-gray-200">Rate / Duration</th>
-                      <td className="font-bold text-gray-800">{selectedLoan.duration_months} Months</td>
+                      <th className="px-3 py-1 text-gray-500 text-left border-r border-gray-200 finance-small-label uppercase">Rate / Duration</th>
+                      <td className="text-gray-800 finance-input">{selectedLoan.duration_months} Months</td>
                     </tr>
                     <tr>
-                      <td className="text-gray-400 font-bold py-0.5 pr-2">Repayable:</td>
-                      <td className="font-bold text-gray-900">₹{ledgerComputations.totalRepayable.toLocaleString('en-IN')}</td>
+                      <td className="text-gray-400 py-0.5 pr-2 finance-input">Repayable:</td>
+                      <td className="text-gray-900 finance-input">₹{ledgerComputations.totalRepayable.toLocaleString('en-IN')}</td>
                     </tr>
                     <tr>
-                      <td className="text-gray-400 font-bold py-0.5 pr-2">Collected (Cr):</td>
-                      <td className="font-bold text-green-700">₹{ledgerComputations.totalCredit.toLocaleString('en-IN')}</td>
+                      <td className="text-gray-400 py-0.5 pr-2 finance-input">Collected (Cr):</td>
+                      <td className="text-green-700 finance-input">₹{ledgerComputations.totalCredit.toLocaleString('en-IN')}</td>
                     </tr>
                     <tr>
-                      <td className="text-gray-400 font-bold py-0.5 pr-2">Outstanding Balance:</td>
-                      <td className="font-bold text-orange-700">₹{ledgerComputations.currentBalance.toLocaleString('en-IN')}</td>
+                      <td className="text-gray-400 py-0.5 pr-2 finance-input">Outstanding Balance:</td>
+                      <td className="text-orange-700 finance-input">₹{ledgerComputations.currentBalance.toLocaleString('en-IN')}</td>
                     </tr>
                     <tr>
-                      <td className="text-gray-400 font-bold py-0.5 pr-2">Disbursement Date:</td>
-                      <td className="font-semibold text-gray-800">
+                      <td className="text-gray-400 py-0.5 pr-2 finance-input">Disbursement Date:</td>
+                      <td className="text-gray-800 finance-input">
                         {new Date(selectedLoan.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                       </td>
                     </tr>
@@ -1091,22 +1085,22 @@ const CDLedger: React.FC = () => {
 
             {/* Guarantor Details */}
             <div className="border-b pb-6 space-y-2">
-              <h4 className="font-bold text-xs uppercase tracking-wider text-green-800 border-b pb-1">Surety & Guarantor Card</h4>
+              <h4 className="text-green-800 border-b pb-1 finance-header-time uppercase">Surety & Guarantor Card</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <table className="w-full text-left">
                     <tbody>
                       <tr>
-                        <td className="text-gray-400 font-bold py-0.5 pr-2 w-28">Surety Name:</td>
-                        <td className="font-bold text-gray-900">{selectedLoan.surety_name || 'N/A'}</td>
+                        <td className="text-gray-400 py-0.5 pr-2 w-28 finance-input">Surety Name:</td>
+                        <td className="text-gray-900 finance-input">{selectedLoan.surety_name || 'N/A'}</td>
                       </tr>
                       <tr>
-                        <td className="text-gray-400 font-bold py-0.5 pr-2">Phone:</td>
-                        <td className="font-bold text-gray-800">{selectedLoan.surety_phone || 'N/A'}</td>
+                        <td className="text-gray-400 py-0.5 pr-2 finance-input">Phone:</td>
+                        <td className="text-gray-800 finance-input">{selectedLoan.surety_phone || 'N/A'}</td>
                       </tr>
                       <tr>
-                        <td className="text-gray-400 font-bold py-0.5 pr-2">Aadhaar UID:</td>
-                        <td className="font-bold text-gray-800">{selectedLoan.surety_aadhaar || 'N/A'}</td>
+                        <td className="text-gray-400 py-0.5 pr-2 finance-input">Aadhaar UID:</td>
+                        <td className="text-gray-800 finance-input">{selectedLoan.surety_aadhaar || 'N/A'}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1116,12 +1110,12 @@ const CDLedger: React.FC = () => {
                   <table className="w-full text-left">
                     <tbody>
                       <tr>
-                        <td className="text-gray-400 font-bold py-0.5 pr-2 w-28">Address:</td>
-                        <td className="font-semibold text-gray-700">{selectedLoan.surety_address || 'N/A'}</td>
+                        <td className="text-gray-400 py-0.5 pr-2 w-28 finance-input">Address:</td>
+                        <td className="text-gray-700 finance-input">{selectedLoan.surety_address || 'N/A'}</td>
                       </tr>
                       <tr>
-                        <td className="text-gray-400 font-bold py-0.5 pr-2">Relation/Remark:</td>
-                        <td className="font-semibold text-gray-700">{selectedLoan.surety_relation || 'N/A'}</td>
+                        <td className="text-gray-400 py-0.5 pr-2 finance-input">Relation/Remark:</td>
+                        <td className="text-gray-700 finance-input">{selectedLoan.surety_relation || 'N/A'}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1131,35 +1125,35 @@ const CDLedger: React.FC = () => {
 
             {/* Transactions Ledger Table */}
             <div className="space-y-2">
-              <h4 className="font-bold text-xs uppercase tracking-wider text-green-800 border-b pb-1">Ledger Transaction History</h4>
-              <table className="min-w-full divide-y divide-gray-300 text-xs border border-gray-200">
+              <h4 className="text-green-800 border-b pb-1 finance-header-time uppercase">Ledger Transaction History</h4>
+              <table className="min-w-full divide-y divide-gray-300 border border-gray-200 finance-caption">
                 <thead>
                   <tr className="bg-gray-50">
-                    <th className="finance-table-header">Date</th>
-                    <th className="finance-table-header">Particulars</th>
-                    <th className="finance-table-header text-right">Credit (Col)</th>
-                    <th className="finance-table-header text-right">Debit (Disb)</th>
-                    <th className="finance-table-header text-right">Balance</th>
-                    <th className="finance-table-header">Mode</th>
+                    <th className="finance-small-label uppercase">Date</th>
+                    <th className="finance-small-label uppercase">Particulars</th>
+                    <th className="text-right finance-small-label uppercase">Credit (Col)</th>
+                    <th className="text-right finance-small-label uppercase">Debit (Disb)</th>
+                    <th className="text-right finance-small-label uppercase">Balance</th>
+                    <th className="finance-small-label uppercase">Mode</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white font-mono">
                   {ledgerComputations.processedTransactions.map((tx: any) => (
                     <tr key={tx.id}>
-                      <td className="px-3 py-1.5 font-sans font-semibold text-gray-700">
+                      <td className="px-3 py-1.5 font-sans text-gray-700 finance-input">
                         {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                       </td>
                       <td className="px-3 py-1.5 font-sans text-gray-600">{tx.remarks || '-'}</td>
-                      <td className="px-3 py-1.5 text-right font-bold text-green-600">
+                      <td className="px-3 py-1.5 text-right text-green-600 finance-input">
                         {tx.credit > 0 ? `₹${tx.credit.toLocaleString('en-IN')}` : '-'}
                       </td>
-                      <td className="px-3 py-1.5 text-right font-bold text-red-600">
+                      <td className="px-3 py-1.5 text-right text-red-600 finance-input">
                         {tx.debit > 0 ? `₹${tx.debit.toLocaleString('en-IN')}` : '-'}
                       </td>
-                      <td className="px-3 py-1.5 text-right font-bold text-gray-900">
+                      <td className="px-3 py-1.5 text-right text-gray-900 finance-input">
                         ₹{tx.balance.toLocaleString('en-IN')}
                       </td>
-                      <td className="px-3 py-1.5 font-sans font-semibold text-gray-500">{tx.payment_mode || 'Cash'}</td>
+                      <td className="px-3 py-1.5 font-sans text-gray-500 finance-input">{tx.payment_mode || 'Cash'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1168,15 +1162,15 @@ const CDLedger: React.FC = () => {
 
             {/* Installment Dues Table */}
             <div className="space-y-2 mt-4">
-              <h4 className="font-bold text-xs uppercase tracking-wider text-green-800 border-b pb-1">Scheduled Receivables Breakdown</h4>
-              <table className="min-w-full divide-y divide-gray-300 text-xs border border-gray-200">
+              <h4 className="text-green-800 border-b pb-1 finance-header-time uppercase">Scheduled Receivables Breakdown</h4>
+              <table className="min-w-full divide-y divide-gray-300 border border-gray-200 finance-caption">
                 <thead>
                   <tr className="bg-gray-50">
-                    <th className="finance-table-header">Due Date</th>
-                    <th className="finance-table-header text-right">Instalment</th>
-                    <th className="finance-table-header text-right">Paid Amount</th>
-                    <th className="finance-table-header text-center">Status</th>
-                    <th className="finance-table-header text-right">Balance</th>
+                    <th className="finance-small-label uppercase">Due Date</th>
+                    <th className="text-right finance-small-label uppercase">Instalment</th>
+                    <th className="text-right finance-small-label uppercase">Paid Amount</th>
+                    <th className="text-center finance-small-label uppercase">Status</th>
+                    <th className="text-right finance-small-label uppercase">Balance</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white font-mono">
@@ -1187,15 +1181,15 @@ const CDLedger: React.FC = () => {
                       const bal = Math.max(0, amt - paid);
                       return (
                         <tr key={due.id}>
-                          <td className="px-3 py-1.5 font-sans font-semibold text-gray-700">
+                          <td className="px-3 py-1.5 font-sans text-gray-700 finance-input">
                             {new Date(due.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                           </td>
-                          <td className="px-3 py-1.5 text-right font-bold text-gray-900">₹{amt.toLocaleString('en-IN')}</td>
-                          <td className="px-3 py-1.5 text-right font-bold text-green-600">₹{paid.toLocaleString('en-IN')}</td>
+                          <td className="px-3 py-1.5 text-right text-gray-900 finance-input">₹{amt.toLocaleString('en-IN')}</td>
+                          <td className="px-3 py-1.5 text-right text-green-600 finance-input">₹{paid.toLocaleString('en-IN')}</td>
                           <td className="px-3 py-1.5 text-center font-sans">
-                            <span className="text-[10px] font-bold uppercase">{due.status}</span>
+                            <span className="finance-small-label uppercase">{due.status}</span>
                           </td>
-                          <td className="px-3 py-1.5 text-right font-bold text-orange-700">₹{bal.toLocaleString('en-IN')}</td>
+                          <td className="px-3 py-1.5 text-right text-orange-700 finance-input">₹{bal.toLocaleString('en-IN')}</td>
                         </tr>
                       );
                     })
@@ -1206,7 +1200,7 @@ const CDLedger: React.FC = () => {
                   )}
                   {selectedLoan.dues && selectedLoan.dues.length > 15 && (
                     <tr>
-                      <td colSpan={5} className="text-center py-2 font-sans text-[10px] text-gray-400">
+                      <td colSpan={5} className="text-center py-2 font-sans text-gray-400 finance-small-label">
                         ... and {selectedLoan.dues.length - 15} more dues scheduled. Refer to system for complete list.
                       </td>
                     </tr>
@@ -1218,23 +1212,23 @@ const CDLedger: React.FC = () => {
             {/* Total Summaries */}
             <div className="border-t border-b py-4 grid grid-cols-3 gap-4 text-center font-mono mt-4">
               <div>
-                <div className="text-[10px] text-gray-400 font-bold uppercase font-sans">Total Collected</div>
-                <div className="font-bold text-green-600 text-sm">₹{ledgerComputations.totalCredit.toLocaleString('en-IN')}</div>
+                <div className="text-gray-400 font-sans finance-small-label uppercase">Total Collected</div>
+                <div className="text-green-600 finance-sidebar-link">₹{ledgerComputations.totalCredit.toLocaleString('en-IN')}</div>
               </div>
 
               <div>
-                <div className="text-[10px] text-gray-400 font-bold uppercase font-sans">Outstanding Balance</div>
-                <div className="font-bold text-orange-700 text-sm">₹{ledgerComputations.currentBalance.toLocaleString('en-IN')}</div>
+                <div className="text-gray-400 font-sans finance-small-label uppercase">Outstanding Balance</div>
+                <div className="text-orange-700 finance-sidebar-link">₹{ledgerComputations.currentBalance.toLocaleString('en-IN')}</div>
               </div>
 
               <div>
-                <div className="text-[10px] text-gray-400 font-bold uppercase font-sans">Total Scheduled Dues</div>
-                <div className="font-bold text-red-600 text-sm">₹{ledgerComputations.totalDues.toLocaleString('en-IN')}</div>
+                <div className="text-gray-400 font-sans finance-small-label uppercase">Total Scheduled Dues</div>
+                <div className="text-red-600 finance-sidebar-link">₹{ledgerComputations.totalDues.toLocaleString('en-IN')}</div>
               </div>
             </div>
 
             {/* Signatures */}
-            <div className="pt-16 grid grid-cols-2 gap-20 text-center font-semibold text-xs text-gray-500">
+            <div className="pt-16 grid grid-cols-2 gap-20 text-center text-gray-500 finance-header-time">
               <div>
                 <div className="border-t border-gray-300 pt-1.5 w-40 mx-auto">Borrower Signature</div>
               </div>

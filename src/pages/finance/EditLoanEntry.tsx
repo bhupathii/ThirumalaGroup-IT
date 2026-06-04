@@ -208,8 +208,8 @@ const EditLoanEntry: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5 mb-6">
         <div>
-          <h1 className="finance-page-title">EDIT LOAN LEDGER</h1>
-          <p className="finance-page-subtitle mt-1">Modify active loan parameters, surety files, and record status updates</p>
+          <h1 className="finance-h1">EDIT LOAN LEDGER</h1>
+          <p className="mt-1 finance-small-label uppercase">Modify active loan parameters, surety files, and record status updates</p>
         </div>
       </div>
 
@@ -224,7 +224,7 @@ const EditLoanEntry: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Box 1: Customer info */}
               <div className="space-y-3">
-                <h4 className="font-extrabold text-sm text-gray-800 border-b pb-1">Customer Profile</h4>
+                <h4 className="text-gray-800 border-b pb-1 finance-section-heading">Customer Profile</h4>
                 <Input label="Customer Name" value={custName} onChange={setCustName} required />
                 <Input label="Father / Husband Name" value={custFatherHusbandName} onChange={setCustFatherHusbandName} />
                 <Input label="Phone Number" value={custPhone} onChange={setCustPhone} />
@@ -252,16 +252,16 @@ const EditLoanEntry: React.FC = () => {
 
               {/* Box 2: Loan parameters */}
               <div className="space-y-3">
-                <h4 className="font-extrabold text-sm text-gray-800 border-b pb-1">Loan Parameters</h4>
+                <h4 className="text-gray-800 border-b pb-1 finance-section-heading">Loan Parameters</h4>
                 <Input label="Disbursed Date" type="date" value={date} onChange={setDate} required />
                 <div>
-                  <label className="finance-label" >
+                  <label className="finance-caption uppercase" >
                     Loan Category
                   </label>
                   <select
                     value={loanCategory}
                     onChange={(e) => setLoanCategory(e.target.value as any)}
-                    className="w-full border border-gray-300 rounded-lg p-1.5 font-bold text-xs focus:ring-2 focus:ring-green-500"
+                    className="w-full border border-gray-300 rounded-lg p-1.5 focus:ring-2 focus:ring-green-500 finance-header-time"
                   >
                     <option value="L">Regular Loan (L)</option>
                     <option value="CD">Chit Fund (CD)</option>
@@ -279,13 +279,13 @@ const EditLoanEntry: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="finance-label" >
+                    <label className="finance-caption uppercase" >
                       Instalment Type
                     </label>
                     <select
                       value={dueType}
                       onChange={(e) => setDueType(e.target.value as any)}
-                      className="w-full border border-gray-300 rounded-lg p-1.5 font-bold text-xs focus:ring-2 focus:ring-green-500"
+                      className="w-full border border-gray-300 rounded-lg p-1.5 focus:ring-2 focus:ring-green-500 finance-header-time"
                     >
                       <option value="Daily">Daily</option>
                       <option value="Weekly">Weekly</option>
@@ -298,7 +298,7 @@ const EditLoanEntry: React.FC = () => {
 
               {/* Box 3: Surety and Remarks */}
               <div className="space-y-3">
-                <h4 className="font-extrabold text-sm text-gray-800 border-b pb-1">Guarantor & Account Status</h4>
+                <h4 className="text-gray-800 border-b pb-1 finance-section-heading">Guarantor & Account Status</h4>
                 <Input label="Surety Person Name" value={suretyName} onChange={setSuretyName} />
                 <Input label="Surety Phone" value={suretyPhone} onChange={setSuretyPhone} />
                 <Input label="Surety Aadhaar" value={suretyAadhaar} onChange={setSuretyAadhaar} />
@@ -321,13 +321,13 @@ const EditLoanEntry: React.FC = () => {
                 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="finance-label" >
+                    <label className="finance-caption uppercase" >
                       Account Status
                     </label>
                     <select
                       value={status}
                       onChange={(e) => setStatus(e.target.value as any)}
-                      className="w-full border border-gray-300 rounded-lg p-1.5 font-bold text-xs focus:ring-2 focus:ring-green-500"
+                      className="w-full border border-gray-300 rounded-lg p-1.5 focus:ring-2 focus:ring-green-500 finance-header-time"
                     >
                       <option value="Active">Active Account</option>
                       <option value="Closed">Closed Account</option>
@@ -380,43 +380,41 @@ const EditLoanEntry: React.FC = () => {
               <div className="text-center py-8 text-gray-400">No matching loans found</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
+                <table className="min-w-full divide-y divide-gray-200 md:text-sm finance-caption">
                   <thead>
                     <tr className="bg-gray-50">
-                      <th className="finance-table-header">Loan ID</th>
-                      <th className="finance-table-header">Customer</th>
-                      <th className="finance-table-header">Aadhaar</th>
-                      <th className="finance-table-header text-right">Principal</th>
-                      <th className="finance-table-header">Instalment</th>
-                      <th className="finance-table-header text-center">Status</th>
-                      <th className="finance-table-header text-right">Action</th>
+                      <th className="finance-small-label uppercase">Loan ID</th>
+                      <th className="finance-small-label uppercase">Customer</th>
+                      <th className="finance-small-label uppercase">Aadhaar</th>
+                      <th className="text-right finance-small-label uppercase">Principal</th>
+                      <th className="finance-small-label uppercase">Instalment</th>
+                      <th className="text-center finance-small-label uppercase">Status</th>
+                      <th className="text-right finance-small-label uppercase">Action</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
                     {filteredLoans.map(loan => (
                       <tr key={loan.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-3 py-3 whitespace-nowrap font-bold text-gray-900 font-mono">
+                        <td className="px-3 py-3 whitespace-nowrap text-gray-900 font-mono finance-input">
                           {loan.loan_id}
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap">
-                          <div className="font-bold text-gray-900">{loan.customer?.name}</div>
+                          <div className="text-gray-900 finance-input">{loan.customer?.name}</div>
                           {loan.customer?.phone && (
-                            <div className="text-xs text-gray-500">{loan.customer.phone}</div>
+                            <div className="text-gray-500 finance-caption">{loan.customer.phone}</div>
                           )}
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap text-gray-600 font-mono">
                           {loan.customer?.aadhaar || '-'}
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap text-right font-bold text-gray-900">
+                        <td className="px-3 py-3 whitespace-nowrap text-right text-gray-900 finance-input">
                           ₹{Number(loan.amount).toLocaleString('en-IN')}
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap text-gray-700">
                           {loan.due_type} (₹{Number(loan.due_amount).toLocaleString('en-IN')})
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                            loan.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                          }`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full ${ loan.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' } finance-header-time`}>
                             {loan.status}
                           </span>
                         </td>

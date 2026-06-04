@@ -382,11 +382,11 @@ const NewCustomer: React.FC = () => {
       {/* Top Header Actions Bar */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5">
         <div>
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+          <div className="text-slate-400 finance-small-label uppercase">
             DASHBOARD / CUSTOMERS / {editId ? 'EDIT' : 'NEW'}
           </div>
-          <h1 className="finance-page-title mt-1">{editId ? 'EDIT CUSTOMER' : 'NEW CUSTOMER'}</h1>
-          <p className="finance-page-subtitle mt-0.5">
+          <h1 className="mt-1 finance-h1">{editId ? 'EDIT CUSTOMER' : 'NEW CUSTOMER'}</h1>
+          <p className="mt-0.5 finance-small-label uppercase">
             {editId ? 'MODIFY CUSTOMER MASTER LIST RECORD' : 'REGISTER A NEW CUSTOMER IN THE MASTER LIST'}
           </p>
         </div>
@@ -394,7 +394,7 @@ const NewCustomer: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
@@ -402,7 +402,7 @@ const NewCustomer: React.FC = () => {
           <button
             type="button"
             onClick={handleResetForm}
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             RESET
@@ -411,7 +411,7 @@ const NewCustomer: React.FC = () => {
             type="button"
             onClick={handleSubmit}
             disabled={saving || uploading}
-            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 finance-button uppercase"
           >
             <Save className="w-3.5 h-3.5" />
             {saving ? 'SAVING...' : 'SAVE'}
@@ -425,14 +425,14 @@ const NewCustomer: React.FC = () => {
         {/* Left Column: Customer Details Form */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase border-b border-slate-100 pb-2">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
               CUSTOMER DETAILS
             </h3>
             
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     CUSTOMER ID
                   </label>
                   <input
@@ -440,15 +440,15 @@ const NewCustomer: React.FC = () => {
                     value={estimatedId}
                     readOnly
                     disabled
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-500 focus:outline-none cursor-not-allowed"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-500 focus:outline-none cursor-not-allowed finance-header-time"
                   />
-                  <span className="text-[9px] text-slate-400 font-bold mt-1 block uppercase tracking-wide">
+                  <span className="text-[9px] text-slate-400 mt-1 block finance-input uppercase">
                     AUTO-GENERATED
                   </span>
                 </div>
 
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     AADHAAR
                   </label>
                   <input
@@ -456,13 +456,13 @@ const NewCustomer: React.FC = () => {
                     value={aadhaar}
                     onChange={(e) => setAadhaar(e.target.value)}
                     placeholder="12-digit Aadhaar UID"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   NAME <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -471,13 +471,13 @@ const NewCustomer: React.FC = () => {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Ramesh Kumar"
                   required
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     FATHER
                   </label>
                   <input
@@ -485,12 +485,12 @@ const NewCustomer: React.FC = () => {
                     value={fatherName}
                     onChange={(e) => setFatherName(e.target.value)}
                     placeholder="Father's or Husband's name"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                   />
                 </div>
 
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     VILLAGE
                   </label>
                   <input
@@ -498,12 +498,12 @@ const NewCustomer: React.FC = () => {
                     value={village}
                     onChange={(e) => setVillage(e.target.value)}
                     placeholder="Village Name"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                   />
                 </div>
 
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     MANDAL
                   </label>
                   <input
@@ -511,12 +511,12 @@ const NewCustomer: React.FC = () => {
                     value={mandal}
                     onChange={(e) => setMandal(e.target.value)}
                     placeholder="Mandal Name"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                   />
                 </div>
 
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     DISTRICT
                   </label>
                   <input
@@ -524,7 +524,7 @@ const NewCustomer: React.FC = () => {
                     value={district}
                     onChange={(e) => setDistrict(e.target.value)}
                     placeholder="District Name"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                   />
                 </div>
               </div>
@@ -532,7 +532,7 @@ const NewCustomer: React.FC = () => {
               {/* Address Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     AADHAAR ADDRESS
                   </label>
                   <textarea
@@ -540,12 +540,12 @@ const NewCustomer: React.FC = () => {
                     onChange={(e) => setAadhaarAddress(e.target.value)}
                     placeholder="Address details as printed on Aadhaar card"
                     rows={3}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y finance-header-time"
                   />
                 </div>
 
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     PRESENT ADDRESS
                   </label>
                   <textarea
@@ -553,7 +553,7 @@ const NewCustomer: React.FC = () => {
                     onChange={(e) => setPresentAddress(e.target.value)}
                     placeholder="Current residential address details"
                     rows={3}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y finance-header-time"
                   />
                 </div>
               </div>
@@ -561,7 +561,7 @@ const NewCustomer: React.FC = () => {
               {/* Phone Inputs */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     PHONE 1
                   </label>
                   <input
@@ -569,12 +569,12 @@ const NewCustomer: React.FC = () => {
                     value={phone1}
                     onChange={(e) => setPhone1(e.target.value)}
                     placeholder="Primary 10-digit number"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                   />
                 </div>
 
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     PHONE 2
                   </label>
                   <input
@@ -582,7 +582,7 @@ const NewCustomer: React.FC = () => {
                     value={phone2}
                     onChange={(e) => setPhone2(e.target.value)}
                     placeholder="Secondary contact number"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                   />
                 </div>
               </div>
@@ -594,10 +594,10 @@ const NewCustomer: React.FC = () => {
         <div className="space-y-6">
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
             <div>
-              <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase">
+              <h3 className="text-slate-900 finance-header-time uppercase">
                 CUSTOMER PHOTO
               </h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+              <p className="text-slate-400 mt-0.5 finance-small-label uppercase">
                 UPLOAD OR CAPTURE. SAVED WITH CUSTOMER RECORD.
               </p>
             </div>
@@ -618,7 +618,7 @@ const NewCustomer: React.FC = () => {
                     <button
                       type="button"
                       onClick={capturePhoto}
-                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow hover:bg-emerald-700 flex items-center gap-1"
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg shadow hover:bg-emerald-700 flex items-center gap-1 finance-header-time"
                     >
                       <Camera className="w-4 h-4" />
                       CAPTURE
@@ -626,7 +626,7 @@ const NewCustomer: React.FC = () => {
                     <button
                       type="button"
                       onClick={stopCamera}
-                      className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold shadow hover:bg-slate-700"
+                      className="px-4 py-2 bg-slate-800 text-white rounded-lg shadow hover:bg-slate-700 finance-header-time"
                     >
                       CANCEL
                     </button>
@@ -651,7 +651,7 @@ const NewCustomer: React.FC = () => {
                     <button
                       type="button"
                       onClick={startCamera}
-                      className="px-3 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg text-[10px] font-bold shadow-sm hover:bg-orange-100 flex items-center gap-1"
+                      className="px-3 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg shadow-sm hover:bg-orange-100 flex items-center gap-1 finance-small-label"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
                       RETAKE
@@ -659,7 +659,7 @@ const NewCustomer: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleClearPhoto}
-                      className="px-3 py-1.5 bg-red-50 text-red-650 border border-red-200 rounded-lg text-[10px] font-bold shadow-sm hover:bg-red-100 flex items-center gap-1"
+                      className="px-3 py-1.5 bg-red-50 text-red-650 border border-red-200 rounded-lg shadow-sm hover:bg-red-100 flex items-center gap-1 finance-small-label"
                     >
                       <X className="w-3.5 h-3.5" />
                       CLEAR
@@ -678,16 +678,16 @@ const NewCustomer: React.FC = () => {
                     <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 text-orange-500 group-hover:scale-105 transition-all">
                       <Camera className="w-6 h-6 stroke-1.5" />
                     </div>
-                    <span className="text-[11px] font-extrabold text-slate-800 uppercase tracking-widest block pt-1">
+                    <span className="text-[11px] text-slate-800 block pt-1 finance-input uppercase">
                       CUSTOMER PHOTO
                     </span>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">
+                    <span className="text-[9px] text-slate-400 block finance-input uppercase">
                       CLICK TO CAPTURE PHOTO
                     </span>
                   </div>
 
                   <div className="w-full flex items-center justify-center gap-2 pt-2 border-t border-slate-100/60">
-                    <label className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg cursor-pointer transition-colors shadow-sm inline-flex items-center gap-1.5 uppercase tracking-wider">
+                    <label className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-colors shadow-sm inline-flex items-center gap-1.5 finance-small-label uppercase">
                       <FileImage className="w-3.5 h-3.5 text-slate-500" />
                       OR SELECT FROM DEVICE
                       <input

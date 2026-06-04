@@ -154,22 +154,22 @@ const FinanceDashboard: React.FC = () => {
       {/* Dashboard Page Title & Top Actions */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-900 tracking-wider">DASHBOARD</h1>
-          <p className="finance-page-subtitle">
+          <h1 className="finance-h1">DASHBOARD</h1>
+          <p className="finance-small-label uppercase">
             OVERVIEW OF TODAY'S CHITFUND OPERATIONS
           </p>
         </div>
         <div className="flex items-center gap-2.5">
           <Link
             to="/finance/loan-entry"
-            className="inline-flex items-center gap-2 px-4 py-2.5 finance-button-text bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all shadow-sm uppercase tracking-wider"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all shadow-sm finance-button uppercase"
           >
             <Plus className="w-3.5 h-3.5 stroke-[3px]" />
             NEW LOAN
           </Link>
           <Link
             to="/finance/daybook"
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-black bg-white text-slate-850 border border-slate-200 rounded-lg hover:bg-slate-50 transition-all shadow-sm uppercase tracking-wider"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-slate-850 border border-slate-200 rounded-lg hover:bg-slate-50 transition-all shadow-sm finance-header-time uppercase"
           >
             <BookOpen className="w-3.5 h-3.5 text-slate-500" />
             CASH BOOK
@@ -179,7 +179,7 @@ const FinanceDashboard: React.FC = () => {
 
       {/* TODAY AT A GLANCE section */}
       <div className="space-y-3">
-        <h2 className="finance-section-title">
+        <h2 className="finance-section-heading uppercase">
           TODAY AT A GLANCE
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -195,10 +195,10 @@ const FinanceDashboard: React.FC = () => {
               </div>
             </div>
             <div>
-              <div className="text-2xl font-black text-slate-900 tracking-tight">
+              <div className="finance-money">
                 ₹{stats.totalDisbursed.toLocaleString('en-IN')}
               </div>
-              <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+              <div className="finance-caption uppercase">
                 {stats.loansCount} Loans on Book
               </div>
             </div>
@@ -215,10 +215,10 @@ const FinanceDashboard: React.FC = () => {
               </div>
             </div>
             <div>
-              <div className="text-2xl font-black text-red-650 tracking-tight">
+              <div className="!text-red-650 finance-money">
                 ₹{stats.totalOutstanding.toLocaleString('en-IN')}
               </div>
-              <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+              <div className="finance-caption uppercase">
                 PRINCIPAL + ACCRUED INTEREST
               </div>
             </div>
@@ -235,10 +235,10 @@ const FinanceDashboard: React.FC = () => {
               </div>
             </div>
             <div>
-              <div className="text-2xl font-black text-green-650 tracking-tight">
+              <div className="!text-green-650 finance-money">
                 ₹{stats.collectedToday.toLocaleString('en-IN')}
               </div>
-              <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+              <div className="finance-caption uppercase">
                 DEBIT SIDE OF CASHBOOK
               </div>
             </div>
@@ -255,10 +255,10 @@ const FinanceDashboard: React.FC = () => {
               </div>
             </div>
             <div>
-              <div className="text-2xl font-black text-orange-650 tracking-tight">
+              <div className="!text-amber-650 finance-money">
                 {stats.overdueLoansCount}
               </div>
-              <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+              <div className="finance-caption uppercase">
                 PAST DUE DATE
               </div>
             </div>
@@ -269,7 +269,7 @@ const FinanceDashboard: React.FC = () => {
 
       {/* QUICK ACTIONS section */}
       <div className="space-y-3">
-        <h2 className="finance-section-title">
+        <h2 className="finance-section-heading uppercase">
           QUICK ACTIONS
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -279,12 +279,12 @@ const FinanceDashboard: React.FC = () => {
               <Link
                 key={idx}
                 to={action.path}
-                className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm hover:border-slate-350 hover:shadow hover:-translate-y-0.5 transition-all group flex flex-col items-start"
+                className="bg-white border border-slate-150 rounded-xl p-4 shadow-sm hover:border-slate-350 hover:shadow hover:-translate-y-0.5 transition-all group flex flex-col items-start"
               >
                 <div className="p-2 border border-slate-100 rounded-lg bg-slate-50/50 text-slate-800 group-hover:bg-slate-100 transition-colors">
                   <IconComponent className="w-4 h-4" />
                 </div>
-                <span className="text-[10px] font-black text-slate-800 tracking-wider uppercase mt-4 block">
+                <span className="finance-input uppercase">
                   {action.label}
                 </span>
               </Link>
@@ -300,16 +300,16 @@ const FinanceDashboard: React.FC = () => {
         <div className="lg:col-span-2 space-y-3">
           <div className="flex justify-between items-end border-b border-slate-100 pb-2">
             <div>
-              <h2 className="finance-page-title text-sm">
+              <h2 className="finance-section-heading uppercase">
                 RECENT LOANS
               </h2>
-              <p className="text-[9px] font-bold text-slate-400 tracking-wider uppercase mt-0.5">
+              <p className="text-[9px] text-slate-400 mt-0.5 finance-input uppercase">
                 MOST RECENT 8 DISBURSALS
               </p>
             </div>
             <Link
               to="/finance/search"
-              className="text-[10px] font-black text-blue-600 hover:text-blue-700 tracking-widest uppercase flex items-center gap-1.5 transition-colors"
+              className="finance-button uppercase"
             >
               VIEW ALL &rarr;
             </Link>
@@ -317,62 +317,59 @@ const FinanceDashboard: React.FC = () => {
 
           {recentLoans.length === 0 ? (
             <div className="border-2 border-dashed border-slate-200 rounded-2xl p-10 flex flex-col items-center justify-center text-center mt-3 min-h-[310px] bg-white">
-              <div className="text-sm font-black text-slate-850 tracking-wide uppercase">
-                NO LOANS YET
+              <div className="text-slate-850 tracking-[0.16px] finance-brand">
+                No loans yet
               </div>
-              <div className="text-[9px] font-bold text-slate-400 tracking-wider uppercase mt-1 mb-6">
-                START BY CREATING YOUR FIRST LOAN ENTRY.
+              <div className="text-slate-500 mt-1 mb-6 finance-sidebar-link">
+                Start by creating your first loan entry.
               </div>
               <Link
                 to="/finance/loan-entry"
-                className="inline-flex items-center justify-center px-5 py-2.5 finance-button-text bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors shadow-sm uppercase tracking-wider"
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-sm tracking-[0.16px] finance-input"
               >
-                CREATE LOAN
+                <Plus className="w-4 h-4" />
+                Create loan
               </Link>
             </div>
           ) : (
             <div className="bg-white border border-slate-150 rounded-xl overflow-hidden shadow-sm mt-3">
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-150 text-xs">
+                <table className="min-w-full divide-y divide-slate-150 finance-caption">
                   <thead>
-                    <tr className="bg-slate-50/75 text-slate-500 font-bold uppercase tracking-wider text-[9px]">
-                      <th className="finance-table-header">Loan ID</th>
-                      <th className="finance-table-header">Customer Name</th>
-                      <th className="finance-table-header">Date</th>
+                    <tr className="bg-slate-50/75 text-slate-500 text-[9px] finance-input uppercase">
+                      <th className="finance-small-label uppercase">Loan ID</th>
+                      <th className="finance-small-label uppercase">Customer Name</th>
+                      <th className="finance-small-label uppercase">Date</th>
                       <th className="px-4 py-3 text-right">Amount</th>
                       <th className="px-4 py-3 text-center">Category</th>
                       <th className="px-4 py-3 text-center">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-slate-100 font-medium">
+                  <tbody className="bg-white divide-y divide-slate-100 finance-input">
                     {recentLoans.map((loan) => (
                       <tr key={loan.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-3 font-bold text-slate-900 font-mono">
+                        <td className="px-4 py-3 text-slate-900 finance-input">
                           {loan.loan_id}
                         </td>
-                        <td className="px-4 py-3 text-slate-900 font-bold">
+                        <td className="px-4 py-3 text-slate-900 finance-input">
                           {loan.customer?.name || 'N/A'}
                         </td>
-                        <td className="px-4 py-3 text-slate-500">
+                        <td className="px-4 py-3 text-slate-500 finance-input">
                           {new Date(loan.date).toLocaleDateString('en-IN', {
                             day: '2-digit',
                             month: 'short',
                             year: 'numeric',
                           })}
                         </td>
-                        <td className="px-4 py-3 text-right font-black text-slate-900">
+                        <td className="px-4 py-3 text-right text-slate-900 finance-input">
                           ₹{Number(loan.amount).toLocaleString('en-IN')}
                         </td>
-                        <td className="px-4 py-3 text-center text-slate-600 font-semibold">
+                        <td className="px-4 py-3 text-center text-slate-600 finance-input">
                           {loan.loan_category?.trim().toUpperCase() || 'CD'}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                              loan.status === 'Active'
-                                ? 'bg-green-50 text-green-700 border border-green-100'
-                                : 'bg-slate-50 text-slate-500 border border-slate-200'
-                            }`}
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] ${ loan.status === 'Active' ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-slate-50 text-slate-500 border border-slate-200' } finance-input uppercase`}
                           >
                             {loan.status}
                           </span>
@@ -389,10 +386,10 @@ const FinanceDashboard: React.FC = () => {
         {/* Right Column: Reports */}
         <div className="space-y-3">
           <div className="border-b border-slate-100 pb-2">
-            <h2 className="finance-page-title text-sm">
+            <h2 className="finance-section-heading uppercase">
               REPORTS
             </h2>
-            <p className="text-[9px] font-bold text-slate-400 tracking-wider uppercase mt-0.5">
+            <p className="text-[9px] text-slate-400 mt-0.5 finance-input uppercase">
               PRINTABLE STATEMENTS
             </p>
           </div>
@@ -408,7 +405,7 @@ const FinanceDashboard: React.FC = () => {
                 >
                   <div className="flex items-center gap-3">
                     <IconComponent className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition-colors" />
-                    <span className="text-[10px] font-black text-slate-700 group-hover:text-slate-900 transition-colors tracking-widest uppercase">
+                    <span className="text-slate-700 group-hover:text-slate-900 transition-colors tracking-[0.16px] finance-header-time uppercase">
                       {report.label}
                     </span>
                   </div>

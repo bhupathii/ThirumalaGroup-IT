@@ -81,8 +81,8 @@ const PhoneNumberEditor: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center border-b border-green-100 pb-4">
         <div>
-          <h1 className="finance-page-title">Phone Number Editor</h1>
-          <p className="finance-page-subtitle">Quickly search and update contact details for customers in the finance registry</p>
+          <h1 className="finance-h1">Phone Number Editor</h1>
+          <p className="finance-small-label uppercase">Quickly search and update contact details for customers in the finance registry</p>
         </div>
       </div>
 
@@ -91,9 +91,9 @@ const PhoneNumberEditor: React.FC = () => {
         <Card title="Edit Contact Details" subtitle="Input new phone details">
           {selectedCustomer ? (
             <form onSubmit={handleSave} className="space-y-4">
-              <div className="p-3 bg-gray-50 rounded text-xs space-y-1">
-                <p className="font-bold text-gray-900 text-sm">{selectedCustomer.name}</p>
-                <p className="text-gray-500">Current Phone: <span className="font-semibold">{selectedCustomer.phone || 'None'}</span></p>
+              <div className="p-3 bg-gray-50 rounded space-y-1 finance-caption">
+                <p className="text-gray-900 finance-sidebar-link">{selectedCustomer.name}</p>
+                <p className="text-gray-500">Current Phone: <span className="finance-input">{selectedCustomer.phone || 'None'}</span></p>
                 {selectedCustomer.aadhaar && (
                   <p className="text-gray-500 font-mono">Aadhaar UID: {selectedCustomer.aadhaar}</p>
                 )}
@@ -115,7 +115,7 @@ const PhoneNumberEditor: React.FC = () => {
               </div>
             </form>
           ) : (
-            <div className="text-center py-8 text-gray-400 text-sm">
+            <div className="text-center py-8 text-gray-400 finance-input">
               Please select a customer from the list on the right to edit their phone number.
             </div>
           )}
@@ -140,19 +140,19 @@ const PhoneNumberEditor: React.FC = () => {
             <div className="text-center py-8 text-gray-400">No matching customers found</div>
           ) : (
             <div className="overflow-x-auto max-h-96 overflow-y-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
+              <table className="min-w-full divide-y divide-gray-200 md:text-sm finance-caption">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="finance-table-header">Customer Name</th>
-                    <th className="finance-table-header">Aadhaar UID</th>
-                    <th className="finance-table-header">Phone Number</th>
-                    <th className="finance-table-header text-right">Action</th>
+                    <th className="finance-small-label uppercase">Customer Name</th>
+                    <th className="finance-small-label uppercase">Aadhaar UID</th>
+                    <th className="finance-small-label uppercase">Phone Number</th>
+                    <th className="text-right finance-small-label uppercase">Action</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
                   {filteredCusts.map(cust => (
                     <tr key={cust.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-3 py-3 font-bold text-gray-900">{cust.name}</td>
+                      <td className="px-3 py-3 text-gray-900 finance-input">{cust.name}</td>
                       <td className="px-3 py-3 text-gray-600 font-mono">{cust.aadhaar || '-'}</td>
                       <td className="px-3 py-3 text-gray-600 font-mono">{cust.phone || '-'}</td>
                       <td className="px-3 py-3 text-right">

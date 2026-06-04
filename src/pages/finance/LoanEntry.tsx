@@ -13,7 +13,8 @@ import {
   Trash2, 
   Navigation,
   Check,
-  Search
+  Search,
+  Camera
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
@@ -28,6 +29,7 @@ interface DocumentItem {
   refNo: string;
   fileUrl: string | null;
   uploading: boolean;
+  isCustom?: boolean;
 }
 
 const LoanEntry: React.FC = () => {
@@ -98,8 +100,10 @@ const LoanEntry: React.FC = () => {
   // Form State - Loan Terms
   const [amount, setAmount] = useState('');
   const [docCharges, setDocCharges] = useState('');
-  const [interestRate, setInterestRate] = useState('2'); // 2% default
-  const [durationMonths, setDurationMonths] = useState('3'); // 3 months default
+  const [interestRate, setInterestRate] = useState('3'); // 3% default
+  const [durationMonths, setDurationMonths] = useState('');
+  const [annualHold, setAnnualHold] = useState('3'); // 3% default
+  const [partialPaid, setPartialPaid] = useState('');
   const [dueType, setDueType] = useState<'Daily' | 'Weekly' | 'Monthly'>('Daily');
   const [particulars, setParticulars] = useState('');
 
@@ -188,6 +192,7 @@ const LoanEntry: React.FC = () => {
   const [locLatitude, setLocLatitude] = useState('');
   const [locLongitude, setLocLongitude] = useState('');
   const [locMapsLink, setLocMapsLink] = useState('');
+  const [collateralImage, setCollateralImage] = useState<string | null>(null);
 
   // Form State - Remarks & Extra
   const [remarks, setRemarks] = useState('');
@@ -388,6 +393,37 @@ const LoanEntry: React.FC = () => {
   const removeChecklistUpload = (key: string) => {
     setDocuments(prev => prev.map(doc => doc.key === key ? { ...doc, fileUrl: null } : doc));
     toast.success('Attachment detached');
+  };
+
+  const handleCollateralImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `collateral-${Date.now()}.${fileExt}`;
+      const filePath = `collateral/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('finance-photos')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('finance-photos')
+        .getPublicUrl(filePath);
+
+      setCollateralImage(data.publicUrl);
+      toast.success('Collateral image uploaded successfully');
+    } catch (err) {
+      console.error('Error uploading collateral image:', err);
+      toast.error('Failed to upload collateral image');
+    }
+  };
+
+  const removeCollateralImage = () => {
+    setCollateralImage(null);
   };
 
   // Live Calculations
@@ -768,6 +804,7 @@ const LoanEntry: React.FC = () => {
           gps_latitude: locLatitude,
           gps_longitude: locLongitude,
           google_maps_link: locMapsLink,
+          collateral_image: collateralImage,
           particulars,
           extraDetails,
           document_charges: liveCalculations.docFees
@@ -833,22 +870,22 @@ const LoanEntry: React.FC = () => {
       {/* Top Header Actions Bar */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5 print:hidden">
         <div>
-          <h1 className="finance-page-title">NEW LOAN ENTRY</h1>
-          <p className="finance-page-subtitle mt-1">
+          <h1 className="finance-h1">NEW LOAN ENTRY</h1>
+          <p className="mt-1 finance-small-label uppercase">
             CAPTURE & DISBURSE GENERAL — LEDGER — DUES CALCULATIONS PREVIEW & FILE
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => navigate('/finance')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
           </button>
           <Link
             to="/finance/calculator"
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
           >
             <Calculator className="w-3.5 h-3.5" />
             CALCULATOR
@@ -856,14 +893,14 @@ const LoanEntry: React.FC = () => {
           <button
             onClick={handlePrintPreview}
             disabled={!liveCalculations}
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50 finance-button uppercase"
           >
             <Printer className="w-3.5 h-3.5" />
             PREVIEW & PRINT
           </button>
           <button
             onClick={handleClearForm}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors shadow-sm finance-header-time"
           >
             <X className="w-3.5 h-3.5" />
             CLEAR
@@ -871,7 +908,7 @@ const LoanEntry: React.FC = () => {
           <button
             onClick={handleSaveLoan}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 finance-button uppercase"
           >
             <Check className="w-3.5 h-3.5" />
             {saving ? 'SAVING...' : 'SAVE LOAN'}
@@ -887,46 +924,45 @@ const LoanEntry: React.FC = () => {
           
           {/* Card 1: BASICS */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase border-b border-slate-100 pb-2">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
               BASICS
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   DATE *
                 </label>
                 <input
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                   required
                 />
               </div>
 
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   LEDGER TYPE *
                 </label>
                 <select
                   value={loanCategory}
                   onChange={(e) => setLoanCategory(e.target.value as any)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                   required
                 >
                   <option value="CD">CHIT FUND (CD)</option>
                   <option value="STBD">STBD LEDGER</option>
                   <option value="HP">HP LEDGER</option>
                   <option value="TBD">TBD LEDGER</option>
-                  <option value="L">REGULAR LOAN (L)</option>
                 </select>
-                <span className="text-[9px] text-slate-400 font-bold mt-1.5 block uppercase tracking-wide">
+                <span className="text-[9px] text-slate-400 mt-1.5 block finance-input uppercase">
                   CD, HP, STBD, TBD
                 </span>
               </div>
 
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   LOAN NUMBER
                 </label>
                 <input
@@ -934,10 +970,10 @@ const LoanEntry: React.FC = () => {
                   value={loanId}
                   onChange={(e) => setLoanId(e.target.value)}
                   placeholder="e.g. CD001"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 focus:outline-none font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-700 focus:outline-none font-mono finance-header-time"
                   required
                 />
-                <span className="text-[9px] text-slate-400 font-bold mt-1.5 block uppercase tracking-wide">
+                <span className="text-[9px] text-slate-400 mt-1.5 block finance-input uppercase">
                   AUTO-GENERATED
                 </span>
               </div>
@@ -947,7 +983,7 @@ const LoanEntry: React.FC = () => {
           {/* Card 2: CUSTOMER */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase">
+              <h3 className="text-slate-900 finance-header-time uppercase">
                 CUSTOMER DETAILS
               </h3>
               {selectedCustomerId && (
@@ -970,7 +1006,7 @@ const LoanEntry: React.FC = () => {
                     setCustAadhaarAddress('');
                     setCustPresentAddress('');
                   }}
-                  className="text-[10px] font-black text-red-650 hover:underline uppercase tracking-wider"
+                  className="text-red-650 hover:underline finance-small-label uppercase"
                 >
                   CLEAR SELECTION
                 </button>
@@ -980,7 +1016,7 @@ const LoanEntry: React.FC = () => {
             <div className="space-y-4">
               {/* Search input for existing customer */}
               <div ref={dropdownRef} className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 print:hidden">
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   SELECT EXISTING CUSTOMER (OR TYPE DETAILS DIRECTLY BELOW)
                 </label>
                 <div className="relative">
@@ -996,13 +1032,13 @@ const LoanEntry: React.FC = () => {
                     }}
                     onFocus={() => setCustDropdownOpen(true)}
                     placeholder="Search by customer name, ID, phone, or Aadhaar..."
-                    className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                   />
                   
                   {custDropdownOpen && (
                     <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                       {filteredCustomersForSelect.length === 0 ? (
-                        <div className="px-4 py-3 text-xs text-slate-400 font-bold uppercase tracking-wider text-center">
+                        <div className="px-4 py-3 text-slate-400 text-center finance-header-time uppercase">
                           No matching customers found
                         </div>
                       ) : (
@@ -1017,13 +1053,13 @@ const LoanEntry: React.FC = () => {
                             className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
                           >
                             <div>
-                              <div className="text-xs font-bold text-slate-900">{c.name}</div>
-                              <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                              <div className="text-slate-900 finance-header-time">{c.name}</div>
+                              <div className="text-[9px] text-slate-400 mt-0.5 finance-input uppercase">
                                 ID: #{c.customer_id || 'N/A'} | Aadhaar: {c.aadhaar || 'N/A'}
                               </div>
                             </div>
                             {(c.phone_1 || c.phone) ? (
-                              <div className="text-[10px] text-slate-500 font-bold font-mono">
+                              <div className="text-slate-500 font-mono finance-small-label">
                                 {c.phone_1 || c.phone}
                               </div>
                             ) : null}
@@ -1037,55 +1073,10 @@ const LoanEntry: React.FC = () => {
 
               {/* Customer Inputs Panel */}
               <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-150 space-y-4">
-                <div className="flex gap-4 items-start">
-                  <div className="w-20 h-20 bg-slate-100 rounded-lg border border-slate-200 flex flex-col items-center justify-center overflow-hidden shrink-0 relative">
-                    {custPhoto ? (
-                      <div className="w-full h-full relative">
-                        <img src={custPhoto} alt="Customer" className="w-full h-full object-cover" />
-                        {!selectedCustomerId && (
-                          <button
-                            type="button"
-                            onClick={() => setCustPhoto(null)}
-                            className="absolute top-1 right-1 p-0.5 bg-red-600 text-white rounded-full hover:bg-red-700 shadow-sm"
-                          >
-                            <X className="w-2.5 h-2.5" />
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center gap-1 p-2 text-center text-[9px] font-bold text-slate-400">
-                        <User className="w-5 h-5 text-slate-300 stroke-1" />
-                        <span>NO PHOTO</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <span className="bg-[#0b1329] text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
-                      {selectedCustomerId ? `ID: #${customers.find(c => c.id === selectedCustomerId)?.customer_id || 'N/A'}` : 'NEW ENTRY'}
-                    </span>
-                    {!selectedCustomerId && (
-                      <div className="flex items-center gap-1.5 pt-1.5">
-                        <label className="text-[9px] font-black bg-white text-slate-700 border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer shadow-sm uppercase tracking-wide">
-                          UPLOAD PHOTO
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  setCustPhoto(reader.result as string);
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                    )}
-                  </div>
+                <div className="flex justify-between items-center pb-2">
+                  <span className="bg-[#0b1329] text-white text-[9px] px-2 py-1 rounded finance-input uppercase">
+                    {selectedCustomerId ? `ID: #${customers.find(c => c.id === selectedCustomerId)?.customer_id || 'N/A'}` : 'NEW ENTRY'}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1150,7 +1141,7 @@ const LoanEntry: React.FC = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-3">
                   <div>
-                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                    <label className="block text-[9px] text-slate-400 mb-1 finance-input uppercase">
                       Aadhaar Address
                     </label>
                     <textarea
@@ -1159,11 +1150,11 @@ const LoanEntry: React.FC = () => {
                       placeholder="Address printed on Aadhaar"
                       rows={2}
                       disabled={!!selectedCustomerId}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 disabled:bg-slate-50 focus:outline-none resize-none"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 disabled:bg-slate-50 focus:outline-none resize-none finance-header-time"
                     />
                   </div>
                   <div>
-                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                    <label className="block text-[9px] text-slate-400 mb-1 finance-input uppercase">
                       Present Address
                     </label>
                     <textarea
@@ -1172,13 +1163,56 @@ const LoanEntry: React.FC = () => {
                       placeholder="Current residential address"
                       rows={2}
                       disabled={!!selectedCustomerId}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 disabled:bg-slate-50 focus:outline-none resize-none"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 disabled:bg-slate-50 focus:outline-none resize-none finance-header-time"
                     />
                   </div>
                 </div>
 
-                {/* Biometrics */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-3 border-t border-slate-150">
+                {/* Photo & Biometrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center space-y-3 shadow-sm">
+                    <span className="finance-caption uppercase text-slate-500 font-semibold mb-1">Customer Photo</span>
+                    <div className="w-24 h-24 bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden relative group">
+                      {custPhoto ? (
+                        <>
+                          <img src={custPhoto} alt="Customer" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setCustPhoto(null)}
+                            className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 className="w-5 h-5 mb-1" />
+                            <span className="finance-small-label uppercase">REMOVE</span>
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center text-slate-400 gap-1">
+                          <User className="w-6 h-6 stroke-1" />
+                          <span className="text-[9px] finance-input uppercase">NO PHOTO</span>
+                        </div>
+                      )}
+                    </div>
+                    <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm finance-input uppercase inline-flex items-center gap-1.5 transition-colors">
+                      <Camera className="w-3.5 h-3.5" />
+                      {custPhoto ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setCustPhoto(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
                   <BiometricScanner
                     label="Customer Fingerprint Capture"
                     existingTemplate={custFingerprintTemplate}
@@ -1196,14 +1230,14 @@ const LoanEntry: React.FC = () => {
 
           {/* Card 3: GUARANTORS */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase border-b border-slate-100 pb-2">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
               GUARANTORS
             </h3>
             
             {/* Guarantor 1 */}
             <div className="space-y-3 pb-4 border-b border-slate-100">
               <div className="flex justify-between items-center">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <h4 className="text-slate-400 finance-small-label uppercase">
                   GUARANTOR 1
                 </h4>
                 {g1SelectedId && (
@@ -1217,7 +1251,7 @@ const LoanEntry: React.FC = () => {
                       setG1Address('');
                       setG1Photo(null);
                     }}
-                    className="text-[9px] font-black text-red-650 hover:underline uppercase tracking-wider"
+                    className="text-[9px] text-red-650 hover:underline finance-input uppercase"
                   >
                     CLEAR SELECTION
                   </button>
@@ -1238,13 +1272,13 @@ const LoanEntry: React.FC = () => {
                   }}
                   onFocus={() => setG1DropdownOpen(true)}
                   placeholder="Select or Search Existing Guarantor 1..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                 />
                 
                 {g1DropdownOpen && (
                   <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
                     {filteredGuarantorsForSelectG1.length === 0 ? (
-                      <div className="px-4 py-3 text-xs text-slate-400 font-bold uppercase tracking-wider text-center">
+                      <div className="px-4 py-3 text-slate-400 text-center finance-header-time uppercase">
                         No matching guarantors
                       </div>
                     ) : (
@@ -1259,13 +1293,13 @@ const LoanEntry: React.FC = () => {
                           className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
                         >
                           <div>
-                            <div className="text-xs font-bold text-slate-900">{g.name}</div>
-                            <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                            <div className="text-slate-900 finance-header-time">{g.name}</div>
+                            <div className="text-[9px] text-slate-400 mt-0.5 finance-input uppercase">
                               ID: #{g.guarantor_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
                             </div>
                           </div>
                           {g.phone && (
-                            <div className="text-[9px] text-slate-500 font-bold font-mono">
+                            <div className="text-[9px] text-slate-500 font-mono finance-input">
                               {g.phone}
                             </div>
                           )}
@@ -1282,48 +1316,51 @@ const LoanEntry: React.FC = () => {
                 <Input label="Aadhaar" value={g1Aadhaar} onChange={setG1Aadhaar} placeholder="Aadhaar UID" readOnly={!!g1SelectedId} />
                 <Input label="Phone" value={g1Phone} onChange={setG1Phone} placeholder="Phone No" readOnly={!!g1SelectedId} />
                 <Input label="Address" value={g1Address} onChange={setG1Address} placeholder="Address details" readOnly={!!g1SelectedId} />
-                <div className="sm:col-span-2">
-                  <span className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Guarantor 1 Photo</span>
-                  {g1Photo ? (
-                    <div className="flex items-center gap-3">
-                      <div className="w-14 h-14 bg-slate-100 rounded border overflow-hidden">
-                        <img src={g1Photo} alt="Guarantor 1" className="w-full h-full object-cover" />
-                      </div>
-                      {!g1SelectedId && (
-                        <button
-                          type="button"
-                          onClick={() => setG1Photo(null)}
-                          className="text-[9px] font-black text-red-600 hover:underline uppercase"
-                        >
-                          REMOVE
-                        </button>
+                {/* Guarantor 1 Photo & Biometrics */}
+                <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center space-y-3">
+                    <span className="finance-caption uppercase text-slate-500 font-semibold mb-1">Guarantor 1 Photo</span>
+                    <div className="w-24 h-24 bg-white rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden relative group">
+                      {g1Photo ? (
+                        <>
+                          <img src={g1Photo} alt="Guarantor 1" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setG1Photo(null)}
+                            className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 className="w-5 h-5 mb-1" />
+                            <span className="finance-small-label uppercase">REMOVE</span>
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center text-slate-400 gap-1">
+                          <User className="w-6 h-6 stroke-1" />
+                          <span className="text-[9px] finance-input uppercase">NO PHOTO</span>
+                        </div>
                       )}
                     </div>
-                  ) : (
-                    !g1SelectedId && (
-                      <label className="inline-flex px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded cursor-pointer transition-colors">
-                        ATTACH PHOTO
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setG1Photo(reader.result as string);
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                          className="hidden"
-                        />
-                      </label>
-                    )
-                  )}
-                </div>
-                
-                <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+                    <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm finance-input uppercase inline-flex items-center gap-1.5 transition-colors">
+                      <Camera className="w-3.5 h-3.5" />
+                      {g1Photo ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setG1Photo(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
                   <BiometricScanner
                     label="Guarantor 1 Fingerprint Capture"
                     existingTemplate={g1FingerprintTemplate}
@@ -1341,7 +1378,7 @@ const LoanEntry: React.FC = () => {
             {/* Guarantor 2 */}
             <div className="space-y-3 pt-2">
               <div className="flex justify-between items-center">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <h4 className="text-slate-400 finance-small-label uppercase">
                   GUARANTOR 2
                 </h4>
                 {g2SelectedId && (
@@ -1355,7 +1392,7 @@ const LoanEntry: React.FC = () => {
                       setG2Address('');
                       setG2Photo(null);
                     }}
-                    className="text-[9px] font-black text-red-650 hover:underline uppercase tracking-wider"
+                    className="text-[9px] text-red-650 hover:underline finance-input uppercase"
                   >
                     CLEAR SELECTION
                   </button>
@@ -1376,13 +1413,13 @@ const LoanEntry: React.FC = () => {
                   }}
                   onFocus={() => setG2DropdownOpen(true)}
                   placeholder="Select or Search Existing Guarantor 2..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                 />
                 
                 {g2DropdownOpen && (
                   <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
                     {filteredGuarantorsForSelectG2.length === 0 ? (
-                      <div className="px-4 py-3 text-xs text-slate-400 font-bold uppercase tracking-wider text-center">
+                      <div className="px-4 py-3 text-slate-400 text-center finance-header-time uppercase">
                         No matching guarantors
                       </div>
                     ) : (
@@ -1397,13 +1434,13 @@ const LoanEntry: React.FC = () => {
                           className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
                         >
                           <div>
-                            <div className="text-xs font-bold text-slate-900">{g.name}</div>
-                            <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                            <div className="text-slate-900 finance-header-time">{g.name}</div>
+                            <div className="text-[9px] text-slate-400 mt-0.5 finance-input uppercase">
                               ID: #{g.guarantor_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
                             </div>
                           </div>
                           {g.phone && (
-                            <div className="text-[9px] text-slate-500 font-bold font-mono">
+                            <div className="text-[9px] text-slate-500 font-mono finance-input">
                               {g.phone}
                             </div>
                           )}
@@ -1420,48 +1457,51 @@ const LoanEntry: React.FC = () => {
                 <Input label="Aadhaar" value={g2Aadhaar} onChange={setG2Aadhaar} placeholder="Aadhaar UID" readOnly={!!g2SelectedId} />
                 <Input label="Phone" value={g2Phone} onChange={setG2Phone} placeholder="Phone No" readOnly={!!g2SelectedId} />
                 <Input label="Address" value={g2Address} onChange={setG2Address} placeholder="Address details" readOnly={!!g2SelectedId} />
-                <div className="sm:col-span-2">
-                  <span className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Guarantor 2 Photo</span>
-                  {g2Photo ? (
-                    <div className="flex items-center gap-3">
-                      <div className="w-14 h-14 bg-slate-100 rounded border overflow-hidden">
-                        <img src={g2Photo} alt="Guarantor 2" className="w-full h-full object-cover" />
-                      </div>
-                      {!g2SelectedId && (
-                        <button
-                          type="button"
-                          onClick={() => setG2Photo(null)}
-                          className="text-[9px] font-black text-red-600 hover:underline uppercase"
-                        >
-                          REMOVE
-                        </button>
+                {/* Guarantor 2 Photo & Biometrics */}
+                <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center space-y-3">
+                    <span className="finance-caption uppercase text-slate-500 font-semibold mb-1">Guarantor 2 Photo</span>
+                    <div className="w-24 h-24 bg-white rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden relative group">
+                      {g2Photo ? (
+                        <>
+                          <img src={g2Photo} alt="Guarantor 2" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setG2Photo(null)}
+                            className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 className="w-5 h-5 mb-1" />
+                            <span className="finance-small-label uppercase">REMOVE</span>
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center text-slate-400 gap-1">
+                          <User className="w-6 h-6 stroke-1" />
+                          <span className="text-[9px] finance-input uppercase">NO PHOTO</span>
+                        </div>
                       )}
                     </div>
-                  ) : (
-                    !g2SelectedId && (
-                      <label className="inline-flex px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded cursor-pointer transition-colors">
-                        ATTACH PHOTO
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setG2Photo(reader.result as string);
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                          className="hidden"
-                        />
-                      </label>
-                    )
-                  )}
-                </div>
+                    <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm finance-input uppercase inline-flex items-center gap-1.5 transition-colors">
+                      <Camera className="w-3.5 h-3.5" />
+                      {g2Photo ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setG2Photo(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
 
-                <div className="sm:col-span-2 pt-2 border-t border-slate-100">
                   <BiometricScanner
                     label="Guarantor 2 Fingerprint Capture"
                     existingTemplate={g2FingerprintTemplate}
@@ -1479,63 +1519,101 @@ const LoanEntry: React.FC = () => {
 
           {/* Card 4: LOAN TERMS */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase border-b border-slate-100 pb-2">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
               LOAN TERMS
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input
-                label="PRINCIPAL / SETTLEMENT *"
-                type="number"
-                value={amount}
-                onChange={setAmount}
-                placeholder="e.g. 50000"
-                required
-              />
-              <Input
-                label="DOCUMENT CHARGES (₹)"
-                type="number"
-                value={docCharges}
-                onChange={setDocCharges}
-                placeholder="e.g. 1000"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  label="RATE OF INTEREST (%) MONTH"
+              {/* Row 1 */}
+              <div>
+                <label className="finance-caption uppercase mb-1 block">LOAN AMOUNT *</label>
+                <input
                   type="number"
-                  value={interestRate}
-                  onChange={setInterestRate}
-                  placeholder="e.g. 2"
-                  required
-                />
-                <Input
-                  label="DURATION (MONTHS) *"
-                  type="number"
-                  value={durationMonths}
-                  onChange={setDurationMonths}
-                  placeholder="e.g. 3"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="e.g. 50000"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
                   required
                 />
               </div>
               <div>
-                <label className="finance-label">
-                  DUE TYPE *
-                </label>
-                <select
-                  value={dueType}
-                  onChange={(e) => setDueType(e.target.value as any)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                <label className="finance-caption uppercase mb-1 block">RATE OF INTEREST (%) *</label>
+                <input
+                  type="number"
+                  value={interestRate}
+                  onChange={(e) => setInterestRate(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
                   required
-                >
-                  <option value="Daily">Daily Instalments</option>
-                  <option value="Weekly">Weekly Instalments</option>
-                  <option value="Monthly">Monthly Instalments</option>
-                </select>
+                />
+                <span className="text-[9px] text-slate-400 mt-1 block finance-input uppercase">DEFAULT: 3%</span>
               </div>
+
+              {/* Row 2 */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="finance-caption uppercase mb-1 block">PERIOD *</label>
+                  <input
+                    type="number"
+                    value={durationMonths}
+                    onChange={(e) => setDurationMonths(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
+                    required
+                  />
+                  <span className="text-[9px] text-slate-400 mt-1 block finance-input uppercase">DAYS FOR CD/OD, INSTALMENTS FOR HP/STBD, MONTHS FOR TBD</span>
+                </div>
+                <div className="col-span-1">
+                  <label className="finance-caption uppercase mb-1 block">DUE TYPE *</label>
+                  <select
+                    value={dueType}
+                    onChange={(e) => setDueType(e.target.value as any)}
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
+                    required
+                  >
+                    <option value="Daily">Daily</option>
+                    <option value="Weekly">Weekly</option>
+                    <option value="Monthly">Monthly</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="finance-caption uppercase mb-1 block">DOCUMENT CHARGES (₹)</label>
+                <input
+                  type="number"
+                  value={docCharges}
+                  onChange={(e) => setDocCharges(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
+                />
+              </div>
+
+              {/* Row 3 */}
+              <div>
+                <label className="finance-caption uppercase mb-1 block">ANNUAL HOLD %</label>
+                <input
+                  type="number"
+                  value={annualHold}
+                  onChange={(e) => setAnnualHold(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
+                />
+                <span className="text-[9px] text-slate-400 mt-1 block finance-input uppercase">PRE-DEDUCTED FROM DISBURSAL, PRORATED OVER TENURE</span>
+              </div>
+              <div>
+                <label className="finance-caption uppercase mb-1 block">PARTIAL PAID (₹)</label>
+                <input
+                  type="number"
+                  value={partialPaid}
+                  onChange={(e) => setPartialPaid(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
+                />
+                <span className="text-[9px] text-slate-400 mt-1 block finance-input uppercase">ANY AMOUNT ALREADY COLLECTED AT ENTRY</span>
+              </div>
+
+              {/* Row 4 */}
               <div className="sm:col-span-2">
-                <Input
-                  label="PARTICULARS"
+                <label className="finance-caption uppercase mb-1 block">PARTICULARS</label>
+                <textarea
                   value={particulars}
-                  onChange={setParticulars}
+                  onChange={(e) => setParticulars(e.target.value)}
+                  rows={2}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input resize-none"
                   placeholder="e.g. Gold weight or pledge card particulars"
                 />
               </div>
@@ -1544,18 +1622,18 @@ const LoanEntry: React.FC = () => {
 
           {/* Card 5: PARTNER */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase border-b border-slate-100 pb-2">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
               PARTNER
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   SELECT PARTNER
                 </label>
                 <select
                   value={selectedPartnerId}
                   onChange={(e) => setSelectedPartnerId(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                 >
                   <option value="">-- SELECT PARTNER --</option>
                   {partners.map(p => (
@@ -1574,43 +1652,82 @@ const LoanEntry: React.FC = () => {
           {/* Card 6: DOCUMENTS SUBMITTED */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase">
+              <h3 className="text-slate-900 finance-header-time uppercase">
                 DOCUMENTS SUBMITTED
               </h3>
-              <span className="text-[9px] font-black text-blue-650 bg-blue-50 border border-blue-150 px-2 py-0.5 rounded uppercase tracking-wider">
-                FILES + CHECKS
-              </span>
+              <div className="flex gap-2">
+                <span className="text-[9px] text-blue-650 bg-blue-50 border border-blue-150 px-2 py-0.5 rounded finance-input uppercase">
+                  FIN: {documents.filter(d => d.category === 'Financial' && (d.checked || d.fileUrl)).length}
+                </span>
+                <span className="text-[9px] text-purple-650 bg-purple-50 border border-purple-150 px-2 py-0.5 rounded finance-input uppercase">
+                  ORIG: {documents.filter(d => d.category === 'Original' && (d.checked || d.fileUrl)).length}
+                </span>
+                <span className="text-[9px] text-amber-650 bg-amber-50 border border-amber-150 px-2 py-0.5 rounded finance-input uppercase">
+                  REG: {documents.filter(d => d.category === 'Registration' && (d.checked || d.fileUrl)).length}
+                </span>
+              </div>
             </div>
 
             {/* Checklist Category Groups */}
             {(['Financial', 'Original', 'Registration'] as const).map((cat, catIdx) => (
               <div key={catIdx} className="space-y-2 pt-2 first:pt-0">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  {catIdx + 1}. {cat.toUpperCase()} DOCUMENTS
-                </h4>
+                <div className="flex justify-between items-center">
+                  <h4 className="text-slate-400 finance-small-label uppercase">
+                    {catIdx + 1}. {cat.toUpperCase()} DOCUMENTS
+                  </h4>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      const newDoc: DocumentItem = {
+                        key: `custom_${Date.now()}_${Math.random()}`,
+                        label: '',
+                        category: cat,
+                        checked: true,
+                        refNo: '',
+                        fileUrl: null,
+                        uploading: false,
+                        isCustom: true
+                      };
+                      setDocuments(prev => [...prev, newDoc]);
+                    }}
+                    className="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded hover:bg-slate-200 transition-colors finance-input uppercase font-semibold"
+                  >
+                    + ADD
+                  </button>
+                </div>
                 
                 <div className="space-y-2">
                   {documents.filter(doc => doc.category === cat).map((doc) => (
-                    <div key={doc.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 border border-slate-100 rounded-lg text-xs bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                      <div className="flex items-center gap-3">
+                    <div key={doc.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 border border-slate-100 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors finance-caption">
+                      <div className="flex items-center gap-3 flex-1">
                         <input
                           type="checkbox"
                           checked={doc.checked}
                           onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, checked: e.target.checked } : d))}
-                          className="w-4 h-4 rounded text-slate-900 border-slate-300 focus:ring-slate-900"
+                          className="w-4 h-4 rounded text-slate-900 border-slate-300 focus:ring-slate-900 shrink-0"
                         />
-                        <span className="font-bold text-slate-800 tracking-wide select-none">
-                          {doc.label}
-                        </span>
+                        {doc.isCustom ? (
+                          <input
+                            type="text"
+                            value={doc.label}
+                            onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, label: e.target.value } : d))}
+                            placeholder="DOCUMENT NAME..."
+                            className="bg-white border border-slate-200 rounded p-1 text-[11px] text-slate-700 w-full focus:outline-none finance-input"
+                          />
+                        ) : (
+                          <span className="text-slate-800 select-none finance-input w-full">
+                            {doc.label}
+                          </span>
+                        )}
                       </div>
                       
-                      <div className="flex items-center gap-2 flex-1 sm:justify-end">
+                      <div className="flex items-center gap-2 flex-1 sm:justify-end shrink-0">
                         <input
                           type="text"
                           value={doc.refNo}
                           onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, refNo: e.target.value } : d))}
                           placeholder="REF NO..."
-                          className="bg-white border border-slate-200 rounded p-1 text-[11px] font-bold text-slate-700 w-full sm:w-48 focus:outline-none"
+                          className="bg-white border border-slate-200 rounded p-1 text-[11px] text-slate-700 w-full sm:w-48 focus:outline-none finance-input"
                         />
                         
                         {doc.fileUrl ? (
@@ -1619,30 +1736,39 @@ const LoanEntry: React.FC = () => {
                               href={doc.fileUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="px-2 py-1 text-[9px] font-bold bg-green-550 text-white rounded hover:bg-green-600 transition-colors shadow-sm"
+                              className="px-2 py-1 text-[9px] bg-green-550 text-white rounded hover:bg-green-600 transition-colors shadow-sm finance-input uppercase"
                             >
                               VIEW
                             </a>
-                            <button
-                              type="button"
-                              onClick={() => removeChecklistUpload(doc.key)}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
                           </div>
                         ) : (
-                          <label className="px-2.5 py-1 text-[9px] font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 cursor-pointer rounded shrink-0 transition-colors select-none shadow-sm flex items-center gap-1">
+                          <label className="px-2.5 py-1 text-[9px] bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 cursor-pointer rounded shrink-0 transition-colors select-none shadow-sm flex items-center gap-1 finance-input uppercase">
                             <Upload className="w-3 h-3" />
-                            {doc.uploading ? 'UPLOADING...' : 'ADD'}
+                            {doc.uploading ? 'UPLOADING...' : 'UPLOAD'}
                             <input
                               type="file"
+                              accept="image/*,.pdf"
                               onChange={(e) => handleChecklistUpload(doc.key, e)}
-                              disabled={doc.uploading}
                               className="hidden"
+                              disabled={doc.uploading}
                             />
                           </label>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (doc.fileUrl) {
+                              removeChecklistUpload(doc.key);
+                            } else {
+                              setDocuments(prev => prev.filter(d => d.key !== doc.key));
+                            }
+                          }}
+                          className="p-1 text-red-500 hover:bg-red-50 rounded shrink-0 ml-1"
+                          title={doc.fileUrl ? "Remove uploaded file" : "Delete document row"}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -1654,13 +1780,13 @@ const LoanEntry: React.FC = () => {
           {/* Card 7: ASSET / COLLATERAL LOCATION */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase">
+              <h3 className="text-slate-900 finance-header-time uppercase">
                 ASSET / COLLATERAL LOCATION
               </h3>
               <button
                 type="button"
                 onClick={handleDetectGPS}
-                className="inline-flex items-center gap-1 px-3 py-1 text-[10px] font-bold bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 rounded transition-colors shadow-sm"
+                className="inline-flex items-center gap-1 px-3 py-1 bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 rounded transition-colors shadow-sm finance-small-label"
               >
                 <Navigation className="w-3.5 h-3.5 text-slate-600 animate-pulse" />
                 DETECT GPS
@@ -1675,7 +1801,7 @@ const LoanEntry: React.FC = () => {
                 placeholder="DOOR NO, STREET, VILLAGE / TOWN"
               />
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Input label="VILLAGE/TOWN" value={locVillage} onChange={setLocVillage} placeholder="Village/Town" />
                 <Input label="MANDAL" value={locMandal} onChange={setLocMandal} placeholder="Mandal" />
                 <Input label="DISTRICT" value={locDistrict} onChange={setLocDistrict} placeholder="District" />
@@ -1692,17 +1818,55 @@ const LoanEntry: React.FC = () => {
                 onChange={setLocMapsLink}
                 placeholder="PASTE THE GOOGLE MAPS LINK"
               />
+              
+              <div className="pt-2 border-t border-slate-100">
+                <label className="finance-caption uppercase block mb-2">
+                  COLLATERAL PHOTO (OPTIONAL)
+                </label>
+                <div className="flex items-center gap-4">
+                  {collateralImage ? (
+                    <div className="relative w-32 h-32 rounded-xl border-2 border-slate-200 overflow-hidden group">
+                      <img
+                        src={collateralImage}
+                        alt="Collateral"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={removeCollateralImage}
+                        className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Trash2 className="w-5 h-5 mb-1" />
+                        <span className="finance-small-label uppercase">REMOVE</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="w-32 h-32 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-xl hover:border-slate-400 hover:bg-slate-50 transition-colors cursor-pointer bg-slate-50/50">
+                      <Camera className="w-6 h-6 text-slate-400 mb-2" />
+                      <span className="finance-small-label uppercase text-slate-500 text-center px-2">
+                        UPLOAD PHOTO
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleCollateralImageUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Card 8: DESCRIPTION & EXTRA FEATURES */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase border-b border-slate-100 pb-2">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
               DESCRIPTION & EXTRA FEATURES
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   REMARKS
                 </label>
                 <textarea
@@ -1710,12 +1874,12 @@ const LoanEntry: React.FC = () => {
                   onChange={(e) => setRemarks(e.target.value)}
                   placeholder="REASON FOR BORROWING, REPAYMENT ARRANGEMENT..."
                   rows={3}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs font-semibold text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                 />
               </div>
 
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   EXTRA DETAILS
                 </label>
                 <textarea
@@ -1723,7 +1887,7 @@ const LoanEntry: React.FC = () => {
                   onChange={(e) => setExtraDetails(e.target.value)}
                   placeholder="SPECIAL CONDITIONS, ETC."
                   rows={2}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs font-semibold text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
                 />
               </div>
             </div>
@@ -1735,45 +1899,45 @@ const LoanEntry: React.FC = () => {
         <div className="space-y-6">
           
           {/* Card 9: LIVE CALCULATION */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4 h-fit sticky top-20">
+          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4 h-fit">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase">
+              <h3 className="text-slate-900 finance-header-time uppercase">
                 LIVE CALCULATION
               </h3>
-              <span className="text-[9px] font-black text-slate-500 bg-slate-50 border border-slate-150 px-2 py-0.5 rounded uppercase tracking-wider">
+              <span className="text-[9px] text-slate-500 bg-slate-50 border border-slate-150 px-2 py-0.5 rounded finance-input uppercase">
                 {dueType}
               </span>
             </div>
 
             {!liveCalculations ? (
-              <div className="py-8 text-center text-slate-400 text-xs font-bold uppercase tracking-wider leading-relaxed">
+              <div className="py-8 text-center text-slate-400 finance-header-time uppercase">
                 FILL IN THE LOAN AMOUNT TO SEE THE CALCULATION PREVIEW.
               </div>
             ) : (
-              <div className="space-y-4 text-xs font-medium text-slate-700">
+              <div className="space-y-4 text-slate-700 finance-caption">
                 <div className="grid grid-cols-2 gap-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Principal:</span>
-                  <span className="text-right text-slate-900 font-bold">₹{liveCalculations.principal.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 finance-small-label uppercase">Principal:</span>
+                  <span className="text-right text-slate-900 finance-input">₹{liveCalculations.principal.toLocaleString('en-IN')}</span>
 
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Doc Fees:</span>
-                  <span className="text-right text-slate-900 font-bold">₹{liveCalculations.docFees.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 finance-small-label uppercase">Doc Fees:</span>
+                  <span className="text-right text-slate-900 finance-input">₹{liveCalculations.docFees.toLocaleString('en-IN')}</span>
 
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Net Disbursed:</span>
-                  <span className="text-right text-slate-900 font-black text-blue-650">₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 finance-small-label uppercase">Net Disbursed:</span>
+                  <span className="text-right text-slate-900 text-blue-650 finance-input">₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-y-2 border-t pt-2.5">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Interest Component:</span>
-                  <span className="text-right text-slate-900 font-bold">₹{liveCalculations.interestAmount.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 finance-small-label uppercase">Interest Component:</span>
+                  <span className="text-right text-slate-900 finance-input">₹{liveCalculations.interestAmount.toLocaleString('en-IN')}</span>
 
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Total Repayment:</span>
-                  <span className="text-right text-slate-900 font-bold">₹{liveCalculations.totalRepayment.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 finance-small-label uppercase">Total Repayment:</span>
+                  <span className="text-right text-slate-900 finance-input">₹{liveCalculations.totalRepayment.toLocaleString('en-IN')}</span>
 
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Instalment Count:</span>
-                  <span className="text-right text-slate-900 font-bold">{liveCalculations.duesCount} {dueType} Dues</span>
+                  <span className="text-slate-400 finance-small-label uppercase">Instalment Count:</span>
+                  <span className="text-right text-slate-900 finance-input">{liveCalculations.duesCount} {dueType} Dues</span>
 
-                  <span className="text-sm font-black text-slate-800 uppercase mt-1 border-t pt-1.5">Instalment:</span>
-                  <span className="text-right text-sm font-black text-green-700 mt-1 border-t pt-1.5">₹{liveCalculations.dueAmount.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-800 mt-1 border-t pt-1.5 finance-sidebar-link uppercase">Instalment:</span>
+                  <span className="text-right text-green-700 mt-1 border-t pt-1.5 finance-sidebar-link">₹{liveCalculations.dueAmount.toLocaleString('en-IN')}</span>
                 </div>
               </div>
             )}
@@ -1781,12 +1945,12 @@ const LoanEntry: React.FC = () => {
 
           {/* Card 10: RECENT LOANS */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase border-b border-slate-100 pb-2">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
               RECENT LOANS
             </h3>
             
             {activeLoans.length === 0 ? (
-              <div className="py-8 text-center text-slate-400 text-xs font-bold uppercase tracking-wider">
+              <div className="py-8 text-center text-slate-400 finance-header-time uppercase">
                 NO LOANS YET
               </div>
             ) : (
@@ -1794,12 +1958,12 @@ const LoanEntry: React.FC = () => {
                 {activeLoans.slice(0, 5).map(loan => (
                   <div key={loan.id} className="p-3 border border-slate-100 rounded-lg hover:bg-slate-50 transition-all flex justify-between items-center bg-slate-50/20">
                     <div>
-                      <div className="text-xs font-bold text-slate-900">{loan.customer?.name}</div>
-                      <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{loan.due_type} Mode</div>
+                      <div className="text-slate-900 finance-header-time">{loan.customer?.name}</div>
+                      <div className="text-[9px] text-slate-400 mt-0.5 finance-input uppercase">{loan.due_type} Mode</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs font-mono font-bold text-slate-700">{loan.loan_id}</div>
-                      <div className="text-xs font-black text-slate-900 mt-0.5">₹{Number(loan.amount).toLocaleString('en-IN')}</div>
+                      <div className="font-mono text-slate-700 finance-header-time">{loan.loan_id}</div>
+                      <div className="text-slate-900 mt-0.5 finance-header-time">₹{Number(loan.amount).toLocaleString('en-IN')}</div>
                     </div>
                   </div>
                 ))}
@@ -1821,61 +1985,61 @@ const LoanEntry: React.FC = () => {
         <div className="space-y-6">
           {/* Top Header */}
           <div className="text-center border-b pb-4">
-            <h1 className="finance-page-title">THIRUMALA GROUP - LOAN ENTRY</h1>
-            <p className="text-sm font-bold text-slate-500 mt-1">Date: {date} | Loan Type: {loanCategory}</p>
+            <h1 className="finance-h1">THIRUMALA GROUP - LOAN ENTRY</h1>
+            <p className="text-slate-500 mt-1 finance-sidebar-link">Date: {date} | Loan Type: {loanCategory}</p>
           </div>
           
           {/* Customer Info */}
           <div>
-            <h3 className="text-sm font-bold bg-slate-100 p-2 uppercase">Customer Details</h3>
+            <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Customer Details</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="font-bold text-gray-500 text-xs">NAME:</span> {custName}</div>
-               <div><span className="font-bold text-gray-500 text-xs">F/W/H:</span> {custFatherName}</div>
-               <div><span className="font-bold text-gray-500 text-xs">PHONE:</span> {custPhone}</div>
-               <div><span className="font-bold text-gray-500 text-xs">AADHAAR:</span> {custAadhaar}</div>
-               <div className="col-span-2"><span className="font-bold text-gray-500 text-xs">ADDRESS:</span> {custPresentAddress}</div>
+               <div><span className="text-gray-500 finance-header-time">NAME:</span> {custName}</div>
+               <div><span className="text-gray-500 finance-header-time">F/W/H:</span> {custFatherName}</div>
+               <div><span className="text-gray-500 finance-header-time">PHONE:</span> {custPhone}</div>
+               <div><span className="text-gray-500 finance-header-time">AADHAAR:</span> {custAadhaar}</div>
+               <div className="col-span-2"><span className="text-gray-500 finance-header-time">ADDRESS:</span> {custPresentAddress}</div>
             </div>
           </div>
 
           {/* Guarantors */}
           <div>
-            <h3 className="text-sm font-bold bg-slate-100 p-2 uppercase">Guarantor Details</h3>
+            <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Guarantor Details</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="font-bold text-gray-500 text-xs">G1 NAME:</span> {g1Name}</div>
-               <div><span className="font-bold text-gray-500 text-xs">G1 PHONE:</span> {g1Phone}</div>
-               {g2Name && <div><span className="font-bold text-gray-500 text-xs">G2 NAME:</span> {g2Name}</div>}
-               {g2Phone && <div><span className="font-bold text-gray-500 text-xs">G2 PHONE:</span> {g2Phone}</div>}
+               <div><span className="text-gray-500 finance-header-time">G1 NAME:</span> {g1Name}</div>
+               <div><span className="text-gray-500 finance-header-time">G1 PHONE:</span> {g1Phone}</div>
+               {g2Name && <div><span className="text-gray-500 finance-header-time">G2 NAME:</span> {g2Name}</div>}
+               {g2Phone && <div><span className="text-gray-500 finance-header-time">G2 PHONE:</span> {g2Phone}</div>}
             </div>
           </div>
 
           {/* Loan Terms */}
           <div>
-            <h3 className="text-sm font-bold bg-slate-100 p-2 uppercase">Loan Terms</h3>
+            <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Loan Terms</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="font-bold text-gray-500 text-xs">PRINCIPAL:</span> ₹{Number(amount).toLocaleString('en-IN')}</div>
-               <div><span className="font-bold text-gray-500 text-xs">INTEREST RATE:</span> {interestRate}% / MONTH</div>
-               <div><span className="font-bold text-gray-500 text-xs">DURATION:</span> {durationMonths} MONTHS</div>
-               <div><span className="font-bold text-gray-500 text-xs">DUE TYPE:</span> {dueType}</div>
-               <div><span className="font-bold text-gray-500 text-xs">DOC CHARGES:</span> ₹{Number(docCharges).toLocaleString('en-IN')}</div>
-               <div className="col-span-2"><span className="font-bold text-gray-500 text-xs">PARTICULARS:</span> {particulars}</div>
+               <div><span className="text-gray-500 finance-header-time">PRINCIPAL:</span> ₹{Number(amount).toLocaleString('en-IN')}</div>
+               <div><span className="text-gray-500 finance-header-time">INTEREST RATE:</span> {interestRate}% / MONTH</div>
+               <div><span className="text-gray-500 finance-header-time">DURATION:</span> {durationMonths} MONTHS</div>
+               <div><span className="text-gray-500 finance-header-time">DUE TYPE:</span> {dueType}</div>
+               <div><span className="text-gray-500 finance-header-time">DOC CHARGES:</span> ₹{Number(docCharges).toLocaleString('en-IN')}</div>
+               <div className="col-span-2"><span className="text-gray-500 finance-header-time">PARTICULARS:</span> {particulars}</div>
             </div>
           </div>
 
           {/* Live Calculation */}
           {liveCalculations && (
           <div>
-            <h3 className="text-sm font-bold bg-slate-100 p-2 uppercase">Calculations</h3>
+            <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Calculations</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="font-bold text-gray-500 text-xs">NET DISBURSED:</span> ₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</div>
-               <div><span className="font-bold text-gray-500 text-xs">TOTAL REPAYMENT:</span> ₹{liveCalculations.totalRepayment.toLocaleString('en-IN')}</div>
-               <div><span className="font-bold text-gray-500 text-xs">INSTALMENT COUNT:</span> {liveCalculations.duesCount}</div>
-               <div><span className="font-bold text-gray-500 text-xs">INSTALMENT AMOUNT:</span> ₹{liveCalculations.dueAmount.toLocaleString('en-IN')}</div>
+               <div><span className="text-gray-500 finance-header-time">NET DISBURSED:</span> ₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</div>
+               <div><span className="text-gray-500 finance-header-time">TOTAL REPAYMENT:</span> ₹{liveCalculations.totalRepayment.toLocaleString('en-IN')}</div>
+               <div><span className="text-gray-500 finance-header-time">INSTALMENT COUNT:</span> {liveCalculations.duesCount}</div>
+               <div><span className="text-gray-500 finance-header-time">INSTALMENT AMOUNT:</span> ₹{liveCalculations.dueAmount.toLocaleString('en-IN')}</div>
             </div>
           </div>
           )}
           
           {/* Signatures */}
-          <div className="pt-24 grid grid-cols-2 gap-10 text-center text-sm font-bold text-slate-500">
+          <div className="pt-24 grid grid-cols-2 gap-10 text-center text-slate-500 finance-sidebar-link">
             <div>
               <div className="border-t border-slate-300 pt-2 w-48 mx-auto">Customer Signature</div>
             </div>

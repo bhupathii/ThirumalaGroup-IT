@@ -152,34 +152,34 @@ const Partners: React.FC = () => {
       {/* Top Header Actions Bar */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5 print:hidden">
         <div>
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+          <div className="text-slate-400 flex items-center gap-1.5 finance-small-label uppercase">
             <span>DASHBOARD</span>
             <span>/</span>
             <span className="text-slate-600">PARTNERS</span>
           </div>
-          <h1 className="finance-page-title mt-1">PARTNERS</h1>
-          <p className="finance-page-subtitle mt-0.5">
+          <h1 className="mt-1 finance-h1">PARTNERS</h1>
+          <p className="mt-0.5 finance-small-label uppercase">
             VIEW, SEARCH, AND MANAGE REGISTERED PARTNERS / MDS
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/finance')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
           </button>
           <button
             onClick={() => navigate('/finance/new-partner')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm finance-button uppercase"
           >
             <UserPlus className="w-3.5 h-3.5" />
             NEW PARTNER
           </button>
           <button
             onClick={fetchData}
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
           >
             <RefreshCw className="w-3.5 h-3.5 text-slate-550" />
             REFRESH
@@ -193,7 +193,7 @@ const Partners: React.FC = () => {
           
           {/* Search Box */}
           <div className="relative">
-            <label className="finance-label">
+            <label className="finance-caption uppercase">
               SEARCH PARTNERS
             </label>
             <div className="relative">
@@ -202,7 +202,7 @@ const Partners: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Name, ID, phone, village..."
-                className="w-full bg-white border border-slate-200 rounded-lg py-2 pl-9 pr-4 text-xs font-bold text-slate-850 placeholder-slate-400 focus:ring-1 focus:ring-slate-950 focus:outline-none"
+                className="w-full bg-white border border-slate-200 rounded-lg py-2 pl-9 pr-4 text-slate-850 placeholder-slate-400 focus:ring-1 focus:ring-slate-950 focus:outline-none finance-header-time"
               />
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             </div>
@@ -210,13 +210,13 @@ const Partners: React.FC = () => {
 
           {/* Role Filter */}
           <div>
-            <label className="finance-label">
+            <label className="finance-caption uppercase">
               ROLE FILTER
             </label>
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value as 'All' | 'Partner' | 'MD')}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-855 focus:ring-1 focus:ring-slate-950 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-855 focus:ring-1 focus:ring-slate-950 focus:outline-none finance-header-time"
             >
               <option value="All">ALL ROLES</option>
               <option value="Partner">PARTNER</option>
@@ -226,13 +226,13 @@ const Partners: React.FC = () => {
 
           {/* Village Filter */}
           <div>
-            <label className="finance-label">
+            <label className="finance-caption uppercase">
               VILLAGE
             </label>
             <select
               value={villageFilter}
               onChange={(e) => setVillageFilter(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-850 focus:ring-1 focus:ring-slate-955 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-850 focus:ring-1 focus:ring-slate-955 focus:outline-none finance-header-time"
             >
               <option value="">ALL VILLAGES</option>
               {uniqueVillages.map(v => (
@@ -243,13 +243,13 @@ const Partners: React.FC = () => {
 
           {/* Sort By */}
           <div>
-            <label className="finance-label">
+            <label className="finance-caption uppercase">
               SORT BY
             </label>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as 'Latest' | 'Name' | 'Partner ID')}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-855 focus:ring-1 focus:ring-slate-955 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-855 focus:ring-1 focus:ring-slate-955 focus:outline-none finance-header-time"
             >
               <option value="Latest">LATEST ADDED</option>
               <option value="Name">PARTNER NAME</option>
@@ -264,20 +264,20 @@ const Partners: React.FC = () => {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-4">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-slate-900"></div>
-          <p className="text-sm font-semibold text-slate-500">Loading financing partners list...</p>
+          <p className="text-slate-500 finance-section-heading">Loading financing partners list...</p>
         </div>
       ) : filteredPartners.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-xl border border-slate-150 shadow-sm space-y-4">
           <div className="p-4 bg-slate-50 rounded-full border border-slate-100 max-w-fit mx-auto">
             <Info className="w-12 h-12 text-slate-350" />
           </div>
-          <h2 className="finance-section-title">No partners found</h2>
-          <p className="finance-page-subtitle max-w-sm mx-auto leading-normal">
+          <h2 className="finance-section-heading uppercase">No partners found</h2>
+          <p className="max-w-sm mx-auto finance-small-label uppercase">
             No active financing partners match your search query or filters. Click below to add a new partner.
           </p>
           <button
             onClick={() => navigate('/finance/new-partner')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm finance-button uppercase"
           >
             <UserPlus className="w-3.5 h-3.5" />
             ADD NEW PARTNER
@@ -285,58 +285,56 @@ const Partners: React.FC = () => {
         </div>
       ) : (
         <Card 
-          title={<span className="text-xs font-black text-slate-900 tracking-wider uppercase">PARTNERS REGISTRY</span>}
-          subtitle={<span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">LIST OF ACTIVE BUSINESS PARTNERS & MDS</span>}
+          title={<span className="text-slate-900 finance-header-time uppercase">PARTNERS REGISTRY</span>}
+          subtitle={<span className="text-slate-400 finance-small-label uppercase">LIST OF ACTIVE BUSINESS PARTNERS & MDS</span>}
           className="shadow-sm border-slate-150 rounded-xl"
         >
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-150 text-xs md:text-sm">
+            <table className="min-w-full divide-y divide-slate-150 md:text-sm finance-caption">
               <thead>
                 <tr className="bg-slate-50/50">
-                  <th className="finance-table-header">S.No</th>
-                  <th className="finance-table-header">Partner ID</th>
-                  <th className="finance-table-header">Name</th>
-                  <th className="finance-table-header">Role</th>
-                  <th className="finance-table-header">Phone</th>
-                  <th className="finance-table-header">Home Phone</th>
-                  <th className="finance-table-header">Village</th>
-                  <th className="finance-table-header">MD Name</th>
-                  <th className="finance-table-header">Created Date</th>
-                  <th className="finance-table-header text-right">Actions</th>
+                  <th className="finance-small-label uppercase">S.No</th>
+                  <th className="finance-small-label uppercase">Partner ID</th>
+                  <th className="finance-small-label uppercase">Name</th>
+                  <th className="finance-small-label uppercase">Role</th>
+                  <th className="finance-small-label uppercase">Phone</th>
+                  <th className="finance-small-label uppercase">Home Phone</th>
+                  <th className="finance-small-label uppercase">Village</th>
+                  <th className="finance-small-label uppercase">MD Name</th>
+                  <th className="finance-small-label uppercase">Created Date</th>
+                  <th className="text-right finance-small-label uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {filteredPartners.map((partner, index) => (
                   <tr key={partner.id} className="hover:bg-slate-50/20">
-                    <td className="px-3 py-3 font-semibold text-slate-500">
+                    <td className="px-3 py-3 text-slate-500 finance-input">
                       {index + 1}
                     </td>
-                    <td className="px-3 py-3 font-mono font-bold text-slate-800">
+                    <td className="px-3 py-3 font-mono text-slate-800 finance-input">
                       #{partner.partner_id || '—'}
                     </td>
-                    <td className="px-3 py-3 font-bold text-slate-900">
+                    <td className="px-3 py-3 text-slate-900 finance-input">
                       {partner.name}
                     </td>
                     <td className="px-3 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                        partner.is_md ? 'bg-[#0b1329] text-white' : 'bg-slate-100 text-slate-800'
-                      }`}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full ${ partner.is_md ? 'bg-[#0b1329] text-white' : 'bg-slate-100 text-slate-800' } finance-small-label uppercase`}>
                         {partner.is_md ? 'MD' : 'Partner'}
                       </span>
                     </td>
-                    <td className="px-3 py-3 font-bold text-slate-700">
+                    <td className="px-3 py-3 text-slate-700 finance-input">
                       {partner.phone || '—'}
                     </td>
-                    <td className="px-3 py-3 font-bold text-slate-700">
+                    <td className="px-3 py-3 text-slate-700 finance-input">
                       {partner.home_phone || '—'}
                     </td>
-                    <td className="px-3 py-3 font-semibold text-slate-600">
+                    <td className="px-3 py-3 text-slate-600 finance-input">
                       {partner.village || '—'}
                     </td>
-                    <td className="px-3 py-3 font-semibold text-slate-600">
+                    <td className="px-3 py-3 text-slate-600 finance-input">
                       {partner.md_name || '—'}
                     </td>
-                    <td className="px-3 py-3 font-semibold text-slate-500">
+                    <td className="px-3 py-3 text-slate-500 finance-input">
                       {new Date(partner.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </td>
                     <td className="px-3 py-3 text-right whitespace-nowrap">
@@ -380,8 +378,8 @@ const Partners: React.FC = () => {
             {/* Modal Header */}
             <div className="px-6 py-4 bg-[#0b1329] text-white flex justify-between items-center">
               <div>
-                <h3 className="font-black text-sm uppercase tracking-wider">Partner Profile Details</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">ID: #{selectedPartner.partner_id || 'N/A'}</p>
+                <h3 className="finance-sidebar-link uppercase">Partner Profile Details</h3>
+                <p className="text-slate-400 finance-small-label uppercase">ID: #{selectedPartner.partner_id || 'N/A'}</p>
               </div>
               <button
                 onClick={() => setSelectedPartner(null)}
@@ -392,17 +390,15 @@ const Partners: React.FC = () => {
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 space-y-4 text-xs md:text-sm">
+            <div className="p-6 space-y-4 md:text-sm finance-caption">
               
               {/* Name & Role */}
               <div className="flex justify-between items-start border-b border-slate-100 pb-3">
                 <div>
-                  <div className="text-[10px] font-black text-slate-400 tracking-widest uppercase">Partner Name</div>
-                  <div className="text-base font-black text-slate-900 mt-0.5">{selectedPartner.name}</div>
+                  <div className="text-slate-400 finance-small-label uppercase">Partner Name</div>
+                  <div className="text-slate-900 mt-0.5 finance-brand">{selectedPartner.name}</div>
                 </div>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                  selectedPartner.is_md ? 'bg-[#0b1329] text-white' : 'bg-slate-100 text-slate-800'
-                }`}>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full ${ selectedPartner.is_md ? 'bg-[#0b1329] text-white' : 'bg-slate-100 text-slate-800' } finance-small-label uppercase`}>
                   {selectedPartner.is_md ? 'MD' : 'Partner'}
                 </span>
               </div>
@@ -410,53 +406,51 @@ const Partners: React.FC = () => {
               {/* Info Grid */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                  <div className="text-slate-400 flex items-center gap-1 finance-small-label uppercase">
                     <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Phone
                   </div>
-                  <div className="font-bold text-slate-900 mt-1">{selectedPartner.phone || '—'}</div>
+                  <div className="text-slate-900 mt-1 finance-input">{selectedPartner.phone || '—'}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                  <div className="text-slate-400 flex items-center gap-1 finance-small-label uppercase">
                     <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Home Phone
                   </div>
-                  <div className="font-bold text-slate-900 mt-1">{selectedPartner.home_phone || '—'}</div>
+                  <div className="text-slate-900 mt-1 finance-input">{selectedPartner.home_phone || '—'}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                  <div className="text-slate-400 flex items-center gap-1 finance-small-label uppercase">
                     <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Village
                   </div>
-                  <div className="font-bold text-slate-900 mt-1">{selectedPartner.village || '—'}</div>
+                  <div className="text-slate-900 mt-1 finance-input">{selectedPartner.village || '—'}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                  <div className="text-slate-400 flex items-center gap-1 finance-small-label uppercase">
                     <User className="w-3.5 h-3.5 text-slate-400 shrink-0" /> MD Name
                   </div>
-                  <div className="font-bold text-slate-900 mt-1">{selectedPartner.md_name || '—'}</div>
+                  <div className="text-slate-900 mt-1 finance-input">{selectedPartner.md_name || '—'}</div>
                 </div>
               </div>
 
               {/* Capital balance */}
               <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-150 flex flex-col space-y-1 mt-2">
                 <span className="finance-card-title">Capital Invested</span>
-                <span className={`text-base font-black ${
-                  (partnerBalances[selectedPartner.id] || 0) >= 0 ? 'text-green-600' : 'text-red-655'
-                }`}>
+                <span className={`${ (partnerBalances[selectedPartner.id] || 0) >= 0 ? 'text-green-600' : 'text-red-655' } finance-brand`}>
                   ₹{(partnerBalances[selectedPartner.id] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
 
               {/* Address */}
               <div>
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                <div className="text-slate-400 flex items-center gap-1 finance-small-label uppercase">
                   <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Address Details
                 </div>
-                <div className="font-semibold text-slate-700 bg-slate-50/50 p-2.5 rounded-lg border border-slate-100 mt-1 h-16 overflow-y-auto leading-relaxed">
+                <div className="text-slate-700 bg-slate-50/50 p-2.5 rounded-lg border border-slate-100 mt-1 h-16 overflow-y-auto finance-input">
                   {selectedPartner.address || 'No address details registered.'}
                 </div>
               </div>
 
               {/* Dates */}
-              <div className="flex justify-between items-center text-[10px] font-bold text-slate-450 border-t border-slate-100 pt-3">
+              <div className="flex justify-between items-center text-slate-450 border-t border-slate-100 pt-3 finance-small-label">
                 <div className="flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5" /> Registered: {new Date(selectedPartner.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                 </div>
@@ -471,7 +465,7 @@ const Partners: React.FC = () => {
             <div className="px-6 py-3 bg-slate-50 border-t flex justify-end">
               <button
                 onClick={() => setSelectedPartner(null)}
-                className="px-4 py-1.5 bg-slate-200 text-slate-800 text-xs font-bold rounded-lg hover:bg-slate-300 transition-colors shadow-sm"
+                className="px-4 py-1.5 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors shadow-sm finance-header-time"
               >
                 CLOSE
               </button>

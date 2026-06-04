@@ -103,15 +103,15 @@ const NewCustomers: React.FC = () => {
 
   const renderTable = () => (
     <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
+      <table className="min-w-full divide-y divide-gray-200 md:text-sm finance-caption">
         <thead>
           <tr className="bg-gray-100">
-            <th className="finance-table-header">Registration Date</th>
-            <th className="finance-table-header">Customer Profile</th>
-            <th className="finance-table-header">Address</th>
-            <th className="finance-table-header">Aadhaar UID</th>
-            <th className="finance-table-header">Active Loan ID</th>
-            <th className="finance-table-header text-right">Loan Amount</th>
+            <th className="finance-small-label uppercase">Registration Date</th>
+            <th className="finance-small-label uppercase">Customer Profile</th>
+            <th className="finance-small-label uppercase">Address</th>
+            <th className="finance-small-label uppercase">Aadhaar UID</th>
+            <th className="finance-small-label uppercase">Active Loan ID</th>
+            <th className="text-right finance-small-label uppercase">Loan Amount</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -126,9 +126,9 @@ const NewCustomers: React.FC = () => {
                     <User className="w-3.5 h-3.5" />
                   </div>
                   <div>
-                    <div className="font-bold text-gray-900">{cust.name}</div>
+                    <div className="text-gray-900 finance-input">{cust.name}</div>
                     {cust.phone && (
-                      <div className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
+                      <div className="text-gray-400 flex items-center gap-1 mt-0.5 finance-small-label">
                         <Phone className="w-2.5 h-2.5 print:hidden" /> {cust.phone}
                       </div>
                     )}
@@ -144,10 +144,10 @@ const NewCustomers: React.FC = () => {
               <td className="px-3 py-3 font-mono text-gray-600">
                 {cust.aadhaar || '-'}
               </td>
-              <td className="px-3 py-3 font-mono font-bold text-gray-900">
+              <td className="px-3 py-3 font-mono text-gray-900 finance-input">
                 {cust.loanId || '-'}
               </td>
-              <td className="px-3 py-3 text-right font-bold text-green-700">
+              <td className="px-3 py-3 text-right text-green-700 finance-input">
                 {cust.amount ? `₹${cust.amount.toLocaleString('en-IN')}` : '-'}
               </td>
             </tr>
@@ -162,8 +162,8 @@ const NewCustomers: React.FC = () => {
       {/* Header */}
       <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
-          <h1 className="finance-page-title">New Customer Registrations</h1>
-          <p className="finance-page-subtitle">Audit log of customers added within specific calendar ranges</p>
+          <h1 className="finance-h1">New Customer Registrations</h1>
+          <p className="finance-small-label uppercase">Audit log of customers added within specific calendar ranges</p>
         </div>
         <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
           Print Registrations

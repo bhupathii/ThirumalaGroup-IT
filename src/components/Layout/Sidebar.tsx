@@ -178,7 +178,7 @@ const Sidebar: React.FC = () => {
             ? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50'
             : 'border-blue-200 bg-gradient-to-br from-orange-50 to-red-50'
         }`}>
-          <h1 className='text-lg font-bold text-gray-900 tracking-wide'>
+          <h1 className="text-gray-900 finance-brand">
             Thirumala Group {isFinanceMode ? 'Finance' : ''}
           </h1>
         </div>
@@ -189,15 +189,15 @@ const Sidebar: React.FC = () => {
           <div className={`w-9 h-9 rounded-full flex items-center justify-center shadow bg-gradient-to-br ${
             isFinanceMode ? 'from-green-500 to-emerald-600' : 'from-blue-500 to-purple-600'
           }`}>
-            <span className='text-base font-bold text-white'>
+            <span className="text-white finance-brand">
               {user?.username.charAt(0).toUpperCase()}
             </span>
           </div>
           <div>
-            <p className='text-sm font-semibold text-gray-900 leading-tight'>
+            <p className="text-gray-900 finance-section-heading">
               {user?.username}
             </p>
-            <p className={`text-xs font-medium capitalize ${isFinanceMode ? 'text-green-600' : 'text-blue-600'}`}>
+            <p className={`${isFinanceMode ? 'text-green-600' : 'text-blue-600'} finance-caption`}>
               {user?.is_admin ? 'Admin' : 'User'}
             </p>
           </div>
@@ -252,7 +252,7 @@ const Sidebar: React.FC = () => {
       <div className='p-4 bg-gradient-to-t from-blue-50 to-transparent border-t border-blue-100'>
         <button
           onClick={logout}
-          className='flex items-center gap-3 w-full px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 rounded-lg transition-colors shadow-sm'
+          className="flex items-center gap-3 w-full px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors shadow-sm finance-section-heading"
         >
           <LogOut className='w-5 h-5' />
           Logout

@@ -132,8 +132,8 @@ const PartnerPerformance: React.FC = () => {
       {/* Header */}
       <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
-          <h1 className="finance-page-title">Partner Performance Sheet</h1>
-          <p className="finance-page-subtitle">Review capital share holding percentages and estimated interest profit distribution</p>
+          <h1 className="finance-h1">Partner Performance Sheet</h1>
+          <p className="finance-small-label uppercase">Review capital share holding percentages and estimated interest profit distribution</p>
         </div>
         <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
           Print Statement
@@ -149,55 +149,55 @@ const PartnerPerformance: React.FC = () => {
           {/* Summary Box */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-3 bg-gray-50 rounded border">
-              <span className="text-gray-500 text-xs font-semibold block uppercase">Total Capital Pools</span>
-              <span className="text-lg font-bold text-gray-900">₹{totals.netCapital.toLocaleString('en-IN')}</span>
+              <span className="text-gray-500 block finance-header-time uppercase">Total Capital Pools</span>
+              <span className="text-gray-900 finance-brand">₹{totals.netCapital.toLocaleString('en-IN')}</span>
             </div>
             <div className="p-3 bg-green-50 rounded border border-green-100">
-              <span className="text-green-700 text-xs font-semibold block uppercase">Total Cash Interest Earned (Realised)</span>
-              <span className="text-lg font-bold text-green-800">₹{totals.realisedInterest.toLocaleString('en-IN')}</span>
+              <span className="text-green-700 block finance-header-time uppercase">Total Cash Interest Earned (Realised)</span>
+              <span className="text-green-800 finance-brand">₹{totals.realisedInterest.toLocaleString('en-IN')}</span>
             </div>
             <div className="p-3 bg-blue-50 rounded border border-blue-100">
-              <span className="text-blue-700 text-xs font-semibold block uppercase">Total Book Interest Earned (Accrued)</span>
-              <span className="text-lg font-bold text-blue-800">₹{totals.accruedInterest.toLocaleString('en-IN')}</span>
+              <span className="text-blue-700 block finance-header-time uppercase">Total Book Interest Earned (Accrued)</span>
+              <span className="text-blue-800 finance-brand">₹{totals.accruedInterest.toLocaleString('en-IN')}</span>
             </div>
           </div>
 
           <Card title="Shareholder Capital Ledger" subtitle="Profit allocations based on net contributions ratios" className="shadow-md">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
+              <table className="min-w-full divide-y divide-gray-200 md:text-sm finance-caption">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="finance-table-header">Partner Name</th>
-                    <th className="finance-table-header text-right">Net Contribution</th>
-                    <th className="finance-table-header text-center">Share holding</th>
-                    <th className="finance-table-header text-right">Realised Profit Share (Cash)</th>
-                    <th className="px-3 py-3 text-right font-bold text-blue-700 uppercase">Accrued Profit Share (Accrual)</th>
+                    <th className="finance-small-label uppercase">Partner Name</th>
+                    <th className="text-right finance-small-label uppercase">Net Contribution</th>
+                    <th className="text-center finance-small-label uppercase">Share holding</th>
+                    <th className="text-right finance-small-label uppercase">Realised Profit Share (Cash)</th>
+                    <th className="px-3 py-3 text-right text-blue-700 finance-input uppercase">Accrued Profit Share (Accrual)</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {rows.map((row) => (
                     <tr key={row.id} className="hover:bg-gray-50/50">
-                      <td className="px-3 py-3 font-bold text-gray-900">
+                      <td className="px-3 py-3 text-gray-900 finance-input">
                         {row.name}
-                        {row.phone && <div className="text-[10px] text-gray-400 font-normal">{row.phone}</div>}
+                        {row.phone && <div className="text-gray-400 finance-small-label">{row.phone}</div>}
                       </td>
-                      <td className="px-3 py-3 text-right font-semibold text-gray-900">
+                      <td className="px-3 py-3 text-right text-gray-900 finance-input">
                         ₹{row.netCapital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-3 py-3 text-center font-extrabold text-gray-700">
+                      <td className="px-3 py-3 text-center text-gray-700 finance-input">
                         {row.sharePercentage}%
                       </td>
-                      <td className="px-3 py-3 text-right font-bold text-green-600">
+                      <td className="px-3 py-3 text-right text-green-600 finance-input">
                         ₹{row.realisedProfitShare.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-3 py-3 text-right font-bold text-blue-600">
+                      <td className="px-3 py-3 text-right text-blue-600 finance-input">
                         ₹{row.accruedProfitShare.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                   ))}
                   {/* Totals row */}
-                  <tr className="bg-gray-50 font-black">
-                    <td className="px-3 py-3 uppercase text-gray-800">Total:</td>
+                  <tr className="bg-gray-50 finance-input">
+                    <td className="px-3 py-3 text-gray-800 finance-input uppercase">Total:</td>
                     <td className="px-3 py-3 text-right">₹{totals.netCapital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="px-3 py-3 text-center">100.00%</td>
                     <td className="px-3 py-3 text-right text-green-700">₹{totals.realisedInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -220,55 +220,55 @@ const PartnerPerformance: React.FC = () => {
           {/* Summary Box */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-3 bg-gray-50 rounded border">
-              <span className="text-gray-500 text-xs font-semibold block uppercase">Total Capital Pools</span>
-              <span className="text-lg font-bold text-gray-900">₹{totals.netCapital.toLocaleString('en-IN')}</span>
+              <span className="text-gray-500 block finance-header-time uppercase">Total Capital Pools</span>
+              <span className="text-gray-900 finance-brand">₹{totals.netCapital.toLocaleString('en-IN')}</span>
             </div>
             <div className="p-3 bg-green-50 rounded border border-green-100">
-              <span className="text-green-700 text-xs font-semibold block uppercase">Total Cash Interest Earned (Realised)</span>
-              <span className="text-lg font-bold text-green-800">₹{totals.realisedInterest.toLocaleString('en-IN')}</span>
+              <span className="text-green-700 block finance-header-time uppercase">Total Cash Interest Earned (Realised)</span>
+              <span className="text-green-800 finance-brand">₹{totals.realisedInterest.toLocaleString('en-IN')}</span>
             </div>
             <div className="p-3 bg-blue-50 rounded border border-blue-100">
-              <span className="text-blue-700 text-xs font-semibold block uppercase">Total Book Interest Earned (Accrued)</span>
-              <span className="text-lg font-bold text-blue-800">₹{totals.accruedInterest.toLocaleString('en-IN')}</span>
+              <span className="text-blue-700 block finance-header-time uppercase">Total Book Interest Earned (Accrued)</span>
+              <span className="text-blue-800 finance-brand">₹{totals.accruedInterest.toLocaleString('en-IN')}</span>
             </div>
           </div>
 
           <Card title="Shareholder Capital Ledger" subtitle="Profit allocations based on net contributions ratios" className="shadow-none border-0">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
+              <table className="min-w-full divide-y divide-gray-200 md:text-sm finance-caption">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="finance-table-header">Partner Name</th>
-                    <th className="finance-table-header text-right">Net Contribution</th>
-                    <th className="finance-table-header text-center">Share holding</th>
-                    <th className="finance-table-header text-right">Realised Profit Share (Cash)</th>
-                    <th className="px-3 py-3 text-right font-bold text-blue-700 uppercase">Accrued Profit Share (Accrual)</th>
+                    <th className="finance-small-label uppercase">Partner Name</th>
+                    <th className="text-right finance-small-label uppercase">Net Contribution</th>
+                    <th className="text-center finance-small-label uppercase">Share holding</th>
+                    <th className="text-right finance-small-label uppercase">Realised Profit Share (Cash)</th>
+                    <th className="px-3 py-3 text-right text-blue-700 finance-input uppercase">Accrued Profit Share (Accrual)</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {rows.map((row) => (
                     <tr key={row.id}>
-                      <td className="px-3 py-3 font-bold text-gray-900">
+                      <td className="px-3 py-3 text-gray-900 finance-input">
                         {row.name}
-                        {row.phone && <div className="text-[10px] text-gray-400 font-normal">{row.phone}</div>}
+                        {row.phone && <div className="text-gray-400 finance-small-label">{row.phone}</div>}
                       </td>
-                      <td className="px-3 py-3 text-right font-semibold text-gray-900">
+                      <td className="px-3 py-3 text-right text-gray-900 finance-input">
                         ₹{row.netCapital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-3 py-3 text-center font-extrabold text-gray-700">
+                      <td className="px-3 py-3 text-center text-gray-700 finance-input">
                         {row.sharePercentage}%
                       </td>
-                      <td className="px-3 py-3 text-right font-bold text-green-600">
+                      <td className="px-3 py-3 text-right text-green-600 finance-input">
                         ₹{row.realisedProfitShare.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-3 py-3 text-right font-bold text-blue-600">
+                      <td className="px-3 py-3 text-right text-blue-600 finance-input">
                         ₹{row.accruedProfitShare.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                   ))}
                   {/* Totals row */}
-                  <tr className="bg-gray-50 font-black">
-                    <td className="px-3 py-3 uppercase text-gray-800">Total:</td>
+                  <tr className="bg-gray-50 finance-input">
+                    <td className="px-3 py-3 text-gray-800 finance-input uppercase">Total:</td>
                     <td className="px-3 py-3 text-right">₹{totals.netCapital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="px-3 py-3 text-center">100.00%</td>
                     <td className="px-3 py-3 text-right text-green-700">₹{totals.realisedInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>

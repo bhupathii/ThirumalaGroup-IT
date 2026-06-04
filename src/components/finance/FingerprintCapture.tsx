@@ -116,14 +116,14 @@ export const FingerprintCapture: React.FC<FingerprintCaptureProps> = ({
   return (
     <div className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-xl">
       <div className="flex justify-between items-center">
-        <label className="finance-label" >
+        <label className="finance-caption uppercase" >
           {label}
         </label>
         {fingerprintAdded && (
           <button
             type="button"
             onClick={handleClear}
-            className="text-[10px] text-red-500 hover:text-red-700 font-bold"
+            className="text-red-500 hover:text-red-700 finance-small-label"
           >
             Clear Fingerprint
           </button>
@@ -135,14 +135,14 @@ export const FingerprintCapture: React.FC<FingerprintCaptureProps> = ({
         {scanning ? (
           <div className="space-y-2 flex flex-col items-center text-green-600 animate-pulse">
             <RefreshCw className="w-8 h-8 animate-spin" />
-            <p className="text-xs font-bold font-mono">Place Finger on Scanner...</p>
+            <p className="font-mono finance-header-time">Place Finger on Scanner...</p>
           </div>
         ) : fingerprintAdded ? (
           <div className="space-y-1.5 flex flex-col items-center text-green-700">
             <CheckCircle2 className="w-8 h-8 fill-green-50 text-green-600" />
-            <div className="text-xs font-bold">Fingerprint Added</div>
+            <div className="finance-header-time">Fingerprint Added</div>
             {fingerprintTemplate && (
-              <span className="text-[9px] bg-green-100 text-green-800 px-2 py-0.5 rounded font-mono font-bold max-w-[200px] truncate">
+              <span className="text-[9px] bg-green-100 text-green-800 px-2 py-0.5 rounded font-mono max-w-[200px] truncate finance-input">
                 {JSON.parse(fingerprintTemplate).device || 'Attached'}
               </span>
             )}
@@ -150,7 +150,7 @@ export const FingerprintCapture: React.FC<FingerprintCaptureProps> = ({
         ) : (
           <div className="space-y-1.5 flex flex-col items-center text-gray-400">
             <Fingerprint className="w-8 h-8 stroke-1 text-gray-400" />
-            <p className="text-xs font-medium">Biometric Verification Pending</p>
+            <p className="finance-caption">Biometric Verification Pending</p>
           </div>
         )}
       </div>
@@ -161,13 +161,13 @@ export const FingerprintCapture: React.FC<FingerprintCaptureProps> = ({
           type="button"
           onClick={handleSimulatedScan}
           disabled={scanning || uploading}
-          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg font-bold border border-green-300 bg-green-50 text-green-700 text-xs hover:bg-green-100 disabled:opacity-50 transition-all"
+          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50 transition-all finance-header-time"
         >
           <Fingerprint className="w-3.5 h-3.5" />
           {scanning ? 'Scanning...' : 'Scan Finger'}
         </button>
 
-        <label className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg font-bold border border-gray-300 bg-white text-gray-700 text-xs hover:bg-gray-50 cursor-pointer disabled:opacity-50 transition-all text-center">
+        <label className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 cursor-pointer disabled:opacity-50 transition-all text-center finance-header-time">
           <Upload className="w-3.5 h-3.5 text-gray-500" />
           {uploading ? 'Uploading...' : 'Upload Image'}
           <input

@@ -42,20 +42,20 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
           {/* Header Actions */}
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 print:hidden">
             <div>
-              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">{title}</h3>
-              {subtitle && <p className="text-xs text-slate-500 font-bold uppercase mt-0.5">{subtitle}</p>}
+              <h3 className="text-slate-900 finance-sidebar-link uppercase">{title}</h3>
+              {subtitle && <p className="text-slate-500 mt-0.5 finance-header-time uppercase">{subtitle}</p>}
             </div>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => window.print()}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm finance-sidebar-link"
               >
                 <Printer className="w-4 h-4" />
                 PRINT DOCUMENT
               </button>
               <button
                 onClick={onClose}
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-bold bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+                className="inline-flex items-center gap-2 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-sidebar-link"
               >
                 <X className="w-4 h-4" />
                 CLOSE
@@ -67,15 +67,15 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
           <div className="p-8 bg-white text-black print-document font-sans print:p-0">
             {/* Document Header */}
             <div className="text-center pb-6 border-b-2 border-slate-900 mb-6">
-              <h2 className="text-2xl font-black tracking-widest uppercase">TIRUMALA FINANCE</h2>
-              <p className="text-base font-bold uppercase tracking-wider mt-1">{documentTitle}</p>
+              <h2 className="finance-money">TIRUMALA FINANCE</h2>
+              <p className="mt-1 finance-brand">{documentTitle}</p>
             </div>
 
             {/* Injected Content */}
             {children}
 
             {/* Document Footer */}
-            <div className="mt-12 text-center text-xs font-semibold text-slate-500 print:mt-16">
+            <div className="mt-12 text-center text-slate-500 print:mt-16 finance-header-time">
               GENERATED ON: {printedDate || new Date().toLocaleString('en-IN')}
             </div>
           </div>

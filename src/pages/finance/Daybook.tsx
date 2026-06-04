@@ -127,8 +127,8 @@ const Daybook: React.FC = () => {
       {/* Title */}
       <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
-          <h1 className="finance-page-title">Finance Daybook</h1>
-          <p className="finance-page-subtitle">Review cash inflow and outflow transactions for any specific business day</p>
+          <h1 className="finance-h1">Finance Daybook</h1>
+          <p className="finance-small-label uppercase">Review cash inflow and outflow transactions for any specific business day</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
@@ -158,7 +158,7 @@ const Daybook: React.FC = () => {
         title={
           <div className="flex justify-between items-center w-full">
             <span>Daybook Statement</span>
-            <span className="font-mono text-sm text-gray-500 text-right">
+            <span className="font-mono text-gray-500 text-right finance-input">
               Period: {new Date(fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })} to {new Date(toDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
             </span>
           </div>
@@ -175,76 +175,76 @@ const Daybook: React.FC = () => {
             {/* Balance Headers */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="p-3 bg-gray-50 rounded border">
-                <span className="text-gray-500 text-xs font-semibold block uppercase">Opening Balance</span>
-                <span className="text-lg font-bold text-gray-900">₹{openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span className="text-gray-500 block finance-header-time uppercase">Opening Balance</span>
+                <span className="text-gray-900 finance-brand">₹{openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="p-3 bg-green-50 rounded border border-green-100">
-                <span className="text-green-700 text-xs font-bold block uppercase">Total Receipts (+)</span>
-                <span className="text-lg font-bold text-green-800">₹{totalCashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span className="text-green-700 block finance-header-time uppercase">Total Receipts (+)</span>
+                <span className="text-green-800 finance-brand">₹{totalCashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="p-3 bg-red-50 rounded border border-red-100">
-                <span className="text-red-700 text-xs font-bold block uppercase">Total Payments (-)</span>
-                <span className="text-lg font-bold text-red-800">₹{totalCashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span className="text-red-700 block finance-header-time uppercase">Total Payments (-)</span>
+                <span className="text-red-800 finance-brand">₹{totalCashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="p-3 bg-emerald-100 rounded border border-emerald-200">
-                <span className="text-emerald-800 text-xs font-black block uppercase">Closing Balance</span>
-                <span className="text-xl font-black text-emerald-900">₹{closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span className="text-emerald-800 block finance-header-time uppercase">Closing Balance</span>
+                <span className="text-emerald-900 finance-h1">₹{closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
 
             {/* Entries Table */}
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-300 text-xs md:text-sm">
+              <table className="min-w-full divide-y divide-gray-300 md:text-sm finance-caption">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="finance-table-header">Particulars / Account</th>
-                    <th className="finance-table-header">Voucher Type</th>
-                    <th className="finance-table-header">Remarks</th>
-                    <th className="finance-table-header text-right">Receipts (Cr)</th>
-                    <th className="finance-table-header text-right">Payments (Dr)</th>
+                    <th className="finance-small-label uppercase">Particulars / Account</th>
+                    <th className="finance-small-label uppercase">Voucher Type</th>
+                    <th className="finance-small-label uppercase">Remarks</th>
+                    <th className="text-right finance-small-label uppercase">Receipts (Cr)</th>
+                    <th className="text-right finance-small-label uppercase">Payments (Dr)</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {daybookItems.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-gray-400 font-semibold">
+                      <td colSpan={5} className="px-3 py-8 text-center text-gray-400 finance-input">
                         No transactions recorded on this date.
                       </td>
                     </tr>
                   ) : (
                     daybookItems.map((item) => (
                       <tr key={item.id} className="hover:bg-gray-50/50">
-                        <td className="px-3 py-3 font-bold text-gray-900">{item.particulars}</td>
-                        <td className="px-3 py-3 font-semibold text-gray-600 capitalize">{item.type}</td>
+                        <td className="px-3 py-3 text-gray-900 finance-input">{item.particulars}</td>
+                        <td className="px-3 py-3 text-gray-600 finance-input">{item.type}</td>
                         <td className="px-3 py-3 text-gray-500">{item.remarks || '-'}</td>
-                        <td className="px-3 py-3 text-right font-extrabold text-green-600">
+                        <td className="px-3 py-3 text-right text-green-600 finance-input">
                           {item.cashIn > 0 ? `₹${item.cashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
                         </td>
-                        <td className="px-3 py-3 text-right font-extrabold text-red-600">
+                        <td className="px-3 py-3 text-right text-red-600 finance-input">
                           {item.cashOut > 0 ? `₹${item.cashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
                         </td>
                       </tr>
                     ))
                   )}
                   {/* Total row */}
-                  <tr className="bg-gray-50 font-extrabold">
-                    <td colSpan={3} className="px-3 py-3 text-right text-gray-800 uppercase">Total Cash Flow:</td>
-                    <td className="px-3 py-3 text-right text-green-700 text-base">₹{totalCashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-3 text-right text-red-700 text-base">₹{totalCashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <tr className="bg-gray-50 finance-input">
+                    <td colSpan={3} className="px-3 py-3 text-right text-gray-800 finance-input uppercase">Total Cash Flow:</td>
+                    <td className="px-3 py-3 text-right text-green-700 finance-card-title">₹{totalCashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="px-3 py-3 text-right text-red-700 finance-card-title">₹{totalCashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
             {/* Print Signatures */}
-            <div className="hidden print:flex justify-between items-center mt-20 pt-8 border-t text-xs">
+            <div className="hidden print:flex justify-between items-center mt-20 pt-8 border-t finance-caption">
               <div>
-                <p className="font-bold text-gray-700">Cashier Signature</p>
-                <p className="text-[10px] text-gray-400 mt-8">Authorized Signatory</p>
+                <p className="text-gray-700 finance-input">Cashier Signature</p>
+                <p className="text-gray-400 mt-8 finance-small-label">Authorized Signatory</p>
               </div>
               <div className="text-right">
-                <p className="font-bold text-gray-700">Verified By Manager</p>
-                <p className="text-[10px] text-gray-400 mt-8">Partner Audit Sign</p>
+                <p className="text-gray-700 finance-input">Verified By Manager</p>
+                <p className="text-gray-400 mt-8 finance-small-label">Partner Audit Sign</p>
               </div>
             </div>
           </div>
@@ -262,74 +262,74 @@ const Daybook: React.FC = () => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="p-3 bg-gray-50 rounded border">
-                <span className="text-gray-500 text-xs font-semibold block uppercase">Opening Balance</span>
-                <span className="text-lg font-bold text-gray-900">₹{openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span className="text-gray-500 block finance-header-time uppercase">Opening Balance</span>
+                <span className="text-gray-900 finance-brand">₹{openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="p-3 bg-green-50 rounded border border-green-100">
-                <span className="text-green-700 text-xs font-bold block uppercase">Total Receipts (+)</span>
-                <span className="text-lg font-bold text-green-800">₹{totalCashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span className="text-green-700 block finance-header-time uppercase">Total Receipts (+)</span>
+                <span className="text-green-800 finance-brand">₹{totalCashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="p-3 bg-red-50 rounded border border-red-100">
-                <span className="text-red-700 text-xs font-bold block uppercase">Total Payments (-)</span>
-                <span className="text-lg font-bold text-red-800">₹{totalCashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span className="text-red-700 block finance-header-time uppercase">Total Payments (-)</span>
+                <span className="text-red-800 finance-brand">₹{totalCashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="p-3 bg-emerald-100 rounded border border-emerald-200">
-                <span className="text-emerald-800 text-xs font-black block uppercase">Closing Balance</span>
-                <span className="text-xl font-black text-emerald-900">₹{closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span className="text-emerald-800 block finance-header-time uppercase">Closing Balance</span>
+                <span className="text-emerald-900 finance-h1">₹{closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
             
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-300 text-xs md:text-sm">
+              <table className="min-w-full divide-y divide-gray-300 md:text-sm finance-caption">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="finance-table-header">Particulars / Account</th>
-                    <th className="finance-table-header">Voucher Type</th>
-                    <th className="finance-table-header">Remarks</th>
-                    <th className="finance-table-header text-right">Receipts (Cr)</th>
-                    <th className="finance-table-header text-right">Payments (Dr)</th>
+                    <th className="finance-small-label uppercase">Particulars / Account</th>
+                    <th className="finance-small-label uppercase">Voucher Type</th>
+                    <th className="finance-small-label uppercase">Remarks</th>
+                    <th className="text-right finance-small-label uppercase">Receipts (Cr)</th>
+                    <th className="text-right finance-small-label uppercase">Payments (Dr)</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {daybookItems.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-gray-400 font-semibold">
+                      <td colSpan={5} className="px-3 py-8 text-center text-gray-400 finance-input">
                         No transactions recorded on this date.
                       </td>
                     </tr>
                   ) : (
                     daybookItems.map((item) => (
                       <tr key={item.id} className="hover:bg-gray-50/50">
-                        <td className="px-3 py-3 font-bold text-gray-900">{item.particulars}</td>
-                        <td className="px-3 py-3 font-semibold text-gray-600 capitalize">{item.type}</td>
+                        <td className="px-3 py-3 text-gray-900 finance-input">{item.particulars}</td>
+                        <td className="px-3 py-3 text-gray-600 finance-input">{item.type}</td>
                         <td className="px-3 py-3 text-gray-500">{item.remarks || '-'}</td>
-                        <td className="px-3 py-3 text-right font-extrabold text-green-600">
+                        <td className="px-3 py-3 text-right text-green-600 finance-input">
                           {item.cashIn > 0 ? `₹${item.cashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
                         </td>
-                        <td className="px-3 py-3 text-right font-extrabold text-red-600">
+                        <td className="px-3 py-3 text-right text-red-600 finance-input">
                           {item.cashOut > 0 ? `₹${item.cashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
                         </td>
                       </tr>
                     ))
                   )}
                   {/* Total row */}
-                  <tr className="bg-gray-50 font-extrabold">
-                    <td colSpan={3} className="px-3 py-3 text-right text-gray-800 uppercase">Total Cash Flow:</td>
-                    <td className="px-3 py-3 text-right text-green-700 text-base">₹{totalCashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-3 text-right text-red-700 text-base">₹{totalCashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <tr className="bg-gray-50 finance-input">
+                    <td colSpan={3} className="px-3 py-3 text-right text-gray-800 finance-input uppercase">Total Cash Flow:</td>
+                    <td className="px-3 py-3 text-right text-green-700 finance-card-title">₹{totalCashIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="px-3 py-3 text-right text-red-700 finance-card-title">₹{totalCashOut.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
             
-            <div className="flex justify-between items-center mt-20 pt-8 border-t text-xs">
+            <div className="flex justify-between items-center mt-20 pt-8 border-t finance-caption">
               <div>
-                <p className="font-bold text-gray-700">Cashier Signature</p>
-                <p className="text-[10px] text-gray-400 mt-8">Authorized Signatory</p>
+                <p className="text-gray-700 finance-input">Cashier Signature</p>
+                <p className="text-gray-400 mt-8 finance-small-label">Authorized Signatory</p>
               </div>
               <div className="text-right">
-                <p className="font-bold text-gray-700">Verified By Manager</p>
-                <p className="text-[10px] text-gray-400 mt-8">Partner Audit Sign</p>
+                <p className="text-gray-700 finance-input">Verified By Manager</p>
+                <p className="text-gray-400 mt-8 finance-small-label">Partner Audit Sign</p>
               </div>
             </div>
           </div>

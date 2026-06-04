@@ -191,14 +191,14 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
   return (
     <div className="space-y-3 p-3 bg-gray-50 border border-gray-200 rounded-xl">
       <div className="flex justify-between items-center">
-        <label className="finance-label" >
+        <label className="finance-caption uppercase" >
           {label}
         </label>
         {capturedImage && (
           <button
             type="button"
             onClick={handleClear}
-            className="text-[10px] text-red-500 hover:text-red-700 font-bold"
+            className="text-red-500 hover:text-red-700 finance-small-label"
           >
             Clear Photo
           </button>
@@ -227,8 +227,8 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
         {!cameraActive && !capturedImage && (
           <div className="text-center p-4 text-gray-400">
             <CameraIcon className="w-8 h-8 mx-auto stroke-1 mb-1 text-gray-500" />
-            <p className="text-xs font-semibold">No Photo Captured</p>
-            <p className="text-[10px]">Use Camera or Choose File below</p>
+            <p className="finance-header-time">No Photo Captured</p>
+            <p className="finance-small-label">Use Camera or Choose File below</p>
           </div>
         )}
       </div>
@@ -240,7 +240,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
             <button
               type="button"
               onClick={startCamera}
-              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg font-bold border border-green-300 bg-green-50 text-green-700 text-xs hover:bg-green-100 transition-all"
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 transition-all finance-header-time"
             >
               <Video className="w-3.5 h-3.5" />
               Open Camera
@@ -249,7 +249,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
             <button
               type="button"
               onClick={capturePhoto}
-              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg font-bold border border-blue-300 bg-blue-50 text-blue-700 text-xs hover:bg-blue-100 transition-all"
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-all finance-header-time"
             >
               <CameraIcon className="w-3.5 h-3.5" />
               Capture
@@ -261,7 +261,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
               <button
                 type="button"
                 onClick={handleRetake}
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg font-bold border border-orange-300 bg-orange-50 text-orange-700 text-xs hover:bg-orange-100 transition-all"
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-all finance-header-time"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 Retake
@@ -270,7 +270,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
                 type="button"
                 onClick={handleSavePhoto}
                 disabled={uploading}
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg font-bold border border-emerald-300 bg-emerald-600 text-white text-xs hover:bg-emerald-700 disabled:opacity-50 transition-all"
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-all finance-header-time"
               >
                 <Check className="w-3.5 h-3.5" />
                 {uploading ? 'Uploading...' : 'Save Photo'}
@@ -282,8 +282,8 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
         {/* File upload option for accessibility */}
         {!cameraActive && (
           <div className="flex items-center gap-2 border-t pt-2 border-gray-200">
-            <span className="text-[10px] text-gray-400 font-medium font-sans">Or:</span>
-            <label className="flex-1 flex items-center justify-center gap-1 py-1 px-2 rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-[10px] font-bold cursor-pointer transition-all">
+            <span className="text-gray-400 font-sans finance-small-label">Or:</span>
+            <label className="flex-1 flex items-center justify-center gap-1 py-1 px-2 rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 cursor-pointer transition-all finance-small-label">
               <FileImage className="w-3 h-3 text-gray-500" />
               Upload Image File
               <input

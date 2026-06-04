@@ -151,7 +151,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
   return (
     <div className="p-3 bg-white border border-gray-200 rounded-xl space-y-3 shadow-sm">
       <div className="flex justify-between items-center">
-        <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5" >
+        <label className="text-gray-700 flex items-center gap-1.5 finance-header-time" >
           <Fingerprint className="w-3.5 h-3.5 text-green-700" />
           {label}
         </label>
@@ -160,7 +160,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
           <button
             type="button"
             onClick={handleClear}
-            className="text-[10px] text-red-500 hover:text-red-700 font-bold transition-colors"
+            className="text-red-500 hover:text-red-700 transition-colors finance-small-label"
           >
             Clear Biometric
           </button>
@@ -169,10 +169,10 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
 
       {/* Security Warning if Unauthorized */}
       {!isAuthorized ? (
-        <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-start gap-2 text-[10px] text-red-700">
+        <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-start gap-2 text-red-700 finance-small-label">
           <ShieldAlert className="w-4 h-4 text-red-500 shrink-0" />
           <div>
-            <p className="font-bold">Access Restricted</p>
+            <p className="finance-input">Access Restricted</p>
             <p>Only administrators or authorised finance personnel can manage biometric data.</p>
           </div>
         </div>
@@ -183,14 +183,14 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
             {connecting && (
               <div className="flex flex-col items-center text-green-600 animate-pulse space-y-1.5">
                 <RefreshCw className="w-6 h-6 animate-spin text-green-600" />
-                <span className="text-[10px] font-bold font-mono">Pinging External Scanner...</span>
+                <span className="font-mono finance-small-label">Pinging External Scanner...</span>
               </div>
             )}
             
             {capturing && (
               <div className="flex flex-col items-center text-blue-600 animate-pulse space-y-1.5">
                 <Cpu className="w-6 h-6 animate-bounce text-blue-600" />
-                <span className="text-[10px] font-bold font-mono">Capture requested. Place finger on scanner...</span>
+                <span className="font-mono finance-small-label">Capture requested. Place finger on scanner...</span>
               </div>
             )}
             
@@ -199,25 +199,25 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
                 {status === 'not_connected' && (
                   <>
                     <WifiOff className="w-6 h-6 text-gray-400 stroke-1" />
-                    <span className="text-xs font-bold text-gray-500">Scanner not connected</span>
+                    <span className="text-gray-500 finance-header-time">Scanner not connected</span>
                   </>
                 )}
                 {status === 'connected' && (
                   <>
                     <Wifi className="w-6 h-6 text-green-600 stroke-1" />
-                    <span className="text-xs font-bold text-green-700">Scanner connected & ready</span>
+                    <span className="text-green-700 finance-header-time">Scanner connected & ready</span>
                   </>
                 )}
                 {status === 'captured' && (
                   <>
                     <Fingerprint className="w-7 h-7 text-blue-600 animate-pulse" />
-                    <span className="text-xs font-bold text-blue-700">Fingerprint captured</span>
+                    <span className="text-blue-700 finance-header-time">Fingerprint captured</span>
                   </>
                 )}
                 {status === 'saved' && (
                   <>
                     <CheckCircle2 className="w-7 h-7 text-green-600 fill-green-50" />
-                    <span className="text-xs font-extrabold text-green-700">Fingerprint Added</span>
+                    <span className="text-green-700 finance-header-time">Fingerprint Added</span>
                   </>
                 )}
               </div>
@@ -225,7 +225,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
 
             {/* Integration Pending Banner */}
             {integrationPending && !connecting && !capturing && (
-              <div className="mt-2 text-[9px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded font-bold">
+              <div className="mt-2 text-[9px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded finance-input">
                 Fingerprint scanner integration pending
               </div>
             )}
@@ -238,7 +238,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
                 type="button"
                 onClick={handleConnect}
                 disabled={connecting}
-                className="col-span-2 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg font-bold border border-green-300 bg-green-50 text-green-700 text-xs hover:bg-green-100 transition-all disabled:opacity-50"
+                className="col-span-2 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 transition-all disabled:opacity-50 finance-header-time"
               >
                 Connect Scanner
               </button>
@@ -249,7 +249,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
                 type="button"
                 onClick={handleCapture}
                 disabled={capturing}
-                className="col-span-2 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg font-bold border border-blue-300 bg-blue-50 text-blue-700 text-xs hover:bg-blue-100 transition-all disabled:opacity-50"
+                className="col-span-2 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-all disabled:opacity-50 finance-header-time"
               >
                 Capture Fingerprint
               </button>
@@ -260,7 +260,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
                 <button
                   type="button"
                   onClick={handleRetake}
-                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg font-bold border border-orange-200 bg-orange-50 text-orange-700 text-xs hover:bg-orange-100 transition-all"
+                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-all finance-header-time"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   Retake
@@ -269,7 +269,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
                   type="button"
                   onClick={handleSave}
                   disabled={saving}
-                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg font-bold border border-emerald-300 bg-emerald-600 text-white text-xs hover:bg-emerald-700 transition-all disabled:opacity-50"
+                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-700 transition-all disabled:opacity-50 finance-header-time"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   {saving ? 'Saving...' : 'Save Fingerprint'}
@@ -281,7 +281,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
               <button
                 type="button"
                 onClick={() => setStatus('connected')}
-                className="col-span-2 flex items-center justify-center gap-1 py-1.5 px-3 rounded-lg font-bold border border-gray-300 bg-white text-gray-700 text-xs hover:bg-gray-50 transition-all"
+                className="col-span-2 flex items-center justify-center gap-1 py-1.5 px-3 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-all finance-header-time"
               >
                 Change Fingerprint
               </button>

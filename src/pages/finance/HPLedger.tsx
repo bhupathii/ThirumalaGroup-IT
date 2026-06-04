@@ -89,8 +89,8 @@ const HPLedger: React.FC = () => {
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
       <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
-          <h1 className="finance-page-title">HP (Hire Purchase) Ledger</h1>
-          <p className="finance-page-subtitle">Review accounts starting with the 'HP' or 'H-' identifier prefix</p>
+          <h1 className="finance-h1">HP (Hire Purchase) Ledger</h1>
+          <p className="finance-small-label uppercase">Review accounts starting with the 'HP' or 'H-' identifier prefix</p>
         </div>
         <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
           Print Ledger
@@ -134,50 +134,48 @@ const HPLedger: React.FC = () => {
           <div className="text-center py-8 text-gray-400">No HP ledger entries found</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
+            <table className="min-w-full divide-y divide-gray-200 md:text-sm finance-caption">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="finance-table-header">Loan ID</th>
-                  <th className="finance-table-header">Customer</th>
-                  <th className="finance-table-header">Disbursed</th>
-                  <th className="finance-table-header text-right">Principal</th>
-                  <th className="finance-table-header text-right">Interest</th>
-                  <th className="finance-table-header text-right">Total Repayable</th>
-                  <th className="finance-table-header text-right">Collected (Cr)</th>
-                  <th className="finance-table-header text-right">Receivable (Dr)</th>
-                  <th className="finance-table-header text-center">Status</th>
+                  <th className="finance-small-label uppercase">Loan ID</th>
+                  <th className="finance-small-label uppercase">Customer</th>
+                  <th className="finance-small-label uppercase">Disbursed</th>
+                  <th className="text-right finance-small-label uppercase">Principal</th>
+                  <th className="text-right finance-small-label uppercase">Interest</th>
+                  <th className="text-right finance-small-label uppercase">Total Repayable</th>
+                  <th className="text-right finance-small-label uppercase">Collected (Cr)</th>
+                  <th className="text-right finance-small-label uppercase">Receivable (Dr)</th>
+                  <th className="text-center finance-small-label uppercase">Status</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredRows.map(row => (
                   <tr key={row.id} className="hover:bg-gray-50/50">
-                    <td className="px-3 py-3 font-bold text-gray-900 font-mono">{row.loanId}</td>
+                    <td className="px-3 py-3 text-gray-900 font-mono finance-input">{row.loanId}</td>
                     <td className="px-3 py-3">
-                      <div className="font-bold text-gray-900">{row.customerName}</div>
-                      {row.phone && <div className="text-[10px] text-gray-400 mt-0.5">{row.phone}</div>}
+                      <div className="text-gray-900 finance-input">{row.customerName}</div>
+                      {row.phone && <div className="text-gray-400 mt-0.5 finance-small-label">{row.phone}</div>}
                     </td>
                     <td className="px-3 py-3 text-gray-500">
                       {new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </td>
-                    <td className="px-3 py-3 text-right font-semibold">
+                    <td className="px-3 py-3 text-right finance-input">
                       ₹{row.principal.toLocaleString('en-IN')}
                     </td>
-                    <td className="px-3 py-3 text-right text-gray-500 font-semibold">
+                    <td className="px-3 py-3 text-right text-gray-500 finance-input">
                       ₹{row.interestAmount.toLocaleString('en-IN')} <span className="text-[9px]">({row.interestRate}%)</span>
                     </td>
-                    <td className="px-3 py-3 text-right font-bold text-gray-900">
+                    <td className="px-3 py-3 text-right text-gray-900 finance-input">
                       ₹{row.totalRepayable.toLocaleString('en-IN')}
                     </td>
-                    <td className="px-3 py-3 text-right font-bold text-green-600">
+                    <td className="px-3 py-3 text-right text-green-600 finance-input">
                       ₹{row.totalCollected.toLocaleString('en-IN')}
                     </td>
-                    <td className="px-3 py-3 text-right font-bold text-orange-700">
+                    <td className="px-3 py-3 text-right text-orange-700 finance-input">
                       ₹{row.outstanding.toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-center">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                        row.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full ${ row.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' } finance-header-time`}>
                         {row.status}
                       </span>
                     </td>
@@ -185,8 +183,8 @@ const HPLedger: React.FC = () => {
                 ))}
               </tbody>
               <tfoot className="bg-gray-50 border-t-2 border-gray-200">
-                <tr className="font-extrabold text-gray-900 text-xs md:text-sm">
-                  <td colSpan={3} className="px-3 py-3 text-right uppercase">Total:</td>
+                <tr className="text-gray-900 md:text-sm finance-header-time">
+                  <td colSpan={3} className="px-3 py-3 text-right finance-input uppercase">Total:</td>
                   <td className="px-3 py-3 text-right">₹{filteredRows.reduce((sum, r) => sum + r.principal, 0).toLocaleString('en-IN')}</td>
                   <td className="px-3 py-3 text-right text-gray-500">₹{filteredRows.reduce((sum, r) => sum + r.interestAmount, 0).toLocaleString('en-IN')}</td>
                   <td className="px-3 py-3 text-right">₹{filteredRows.reduce((sum, r) => sum + r.totalRepayable, 0).toLocaleString('en-IN')}</td>
@@ -209,50 +207,48 @@ const HPLedger: React.FC = () => {
       >
         {filteredRows.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
+            <table className="min-w-full divide-y divide-gray-200 md:text-sm finance-caption">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="finance-table-header">Loan ID</th>
-                  <th className="finance-table-header">Customer</th>
-                  <th className="finance-table-header">Disbursed</th>
-                  <th className="finance-table-header text-right">Principal</th>
-                  <th className="finance-table-header text-right">Interest</th>
-                  <th className="finance-table-header text-right">Total Repayable</th>
-                  <th className="finance-table-header text-right">Collected (Cr)</th>
-                  <th className="finance-table-header text-right">Receivable (Dr)</th>
-                  <th className="finance-table-header text-center">Status</th>
+                  <th className="finance-small-label uppercase">Loan ID</th>
+                  <th className="finance-small-label uppercase">Customer</th>
+                  <th className="finance-small-label uppercase">Disbursed</th>
+                  <th className="text-right finance-small-label uppercase">Principal</th>
+                  <th className="text-right finance-small-label uppercase">Interest</th>
+                  <th className="text-right finance-small-label uppercase">Total Repayable</th>
+                  <th className="text-right finance-small-label uppercase">Collected (Cr)</th>
+                  <th className="text-right finance-small-label uppercase">Receivable (Dr)</th>
+                  <th className="text-center finance-small-label uppercase">Status</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredRows.map(row => (
                   <tr key={row.id} className="hover:bg-gray-50/50">
-                    <td className="px-3 py-3 font-bold text-gray-900 font-mono">{row.loanId}</td>
+                    <td className="px-3 py-3 text-gray-900 font-mono finance-input">{row.loanId}</td>
                     <td className="px-3 py-3">
-                      <div className="font-bold text-gray-900">{row.customerName}</div>
-                      {row.phone && <div className="text-[10px] text-gray-400 mt-0.5">{row.phone}</div>}
+                      <div className="text-gray-900 finance-input">{row.customerName}</div>
+                      {row.phone && <div className="text-gray-400 mt-0.5 finance-small-label">{row.phone}</div>}
                     </td>
                     <td className="px-3 py-3 text-gray-500">
                       {new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </td>
-                    <td className="px-3 py-3 text-right font-semibold">
+                    <td className="px-3 py-3 text-right finance-input">
                       ₹{row.principal.toLocaleString('en-IN')}
                     </td>
-                    <td className="px-3 py-3 text-right text-gray-500 font-semibold">
+                    <td className="px-3 py-3 text-right text-gray-500 finance-input">
                       ₹{row.interestAmount.toLocaleString('en-IN')} <span className="text-[9px]">({row.interestRate}%)</span>
                     </td>
-                    <td className="px-3 py-3 text-right font-bold text-gray-900">
+                    <td className="px-3 py-3 text-right text-gray-900 finance-input">
                       ₹{row.totalRepayable.toLocaleString('en-IN')}
                     </td>
-                    <td className="px-3 py-3 text-right font-bold text-green-600">
+                    <td className="px-3 py-3 text-right text-green-600 finance-input">
                       ₹{row.totalCollected.toLocaleString('en-IN')}
                     </td>
-                    <td className="px-3 py-3 text-right font-bold text-orange-700">
+                    <td className="px-3 py-3 text-right text-orange-700 finance-input">
                       ₹{row.outstanding.toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-center">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                        row.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full ${ row.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' } finance-header-time`}>
                         {row.status}
                       </span>
                     </td>
@@ -260,8 +256,8 @@ const HPLedger: React.FC = () => {
                 ))}
               </tbody>
               <tfoot className="bg-gray-50 border-t-2 border-gray-200">
-                <tr className="font-extrabold text-gray-900 text-xs md:text-sm">
-                  <td colSpan={3} className="px-3 py-3 text-right uppercase">Total:</td>
+                <tr className="text-gray-900 md:text-sm finance-header-time">
+                  <td colSpan={3} className="px-3 py-3 text-right finance-input uppercase">Total:</td>
                   <td className="px-3 py-3 text-right">₹{filteredRows.reduce((sum, r) => sum + r.principal, 0).toLocaleString('en-IN')}</td>
                   <td className="px-3 py-3 text-right text-gray-500">₹{filteredRows.reduce((sum, r) => sum + r.interestAmount, 0).toLocaleString('en-IN')}</td>
                   <td className="px-3 py-3 text-right">₹{filteredRows.reduce((sum, r) => sum + r.totalRepayable, 0).toLocaleString('en-IN')}</td>

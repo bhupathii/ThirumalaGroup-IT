@@ -352,34 +352,34 @@ const CashBook: React.FC = () => {
       {/* Top Header Actions Bar */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5">
         <div>
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+          <div className="text-slate-400 flex items-center gap-1.5 finance-small-label uppercase">
             <span>DASHBOARD</span>
             <span>/</span>
             <span className="text-slate-600">CASH BOOK</span>
           </div>
-          <h1 className="finance-page-title mt-1">CASH BOOK</h1>
-          <p className="finance-page-subtitle mt-0.5">
+          <h1 className="mt-1 finance-h1">CASH BOOK</h1>
+          <p className="mt-0.5 finance-small-label uppercase">
             DAY-BOOK ENTRIES · CREDIT / DEBIT POSTED TO GENERAL LEDGER
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/finance')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
           </button>
           <button
             onClick={handleDeleteAll}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-red-600 text-white border border-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white border border-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-sm finance-header-time"
           >
             <Trash2 className="w-3.5 h-3.5" />
             DELETE ALL ENTRIES
           </button>
           <button
             onClick={() => setShowPrintModal(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm finance-button uppercase"
           >
             <Printer className="w-3.5 h-3.5" />
             PRINT
@@ -394,12 +394,12 @@ const CashBook: React.FC = () => {
         <div className="lg:col-span-5 space-y-6">
           <Card
             title={
-              <span className="text-xs font-black text-slate-900 tracking-wider uppercase">
+              <span className="text-slate-900 finance-header-time uppercase">
                 {editId ? 'EDIT ENTRY' : 'NEW ENTRY'}
               </span>
             }
             subtitle={
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">
+              <span className="text-slate-400 finance-small-label uppercase">
                 Every field except account number is required
               </span>
             }
@@ -428,14 +428,14 @@ const CashBook: React.FC = () => {
 
               {/* Head of Account Select Dropdown */}
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   HEAD OF A/C <span className="text-red-500 ml-0.5">*</span>
                 </label>
                 <select
                   value={headOfAccount}
                   onChange={(e) => handleAccountChange(e.target.value)}
                   required
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-850 focus:ring-1 focus:ring-slate-955 focus:outline-none h-10 shadow-sm"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-850 focus:ring-1 focus:ring-slate-955 focus:outline-none h-10 shadow-sm finance-header-time"
                 >
                   <option value="">SELECT...</option>
                   {accounts.map(acc => (
@@ -449,7 +449,7 @@ const CashBook: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAccountModal(true)}
-                  className="mt-2 inline-flex items-center gap-1 text-[10px] font-extrabold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider"
+                  className="mt-2 inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors finance-small-label uppercase"
                 >
                   <Plus className="w-3 h-3" />
                   + New Account
@@ -458,7 +458,7 @@ const CashBook: React.FC = () => {
 
               {/* Particulars */}
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   PARTICULARS <span className="text-red-500 ml-0.5">*</span>
                 </label>
                 <textarea
@@ -466,7 +466,7 @@ const CashBook: React.FC = () => {
                   onChange={(e) => setParticulars(e.target.value)}
                   placeholder="Enter details of the transaction"
                   required
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-855 focus:ring-1 focus:ring-slate-950 focus:outline-none h-24 shadow-sm"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-855 focus:ring-1 focus:ring-slate-950 focus:outline-none h-24 shadow-sm finance-header-time"
                 />
               </div>
 
@@ -497,7 +497,7 @@ const CashBook: React.FC = () => {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 finance-button uppercase"
                 >
                   <Save className="w-3.5 h-3.5" />
                   {saving ? 'SAVING...' : editId ? 'UPDATE ENTRY' : 'SAVE ENTRY'}
@@ -505,7 +505,7 @@ const CashBook: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleReset(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   {editId ? 'CANCEL' : 'RESET'}
@@ -524,24 +524,24 @@ const CashBook: React.FC = () => {
             
             {/* Total Credits */}
             <div className="bg-white rounded-lg p-4 shadow-sm border border-emerald-150">
-              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block">TOTAL CREDITS</span>
-              <span className="text-xl font-bold text-emerald-700 block mt-1">
+              <span className="text-emerald-600 block finance-small-label uppercase">TOTAL CREDITS</span>
+              <span className="text-emerald-700 block mt-1 finance-h1">
                 ₹{summaries.totalCredits.toLocaleString('en-IN')}
               </span>
             </div>
 
             {/* Total Debits */}
             <div className="bg-white rounded-lg p-4 shadow-sm border border-rose-150">
-              <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest block">TOTAL DEBITS</span>
-              <span className="text-xl font-bold text-rose-700 block mt-1">
+              <span className="text-rose-600 block finance-small-label uppercase">TOTAL DEBITS</span>
+              <span className="text-rose-700 block mt-1 finance-h1">
                 ₹{summaries.totalDebits.toLocaleString('en-IN')}
               </span>
             </div>
 
             {/* Net Balance */}
             <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-250">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">NET</span>
-              <span className={`text-xl font-bold block mt-1 ${summaries.net >= 0 ? 'text-slate-900' : 'text-rose-700'}`}>
+              <span className="text-slate-500 block finance-small-label uppercase">NET</span>
+              <span className={`block mt-1 ${summaries.net >= 0 ? 'text-slate-900' : 'text-rose-700'} finance-h1`}>
                 ₹{summaries.net.toLocaleString('en-IN')}
               </span>
             </div>
@@ -552,7 +552,7 @@ const CashBook: React.FC = () => {
           <Card
             title={
               <div className="flex items-center justify-between w-full">
-                <span className="text-xs font-black text-slate-900 tracking-wider uppercase">
+                <span className="text-slate-900 finance-header-time uppercase">
                   RECENT ENTRIES
                 </span>
                 
@@ -560,7 +560,7 @@ const CashBook: React.FC = () => {
                 <select
                   value={sortOrder}
                   onChange={(e) => setSortOrder(e.target.value as 'desc' | 'asc')}
-                  className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[10px] font-black text-slate-700 uppercase tracking-wider focus:outline-none shadow-sm cursor-pointer"
+                  className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-700 focus:outline-none shadow-sm cursor-pointer finance-small-label uppercase"
                 >
                   <option value="desc">NEWEST FIRST</option>
                   <option value="asc">OLDEST FIRST</option>
@@ -568,7 +568,7 @@ const CashBook: React.FC = () => {
               </div>
             }
             subtitle={
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">
+              <span className="text-slate-400 finance-small-label uppercase">
                 Showing {filteredEntries.length} of {entries.length} records
               </span>
             }
@@ -584,7 +584,7 @@ const CashBook: React.FC = () => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Filter by head, particulars, date, account..."
-                  className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-850 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-950 shadow-sm"
+                  className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-slate-850 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-950 shadow-sm finance-header-time"
                 />
               </div>
 
@@ -592,7 +592,7 @@ const CashBook: React.FC = () => {
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-16 space-y-3">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-slate-900"></div>
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Loading cash book entries...</span>
+                  <span className="text-slate-400 finance-header-time uppercase">Loading cash book entries...</span>
                 </div>
               ) : filteredEntries.length === 0 ? (
                 <div className="text-center py-16 border border-dashed border-slate-200 rounded-xl space-y-4 bg-slate-50/50">
@@ -600,34 +600,34 @@ const CashBook: React.FC = () => {
                     <Info className="w-8 h-8 text-slate-300" />
                   </div>
                   <div>
-                    <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">NO ENTRIES</h3>
-                    <p className="finance-page-subtitle">
+                    <h3 className="text-slate-700 finance-header-time uppercase">NO ENTRIES</h3>
+                    <p className="finance-small-label uppercase">
                       Post an entry from the form on the left.
                     </p>
                   </div>
                 </div>
               ) : (
                 <div className="overflow-x-auto border border-slate-150 rounded-xl">
-                  <table className="min-w-full divide-y divide-slate-150 text-xs">
+                  <table className="min-w-full divide-y divide-slate-150 finance-caption">
                     <thead>
                       <tr className="bg-slate-50">
-                        <th className="finance-table-header">Date</th>
-                        <th className="finance-table-header">Head of A/C</th>
-                        <th className="finance-table-header">Acc No</th>
-                        <th className="finance-table-header">Particulars</th>
-                        <th className="finance-table-header text-right">Credit</th>
-                        <th className="finance-table-header text-right">Debit</th>
-                        <th className="finance-table-header">By</th>
-                        <th className="finance-table-header text-right">Actions</th>
+                        <th className="finance-small-label uppercase">Date</th>
+                        <th className="finance-small-label uppercase">Head of A/C</th>
+                        <th className="finance-small-label uppercase">Acc No</th>
+                        <th className="finance-small-label uppercase">Particulars</th>
+                        <th className="text-right finance-small-label uppercase">Credit</th>
+                        <th className="text-right finance-small-label uppercase">Debit</th>
+                        <th className="finance-small-label uppercase">By</th>
+                        <th className="text-right finance-small-label uppercase">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
                       {filteredEntries.map(e => (
                         <tr key={e.id} className="hover:bg-slate-50/20">
-                          <td className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">
+                          <td className="px-3 py-3 text-slate-600 whitespace-nowrap finance-input">
                             {e.entry_date.split('-').reverse().join('/')}
                           </td>
-                          <td className="px-3 py-3 font-bold text-slate-900">
+                          <td className="px-3 py-3 text-slate-900 finance-input">
                             {e.head_of_account}
                           </td>
                           <td className="px-3 py-3 font-mono text-slate-600">
@@ -636,13 +636,13 @@ const CashBook: React.FC = () => {
                           <td className="px-3 py-3 text-slate-700 max-w-[200px] break-words">
                             {e.particulars}
                           </td>
-                          <td className="px-3 py-3 text-right font-bold text-emerald-600 whitespace-nowrap">
+                          <td className="px-3 py-3 text-right text-emerald-600 whitespace-nowrap finance-input">
                             {e.credit > 0 ? `₹${e.credit.toLocaleString('en-IN')}` : '—'}
                           </td>
-                          <td className="px-3 py-3 text-right font-bold text-rose-600 whitespace-nowrap">
+                          <td className="px-3 py-3 text-right text-rose-600 whitespace-nowrap finance-input">
                             {e.debit > 0 ? `₹${e.debit.toLocaleString('en-IN')}` : '—'}
                           </td>
-                          <td className="px-3 py-3 text-slate-500 font-semibold uppercase tracking-wide">
+                          <td className="px-3 py-3 text-slate-500 finance-input uppercase">
                             {e.created_by || 'Staff'}
                           </td>
                           <td className="px-3 py-3 text-right whitespace-nowrap">
@@ -682,7 +682,7 @@ const CashBook: React.FC = () => {
           <div className="bg-white rounded-xl shadow-lg border border-slate-150 max-w-md w-full overflow-hidden">
             
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">CREATE NEW ACCOUNT</h3>
+              <h3 className="text-slate-900 finance-header-time uppercase">CREATE NEW ACCOUNT</h3>
               <button
                 onClick={() => setShowAccountModal(false)}
                 className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
@@ -713,14 +713,14 @@ const CashBook: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAccountModal(false)}
-                  className="px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+                  className="px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
                 >
                   CANCEL
                 </button>
                 <button
                   type="submit"
                   disabled={savingAccount}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 finance-button uppercase"
                 >
                   <Save className="w-3.5 h-3.5" />
                   {savingAccount ? 'SAVING...' : 'CREATE ACCOUNT'}
@@ -742,9 +742,9 @@ const CashBook: React.FC = () => {
         title="Print Preview (Cash Day-Book)"
         documentTitle="CASH DAY-BOOK STATEMENT"
       >
-        <div className="font-sans text-xs">
+        <div className="font-sans finance-caption">
           {/* Period details */}
-          <div className="grid grid-cols-2 gap-4 py-4 text-xs font-bold uppercase tracking-wider">
+          <div className="grid grid-cols-2 gap-4 py-4 finance-header-time uppercase">
             <div>
               <span className="text-slate-500">FILTER QUERY:</span> {searchQuery.toUpperCase() || 'ALL RECORDS'}
             </div>
@@ -754,9 +754,9 @@ const CashBook: React.FC = () => {
           </div>
 
           {/* Table */}
-          <table className="min-w-full divide-y-2 divide-slate-900 text-xs border border-slate-900">
+          <table className="min-w-full divide-y-2 divide-slate-900 border border-slate-900 finance-caption">
             <thead>
-              <tr className="bg-slate-100 font-black uppercase text-slate-800">
+              <tr className="bg-slate-100 text-slate-800 finance-input uppercase">
                 <th className="border border-slate-900 px-2 py-2 text-left">Date</th>
                 <th className="border border-slate-900 px-2 py-2 text-left">Head of A/C</th>
                 <th className="border border-slate-900 px-2 py-2 text-left">Acc No</th>
@@ -768,17 +768,17 @@ const CashBook: React.FC = () => {
             <tbody className="divide-y divide-slate-800">
               {filteredEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-2 py-8 text-center text-slate-400 font-bold uppercase">
+                  <td colSpan={6} className="px-2 py-8 text-center text-slate-400 finance-input uppercase">
                     No transactions recorded.
                   </td>
                 </tr>
               ) : (
                 filteredEntries.map(e => (
-                  <tr key={e.id} className="font-semibold text-slate-900">
+                  <tr key={e.id} className="text-slate-900 finance-input">
                     <td className="border border-slate-900 px-2 py-2 whitespace-nowrap">
                       {e.entry_date.split('-').reverse().join('/')}
                     </td>
-                    <td className="border border-slate-900 px-2 py-2 font-bold">
+                    <td className="border border-slate-900 px-2 py-2 finance-input">
                       {e.head_of_account.toUpperCase()}
                     </td>
                     <td className="border border-slate-900 px-2 py-2 font-mono">
@@ -787,24 +787,24 @@ const CashBook: React.FC = () => {
                     <td className="border border-slate-900 px-2 py-2 max-w-[250px] break-words">
                       {e.particulars.toUpperCase()}
                     </td>
-                    <td className="border border-slate-900 px-2 py-2 text-right font-bold">
+                    <td className="border border-slate-900 px-2 py-2 text-right finance-input">
                       {e.credit > 0 ? `₹${e.credit.toLocaleString('en-IN')}` : '—'}
                     </td>
-                    <td className="border border-slate-900 px-2 py-2 text-right font-bold">
+                    <td className="border border-slate-900 px-2 py-2 text-right finance-input">
                       {e.debit > 0 ? `₹${e.debit.toLocaleString('en-IN')}` : '—'}
                     </td>
                   </tr>
                 ))
               )}
               {/* Totals Summary Row */}
-              <tr className="bg-slate-100 font-bold border-t-2 border-slate-900">
+              <tr className="bg-slate-100 border-t-2 border-slate-900 finance-input">
                 <td colSpan={4} className="border border-slate-900 px-2 py-2 text-right">TOTAL CASH FLOW:</td>
-                <td className="border border-slate-900 px-2 py-2 text-right font-black">₹{summaries.totalCredits.toLocaleString('en-IN')}</td>
-                <td className="border border-slate-900 px-2 py-2 text-right font-black">₹{summaries.totalDebits.toLocaleString('en-IN')}</td>
+                <td className="border border-slate-900 px-2 py-2 text-right finance-input">₹{summaries.totalCredits.toLocaleString('en-IN')}</td>
+                <td className="border border-slate-900 px-2 py-2 text-right finance-input">₹{summaries.totalDebits.toLocaleString('en-IN')}</td>
               </tr>
-              <tr className="bg-slate-200 font-bold">
+              <tr className="bg-slate-200 finance-input">
                 <td colSpan={4} className="border border-slate-900 px-2 py-2 text-right">NET BALANCE:</td>
-                <td colSpan={2} className="border border-slate-900 px-2 py-2 text-center text-sm font-black">
+                <td colSpan={2} className="border border-slate-900 px-2 py-2 text-center finance-sidebar-link">
                   ₹{summaries.net.toLocaleString('en-IN')}
                 </td>
               </tr>
@@ -812,14 +812,14 @@ const CashBook: React.FC = () => {
           </table>
 
           {/* Signatures */}
-          <div className="flex justify-between items-center mt-20 pt-8 border-t border-slate-300 text-xs font-bold uppercase tracking-wider">
+          <div className="flex justify-between items-center mt-20 pt-8 border-t border-slate-300 finance-header-time uppercase">
             <div>
               <p>CASHIER SIGNATURE</p>
-              <p className="text-[10px] text-slate-400 mt-8">AUTHORIZED SIGNATORY</p>
+              <p className="text-slate-400 mt-8 finance-small-label">AUTHORIZED SIGNATORY</p>
             </div>
             <div className="text-right">
               <p>VERIFIED BY MANAGER</p>
-              <p className="text-[10px] text-slate-400 mt-8">PARTNER AUDIT SIGN</p>
+              <p className="text-slate-400 mt-8 finance-small-label">PARTNER AUDIT SIGN</p>
             </div>
           </div>
         </div>

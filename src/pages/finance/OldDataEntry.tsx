@@ -583,22 +583,22 @@ const OldDataEntry: React.FC = () => {
       {/* Top Header Actions Bar */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5 print:hidden">
         <div>
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+          <div className="text-slate-400 flex items-center gap-1.5 finance-small-label uppercase">
             <span>DASHBOARD</span>
             <span>/</span>
             <span>LOANS</span>
             <span>/</span>
             <span className="text-slate-600">OLD-DATA ENTRY</span>
           </div>
-          <h1 className="finance-page-title mt-1">OLD-DATA ENTRY</h1>
-          <p className="finance-page-subtitle mt-0.5">
+          <h1 className="mt-1 finance-h1">OLD-DATA ENTRY</h1>
+          <p className="mt-0.5 finance-small-label uppercase">
             MIGRATE AN EXISTING CUSTOMER'S LOAN + FULL RENEWAL HISTORY — SYSTEM COMPUTES FORWARD DYNAMICALLY
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/finance')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
@@ -606,7 +606,7 @@ const OldDataEntry: React.FC = () => {
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 px-4 py-2 finance-button-text bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 finance-button uppercase"
           >
             <Check className="w-3.5 h-3.5" />
             {saving ? 'SAVING...' : 'CREATE LOAN + POST LEDGER'}
@@ -622,19 +622,19 @@ const OldDataEntry: React.FC = () => {
           
           {/* Card 1: Customer Details */}
           <Card 
-            title={<span className="text-xs font-black text-slate-900 tracking-wider uppercase">1. CUSTOMER</span>} 
-            subtitle={<span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">PICK EXISTING TO AUTO-FILL, OR FILL IN MANUALLY</span>}
+            title={<span className="text-slate-900 finance-header-time uppercase">1. CUSTOMER</span>} 
+            subtitle={<span className="text-slate-400 finance-small-label uppercase">PICK EXISTING TO AUTO-FILL, OR FILL IN MANUALLY</span>}
             className="shadow-sm border-slate-150 rounded-xl"
           >
             <div className="space-y-4">
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   PICK EXISTING CUSTOMER
                 </label>
                 <select
                   value={selectedCustomerId}
                   onChange={(e) => handleCustomerSelect(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-850 focus:ring-1 focus:ring-slate-950 focus:outline-none"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-850 focus:ring-1 focus:ring-slate-950 focus:outline-none finance-header-time"
                 >
                   <option value="">— FRESH CUSTOMER —</option>
                   {customers.map((c) => (
@@ -681,7 +681,7 @@ const OldDataEntry: React.FC = () => {
               </div>
 
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   ADDRESS
                 </label>
                 <textarea
@@ -689,20 +689,20 @@ const OldDataEntry: React.FC = () => {
                   onChange={(e) => setCustAddress(e.target.value)}
                   placeholder="Address details"
                   readOnly={!!selectedCustomerId}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-850 focus:ring-1 focus:ring-slate-950 focus:outline-none h-16 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-850 focus:ring-1 focus:ring-slate-950 focus:outline-none h-16 disabled:bg-slate-50 disabled:cursor-not-allowed finance-header-time"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     PARTNER
                   </label>
                   <select
                     value={selectedPartnerId}
                     onChange={(e) => handlePartnerSelect(e.target.value)}
                     disabled={!!selectedCustomerId}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-850 focus:ring-1 focus:ring-slate-950 focus:outline-none disabled:bg-slate-50 disabled:cursor-not-allowed"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-850 focus:ring-1 focus:ring-slate-950 focus:outline-none disabled:bg-slate-50 disabled:cursor-not-allowed finance-header-time"
                   >
                     <option value="">— SELECT PARTNER —</option>
                     {partners.map((p) => (
@@ -724,20 +724,20 @@ const OldDataEntry: React.FC = () => {
 
           {/* Card 2: Loan Basics */}
           <Card
-            title={<span className="text-xs font-black text-slate-900 tracking-wider uppercase">2. LOAN BASICS (AS ORIGINALLY DISBURSED)</span>}
-            subtitle={<span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">THESE CREATE THE FIRST 3 DAYBOOK ROWS: CD A/C (DEBIT) + CD COMMISSION (3% HOLD) + CD DOC CHARGES</span>}
+            title={<span className="text-slate-900 finance-header-time uppercase">2. LOAN BASICS (AS ORIGINALLY DISBURSED)</span>}
+            subtitle={<span className="text-slate-400 finance-small-label uppercase">THESE CREATE THE FIRST 3 DAYBOOK ROWS: CD A/C (DEBIT) + CD COMMISSION (3% HOLD) + CD DOC CHARGES</span>}
             className="shadow-sm border-slate-150 rounded-xl"
           >
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="finance-label">
+                  <label className="finance-caption uppercase">
                     LEDGER TYPE
                   </label>
                   <select
                     value={ledgerType}
                     onChange={(e) => setLedgerType(e.target.value as 'CD' | 'STBD' | 'HP' | 'TBD' | 'L')}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-850 focus:ring-1 focus:ring-slate-950 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-850 focus:ring-1 focus:ring-slate-950 focus:outline-none finance-header-time"
                   >
                     <option value="CD">CASH DEPOSIT (CD)</option>
                     <option value="HP">HP LEDGER</option>
@@ -810,14 +810,14 @@ const OldDataEntry: React.FC = () => {
               </div>
 
               <div>
-                <label className="finance-label">
+                <label className="finance-caption uppercase">
                   PARTICULARS
                 </label>
                 <textarea
                   value={particulars}
                   onChange={(e) => setParticulars(e.target.value)}
                   placeholder="Migration details"
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-850 focus:ring-1 focus:ring-slate-955 focus:outline-none h-16"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-850 focus:ring-1 focus:ring-slate-955 focus:outline-none h-16 finance-header-time"
                 />
               </div>
             </div>
@@ -825,13 +825,13 @@ const OldDataEntry: React.FC = () => {
 
           {/* Card 3: Past Renewals */}
           <Card
-            title={<span className="text-xs font-black text-slate-900 tracking-wider uppercase">3. PAST RENEWALS (FROM ACCESS CD LEDGER)</span>}
-            subtitle={<span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">EACH ROW = ONE DATE POSTING CD COMMISSION + PENALTY CD PAIR. DAYS AUTO-CALC FROM PREVIOUS DATE.</span>}
+            title={<span className="text-slate-900 finance-header-time uppercase">3. PAST RENEWALS (FROM ACCESS CD LEDGER)</span>}
+            subtitle={<span className="text-slate-400 finance-small-label uppercase">EACH ROW = ONE DATE POSTING CD COMMISSION + PENALTY CD PAIR. DAYS AUTO-CALC FROM PREVIOUS DATE.</span>}
             headerActions={
               <button
                 type="button"
                 onClick={handleAddRenewal}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 finance-button-text bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
               >
                 <Plus className="w-3.5 h-3.5 text-slate-550" />
                 ADD RENEWAL
@@ -842,22 +842,22 @@ const OldDataEntry: React.FC = () => {
             {renewals.length === 0 ? (
               <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-400 space-y-2">
                 <Info className="w-8 h-8 mx-auto text-slate-350" />
-                <div className="text-xs font-black uppercase tracking-wider text-slate-700">NO RENEWALS YET</div>
-                <div className="text-[10px] font-bold text-slate-450 max-w-sm mx-auto leading-normal">
+                <div className="text-slate-700 finance-header-time uppercase">NO RENEWALS YET</div>
+                <div className="text-slate-450 max-w-sm mx-auto finance-small-label">
                   CLICK ADD RENEWAL FOR EACH ROW IN THE OLD ACCESS CD LEDGER. LEAVE BLANK IF NO PAST RENEWALS.
                 </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-100 text-xs md:text-sm">
+                <table className="min-w-full divide-y divide-slate-100 md:text-sm finance-caption">
                   <thead>
                     <tr className="bg-slate-50/50">
-                      <th className="finance-table-header">Date</th>
-                      <th className="finance-table-header">Days</th>
-                      <th className="finance-table-header">Interest Paid</th>
-                      <th className="finance-table-header">Penalty Paid</th>
-                      <th className="finance-table-header">Partial Paid</th>
-                      <th className="finance-table-header text-center">Action</th>
+                      <th className="finance-small-label uppercase">Date</th>
+                      <th className="finance-small-label uppercase">Days</th>
+                      <th className="finance-small-label uppercase">Interest Paid</th>
+                      <th className="finance-small-label uppercase">Penalty Paid</th>
+                      <th className="finance-small-label uppercase">Partial Paid</th>
+                      <th className="text-center finance-small-label uppercase">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
@@ -868,10 +868,10 @@ const OldDataEntry: React.FC = () => {
                             type="date"
                             value={r.date}
                             onChange={(e) => handleRenewalChange(r.id, 'date', e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-850 focus:outline-none focus:ring-1 focus:ring-slate-950"
+                            className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-slate-850 focus:outline-none focus:ring-1 focus:ring-slate-950 finance-header-time"
                           />
                         </td>
-                        <td className="px-3 py-2 font-mono font-bold text-slate-600 text-xs shrink-0">
+                        <td className="px-3 py-2 font-mono text-slate-600 shrink-0 finance-header-time">
                           {computedRenewals[index]?.days || 0} days
                         </td>
                         <td className="px-3 py-2">
@@ -880,7 +880,7 @@ const OldDataEntry: React.FC = () => {
                             value={r.interest}
                             onChange={(e) => handleRenewalChange(r.id, 'interest', e.target.value)}
                             placeholder="₹0"
-                            className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-850 focus:outline-none focus:ring-1 focus:ring-slate-950"
+                            className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-slate-850 focus:outline-none focus:ring-1 focus:ring-slate-950 finance-header-time"
                           />
                         </td>
                         <td className="px-3 py-2">
@@ -889,7 +889,7 @@ const OldDataEntry: React.FC = () => {
                             value={r.penalty}
                             onChange={(e) => handleRenewalChange(r.id, 'penalty', e.target.value)}
                             placeholder="₹0"
-                            className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-850 focus:outline-none focus:ring-1 focus:ring-slate-955"
+                            className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-slate-850 focus:outline-none focus:ring-1 focus:ring-slate-955 finance-header-time"
                           />
                         </td>
                         <td className="px-3 py-2">
@@ -898,7 +898,7 @@ const OldDataEntry: React.FC = () => {
                             value={r.partialPaid}
                             onChange={(e) => handleRenewalChange(r.id, 'partialPaid', e.target.value)}
                             placeholder="₹0"
-                            className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-850 focus:outline-none focus:ring-1 focus:ring-slate-955"
+                            className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-slate-850 focus:outline-none focus:ring-1 focus:ring-slate-955 finance-header-time"
                           />
                         </td>
                         <td className="px-3 py-2 text-center">
@@ -920,46 +920,46 @@ const OldDataEntry: React.FC = () => {
 
           {/* Card 4: Ledger Preview */}
           <Card
-            title={<span className="text-xs font-black text-slate-900 tracking-wider uppercase">4. LEDGER PREVIEW — EXACTLY WHAT WILL POST</span>}
-            subtitle={<span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">MIRRORS THE OLD ACCESS CD LEDGER LAYOUT</span>}
+            title={<span className="text-slate-900 finance-header-time uppercase">4. LEDGER PREVIEW — EXACTLY WHAT WILL POST</span>}
+            subtitle={<span className="text-slate-400 finance-small-label uppercase">MIRRORS THE OLD ACCESS CD LEDGER LAYOUT</span>}
             className="shadow-sm border-slate-150 rounded-xl"
           >
             {ledgerPreviewRows.length === 0 ? (
               <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-400 space-y-2">
                 <Info className="w-8 h-8 mx-auto text-slate-350" />
-                <div className="text-xs font-black uppercase tracking-wider text-slate-700">NOTHING TO PREVIEW YET</div>
-                <div className="text-[10px] font-bold text-slate-450 max-w-sm mx-auto leading-normal">
+                <div className="text-slate-700 finance-header-time uppercase">NOTHING TO PREVIEW YET</div>
+                <div className="text-slate-450 max-w-sm mx-auto finance-small-label">
                   ENTER PRINCIPAL TO SEE THE LEDGER ROWS.
                 </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-150 text-xs md:text-sm">
+                <table className="min-w-full divide-y divide-slate-150 md:text-sm finance-caption">
                   <thead>
                     <tr className="bg-slate-50/50">
-                      <th className="px-3 py-2.5 text-left font-bold text-slate-500 uppercase tracking-wider">Date</th>
-                      <th className="px-3 py-2.5 text-left font-bold text-slate-500 uppercase tracking-wider">Particulars</th>
-                      <th className="px-3 py-2.5 text-right font-bold text-slate-500 uppercase tracking-wider">Debit (Dr)</th>
-                      <th className="px-3 py-2.5 text-right font-bold text-slate-500 uppercase tracking-wider">Credit (Cr)</th>
-                      <th className="px-3 py-2.5 text-right font-bold text-slate-500 uppercase tracking-wider">Balance</th>
+                      <th className="px-3 py-2.5 text-left text-slate-500 finance-input uppercase">Date</th>
+                      <th className="px-3 py-2.5 text-left text-slate-500 finance-input uppercase">Particulars</th>
+                      <th className="px-3 py-2.5 text-right text-slate-500 finance-input uppercase">Debit (Dr)</th>
+                      <th className="px-3 py-2.5 text-right text-slate-500 finance-input uppercase">Credit (Cr)</th>
+                      <th className="px-3 py-2.5 text-right text-slate-500 finance-input uppercase">Balance</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
                     {ledgerPreviewRows.map((row, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/20">
-                        <td className="px-3 py-2.5 font-semibold text-slate-700">
+                        <td className="px-3 py-2.5 text-slate-700 finance-input">
                           {row.date ? new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}
                         </td>
-                        <td className="px-3 py-2.5 font-semibold text-slate-800">
+                        <td className="px-3 py-2.5 text-slate-800 finance-input">
                           {row.particulars}
                         </td>
-                        <td className="px-3 py-2.5 text-right font-bold text-red-650 font-mono">
+                        <td className="px-3 py-2.5 text-right text-red-650 font-mono finance-input">
                           {row.debit > 0 ? `₹${row.debit.toLocaleString('en-IN')}` : '-'}
                         </td>
-                        <td className="px-3 py-2.5 text-right font-bold text-green-650 font-mono">
+                        <td className="px-3 py-2.5 text-right text-green-650 font-mono finance-input">
                           {row.credit > 0 ? `₹${row.credit.toLocaleString('en-IN')}` : '-'}
                         </td>
-                        <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-900">
+                        <td className="px-3 py-2.5 text-right font-mono text-slate-900 finance-input">
                           ₹{row.balance.toLocaleString('en-IN')}
                         </td>
                       </tr>
@@ -977,71 +977,71 @@ const OldDataEntry: React.FC = () => {
           
           {/* Card 5: SUMMARY */}
           <Card
-            title={<span className="text-xs font-black text-slate-900 tracking-wider uppercase">SUMMARY</span>}
-            subtitle={<span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">WHAT GETS SAVED TO THE NEW SYSTEM</span>}
+            title={<span className="text-slate-900 finance-header-time uppercase">SUMMARY</span>}
+            subtitle={<span className="text-slate-400 finance-small-label uppercase">WHAT GETS SAVED TO THE NEW SYSTEM</span>}
             className="shadow-sm border-slate-150 rounded-xl"
           >
             <div className="space-y-3">
               {/* Principal Card */}
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest animate-pulse">PRINCIPAL</span>
-                <span className="text-base font-black text-slate-850 mt-1">
+                <span className="text-[9px] text-slate-400 animate-pulse finance-input uppercase">PRINCIPAL</span>
+                <span className="text-slate-850 mt-1 finance-brand">
                   ₹{parsedPrincipal.toLocaleString('en-IN')}
                 </span>
               </div>
 
               {/* Hold Card */}
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">HOLD ({holdPercent}%)</span>
-                <span className="text-base font-black text-slate-850 mt-1">
+                <span className="text-[9px] text-slate-400 finance-input uppercase">HOLD ({holdPercent}%)</span>
+                <span className="text-slate-850 mt-1 finance-brand">
                   ₹{holdAmount.toLocaleString('en-IN')}
                 </span>
               </div>
 
               {/* Doc Charges Card */}
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DOCUMENT CHARGES</span>
-                <span className="text-base font-black text-slate-850 mt-1">
+                <span className="text-[9px] text-slate-400 finance-input uppercase">DOCUMENT CHARGES</span>
+                <span className="text-slate-850 mt-1 finance-brand">
                   ₹{parsedDocCharges.toLocaleString('en-IN')}
                 </span>
               </div>
 
               {/* Net Disbursement Card */}
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">NET DISBURSEMENT</span>
-                <span className="text-base font-black text-green-650 mt-1">
+                <span className="text-[9px] text-slate-400 finance-input uppercase">NET DISBURSEMENT</span>
+                <span className="text-green-650 mt-1 finance-brand">
                   ₹{netDisbursement.toLocaleString('en-IN')}
                 </span>
               </div>
 
               {/* Renewals Entered Card */}
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">RENEWALS ENTERED</span>
-                <span className="text-base font-black text-slate-850 mt-1">
+                <span className="text-[9px] text-slate-400 finance-input uppercase">RENEWALS ENTERED</span>
+                <span className="text-slate-850 mt-1 finance-brand">
                   {renewalsCount}
                 </span>
               </div>
 
               {/* Interest Posted So Far Card */}
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">INTEREST POSTED SO FAR</span>
-                <span className="text-base font-black text-slate-850 mt-1">
+                <span className="text-[9px] text-slate-400 finance-input uppercase">INTEREST POSTED SO FAR</span>
+                <span className="text-slate-850 mt-1 finance-brand">
                   ₹{totalInterestPosted.toLocaleString('en-IN')}
                 </span>
               </div>
 
               {/* Penalty Posted So Far Card */}
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">PENALTY POSTED SO FAR</span>
-                <span className="text-base font-black text-slate-850 mt-1">
+                <span className="text-[9px] text-slate-400 finance-input uppercase">PENALTY POSTED SO FAR</span>
+                <span className="text-slate-850 mt-1 finance-brand">
                   ₹{totalPenaltyPosted.toLocaleString('en-IN')}
                 </span>
               </div>
 
               {/* Partial Collected Card */}
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">PARTIAL COLLECTED</span>
-                <span className="text-base font-black text-slate-850 mt-1">
+                <span className="text-[9px] text-slate-400 finance-input uppercase">PARTIAL COLLECTED</span>
+                <span className="text-slate-850 mt-1 finance-brand">
                   ₹{totalPartialCollected.toLocaleString('en-IN')}
                 </span>
               </div>
@@ -1049,20 +1049,20 @@ const OldDataEntry: React.FC = () => {
               {/* Accrued forward details card */}
               {loanDate && (
                 <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 flex flex-col space-y-1.5 mt-2">
-                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                  <span className="text-[9px] text-slate-500 flex items-center gap-1 finance-input uppercase">
                     <Info className="w-3.5 h-3.5 shrink-0 text-slate-500" /> ACCRUED FORWARD STATUS
                   </span>
-                  <div className="flex justify-between text-xs font-bold text-slate-600">
+                  <div className="flex justify-between text-slate-600 finance-header-time">
                     <span>Last Reference Date:</span>
                     <span>{lastReferenceDate ? new Date(lastReferenceDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</span>
                   </div>
-                  <div className="flex justify-between text-xs font-bold text-slate-600">
+                  <div className="flex justify-between text-slate-600 finance-header-time">
                     <span>Days elapsed to today:</span>
                     <span>{daysElapsedToToday} days</span>
                   </div>
-                  <div className="flex justify-between text-xs font-bold text-slate-700 border-t border-slate-200 pt-1.5 mt-1.5">
+                  <div className="flex justify-between text-slate-700 border-t border-slate-200 pt-1.5 mt-1.5 finance-header-time">
                     <span>Forward Accrued Interest:</span>
-                    <span className="font-extrabold text-[#0b1329]">₹{accruedForwardInterest.toLocaleString('en-IN')}</span>
+                    <span className="text-[#0b1329] finance-input">₹{accruedForwardInterest.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
               )}
@@ -1071,32 +1071,32 @@ const OldDataEntry: React.FC = () => {
 
           {/* Card 6: HOW THIS WORKS */}
           <Card
-            title={<span className="text-xs font-black text-slate-900 tracking-wider uppercase">HOW THIS WORKS</span>}
+            title={<span className="text-slate-900 finance-header-time uppercase">HOW THIS WORKS</span>}
             className="shadow-sm border-slate-150 rounded-xl"
           >
-            <div className="text-xs text-slate-650 space-y-3 font-semibold leading-relaxed">
+            <div className="text-slate-650 space-y-3 finance-header-time">
               <div className="flex gap-2">
-                <span className="font-black text-slate-800">1.</span>
+                <span className="text-slate-800 finance-input">1.</span>
                 <span>CREATES THE LOAN RECORD WITH ORIGINAL PRINCIPAL + LOAN DATE.</span>
               </div>
               <div className="flex gap-2 border-t border-slate-50 pt-2.5">
-                <span className="font-black text-slate-800">2.</span>
+                <span className="text-slate-800 finance-input">2.</span>
                 <span>
-                  AUTO-POSTS THE FIRST 3 DAYBOOK ROWS: <span className="bg-slate-50 border border-slate-200 px-1 py-0.5 rounded text-[10px] font-mono text-slate-700 font-bold">CD A/C (DEBIT)</span> + <span className="bg-slate-50 border border-slate-200 px-1 py-0.5 rounded text-[10px] font-mono text-slate-700 font-bold">CD COMMISSION (3% HOLD)</span> + <span className="bg-slate-50 border border-slate-200 px-1 py-0.5 rounded text-[10px] font-mono text-slate-700 font-bold">CD DOC CHARGES</span>.
+                  AUTO-POSTS THE FIRST 3 DAYBOOK ROWS: <span className="bg-slate-50 border border-slate-200 px-1 py-0.5 rounded font-mono text-slate-700 finance-small-label">CD A/C (DEBIT)</span> + <span className="bg-slate-50 border border-slate-200 px-1 py-0.5 rounded font-mono text-slate-700 finance-small-label">CD COMMISSION (3% HOLD)</span> + <span className="bg-slate-50 border border-slate-200 px-1 py-0.5 rounded font-mono text-slate-700 finance-small-label">CD DOC CHARGES</span>.
                 </span>
               </div>
               <div className="flex gap-2 border-t border-slate-50 pt-2.5">
-                <span className="font-black text-slate-800">3.</span>
+                <span className="text-slate-800 finance-input">3.</span>
                 <span>
-                  EACH PAST RENEWAL ROW POSTS <span className="bg-slate-50 border border-slate-200 px-1 py-0.5 rounded text-[10px] font-mono text-slate-700 font-bold">CD COMMISSION</span> + <span className="bg-slate-50 border border-slate-200 px-1 py-0.5 rounded text-[10px] font-mono text-slate-700 font-bold">PENALTY CD</span> AT THE HISTORICAL DATE.
+                  EACH PAST RENEWAL ROW POSTS <span className="bg-slate-50 border border-slate-200 px-1 py-0.5 rounded font-mono text-slate-700 finance-small-label">CD COMMISSION</span> + <span className="bg-slate-50 border border-slate-200 px-1 py-0.5 rounded font-mono text-slate-700 finance-small-label">PENALTY CD</span> AT THE HISTORICAL DATE.
                 </span>
               </div>
               <div className="flex gap-2 border-t border-slate-50 pt-2.5">
-                <span className="font-black text-slate-800">4.</span>
+                <span className="text-slate-800 finance-input">4.</span>
                 <span>SYSTEM THEN COMPUTES INTEREST/PENALTY/DUE FORWARD FROM LAST RENEWAL TO TODAY — DYNAMICALLY.</span>
               </div>
               <div className="flex gap-2 border-t border-slate-50 pt-2.5">
-                <span className="font-black text-slate-800">5.</span>
+                <span className="text-slate-800 finance-input">5.</span>
                 <span>REDIRECTS TO THE RENEWAL PAGE SO YOU CAN POST NEXT RENEWAL WHENEVER CUSTOMER COMES IN.</span>
               </div>
             </div>

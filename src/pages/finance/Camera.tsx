@@ -153,8 +153,8 @@ const Camera: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center border-b border-green-100 pb-4">
         <div>
-          <h1 className="finance-page-title">Camera Attachment</h1>
-          <p className="finance-page-subtitle">Capture customer/surety photos and link them to active loan records</p>
+          <h1 className="finance-h1">Camera Attachment</h1>
+          <p className="finance-small-label uppercase">Capture customer/surety photos and link them to active loan records</p>
         </div>
       </div>
 
@@ -163,13 +163,13 @@ const Camera: React.FC = () => {
         <Card title="Live Camera Capture" subtitle="Record customer profile or surety details">
           <div className="space-y-4">
             <div>
-              <label className="finance-label" >
+              <label className="finance-caption uppercase" >
                 Select Active Loan *
               </label>
               <select
                 value={selectedLoanId}
                 onChange={(e) => setSelectedLoanId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg p-2 font-bold focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-base text-gray-800"
+                className="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-800 finance-brand"
                 
               >
                 <option value="">-- Choose Loan (Customer Name) --</option>
@@ -180,29 +180,21 @@ const Camera: React.FC = () => {
             </div>
 
             <div>
-              <label className="finance-label" >
+              <label className="finance-caption uppercase" >
                 Photo Category *
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setPhotoType('Customer')}
-                  className={`py-2 px-4 rounded-lg font-bold border transition-all text-sm ${
-                    photoType === 'Customer'
-                      ? 'bg-green-100 text-green-700 border-green-300'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                  }`}
+                  className={`py-2 px-4 rounded-lg border transition-all ${ photoType === 'Customer' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' } finance-sidebar-link`}
                 >
                   Customer Photo
                 </button>
                 <button
                   type="button"
                   onClick={() => setPhotoType('Surety')}
-                  className={`py-2 px-4 rounded-lg font-bold border transition-all text-sm ${
-                    photoType === 'Surety'
-                      ? 'bg-green-100 text-green-700 border-green-300'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                  }`}
+                  className={`py-2 px-4 rounded-lg border transition-all ${ photoType === 'Surety' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' } finance-sidebar-link`}
                 >
                   Surety Photo
                 </button>
@@ -231,8 +223,8 @@ const Camera: React.FC = () => {
               {!cameraActive && !capturedImage && (
                 <div className="text-center p-4 text-gray-400">
                   <CameraIcon className="w-12 h-12 mx-auto stroke-1 mb-2 text-gray-500" />
-                  <p className="text-sm font-semibold">Camera is stopped</p>
-                  <p className="text-xs mt-1">Click Start Camera below to begin capturing</p>
+                  <p className="finance-section-heading">Camera is stopped</p>
+                  <p className="mt-1 finance-caption">Click Start Camera below to begin capturing</p>
                 </div>
               )}
             </div>
@@ -281,11 +273,11 @@ const Camera: React.FC = () => {
           {!selectedLoanId ? (
             <div className="flex flex-col items-center justify-center border border-dashed rounded-lg py-16 px-4 bg-gray-50/50">
               <AlertCircle className="w-10 h-10 text-gray-400 stroke-1 mb-2" />
-              <p className="finance-page-subtitle">No loan selected</p>
-              <p className="finance-page-subtitle">Select an active loan to inspect attached documents</p>
+              <p className="finance-small-label uppercase">No loan selected</p>
+              <p className="finance-small-label uppercase">Select an active loan to inspect attached documents</p>
             </div>
           ) : existingPhotos.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 text-sm">No photos attached to this loan yet</div>
+            <div className="text-center py-8 text-gray-400 finance-input">No photos attached to this loan yet</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {existingPhotos.map(photo => (
@@ -296,14 +288,12 @@ const Camera: React.FC = () => {
                       alt={photo.photo_type}
                       className="w-full h-full object-cover"
                     />
-                    <span className={`absolute top-2 left-2 px-2.5 py-0.5 rounded-full text-xs font-bold text-white shadow ${
-                      photo.photo_type === 'Customer' ? 'bg-green-600' : 'bg-blue-600'
-                    }`}>
+                    <span className={`absolute top-2 left-2 px-2.5 py-0.5 rounded-full text-white shadow ${ photo.photo_type === 'Customer' ? 'bg-green-600' : 'bg-blue-600' } finance-header-time`}>
                       {photo.photo_type}
                     </span>
                   </div>
                   <div className="p-3 border-t flex justify-between items-center bg-gray-50">
-                    <span className="text-[10px] text-gray-400 font-mono">
+                    <span className="text-gray-400 font-mono finance-small-label">
                       {new Date(photo.created_at).toLocaleDateString('en-IN')}
                     </span>
                     <Button

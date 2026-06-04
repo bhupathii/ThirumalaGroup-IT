@@ -111,8 +111,8 @@ const AadhaarSearch: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center border-b border-green-100 pb-4">
         <div>
-          <h1 className="finance-page-title">Aadhaar Search Engine</h1>
-          <p className="finance-page-subtitle">Look up customer risk profile and full historical loan sheets using Aadhaar UID</p>
+          <h1 className="finance-h1">Aadhaar Search Engine</h1>
+          <p className="finance-small-label uppercase">Look up customer risk profile and full historical loan sheets using Aadhaar UID</p>
         </div>
       </div>
 
@@ -141,28 +141,28 @@ const AadhaarSearch: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Customer profile */}
           <Card title="Customer Registry Card" subtitle="Identity details saved in credit registry">
-            <div className="space-y-4 text-sm text-gray-700">
+            <div className="space-y-4 text-gray-700 finance-input">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-green-100 text-green-700 flex items-center justify-center">
                   <User className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="font-extrabold text-gray-900 text-base">{result.customer.name}</h4>
-                  <p className="text-xs text-gray-400">Created: {new Date(result.customer.created_at).toLocaleDateString('en-IN')}</p>
+                  <h4 className="text-gray-900 finance-card-title">{result.customer.name}</h4>
+                  <p className="text-gray-400 finance-caption">Created: {new Date(result.customer.created_at).toLocaleDateString('en-IN')}</p>
                 </div>
               </div>
               <div className="space-y-2 border-t pt-3">
                 <div className="flex items-center gap-2">
                   <Phone className="w-4 h-4 text-gray-400" />
-                  <span className="font-bold">{result.customer.phone || 'No phone recorded'}</span>
+                  <span className="finance-input">{result.customer.phone || 'No phone recorded'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-gray-400" />
-                  <span className="font-semibold">{result.customer.address || 'No address recorded'}</span>
+                  <span className="finance-input">{result.customer.address || 'No address recorded'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CreditCard className="w-4 h-4 text-gray-400" />
-                  <span className="font-mono font-bold text-gray-900">Aadhaar: {result.customer.aadhaar}</span>
+                  <span className="font-mono text-gray-900 finance-input">Aadhaar: {result.customer.aadhaar}</span>
                 </div>
               </div>
             </div>
@@ -170,7 +170,7 @@ const AadhaarSearch: React.FC = () => {
 
           {/* Customer loan list */}
           <div className="lg:col-span-2 space-y-4">
-            <h3 className="text-lg font-bold text-gray-900">Historical Credit Ledgers</h3>
+            <h3 className="text-gray-900 finance-brand">Historical Credit Ledgers</h3>
             {result.loans.length === 0 ? (
               <div className="p-8 text-center text-gray-400 border rounded-lg bg-gray-50/50">
                 No credit loan accounts found associated with this Aadhaar profile.
@@ -181,10 +181,8 @@ const AadhaarSearch: React.FC = () => {
                   key={loan.id}
                   title={
                     <div className="flex justify-between items-center w-full">
-                      <span className="font-mono font-bold text-gray-900">{loan.loan_id}</span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                        loan.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span className="font-mono text-gray-900 finance-input">{loan.loan_id}</span>
+                      <span className={`px-2.5 py-0.5 rounded-full ${ loan.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' } finance-header-time`}>
                         {loan.status}
                       </span>
                     </div>
@@ -192,28 +190,28 @@ const AadhaarSearch: React.FC = () => {
                   subtitle={`Disbursed Date: ${new Date(loan.date).toLocaleDateString('en-IN')}`}
                   className="shadow-sm hover:border-green-200 transition-all border border-gray-100"
                 >
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-medium text-gray-600 mb-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-gray-600 mb-4 finance-caption">
                     <div>
-                      <span className="text-[10px] block uppercase text-gray-400">Principal</span>
-                      <span className="text-gray-900 font-bold">₹{Number(loan.amount).toLocaleString('en-IN')}</span>
+                      <span className="block text-gray-400 finance-small-label uppercase">Principal</span>
+                      <span className="text-gray-900 finance-input">₹{Number(loan.amount).toLocaleString('en-IN')}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] block uppercase text-gray-400">Total Repayable</span>
-                      <span className="text-gray-900 font-bold">₹{loan.totalRepayable.toLocaleString('en-IN')}</span>
+                      <span className="block text-gray-400 finance-small-label uppercase">Total Repayable</span>
+                      <span className="text-gray-900 finance-input">₹{loan.totalRepayable.toLocaleString('en-IN')}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] block uppercase text-gray-400">Paid Collected</span>
-                      <span className="text-green-600 font-bold">₹{loan.totalCollected.toLocaleString('en-IN')}</span>
+                      <span className="block text-gray-400 finance-small-label uppercase">Paid Collected</span>
+                      <span className="text-green-600 finance-input">₹{loan.totalCollected.toLocaleString('en-IN')}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] block uppercase text-gray-400">Remaining Bal</span>
-                      <span className="text-orange-700 font-extrabold">₹{loan.outstanding.toLocaleString('en-IN')}</span>
+                      <span className="block text-gray-400 finance-small-label uppercase">Remaining Bal</span>
+                      <span className="text-orange-700 finance-input">₹{loan.outstanding.toLocaleString('en-IN')}</span>
                     </div>
                   </div>
 
                   {/* Payment Ratio Progress Bar */}
                   <div>
-                    <div className="flex justify-between text-[10px] font-bold text-gray-500 mb-1">
+                    <div className="flex justify-between text-gray-500 mb-1 finance-small-label">
                       <span>Collection Repayment Progress</span>
                       <span>{loan.payRatio}% Paid</span>
                     </div>
@@ -227,12 +225,12 @@ const AadhaarSearch: React.FC = () => {
 
                   {/* Surety details preview */}
                   {(loan.surety_name || loan.remarks) && (
-                    <div className="mt-4 pt-3 border-t grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-gray-400 font-semibold">
+                    <div className="mt-4 pt-3 border-t grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-400 finance-small-label">
                       {loan.surety_name && (
-                        <p>Guarantor: <span className="text-gray-600 font-bold">{loan.surety_name}</span></p>
+                        <p>Guarantor: <span className="text-gray-600 finance-input">{loan.surety_name}</span></p>
                       )}
                       {loan.remarks && (
-                        <p>Remarks: <span className="text-gray-500 font-normal italic">"{loan.remarks}"</span></p>
+                        <p>Remarks: <span className="text-gray-500 italic finance-input">"{loan.remarks}"</span></p>
                       )}
                     </div>
                   )}
@@ -240,17 +238,13 @@ const AadhaarSearch: React.FC = () => {
                   {/* Dues Schedule */}
                   {loan.dues && loan.dues.length > 0 && (
                     <div className="mt-4 pt-3 border-t">
-                      <p className="text-xs font-bold text-gray-700 mb-2">Instalment Dues Schedule</p>
+                      <p className="text-gray-700 mb-2 finance-header-time">Instalment Dues Schedule</p>
                       <div className="max-h-32 overflow-y-auto border rounded divide-y">
                         {loan.dues.map((due: any) => (
-                          <div key={due.id} className="flex justify-between p-2 text-[10px] font-semibold">
+                          <div key={due.id} className="flex justify-between p-2 finance-small-label">
                             <span>{new Date(due.due_date).toLocaleDateString('en-IN')}</span>
                             <span>Due: ₹{Number(due.amount).toLocaleString('en-IN')}</span>
-                            <span className={`px-2 py-0.5 rounded-full font-bold ${
-                              due.status === 'Paid' ? 'bg-green-100 text-green-800' :
-                              due.status === 'Partially Paid' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>{due.status}</span>
+                            <span className={`px-2 py-0.5 rounded-full ${ due.status === 'Paid' ? 'bg-green-100 text-green-800' : due.status === 'Partially Paid' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800' } finance-input`}>{due.status}</span>
                           </div>
                         ))}
                       </div>
@@ -264,7 +258,7 @@ const AadhaarSearch: React.FC = () => {
       ) : searched ? (
         <div className="flex flex-col items-center justify-center border border-dashed rounded-lg py-16 bg-gray-50/20">
           <CreditCard className="w-10 h-10 text-gray-300 mb-2 stroke-1" />
-          <p className="finance-page-subtitle">Registry search was negative. Check Aadhaar spacing and digit counts.</p>
+          <p className="finance-small-label uppercase">Registry search was negative. Check Aadhaar spacing and digit counts.</p>
         </div>
       ) : null}
     </div>

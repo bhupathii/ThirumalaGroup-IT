@@ -171,18 +171,14 @@ const DuesLedger: React.FC = () => {
     return (
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden sticky top-6">
         <div className="p-4 border-b border-slate-100 bg-slate-50">
-          <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">REPORT</h3>
+          <h3 className="text-slate-900 finance-sidebar-link uppercase">REPORT</h3>
         </div>
         <div className="flex flex-col">
           {options.map((opt) => (
             <button
               key={opt}
               onClick={() => setActiveReport(opt)}
-              className={`text-left px-4 py-3 text-xs font-black uppercase tracking-wider border-b border-slate-100 last:border-0 transition-colors
-                ${activeReport === opt 
-                  ? 'bg-[#0b1329] text-white' 
-                  : 'text-slate-700 hover:bg-slate-50'
-                }`}
+              className={`text-left px-4 py-3 border-b border-slate-100 last:border-0 transition-colors ${activeReport === opt ? 'bg-[#0b1329] text-white' : 'text-slate-700 hover:bg-slate-50' } finance-header-time uppercase`}
             >
               {opt}
             </button>
@@ -199,16 +195,16 @@ const DuesLedger: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="finance-page-title">Dues Ledger</h1>
-          <p className="finance-page-subtitle">
+          <h1 className="finance-h1">Dues Ledger</h1>
+          <p className="finance-small-label uppercase">
             Outstanding, NPA, and Partner-wise Due Lists with Grace/Penalty already applied
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold uppercase tracking-wider text-xs">
+          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 finance-header-time uppercase">
             Back
           </Button>
-          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white font-bold uppercase tracking-wider text-xs">
+          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white finance-header-time uppercase">
             Print
           </Button>
         </div>
@@ -219,14 +215,14 @@ const DuesLedger: React.FC = () => {
         {/* Partners Card */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
           <div className="px-4 pt-4 pb-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Partners</span>
+            <span className="text-slate-400 block mb-1 finance-small-label uppercase">Partners</span>
             {partners.length === 0 ? (
-              <span className="text-sm font-bold text-slate-500 uppercase">No Partners</span>
+              <span className="text-slate-500 finance-sidebar-link uppercase">No Partners</span>
             ) : (
               <select
                 value={selectedPartner}
                 onChange={(e) => setSelectedPartner(e.target.value)}
-                className="w-full text-sm font-black text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer uppercase tracking-wider"
+                className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase"
               >
                 <option value="ALL PARTNERS">ALL PARTNERS</option>
                 {partners.map(p => (
@@ -235,27 +231,27 @@ const DuesLedger: React.FC = () => {
               </select>
             )}
           </div>
-          <div className="mt-auto bg-[#0b1329] text-white px-4 py-2 text-[10px] font-black uppercase tracking-widest">
+          <div className="mt-auto bg-[#0b1329] text-white px-4 py-2 finance-small-label uppercase">
             {selectedPartner}
           </div>
         </div>
 
         {/* Records Card */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Records</span>
-          <span className="text-3xl font-black text-slate-900 tracking-tight mt-1">{filteredDues.length}</span>
+          <span className="text-slate-400 block finance-small-label uppercase">Records</span>
+          <span className="text-slate-900 mt-1 finance-money">{filteredDues.length}</span>
         </div>
 
         {/* NPA Total Card */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">NPA Total</span>
-          <span className="text-3xl font-black text-red-600 tracking-tight mt-1">₹{npaTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          <span className="text-slate-400 block finance-small-label uppercase">NPA Total</span>
+          <span className="text-red-600 mt-1 finance-money">₹{npaTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
 
         {/* Filter Card */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Filter</span>
-          <span className="text-xl font-black text-slate-900 tracking-tight mt-1 uppercase">{selectedPartner}</span>
+          <span className="text-slate-400 block finance-small-label uppercase">Filter</span>
+          <span className="text-slate-900 mt-1 finance-h1">{selectedPartner}</span>
         </div>
       </div>
 
@@ -274,14 +270,14 @@ const DuesLedger: React.FC = () => {
             {/* Main Content Header */}
             <div className="p-4 border-b border-slate-100 flex justify-between items-center relative">
               <div>
-                <h2 className="text-lg font-black text-slate-900 uppercase tracking-wider">{activeReport}</h2>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">
+                <h2 className="text-slate-900 finance-brand">{activeReport}</h2>
+                <p className="text-slate-500 mt-1 finance-small-label uppercase">
                   {activeReport === 'A -> B DUE LIST' 
                     ? 'FILTER BY AADHAAR, CUSTOMER NAME, OR DATE RANGE'
                     : 'FILTER BY AADHAAR OR CUSTOMER NAME'}
                 </p>
               </div>
-              <div className="absolute top-4 right-4 bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest border border-blue-100">
+              <div className="absolute top-4 right-4 bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 finance-small-label uppercase">
                 LIVE
               </div>
             </div>
@@ -289,44 +285,44 @@ const DuesLedger: React.FC = () => {
             {/* Search/Filter Row */}
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-slate-100 bg-slate-50">
               <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Aadhaar</label>
+                <label className="text-slate-500 mb-1 block finance-small-label uppercase">Aadhaar</label>
                 <input
                   type="text"
                   placeholder="SEARCH BY AADHAAR"
                   value={searchAadhaar}
                   onChange={(e) => setSearchAadhaar(e.target.value)}
-                  className="w-full text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className="w-full text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 finance-header-time"
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Name</label>
+                <label className="text-slate-500 mb-1 block finance-small-label uppercase">Name</label>
                 <input
                   type="text"
                   placeholder="SEARCH BY NAME"
                   value={searchName}
                   onChange={(e) => setSearchName(e.target.value)}
-                  className="w-full text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className="w-full text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 finance-header-time"
                 />
               </div>
 
               {activeReport === 'A -> B DUE LIST' && (
                 <>
                   <div className="md:col-span-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Start Date (A)</label>
+                    <label className="text-slate-500 mb-1 block finance-small-label uppercase">Start Date (A)</label>
                     <input
                       type="date"
                       value={startDate}
                       onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className="w-full text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 finance-header-time"
                     />
                   </div>
                   <div className="md:col-span-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">End Date (B)</label>
+                    <label className="text-slate-500 mb-1 block finance-small-label uppercase">End Date (B)</label>
                     <input
                       type="date"
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className="w-full text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 finance-header-time"
                     />
                   </div>
                 </>
@@ -341,8 +337,8 @@ const DuesLedger: React.FC = () => {
             ) : filteredDues.length === 0 ? (
               <div className="flex-1 flex items-center justify-center p-8">
                 <div className="text-center border border-dashed border-slate-200 rounded-xl p-12 w-full max-w-md bg-slate-50">
-                  <p className="text-sm font-black text-slate-900 uppercase tracking-widest mb-2">No Records</p>
-                  <p className="text-xs font-bold text-slate-500 uppercase">Try adjusting the filters above.</p>
+                  <p className="text-slate-900 mb-2 finance-sidebar-link uppercase">No Records</p>
+                  <p className="text-slate-500 finance-header-time uppercase">Try adjusting the filters above.</p>
                 </div>
               </div>
             ) : (
@@ -350,34 +346,34 @@ const DuesLedger: React.FC = () => {
                 <table className="w-full text-left border-collapse min-w-[800px]">
                   <thead>
                     <tr className="bg-white border-b border-slate-200">
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">S.No</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Customer Name</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Aadhaar</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Loan No</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Partner</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Due Date</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">Prin. Due</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">Penalty</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">Total Due</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-slate-500 finance-small-label uppercase">S.No</th>
+                      <th className="px-4 py-3 text-slate-500 finance-small-label uppercase">Customer Name</th>
+                      <th className="px-4 py-3 text-slate-500 finance-small-label uppercase">Aadhaar</th>
+                      <th className="px-4 py-3 text-slate-500 finance-small-label uppercase">Loan No</th>
+                      <th className="px-4 py-3 text-slate-500 finance-small-label uppercase">Partner</th>
+                      <th className="px-4 py-3 text-slate-500 finance-small-label uppercase">Due Date</th>
+                      <th className="px-4 py-3 text-slate-500 text-right finance-small-label uppercase">Prin. Due</th>
+                      <th className="px-4 py-3 text-slate-500 text-right finance-small-label uppercase">Penalty</th>
+                      <th className="px-4 py-3 text-slate-500 text-right finance-small-label uppercase">Total Due</th>
+                      <th className="px-4 py-3 text-slate-500 finance-small-label uppercase">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredDues.map((due, idx) => (
                       <tr key={due.id} className={`transition-colors hover:bg-slate-50 ${due.isNPA ? 'bg-red-50/30' : ''}`}>
-                        <td className="px-4 py-3 text-xs font-bold text-slate-500">{idx + 1}</td>
-                        <td className="px-4 py-3 text-xs font-black text-slate-900">{due.customerName}</td>
-                        <td className="px-4 py-3 text-xs font-bold text-slate-600">{due.aadhaar}</td>
-                        <td className="px-4 py-3 text-xs font-bold text-blue-600">{due.loanId}</td>
-                        <td className="px-4 py-3 text-xs font-bold text-slate-600">{due.partnerName}</td>
-                        <td className="px-4 py-3 text-xs font-bold text-slate-600 whitespace-nowrap">
+                        <td className="px-4 py-3 text-slate-500 finance-header-time">{idx + 1}</td>
+                        <td className="px-4 py-3 text-slate-900 finance-header-time">{due.customerName}</td>
+                        <td className="px-4 py-3 text-slate-600 finance-header-time">{due.aadhaar}</td>
+                        <td className="px-4 py-3 text-blue-600 finance-header-time">{due.loanId}</td>
+                        <td className="px-4 py-3 text-slate-600 finance-header-time">{due.partnerName}</td>
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap finance-header-time">
                           {new Date(due.dueDate).toLocaleDateString('en-GB')}
-                          {due.overdueDays > 0 && <span className="block text-[9px] text-red-500 font-black">{due.overdueDays} days late</span>}
+                          {due.overdueDays > 0 && <span className="block text-[9px] text-red-500 finance-input">{due.overdueDays} days late</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs font-black text-slate-700 text-right">₹{due.pendingAmount.toLocaleString('en-IN')}</td>
-                        <td className="px-4 py-3 text-xs font-black text-orange-600 text-right">₹{due.penalty.toLocaleString('en-IN')}</td>
-                        <td className="px-4 py-3 text-xs font-black text-red-600 text-right">₹{(due.pendingAmount + due.penalty).toLocaleString('en-IN')}</td>
-                        <td className="px-4 py-3 text-[10px] font-black uppercase tracking-wider">
+                        <td className="px-4 py-3 text-slate-700 text-right finance-header-time">₹{due.pendingAmount.toLocaleString('en-IN')}</td>
+                        <td className="px-4 py-3 text-orange-600 text-right finance-header-time">₹{due.penalty.toLocaleString('en-IN')}</td>
+                        <td className="px-4 py-3 text-red-600 text-right finance-header-time">₹{(due.pendingAmount + due.penalty).toLocaleString('en-IN')}</td>
+                        <td className="px-4 py-3 finance-small-label uppercase">
                           <span className={`px-2 py-1 rounded-full ${
                             due.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' :
                             due.status === 'Partially Paid' ? 'bg-orange-100 text-orange-700' :
@@ -407,26 +403,26 @@ const DuesLedger: React.FC = () => {
           {/* Print Summary */}
           <div className="grid grid-cols-4 gap-4 border-b border-t border-slate-900 py-4 mb-6 text-center">
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Report Type</p>
-              <p className="text-sm font-black text-slate-900">{activeReport}</p>
+              <p className="text-slate-500 finance-small-label uppercase">Report Type</p>
+              <p className="text-slate-900 finance-sidebar-link">{activeReport}</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Partner</p>
-              <p className="text-sm font-black text-slate-900">{selectedPartner}</p>
+              <p className="text-slate-500 finance-small-label uppercase">Partner</p>
+              <p className="text-slate-900 finance-sidebar-link">{selectedPartner}</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase">Records</p>
-              <p className="text-sm font-black text-slate-900">{filteredDues.length}</p>
+              <p className="text-slate-500 finance-small-label uppercase">Records</p>
+              <p className="text-slate-900 finance-sidebar-link">{filteredDues.length}</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase">NPA Total</p>
-              <p className="text-sm font-black text-red-700">₹{npaTotalAmount.toLocaleString('en-IN')}</p>
+              <p className="text-slate-500 finance-small-label uppercase">NPA Total</p>
+              <p className="text-red-700 finance-sidebar-link">₹{npaTotalAmount.toLocaleString('en-IN')}</p>
             </div>
           </div>
 
           {(searchAadhaar || searchName || startDate || endDate) && (
-            <div className="text-xs font-bold text-slate-600 mb-4 border border-slate-200 p-2 rounded bg-slate-50">
-              <span className="text-[10px] uppercase text-slate-400 mr-2">Filters Applied:</span>
+            <div className="text-slate-600 mb-4 border border-slate-200 p-2 rounded bg-slate-50 finance-header-time">
+              <span className="text-slate-400 mr-2 finance-small-label uppercase">Filters Applied:</span>
               {searchAadhaar && <span className="mr-4">Aadhaar: {searchAadhaar}</span>}
               {searchName && <span className="mr-4">Name: {searchName}</span>}
               {startDate && <span className="mr-4">From: {startDate}</span>}
@@ -437,37 +433,37 @@ const DuesLedger: React.FC = () => {
           {/* Transactions Print Table */}
           <div className="border border-slate-900">
             <div className="bg-slate-100 border-b border-slate-900 px-4 py-2 flex justify-between">
-              <h4 className="text-[10px] font-black uppercase text-slate-900">Due List</h4>
-              <span className="text-[10px] font-bold text-slate-500">{filteredDues.length} ROWS</span>
+              <h4 className="text-slate-900 finance-small-label uppercase">Due List</h4>
+              <span className="text-slate-500 finance-small-label">{filteredDues.length} ROWS</span>
             </div>
-            <table className="w-full text-left text-[10px]">
+            <table className="w-full text-left finance-small-label">
               <thead>
                 <tr className="border-b border-slate-900 bg-slate-50">
-                  <th className="px-2 py-2 font-bold text-slate-800 border-r border-slate-300">S.No</th>
-                  <th className="px-2 py-2 font-bold text-slate-800 border-r border-slate-300">Name / Aadhaar</th>
-                  <th className="px-2 py-2 font-bold text-slate-800 border-r border-slate-300">Loan / Partner</th>
-                  <th className="px-2 py-2 font-bold text-slate-800 border-r border-slate-300">Due Date</th>
-                  <th className="px-2 py-2 font-bold text-slate-800 text-right border-r border-slate-300">Prin. Due</th>
-                  <th className="px-2 py-2 font-bold text-slate-800 text-right border-r border-slate-300">Penalty</th>
-                  <th className="px-2 py-2 font-bold text-slate-900 text-right border-r border-slate-300">Total Due</th>
-                  <th className="px-2 py-2 font-bold text-slate-800">Status</th>
+                  <th className="px-2 py-2 text-slate-800 border-r border-slate-300 finance-input">S.No</th>
+                  <th className="px-2 py-2 text-slate-800 border-r border-slate-300 finance-input">Name / Aadhaar</th>
+                  <th className="px-2 py-2 text-slate-800 border-r border-slate-300 finance-input">Loan / Partner</th>
+                  <th className="px-2 py-2 text-slate-800 border-r border-slate-300 finance-input">Due Date</th>
+                  <th className="px-2 py-2 text-slate-800 text-right border-r border-slate-300 finance-input">Prin. Due</th>
+                  <th className="px-2 py-2 text-slate-800 text-right border-r border-slate-300 finance-input">Penalty</th>
+                  <th className="px-2 py-2 text-slate-900 text-right border-r border-slate-300 finance-input">Total Due</th>
+                  <th className="px-2 py-2 text-slate-800 finance-input">Status</th>
                 </tr>
               </thead>
               <tbody className="font-mono">
                 {filteredDues.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-8 text-slate-500 font-sans font-bold uppercase">No records found</td>
+                    <td colSpan={8} className="text-center py-8 text-slate-500 font-sans finance-input uppercase">No records found</td>
                   </tr>
                 ) : (
                   filteredDues.map((due, idx) => (
                     <tr key={due.id} className="border-b border-slate-200 last:border-0">
                       <td className="px-2 py-1 border-r border-slate-200 text-center">{idx + 1}</td>
                       <td className="px-2 py-1 border-r border-slate-200">
-                        <div className="font-bold text-slate-900 truncate max-w-[150px]">{due.customerName}</div>
+                        <div className="text-slate-900 truncate max-w-[150px] finance-input">{due.customerName}</div>
                         <div className="text-[9px] text-slate-500">{due.aadhaar}</div>
                       </td>
                       <td className="px-2 py-1 border-r border-slate-200">
-                        <div className="font-bold text-slate-900">{due.loanId}</div>
+                        <div className="text-slate-900 finance-input">{due.loanId}</div>
                         <div className="text-[9px] text-slate-500 truncate max-w-[100px]">{due.partnerName}</div>
                       </td>
                       <td className="px-2 py-1 border-r border-slate-200 whitespace-nowrap">
@@ -476,8 +472,8 @@ const DuesLedger: React.FC = () => {
                       </td>
                       <td className="px-2 py-1 text-right text-slate-700 border-r border-slate-200">{due.pendingAmount > 0 ? due.pendingAmount.toLocaleString('en-IN') : '-'}</td>
                       <td className="px-2 py-1 text-right text-slate-700 border-r border-slate-200">{due.penalty > 0 ? due.penalty.toLocaleString('en-IN') : '-'}</td>
-                      <td className="px-2 py-1 text-right font-bold text-slate-900 border-r border-slate-200">₹{(due.pendingAmount + due.penalty).toLocaleString('en-IN')}</td>
-                      <td className="px-2 py-1 text-[8px] uppercase tracking-wider">{due.status}</td>
+                      <td className="px-2 py-1 text-right text-slate-900 border-r border-slate-200 finance-input">₹{(due.pendingAmount + due.penalty).toLocaleString('en-IN')}</td>
+                      <td className="px-2 py-1 text-[8px] finance-input uppercase">{due.status}</td>
                     </tr>
                   ))
                 )}

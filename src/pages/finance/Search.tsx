@@ -165,8 +165,8 @@ const SearchPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5 mb-6">
         <div>
-          <h1 className="finance-page-title">SEARCH & COLLECTION CENTER</h1>
-          <p className="finance-page-subtitle mt-1">Lookup loans, view repayment graphs, and collect daily/weekly instalments</p>
+          <h1 className="finance-h1">SEARCH & COLLECTION CENTER</h1>
+          <p className="mt-1 finance-small-label uppercase">Lookup loans, view repayment graphs, and collect daily/weekly instalments</p>
         </div>
       </div>
 
@@ -190,15 +190,15 @@ const SearchPage: React.FC = () => {
                 className="px-4 py-3 cursor-pointer hover:bg-green-50/50 flex justify-between items-center transition-colors"
               >
                 <div>
-                  <span className="font-bold text-gray-900 text-sm">{loan.customer?.name}</span>
-                  <span className="text-[10px] text-gray-400 font-mono ml-2">({loan.loan_id})</span>
+                  <span className="text-gray-900 finance-sidebar-link">{loan.customer?.name}</span>
+                  <span className="text-gray-400 font-mono ml-2 finance-small-label">({loan.loan_id})</span>
                   {loan.customer?.phone && (
-                    <div className="text-xs text-gray-500 mt-0.5">{loan.customer.phone}</div>
+                    <div className="text-gray-500 mt-0.5 finance-caption">{loan.customer.phone}</div>
                   )}
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-bold text-green-700">₹{Number(loan.amount).toLocaleString('en-IN')}</div>
-                  <span className="text-[10px] text-gray-400 font-medium capitalize">{loan.due_type}</span>
+                  <div className="text-green-700 finance-sidebar-link">₹{Number(loan.amount).toLocaleString('en-IN')}</div>
+                  <span className="text-gray-400 finance-small-label">{loan.due_type}</span>
                 </div>
               </li>
             ))}
@@ -212,27 +212,27 @@ const SearchPage: React.FC = () => {
           <div className="space-y-6">
             {/* Customer Brief */}
             <Card title={`Customer Profile (${selectedLoanDetails.loan_id})`} subtitle="Linked identity parameters">
-              <div className="space-y-2 text-sm text-gray-700 font-medium">
+              <div className="space-y-2 text-gray-700 finance-input">
                 <div>
-                  <span className="text-gray-400 block text-xs">Customer Name</span>
-                  <span className="text-gray-900 font-bold text-base">{selectedLoanDetails.customer?.name}</span>
+                  <span className="text-gray-400 block finance-caption">Customer Name</span>
+                  <span className="text-gray-900 finance-brand">{selectedLoanDetails.customer?.name}</span>
                 </div>
                 {selectedLoanDetails.customer?.phone && (
                   <div>
-                    <span className="text-gray-400 block text-xs">Phone Number</span>
-                    <span className="text-gray-900 font-bold">{selectedLoanDetails.customer?.phone}</span>
+                    <span className="text-gray-400 block finance-caption">Phone Number</span>
+                    <span className="text-gray-900 finance-input">{selectedLoanDetails.customer?.phone}</span>
                   </div>
                 )}
                 {selectedLoanDetails.customer?.address && (
                   <div>
-                    <span className="text-gray-400 block text-xs">Address</span>
-                    <span className="text-gray-900 font-semibold">{selectedLoanDetails.customer?.address}</span>
+                    <span className="text-gray-400 block finance-caption">Address</span>
+                    <span className="text-gray-900 finance-input">{selectedLoanDetails.customer?.address}</span>
                   </div>
                 )}
                 {selectedLoanDetails.customer?.aadhaar && (
                   <div>
-                    <span className="text-gray-400 block text-xs">Aadhaar Card UID</span>
-                    <span className="text-gray-900 font-semibold font-mono">{selectedLoanDetails.customer?.aadhaar}</span>
+                    <span className="text-gray-400 block finance-caption">Aadhaar Card UID</span>
+                    <span className="text-gray-900 font-mono finance-input">{selectedLoanDetails.customer?.aadhaar}</span>
                   </div>
                 )}
               </div>
@@ -262,14 +262,14 @@ const SearchPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setCollectAmount(String(selectedLoanDetails.due_amount))}
-                    className="bg-gray-100 text-gray-700 hover:bg-gray-200 text-xs px-2 py-1.5 font-bold rounded"
+                    className="bg-gray-100 text-gray-700 hover:bg-gray-200 px-2 py-1.5 rounded finance-header-time"
                   >
                     Instalment (₹{selectedLoanDetails.due_amount})
                   </button>
                   <button
                     type="button"
                     onClick={() => setCollectAmount(String(summary.outstanding))}
-                    className="bg-gray-100 text-gray-700 hover:bg-gray-200 text-xs px-2 py-1.5 font-bold rounded"
+                    className="bg-gray-100 text-gray-700 hover:bg-gray-200 px-2 py-1.5 rounded finance-header-time"
                   >
                     Outstanding (₹{summary.outstanding})
                   </button>
@@ -295,7 +295,7 @@ const SearchPage: React.FC = () => {
                   {selectedLoanDetails.photos.map(p => (
                     <div key={p.id} className="relative rounded overflow-hidden border border-gray-200 bg-gray-50 aspect-square">
                       <img src={p.photo_url} alt={p.photo_type} className="w-full h-full object-cover" />
-                      <span className="absolute bottom-1 right-1 bg-black/60 text-[10px] text-white px-2 py-0.5 font-bold rounded">
+                      <span className="absolute bottom-1 right-1 bg-black/60 text-white px-2 py-0.5 rounded finance-small-label">
                         {p.photo_type}
                       </span>
                     </div>
@@ -311,20 +311,20 @@ const SearchPage: React.FC = () => {
             <Card title="Account Repayment Balance Statement" subtitle="Current status breakdown">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <span className="text-gray-500 text-[10px] font-semibold block uppercase">Total Repayable</span>
-                  <span className="text-base font-bold text-gray-900">₹{summary.totalPayable.toLocaleString('en-IN')}</span>
+                  <span className="text-gray-500 block finance-small-label uppercase">Total Repayable</span>
+                  <span className="text-gray-900 finance-brand">₹{summary.totalPayable.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="p-3 bg-green-50 rounded-lg border border-green-100">
-                  <span className="text-green-700 text-[10px] font-semibold block uppercase">Total Collected</span>
-                  <span className="text-base font-bold text-green-800">₹{summary.totalPaid.toLocaleString('en-IN')}</span>
+                  <span className="text-green-700 block finance-small-label uppercase">Total Collected</span>
+                  <span className="text-green-800 finance-brand">₹{summary.totalPaid.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="p-3 bg-orange-50 rounded-lg border border-orange-100">
-                  <span className="text-orange-700 text-[10px] font-semibold block uppercase">Outstanding Bal</span>
-                  <span className="text-base font-bold text-orange-800">₹{summary.outstanding.toLocaleString('en-IN')}</span>
+                  <span className="text-orange-700 block finance-small-label uppercase">Outstanding Bal</span>
+                  <span className="text-orange-800 finance-brand">₹{summary.outstanding.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <span className="text-gray-500 text-[10px] font-semibold block uppercase">Instalment Status</span>
-                  <span className="text-xs font-bold text-gray-900 mt-1 block">
+                  <span className="text-gray-500 block finance-small-label uppercase">Instalment Status</span>
+                  <span className="text-gray-900 mt-1 block finance-header-time">
                     {summary.paidDues} Paid / {summary.pendingDues} Pend
                   </span>
                 </div>
@@ -343,14 +343,14 @@ const SearchPage: React.FC = () => {
                       'bg-red-50 border-red-100 text-red-800'
                     }`}
                   >
-                    <span className="text-[10px] font-bold block">{idx + 1}</span>
-                    <span className="text-[9px] font-semibold my-1 font-mono">
+                    <span className="block finance-small-label">{idx + 1}</span>
+                    <span className="text-[9px] my-1 font-mono finance-input">
                       {new Date(due.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit' })}
                     </span>
-                    <span className="text-[10px] font-extrabold block">₹{Number(due.amount).toFixed(0)}</span>
+                    <span className="block finance-small-label">₹{Number(due.amount).toFixed(0)}</span>
                     
                     {due.paid_amount > 0 && due.status !== 'Paid' && (
-                      <span className="text-[8px] text-gray-500 block font-bold mt-0.5">Rec: ₹{Number(due.paid_amount).toFixed(0)}</span>
+                      <span className="text-[8px] text-gray-500 block mt-0.5 finance-input">Rec: ₹{Number(due.paid_amount).toFixed(0)}</span>
                     )}
                   </div>
                 ))}
@@ -360,15 +360,15 @@ const SearchPage: React.FC = () => {
             {/* Transaction Ledger list */}
             <Card title="Transaction Logs" subtitle="Disbursements and Collection entries logged for this account" className="shadow">
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-xs">
+                <table className="min-w-full divide-y divide-gray-200 finance-caption">
                   <thead>
                     <tr className="bg-gray-50">
-                      <th className="px-3 py-3 text-left font-semibold text-gray-500 uppercase">Date</th>
-                      <th className="px-3 py-3 text-left font-semibold text-gray-500 uppercase">Type</th>
-                      <th className="px-3 py-3 text-left font-semibold text-gray-500 uppercase">Staff / Collected By</th>
-                      <th className="px-3 py-3 text-left font-semibold text-gray-500 uppercase">Remarks</th>
-                      <th className="px-3 py-3 text-right font-semibold text-gray-500 uppercase">Amount</th>
-                      <th className="px-3 py-3 text-right font-semibold text-gray-500 uppercase">Action</th>
+                      <th className="px-3 py-3 text-left text-gray-500 finance-input uppercase">Date</th>
+                      <th className="px-3 py-3 text-left text-gray-500 finance-input uppercase">Type</th>
+                      <th className="px-3 py-3 text-left text-gray-500 finance-input uppercase">Staff / Collected By</th>
+                      <th className="px-3 py-3 text-left text-gray-500 finance-input uppercase">Remarks</th>
+                      <th className="px-3 py-3 text-right text-gray-500 finance-input uppercase">Amount</th>
+                      <th className="px-3 py-3 text-right text-gray-500 finance-input uppercase">Action</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
@@ -378,23 +378,17 @@ const SearchPage: React.FC = () => {
                           {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-0.5 rounded-full font-bold ${
-                            tx.type === 'Collection' ? 'bg-green-100 text-green-800' :
-                            tx.type === 'Disbursement' ? 'bg-blue-100 text-blue-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
+                          <span className={`inline-flex px-2 py-0.5 rounded-full ${ tx.type === 'Collection' ? 'bg-green-100 text-green-800' : tx.type === 'Disbursement' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800' } finance-input`}>
                             {tx.type}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-gray-900 font-bold">
+                        <td className="px-3 py-2.5 text-gray-900 finance-input">
                           {tx.collected_by || '-'}
                         </td>
                         <td className="px-3 py-2.5 text-gray-500">
                           {tx.remarks || '-'}
                         </td>
-                        <td className={`px-3 py-2.5 text-right font-bold ${
-                          tx.type === 'Collection' ? 'text-green-600' : 'text-blue-600'
-                        }`}>
+                        <td className={`px-3 py-2.5 text-right ${ tx.type === 'Collection' ? 'text-green-600' : 'text-blue-600' } finance-input`}>
                           ₹{Number(tx.amount).toLocaleString('en-IN')}
                         </td>
                         <td className="px-3 py-2.5 text-right whitespace-nowrap">
@@ -419,8 +413,8 @@ const SearchPage: React.FC = () => {
       ) : (
         <div className="flex flex-col items-center justify-center border border-dashed rounded-lg py-20 bg-gray-50/30">
           <SearchIcon className="w-12 h-12 text-gray-400 stroke-1 mb-2" />
-          <p className="finance-page-subtitle">Account Detail Panel is idle</p>
-          <p className="finance-page-subtitle">Use the search box above to lookup customer records and make collections</p>
+          <p className="finance-small-label uppercase">Account Detail Panel is idle</p>
+          <p className="finance-small-label uppercase">Use the search box above to lookup customer records and make collections</p>
         </div>
       )}
     </div>
