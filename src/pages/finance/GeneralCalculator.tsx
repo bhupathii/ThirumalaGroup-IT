@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../components/UI/Card';
 import { 
@@ -10,6 +10,13 @@ import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { financeLedgerSettingsService, DEFAULT_LEDGER_SETTINGS } from '../../services/financeLedgerSettingsService';
 import { financeCalculationService } from '../../services/financeCalculationService';
 import { FinanceLedgerSetting } from '../../lib/supabaseFinance';
+
+const LOAN_LABELS: Record<string, string> = {
+  'CD': 'CASH DEPOSIT (CD)',
+  'HP': 'HIRE PURCHASE (HP)',
+  'STBD': 'SHORT TERM BUSINESS DEPOSIT (STBD)',
+  'TBD': 'TERM BUSINESS DEPOSIT (TBD)'
+};
 
 const GeneralCalculator: React.FC = () => {
   const navigate = useNavigate();
@@ -156,7 +163,7 @@ const GeneralCalculator: React.FC = () => {
           }
           subtitle={
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">
-              {DEFAULT_RATES[loanType]?.label || 'CASH DEPOSIT (CD)'}
+              {LOAN_LABELS[loanType] || 'CASH DEPOSIT (CD)'}
             </span>
           }
           className="shadow-sm border-slate-150 rounded-xl"
@@ -399,7 +406,7 @@ const GeneralCalculator: React.FC = () => {
             <tbody>
               <tr className="border-b border-slate-200">
                 <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">LOAN TYPE</td>
-                <td className="px-3 py-2 font-semibold uppercase">{DEFAULT_RATES[loanType]?.label || loanType}</td>
+                <td className="px-3 py-2 font-semibold uppercase">{LOAN_LABELS[loanType] || loanType}</td>
               </tr>
               <tr className="border-b border-slate-200">
                 <td className="bg-slate-50 font-bold px-3 py-2 w-1/3 border-r border-slate-300">PRINCIPAL</td>

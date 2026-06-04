@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer, RefreshCw, ArrowLeft } from 'lucide-react';

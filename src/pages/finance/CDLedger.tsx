@@ -99,19 +99,6 @@ const CDLedger: React.FC = () => {
     }
   };
 
-  const fetchLoans = async () => {
-    setLoading(true);
-    try {
-      const allLoans = await supabaseFinance.getLoans();
-      setLoansList(allLoans);
-      setLoading(false);
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to load loans directory');
-      setLoading(false);
-    }
-  };
-
   // Perform search locally
   const handleSearch = () => {
     const query = searchQuery.toLowerCase().trim();
@@ -334,7 +321,7 @@ const CDLedger: React.FC = () => {
       return;
     }
 
-    const exportData = ledgerComputations.processedTransactions.map(tx => ({
+    const exportData = ledgerComputations.processedTransactions.map((tx: any) => ({
       Date: tx.date,
       Account: selectedLoan.customer?.name || 'N/A',
       Credit: tx.credit,
@@ -1157,7 +1144,7 @@ const CDLedger: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white font-mono">
-                  {ledgerComputations.processedTransactions.map((tx) => (
+                  {ledgerComputations.processedTransactions.map((tx: any) => (
                     <tr key={tx.id}>
                       <td className="px-3 py-1.5 font-sans font-semibold text-gray-700">
                         {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}

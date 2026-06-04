@@ -10,6 +10,7 @@ import {
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTableMode } from '../../contexts/TableModeContext';
 import { supabaseDB } from '../../lib/supabaseDatabase';
+import { supabaseFinance } from '../../lib/supabaseFinance';
 
 interface CustomCalendarProps {
   onDateSelect: (date: string) => void;
@@ -41,7 +42,12 @@ const CustomCalendar = ({
     const loadAll = async () => {
       setLoading(true);
       try {
-        const all = await supabaseDB.getAllCashBookEntries();
+        let all: any[];
+        if (tableMode === 'finance') {
+          all = await supabaseFinance.getAllFinanceEntryDates();
+        } else {
+          all = await supabaseDB.getAllCashBookEntries();
+        }
         if (isMounted) setLoadedEntries(all || []);
       } catch (e) {
         console.error('Error loading entries for calendar:', e);

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, RefreshCw, CheckCircle, Database } from 'lucide-react';
+import { ArrowLeft, Save, RefreshCw, Database } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { financeLedgerSettingsService, DEFAULT_LEDGER_SETTINGS } from '../../services/financeLedgerSettingsService';
 import { FinanceLedgerSetting } from '../../lib/supabaseFinance';

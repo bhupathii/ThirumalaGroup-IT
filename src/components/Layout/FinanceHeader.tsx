@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { LogOut, User, Plus, BookOpen, Menu } from 'lucide-react';
+import { LogOut, Plus, BookOpen, Menu } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useTableMode } from '../../contexts/TableModeContext';
 
 const FinanceHeader: React.FC = () => {
   const { user, logout } = useAuth();
-  const { setMode } = useTableMode();
   const navigate = useNavigate();
   const [time, setTime] = useState(new Date());
 

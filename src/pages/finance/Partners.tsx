@@ -52,15 +52,13 @@ const Partners: React.FC = () => {
       const balances: Record<string, number> = {};
       
       entries.forEach(entry => {
-        const amt = Number(entry.amount);
+        const credit = Number(entry.credit || 0);
+        const debit = Number(entry.debit || 0);
         if (!balances[entry.partner_id]) {
           balances[entry.partner_id] = 0;
         }
-        if (entry.type === 'Credit') {
-          balances[entry.partner_id] += amt;
-        } else {
-          balances[entry.partner_id] -= amt;
-        }
+        balances[entry.partner_id] += credit;
+        balances[entry.partner_id] -= debit;
       });
       setPartnerBalances(balances);
     } catch (err) {

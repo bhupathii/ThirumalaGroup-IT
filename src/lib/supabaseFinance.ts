@@ -1360,6 +1360,47 @@ class SupabaseFinance {
       return false;
     }
   }
+
+  // --- Utility for Calendar Indicators ---
+  async getAllFinanceEntryDates(): Promise<{ c_date: string }[]> {
+    try {
+      const results = await Promise.all([
+        supabase.from('finance_loans').select('date'),
+        supabase.from('finance_transactions').select('date'),
+        supabase.from('finance_cashbook_entries').select('entry_date'),
+        supabase.from('finance_capital_entries').select('entry_date'),
+        supabase.from('finance_dues').select('due_date'),
+        supabase.from('finance_customers').select('created_at'),
+        supabase.from('finance_edited_logs').select('edited_at'),
+        supabase.from('finance_deleted_logs').select('deleted_at')
+      ]);
+
+      const datesSet = new Set<string>();
+
+      const addDate = (d: any) => {
+        if (typeof d === 'string') {
+          const match = d.match(/^(\d{4}-\d{2}-\d{2})/);
+          if (match) {
+            datesSet.add(match[1]);
+          }
+        }
+      };
+
+      results[0].data?.forEach(r => addDate(r.date));
+      results[1].data?.forEach(r => addDate(r.date));
+      results[2].data?.forEach(r => addDate(r.entry_date));
+      results[3].data?.forEach(r => addDate(r.entry_date));
+      results[4].data?.forEach(r => addDate(r.due_date));
+      results[5].data?.forEach(r => addDate(r.created_at));
+      results[6].data?.forEach(r => addDate(r.edited_at));
+      results[7].data?.forEach(r => addDate(r.deleted_at));
+
+      return Array.from(datesSet).map(d => ({ c_date: d }));
+    } catch (error) {
+      console.error('Error fetching finance entry dates:', error);
+      return [];
+    }
+  }
 }
 
 export const supabaseFinance = new SupabaseFinance();
