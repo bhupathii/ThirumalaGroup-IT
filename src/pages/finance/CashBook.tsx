@@ -16,6 +16,7 @@ import {
   X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { validateFinanceForm, ValidationField } from '../../utils/financeValidation';
 import { useAuth } from '../../contexts/AuthContext';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
@@ -37,6 +38,15 @@ const CashBook: React.FC = () => {
   const [credit, setCredit] = useState('');
   const [debit, setDebit] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const entryDateRef = React.useRef<HTMLInputElement>(null);
+  const headOfAccountRef = React.useRef<HTMLSelectElement>(null);
+  const particularsRef = React.useRef<HTMLTextAreaElement>(null);
+  const creditRef = React.useRef<HTMLInputElement>(null);
+  const debitRef = React.useRef<HTMLInputElement>(null);
+  const newAccountNameRef = React.useRef<HTMLInputElement>(null);
+
 
   // Search & Sorting States
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,26 +122,26 @@ const CashBook: React.FC = () => {
   const handleSaveEntry = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
-    if (!entryDate) {
-      toast.error('Date is required');
-      return;
-    }
-    if (!headOfAccount) {
-      toast.error('Head of A/C is required');
-      return;
-    }
-    if (!particulars.trim()) {
-      toast.error('Particulars is required');
-      return;
-    }
 
     const creditVal = Number(credit) || 0;
     const debitVal = Number(debit) || 0;
 
-    if (creditVal === 0 && debitVal === 0) {
-      toast.error('Please enter either Credit or Debit amount greater than 0');
-      return;
-    }
+    const fields: ValidationField[] = [
+      { name: 'entryDate', label: 'Date', value: entryDate, required: true, ref: entryDateRef },
+      { name: 'headOfAccount', label: 'Head of A/C', value: headOfAccount, required: true, ref: headOfAccountRef as any },
+      { name: 'particulars', label: 'Particulars', value: particulars, required: true, ref: particularsRef as any },
+      { 
+        name: 'amount_xor', 
+        label: 'Credit or Debit', 
+        value: 'checked', 
+        required: true, 
+        customValidation: () => (creditVal > 0 || debitVal > 0) ? null : 'Please enter either Credit or Debit amount greater than 0'
+      }
+    ];
+
+    const { isValid, errors: newErrors } = validateFinanceForm(fields);
+    setErrors(newErrors);
+    if (!isValid) return;
 
     setSaving(true);
     const staffName = user?.username || 'Staff';
@@ -248,10 +258,15 @@ const CashBook: React.FC = () => {
   // Add New Account Modal Submit
   const handleCreateAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAccountName.trim()) {
-      toast.error('Account Name is required');
-      return;
-    }
+
+    const fields: ValidationField[] = [
+      { name: 'newAccountName', label: 'Account Name', value: newAccountName, required: true, ref: newAccountNameRef }
+    ];
+
+    const { isValid, errors: newErrors } = validateFinanceForm(fields);
+    setErrors(newErrors);
+    if (!isValid) return;
+
 
     setSavingAccount(true);
     try {
@@ -412,8 +427,7 @@ const CashBook: React.FC = () => {
                 <Input
                   label="DATE"
                   type="date"
-                  value={entryDate}
-                  onChange={setEntryDate}
+                  ref={entryDateRef} error={errors.entryDate} value={entryDate} onChange={(val) => { setEntryDate(val); setErrors(p => ({...p, entryDate: false})) }}
                   required
                   
                 />
@@ -433,9 +447,11 @@ const CashBook: React.FC = () => {
                 </label>
                 <select
                   value={headOfAccount}
-                  onChange={(e) => handleAccountChange(e.target.value)}
+                  onChange={(e) => { handleAccountChange(e.target.value); setErrors(p => ({...p, headOfAccount: false})) }}
+                  ref={headOfAccountRef}
+                  className={`w-full bg-white border rounded-lg p-2 text-slate-850 focus:outline-none h-10 shadow-sm finance-header-time ${errors.headOfAccount ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-955'}`}
                   required
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-850 focus:ring-1 focus:ring-slate-955 focus:outline-none h-10 shadow-sm finance-header-time"
+
                 >
                   <option value="">SELECT...</option>
                   {accounts.map(acc => (
@@ -463,10 +479,12 @@ const CashBook: React.FC = () => {
                 </label>
                 <textarea
                   value={particulars}
-                  onChange={(e) => setParticulars(e.target.value)}
+                  onChange={(e) => { setParticulars(e.target.value); setErrors(p => ({...p, particulars: false})) }}
+                  ref={particularsRef as any}
+                  className={`w-full bg-white border rounded-lg p-2 text-slate-855 focus:outline-none h-24 shadow-sm finance-header-time ${errors.particulars ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-950'}`}
                   placeholder="Enter details of the transaction"
                   required
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-855 focus:ring-1 focus:ring-slate-950 focus:outline-none h-24 shadow-sm finance-header-time"
+
                 />
               </div>
 
@@ -475,8 +493,7 @@ const CashBook: React.FC = () => {
                 <Input
                   label="CREDIT (₹)"
                   type="number"
-                  value={credit}
-                  onChange={handleCreditChange}
+                  ref={creditRef} error={errors.credit} value={credit} onChange={(val) => { handleCreditChange(val); setErrors(p => ({...p, credit: false})) }}
                   placeholder="0"
                   disabled={debit !== ''}
                   
@@ -484,8 +501,7 @@ const CashBook: React.FC = () => {
                 <Input
                   label="DEBIT (₹)"
                   type="number"
-                  value={debit}
-                  onChange={handleDebitChange}
+                  ref={debitRef} error={errors.debit} value={debit} onChange={(val) => { handleDebitChange(val); setErrors(p => ({...p, debit: false})) }}
                   placeholder="0"
                   disabled={credit !== ''}
                   
@@ -694,8 +710,7 @@ const CashBook: React.FC = () => {
             <form onSubmit={handleCreateAccountSubmit} className="p-6 space-y-4">
               <Input
                 label="ACCOUNT NAME"
-                value={newAccountName}
-                onChange={setNewAccountName}
+                ref={newAccountNameRef} error={errors.newAccountName} value={newAccountName} onChange={(val) => { setNewAccountName(val); setErrors(p => ({...p, newAccountName: false})) }}
                 placeholder="e.g. RENT, SALARY, OFFICE EXPENSE"
                 required
                 uppercase

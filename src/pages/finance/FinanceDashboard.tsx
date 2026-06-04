@@ -210,12 +210,12 @@ const FinanceDashboard: React.FC = () => {
               <span className="finance-card-title">
                 OUTSTANDING
               </span>
-              <div className="p-1.5 bg-red-50 text-red-500 rounded-lg border border-red-100/50">
+              <div className="p-1.5 bg-rose-50 text-rose-500 rounded-lg border border-rose-100/50">
                 <TrendingUp className="w-3.5 h-3.5" />
               </div>
             </div>
             <div>
-              <div className="!text-red-650 finance-money">
+              <div className="!text-rose-600 finance-money">
                 ₹{stats.totalOutstanding.toLocaleString('en-IN')}
               </div>
               <div className="finance-caption uppercase">
@@ -230,12 +230,12 @@ const FinanceDashboard: React.FC = () => {
               <span className="finance-card-title">
                 COLLECTED TODAY
               </span>
-              <div className="p-1.5 bg-green-50 text-green-600 rounded-lg border border-green-100/50">
+              <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100/50">
                 <DollarSign className="w-3.5 h-3.5" />
               </div>
             </div>
             <div>
-              <div className="!text-green-650 finance-money">
+              <div className="!text-emerald-600 finance-money">
                 ₹{stats.collectedToday.toLocaleString('en-IN')}
               </div>
               <div className="finance-caption uppercase">
@@ -250,12 +250,12 @@ const FinanceDashboard: React.FC = () => {
               <span className="finance-card-title">
                 OVERDUE LOANS
               </span>
-              <div className="p-1.5 bg-orange-50 text-orange-500 rounded-lg border border-orange-100/50">
+              <div className="p-1.5 bg-amber-50 text-amber-500 rounded-lg border border-amber-100/50">
                 <AlertCircle className="w-3.5 h-3.5" />
               </div>
             </div>
             <div>
-              <div className="!text-amber-650 finance-money">
+              <div className="!text-amber-600 finance-money">
                 {stats.overdueLoansCount}
               </div>
               <div className="finance-caption uppercase">
@@ -325,7 +325,7 @@ const FinanceDashboard: React.FC = () => {
               </div>
               <Link
                 to="/finance/loan-entry"
-                className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-sm tracking-[0.16px] finance-input"
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-sm tracking-[0.16px] finance-input"
               >
                 <Plus className="w-4 h-4" />
                 Create loan

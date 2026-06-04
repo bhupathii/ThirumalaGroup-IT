@@ -12,6 +12,7 @@ import {
   Info 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { validateFinanceForm, ValidationField } from '../../utils/financeValidation';
 import { useAuth } from '../../contexts/AuthContext';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
@@ -37,6 +38,14 @@ const CapitalEntry: React.FC = () => {
   const [credit, setCredit] = useState('');
   const [debit, setDebit] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const dateRef = React.useRef<HTMLInputElement>(null);
+  const partnerIdRef = React.useRef<HTMLSelectElement>(null);
+
+  const creditRef = React.useRef<HTMLInputElement>(null);
+  const debitRef = React.useRef<HTMLInputElement>(null);
+
 
   // Bulk Distribution States
   const [bulkCreditAmount, setBulkCreditAmount] = useState('');
@@ -88,18 +97,26 @@ const CapitalEntry: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!partnerId) {
-      toast.error('Please select a partner');
-      return;
-    }
 
     const creditAmt = Number(credit) || 0;
     const debitAmt = Number(debit) || 0;
 
-    if (creditAmt <= 0 && debitAmt <= 0) {
-      toast.error('Please enter a valid Credit or Debit amount greater than zero');
-      return;
-    }
+    const fields: ValidationField[] = [
+      { name: 'date', label: 'Date', value: date, required: true, ref: dateRef },
+      { name: 'partnerId', label: 'Partner', value: partnerId, required: true, ref: partnerIdRef as any },
+      { 
+        name: 'amount_xor', 
+        label: 'Credit or Debit', 
+        value: 'checked', 
+        required: true, 
+        customValidation: () => (creditAmt > 0 || debitAmt > 0) ? null : 'Please enter a valid Credit or Debit amount greater than zero'
+      }
+    ];
+
+    const { isValid, errors: newErrors } = validateFinanceForm(fields);
+    setErrors(newErrors);
+    if (!isValid) return;
+
 
     const selectedPartner = partners.find(p => p.id === partnerId);
     if (!selectedPartner) {
@@ -363,9 +380,11 @@ const CapitalEntry: React.FC = () => {
                   <input
                     type="date"
                     value={date}
-                    onChange={(e) => setDate(e.target.value)}
+                    onChange={(e) => { setDate(e.target.value); setErrors(p => ({...p, date: false})) }}
+                    ref={dateRef}
+                    className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none h-9 shadow-sm finance-header-time ${errors.date ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500" : "border-slate-200 focus:ring-1 focus:ring-slate-900"}`}
                     required
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-9 shadow-sm finance-header-time"
+                    
                   />
                 </div>
 
@@ -375,9 +394,11 @@ const CapitalEntry: React.FC = () => {
                   </label>
                   <select
                     value={partnerId}
-                    onChange={(e) => setPartnerId(e.target.value)}
+                    onChange={(e) => { setPartnerId(e.target.value); setErrors(p => ({...p, partnerId: false})) }}
+                    ref={partnerIdRef as any}
+                    className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none h-9 shadow-sm finance-header-time ${errors.partnerId ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500" : "border-slate-200 focus:ring-1 focus:ring-slate-900"}`}
                     required
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-9 shadow-sm finance-header-time"
+                    
                   >
                     <option value="">SELECT PARTNER</option>
                     {partners.map(p => (
@@ -409,10 +430,12 @@ const CapitalEntry: React.FC = () => {
                     type="number"
                     step="any"
                     value={credit}
-                    onChange={(e) => handleCreditChange(e.target.value)}
+                    onChange={(e) => { handleCreditChange(e.target.value); setErrors(p => ({...p, amount_xor: false})) }}
+                    ref={creditRef}
+                    className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400 shadow-sm finance-header-time ${errors.amount_xor ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500" : "border-slate-200 focus:ring-1 focus:ring-slate-900"}`}
                     disabled={!!debit}
                     placeholder="0.00"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400 shadow-sm finance-header-time"
+                    
                   />
                 </div>
 
@@ -424,10 +447,12 @@ const CapitalEntry: React.FC = () => {
                     type="number"
                     step="any"
                     value={debit}
-                    onChange={(e) => handleDebitChange(e.target.value)}
+                    onChange={(e) => { handleDebitChange(e.target.value); setErrors(p => ({...p, amount_xor: false})) }}
+                    ref={debitRef}
+                    className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400 shadow-sm finance-header-time ${errors.amount_xor ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500" : "border-slate-200 focus:ring-1 focus:ring-slate-900"}`}
                     disabled={!!credit}
                     placeholder="0.00"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400 shadow-sm finance-header-time"
+                    
                   />
                 </div>
               </div>

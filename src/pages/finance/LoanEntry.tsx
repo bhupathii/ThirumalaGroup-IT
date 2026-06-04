@@ -17,6 +17,7 @@ import {
   Camera
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { validateFinanceForm, ValidationField } from '../../utils/financeValidation';
 import { useAuth } from '../../contexts/AuthContext';
 import { BiometricScanner } from '../../components/finance/BiometricScanner';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
@@ -37,6 +38,20 @@ const LoanEntry: React.FC = () => {
   const navigate = useNavigate();
 
   // Loading/Saving states
+
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const dateRef = useRef<HTMLInputElement>(null);
+  const loanIdRef = useRef<HTMLInputElement>(null);
+  const custNameRef = useRef<HTMLInputElement>(null);
+  const custPhoneRef = useRef<HTMLInputElement>(null);
+  const g1NameRef = useRef<HTMLInputElement>(null);
+  const g1PhoneRef = useRef<HTMLInputElement>(null);
+  const amountRef = useRef<HTMLInputElement>(null);
+  const interestRateRef = useRef<HTMLInputElement>(null);
+  const durationMonthsRef = useRef<HTMLInputElement>(null);
+  const particularsRef = useRef<HTMLTextAreaElement>(null);
+  const locAddressRef = useRef<HTMLInputElement>(null);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -70,7 +85,8 @@ const LoanEntry: React.FC = () => {
   const [g1Name, setG1Name] = useState('');
   const [g1Phone, setG1Phone] = useState('');
   const [g1Aadhaar, setG1Aadhaar] = useState('');
-  const [g1Address, setG1Address] = useState('');
+  const [g1AadhaarAddress, setG1AadhaarAddress] = useState('');
+  const [g1PresentAddress, setG1PresentAddress] = useState('');
   const [g1Photo, setG1Photo] = useState<string | null>(null);
   const [g1FingerprintUrl, setG1FingerprintUrl] = useState<string | null>(null);
   const [g1FingerprintTemplate, setG1FingerprintTemplate] = useState<string | null>(null);
@@ -83,7 +99,8 @@ const LoanEntry: React.FC = () => {
   const [g2Name, setG2Name] = useState('');
   const [g2Phone, setG2Phone] = useState('');
   const [g2Aadhaar, setG2Aadhaar] = useState('');
-  const [g2Address, setG2Address] = useState('');
+  const [g2AadhaarAddress, setG2AadhaarAddress] = useState('');
+  const [g2PresentAddress, setG2PresentAddress] = useState('');
   const [g2Photo, setG2Photo] = useState<string | null>(null);
   const [g2FingerprintUrl, setG2FingerprintUrl] = useState<string | null>(null);
   const [g2FingerprintTemplate, setG2FingerprintTemplate] = useState<string | null>(null);
@@ -296,7 +313,8 @@ const LoanEntry: React.FC = () => {
         setG1Name(selected.name);
         setG1Phone(selected.phone || '');
         setG1Aadhaar(selected.aadhaar || '');
-        setG1Address(selected.address || '');
+        setG1AadhaarAddress(selected.aadhaar_address || '');
+        setG1PresentAddress(selected.present_address || '');
         setG1Photo(selected.photo_url || null);
         setG1FingerprintUrl(selected.fingerprint_image_url || null);
         setG1FingerprintTemplate(selected.fingerprint_template || null);
@@ -313,7 +331,8 @@ const LoanEntry: React.FC = () => {
         setG2Name(selected.name);
         setG2Phone(selected.phone || '');
         setG2Aadhaar(selected.aadhaar || '');
-        setG2Address(selected.address || '');
+        setG2AadhaarAddress(selected.aadhaar_address || '');
+        setG2PresentAddress(selected.present_address || '');
         setG2Photo(selected.photo_url || null);
         setG2FingerprintUrl(selected.fingerprint_image_url || null);
         setG2FingerprintTemplate(selected.fingerprint_template || null);
@@ -491,7 +510,8 @@ const LoanEntry: React.FC = () => {
     setG1Name('');
     setG1Phone('');
     setG1Aadhaar('');
-    setG1Address('');
+    setG1AadhaarAddress('');
+    setG1PresentAddress('');
     setG1Photo(null);
     setG1FingerprintUrl(null);
     setG1FingerprintTemplate(null);
@@ -503,7 +523,8 @@ const LoanEntry: React.FC = () => {
     setG2Name('');
     setG2Phone('');
     setG2Aadhaar('');
-    setG2Address('');
+    setG2AadhaarAddress('');
+    setG2PresentAddress('');
     setG2Photo(null);
     setG2FingerprintUrl(null);
     setG2FingerprintTemplate(null);
@@ -541,14 +562,31 @@ const LoanEntry: React.FC = () => {
 
   const handleSaveLoan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loanId.trim()) {
-      toast.error('Loan Number is required');
-      return;
+
+    const fields: ValidationField[] = [
+      { name: 'date', label: 'Date', value: date, required: true, ref: dateRef },
+      { name: 'loanId', label: 'Loan Number', value: loanId, required: true, ref: loanIdRef },
+      { name: 'custName', label: 'Customer Name', value: custName, required: true, ref: custNameRef },
+      { name: 'custPhone', label: 'Customer Phone', value: custPhone, required: true, ref: custPhoneRef },
+      { name: 'amount', label: 'Loan Amount', value: amount, required: true, ref: amountRef },
+      { name: 'interestRate', label: 'Rate of Interest', value: interestRate, required: true, ref: interestRateRef },
+      { name: 'durationMonths', label: 'Period', value: durationMonths, required: true, ref: durationMonthsRef },
+      { name: 'particulars', label: 'Particulars', value: particulars, required: true, ref: particularsRef },
+    ];
+
+    if (g1Name || g1SelectedId) {
+      fields.push({ name: 'g1Name', label: 'Guarantor Name', value: g1Name, required: true, ref: g1NameRef });
+      fields.push({ name: 'g1Phone', label: 'Guarantor Phone', value: g1Phone, required: true, ref: g1PhoneRef });
     }
-    if (!custName.trim()) {
-      toast.error('Customer name is required');
-      return;
+    
+    if (locVillage || locMandal || locDistrict || locState || locPincode || locLandmark || locLatitude || locLongitude || collateralImage) {
+      fields.push({ name: 'locAddress', label: 'Collateral Address / Location', value: locAddress, required: true, ref: locAddressRef });
     }
+    
+    const { isValid, errors: newErrors } = validateFinanceForm(fields);
+    setErrors(newErrors);
+    if (!isValid) return;
+
     if (!liveCalculations) {
       toast.error('Please enter valid loan terms (Amount, Rate, Duration)');
       return;
@@ -650,7 +688,8 @@ const LoanEntry: React.FC = () => {
             name: g1Name.trim(),
             aadhaar: g1Aadhaar || null,
             phone: g1Phone || null,
-            address: g1Address || null,
+            aadhaar_address: g1AadhaarAddress || null,
+            present_address: g1PresentAddress || null,
             photo_url: g1Photo,
             fingerprint_template: g1FingerprintTemplate || null,
             fingerprint_image_url: g1FingerprintUrl || null,
@@ -682,7 +721,8 @@ const LoanEntry: React.FC = () => {
             name: g2Name.trim(),
             aadhaar: g2Aadhaar || null,
             phone: g2Phone || null,
-            address: g2Address || null,
+            aadhaar_address: g2AadhaarAddress || null,
+            present_address: g2PresentAddress || null,
             photo_url: g2Photo,
             fingerprint_template: g2FingerprintTemplate || null,
             fingerprint_image_url: g2FingerprintUrl || null,
@@ -720,6 +760,8 @@ const LoanEntry: React.FC = () => {
       const combinedSuretyName = [g1Name, g2Name].filter(Boolean).join(' / ') || null;
       const combinedSuretyPhone = [g1Phone, g2Phone].filter(Boolean).join(' / ') || null;
       const combinedSuretyAadhaar = [g1Aadhaar, g2Aadhaar].filter(Boolean).join(' / ') || null;
+      const combinedSuretyAadhaarAddress = [g1AadhaarAddress, g2AadhaarAddress].filter(Boolean).join(' / ') || null;
+      const combinedSuretyPresentAddress = [g1PresentAddress, g2PresentAddress].filter(Boolean).join(' / ') || null;
 
       const finalRemarks = [
          remarks,
@@ -752,6 +794,8 @@ const LoanEntry: React.FC = () => {
         surety_name: combinedSuretyName,
         surety_phone: combinedSuretyPhone,
         surety_aadhaar: combinedSuretyAadhaar,
+        surety_aadhaar_address: combinedSuretyAadhaarAddress,
+        surety_present_address: combinedSuretyPresentAddress,
         remarks: finalRemarks,
         customer_photo_url: custPhoto,
         surety_photo_url: g1Photo || g2Photo || null,
@@ -870,22 +914,22 @@ const LoanEntry: React.FC = () => {
       {/* Top Header Actions Bar */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5 print:hidden">
         <div>
-          <h1 className="finance-h1">NEW LOAN ENTRY</h1>
-          <p className="mt-1 finance-small-label uppercase">
+          <h1 className="peek-h1">NEW LOAN ENTRY</h1>
+          <p className="mt-1 peek-small-10 uppercase">
             CAPTURE & DISBURSE GENERAL — LEDGER — DUES CALCULATIONS PREVIEW & FILE
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => navigate('/finance')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm peek-button uppercase"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
           </button>
           <Link
             to="/finance/calculator"
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm peek-button uppercase"
           >
             <Calculator className="w-3.5 h-3.5" />
             CALCULATOR
@@ -893,14 +937,14 @@ const LoanEntry: React.FC = () => {
           <button
             onClick={handlePrintPreview}
             disabled={!liveCalculations}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50 finance-button uppercase"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50 peek-button uppercase"
           >
             <Printer className="w-3.5 h-3.5" />
             PREVIEW & PRINT
           </button>
           <button
             onClick={handleClearForm}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors shadow-sm finance-header-time"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors shadow-sm peek-button uppercase"
           >
             <X className="w-3.5 h-3.5" />
             CLEAR
@@ -908,7 +952,7 @@ const LoanEntry: React.FC = () => {
           <button
             onClick={handleSaveLoan}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 finance-button uppercase"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 peek-button uppercase"
           >
             <Check className="w-3.5 h-3.5" />
             {saving ? 'SAVING...' : 'SAVE LOAN'}
@@ -924,31 +968,32 @@ const LoanEntry: React.FC = () => {
           
           {/* Card 1: BASICS */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
               BASICS
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="finance-caption uppercase">
-                  DATE *
+                <label className="peek-label uppercase">
+                  DATE <span className="text-red-500 ml-1">*</span>
                 </label>
                 <input
                   type="date"
+                  ref={dateRef}
                   value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                  onChange={(e) => { setDate(e.target.value); setErrors(p => ({...p, date: false})) }}
+                  className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-caption-12 ${errors.date ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                   required
                 />
               </div>
 
               <div>
-                <label className="finance-caption uppercase">
-                  LEDGER TYPE *
+                <label className="peek-label uppercase">
+                  LEDGER TYPE <span className="text-red-500 ml-1">*</span>
                 </label>
                 <select
                   value={loanCategory}
                   onChange={(e) => setLoanCategory(e.target.value as any)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
                   required
                 >
                   <option value="CD">CHIT FUND (CD)</option>
@@ -956,24 +1001,25 @@ const LoanEntry: React.FC = () => {
                   <option value="HP">HP LEDGER</option>
                   <option value="TBD">TBD LEDGER</option>
                 </select>
-                <span className="text-[9px] text-slate-400 mt-1.5 block finance-input uppercase">
+                <span className="text-[9px] text-slate-400 mt-1.5 block peek-button uppercase">
                   CD, HP, STBD, TBD
                 </span>
               </div>
 
               <div>
-                <label className="finance-caption uppercase">
-                  LOAN NUMBER
+                <label className="peek-label uppercase">
+                  LOAN NUMBER <span className="text-red-500 ml-1">*</span>
                 </label>
                 <input
                   type="text"
+                  ref={loanIdRef}
                   value={loanId}
-                  onChange={(e) => setLoanId(e.target.value)}
+                  onChange={(e) => { setLoanId(e.target.value); setErrors(p => ({...p, loanId: false})) }}
                   placeholder="e.g. CD001"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-700 focus:outline-none font-mono finance-header-time"
+                  className={`w-full bg-slate-50 border rounded-lg p-2 text-slate-700 focus:outline-none font-mono peek-caption-12 ${errors.loanId ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200'}`}
                   required
                 />
-                <span className="text-[9px] text-slate-400 mt-1.5 block finance-input uppercase">
+                <span className="text-[9px] text-slate-400 mt-1.5 block peek-button uppercase">
                   AUTO-GENERATED
                 </span>
               </div>
@@ -983,7 +1029,7 @@ const LoanEntry: React.FC = () => {
           {/* Card 2: CUSTOMER */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-slate-900 finance-header-time uppercase">
+              <h3 className="text-slate-900 peek-h3 uppercase">
                 CUSTOMER DETAILS
               </h3>
               {selectedCustomerId && (
@@ -1006,7 +1052,7 @@ const LoanEntry: React.FC = () => {
                     setCustAadhaarAddress('');
                     setCustPresentAddress('');
                   }}
-                  className="text-red-650 hover:underline finance-small-label uppercase"
+                  className="text-red-650 hover:underline peek-small-10 uppercase"
                 >
                   CLEAR SELECTION
                 </button>
@@ -1016,7 +1062,7 @@ const LoanEntry: React.FC = () => {
             <div className="space-y-4">
               {/* Search input for existing customer */}
               <div ref={dropdownRef} className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 print:hidden">
-                <label className="finance-caption uppercase">
+                <label className="peek-label uppercase">
                   SELECT EXISTING CUSTOMER (OR TYPE DETAILS DIRECTLY BELOW)
                 </label>
                 <div className="relative">
@@ -1032,13 +1078,13 @@ const LoanEntry: React.FC = () => {
                     }}
                     onFocus={() => setCustDropdownOpen(true)}
                     placeholder="Search by customer name, ID, phone, or Aadhaar..."
-                    className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                    className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
                   />
                   
                   {custDropdownOpen && (
                     <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                       {filteredCustomersForSelect.length === 0 ? (
-                        <div className="px-4 py-3 text-slate-400 text-center finance-header-time uppercase">
+                        <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase">
                           No matching customers found
                         </div>
                       ) : (
@@ -1053,13 +1099,13 @@ const LoanEntry: React.FC = () => {
                             className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
                           >
                             <div>
-                              <div className="text-slate-900 finance-header-time">{c.name}</div>
-                              <div className="text-[9px] text-slate-400 mt-0.5 finance-input uppercase">
+                              <div className="text-slate-900 peek-caption-12">{c.name}</div>
+                              <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">
                                 ID: #{c.customer_id || 'N/A'} | Aadhaar: {c.aadhaar || 'N/A'}
                               </div>
                             </div>
                             {(c.phone_1 || c.phone) ? (
-                              <div className="text-slate-500 font-mono finance-small-label">
+                              <div className="text-slate-500 font-mono peek-small-10">
                                 {c.phone_1 || c.phone}
                               </div>
                             ) : null}
@@ -1074,16 +1120,15 @@ const LoanEntry: React.FC = () => {
               {/* Customer Inputs Panel */}
               <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-150 space-y-4">
                 <div className="flex justify-between items-center pb-2">
-                  <span className="bg-[#0b1329] text-white text-[9px] px-2 py-1 rounded finance-input uppercase">
+                  <span className="bg-[#0b1329] text-white text-[9px] px-2 py-1 rounded peek-button uppercase">
                     {selectedCustomerId ? `ID: #${customers.find(c => c.id === selectedCustomerId)?.customer_id || 'N/A'}` : 'NEW ENTRY'}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input 
-                    label="Customer Name *" 
-                    value={custName} 
-                    onChange={setCustName} 
+                    label="Customer Name" 
+                    ref={custNameRef} error={errors.custName} value={custName} onChange={(val) => { setCustName(val); setErrors(p => ({...p, custName: false})) }} 
                     placeholder="Full Name" 
                     readOnly={!!selectedCustomerId} 
                     required 
@@ -1094,6 +1139,7 @@ const LoanEntry: React.FC = () => {
                     onChange={setCustFatherName} 
                     placeholder="Father Name" 
                     readOnly={!!selectedCustomerId} 
+                    required
                   />
                   <Input 
                     label="Aadhaar UID" 
@@ -1101,13 +1147,14 @@ const LoanEntry: React.FC = () => {
                     onChange={setCustAadhaar} 
                     placeholder="12-digit Aadhaar UID" 
                     readOnly={!!selectedCustomerId} 
+                    required
                   />
                   <Input 
                     label="Phone 1" 
-                    value={custPhone} 
-                    onChange={setCustPhone} 
+                    ref={custPhoneRef} error={errors.custPhone} value={custPhone} onChange={(val) => { setCustPhone(val); setErrors(p => ({...p, custPhone: false})) }} 
                     placeholder="Primary contact" 
                     readOnly={!!selectedCustomerId} 
+                    required
                   />
                   <Input 
                     label="Phone 2" 
@@ -1141,7 +1188,7 @@ const LoanEntry: React.FC = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-3">
                   <div>
-                    <label className="block text-[9px] text-slate-400 mb-1 finance-input uppercase">
+                    <label className="block text-[9px] text-slate-400 mb-1 peek-button uppercase">
                       Aadhaar Address
                     </label>
                     <textarea
@@ -1150,11 +1197,11 @@ const LoanEntry: React.FC = () => {
                       placeholder="Address printed on Aadhaar"
                       rows={2}
                       disabled={!!selectedCustomerId}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 disabled:bg-slate-50 focus:outline-none resize-none finance-header-time"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 disabled:bg-slate-50 focus:outline-none resize-none peek-caption-12"
                     />
                   </div>
                   <div>
-                    <label className="block text-[9px] text-slate-400 mb-1 finance-input uppercase">
+                    <label className="block text-[9px] text-slate-400 mb-1 peek-button uppercase">
                       Present Address
                     </label>
                     <textarea
@@ -1163,7 +1210,7 @@ const LoanEntry: React.FC = () => {
                       placeholder="Current residential address"
                       rows={2}
                       disabled={!!selectedCustomerId}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 disabled:bg-slate-50 focus:outline-none resize-none finance-header-time"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 disabled:bg-slate-50 focus:outline-none resize-none peek-caption-12"
                     />
                   </div>
                 </div>
@@ -1171,7 +1218,7 @@ const LoanEntry: React.FC = () => {
                 {/* Photo & Biometrics */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">
                   <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center space-y-3 shadow-sm">
-                    <span className="finance-caption uppercase text-slate-500 font-semibold mb-1">Customer Photo</span>
+                    <span className="peek-label uppercase text-slate-500 font-semibold mb-1">Customer Photo</span>
                     <div className="w-24 h-24 bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden relative group">
                       {custPhoto ? (
                         <>
@@ -1182,17 +1229,17 @@ const LoanEntry: React.FC = () => {
                             className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <Trash2 className="w-5 h-5 mb-1" />
-                            <span className="finance-small-label uppercase">REMOVE</span>
+                            <span className="peek-small-10 uppercase">REMOVE</span>
                           </button>
                         </>
                       ) : (
                         <div className="flex flex-col items-center text-slate-400 gap-1">
                           <User className="w-6 h-6 stroke-1" />
-                          <span className="text-[9px] finance-input uppercase">NO PHOTO</span>
+                          <span className="text-[9px] peek-button uppercase">NO PHOTO</span>
                         </div>
                       )}
                     </div>
-                    <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm finance-input uppercase inline-flex items-center gap-1.5 transition-colors">
+                    <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm peek-button uppercase inline-flex items-center gap-1.5 transition-colors">
                       <Camera className="w-3.5 h-3.5" />
                       {custPhoto ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
                       <input
@@ -1230,14 +1277,14 @@ const LoanEntry: React.FC = () => {
 
           {/* Card 3: GUARANTORS */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
               GUARANTORS
             </h3>
             
             {/* Guarantor 1 */}
             <div className="space-y-3 pb-4 border-b border-slate-100">
               <div className="flex justify-between items-center">
-                <h4 className="text-slate-400 finance-small-label uppercase">
+                <h4 className="text-slate-400 peek-small-10 uppercase">
                   GUARANTOR 1
                 </h4>
                 {g1SelectedId && (
@@ -1248,10 +1295,11 @@ const LoanEntry: React.FC = () => {
                       setG1Name('');
                       setG1Phone('');
                       setG1Aadhaar('');
-                      setG1Address('');
+                      setG1AadhaarAddress('');
+                      setG1PresentAddress('');
                       setG1Photo(null);
                     }}
-                    className="text-[9px] text-red-650 hover:underline finance-input uppercase"
+                    className="text-[9px] text-red-650 hover:underline peek-button uppercase"
                   >
                     CLEAR SELECTION
                   </button>
@@ -1272,13 +1320,13 @@ const LoanEntry: React.FC = () => {
                   }}
                   onFocus={() => setG1DropdownOpen(true)}
                   placeholder="Select or Search Existing Guarantor 1..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
                 />
                 
                 {g1DropdownOpen && (
                   <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
                     {filteredGuarantorsForSelectG1.length === 0 ? (
-                      <div className="px-4 py-3 text-slate-400 text-center finance-header-time uppercase">
+                      <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase">
                         No matching guarantors
                       </div>
                     ) : (
@@ -1293,13 +1341,13 @@ const LoanEntry: React.FC = () => {
                           className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
                         >
                           <div>
-                            <div className="text-slate-900 finance-header-time">{g.name}</div>
-                            <div className="text-[9px] text-slate-400 mt-0.5 finance-input uppercase">
+                            <div className="text-slate-900 peek-caption-12">{g.name}</div>
+                            <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">
                               ID: #{g.guarantor_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
                             </div>
                           </div>
                           {g.phone && (
-                            <div className="text-[9px] text-slate-500 font-mono finance-input">
+                            <div className="text-[9px] text-slate-500 font-mono peek-button">
                               {g.phone}
                             </div>
                           )}
@@ -1312,14 +1360,16 @@ const LoanEntry: React.FC = () => {
 
               {/* Guarantor 1 details */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <Input label="Name" value={g1Name} onChange={setG1Name} placeholder="Full Name" readOnly={!!g1SelectedId} />
-                <Input label="Aadhaar" value={g1Aadhaar} onChange={setG1Aadhaar} placeholder="Aadhaar UID" readOnly={!!g1SelectedId} />
-                <Input label="Phone" value={g1Phone} onChange={setG1Phone} placeholder="Phone No" readOnly={!!g1SelectedId} />
-                <Input label="Address" value={g1Address} onChange={setG1Address} placeholder="Address details" readOnly={!!g1SelectedId} />
+                <Input label="Name" ref={g1NameRef} error={errors.g1Name} value={g1Name} onChange={(val) => { setG1Name(val); setErrors(p => ({...p, g1Name: false})) }} placeholder="Full Name" readOnly={!!g1SelectedId} />
+                <Input label="Aadhaar" value={g1Aadhaar} onChange={setG1Aadhaar} placeholder="Aadhaar UID" readOnly={!!g1SelectedId} required={!!g1Name} />
+                <Input label="Phone" ref={g1PhoneRef} error={errors.g1Phone} value={g1Phone} onChange={(val) => { setG1Phone(val); setErrors(p => ({...p, g1Phone: false})) }} placeholder="Phone No" readOnly={!!g1SelectedId} required={!!g1Name} />
+
+                <Input label="Aadhaar Address" value={g1AadhaarAddress} onChange={setG1AadhaarAddress} placeholder="Address as per Aadhaar" readOnly={!!g1SelectedId} required={!!g1Name} />
+                <Input label="Present Address" value={g1PresentAddress} onChange={setG1PresentAddress} placeholder="Current residential address" readOnly={!!g1SelectedId} required={!!g1Name} />
                 {/* Guarantor 1 Photo & Biometrics */}
                 <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center space-y-3">
-                    <span className="finance-caption uppercase text-slate-500 font-semibold mb-1">Guarantor 1 Photo</span>
+                    <span className="peek-label uppercase text-slate-500 font-semibold mb-1">Guarantor 1 Photo</span>
                     <div className="w-24 h-24 bg-white rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden relative group">
                       {g1Photo ? (
                         <>
@@ -1330,17 +1380,17 @@ const LoanEntry: React.FC = () => {
                             className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <Trash2 className="w-5 h-5 mb-1" />
-                            <span className="finance-small-label uppercase">REMOVE</span>
+                            <span className="peek-small-10 uppercase">REMOVE</span>
                           </button>
                         </>
                       ) : (
                         <div className="flex flex-col items-center text-slate-400 gap-1">
                           <User className="w-6 h-6 stroke-1" />
-                          <span className="text-[9px] finance-input uppercase">NO PHOTO</span>
+                          <span className="text-[9px] peek-button uppercase">NO PHOTO</span>
                         </div>
                       )}
                     </div>
-                    <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm finance-input uppercase inline-flex items-center gap-1.5 transition-colors">
+                    <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm peek-button uppercase inline-flex items-center gap-1.5 transition-colors">
                       <Camera className="w-3.5 h-3.5" />
                       {g1Photo ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
                       <input
@@ -1378,7 +1428,7 @@ const LoanEntry: React.FC = () => {
             {/* Guarantor 2 */}
             <div className="space-y-3 pt-2">
               <div className="flex justify-between items-center">
-                <h4 className="text-slate-400 finance-small-label uppercase">
+                <h4 className="text-slate-400 peek-small-10 uppercase">
                   GUARANTOR 2
                 </h4>
                 {g2SelectedId && (
@@ -1389,10 +1439,11 @@ const LoanEntry: React.FC = () => {
                       setG2Name('');
                       setG2Phone('');
                       setG2Aadhaar('');
-                      setG2Address('');
+                      setG2AadhaarAddress('');
+                      setG2PresentAddress('');
                       setG2Photo(null);
                     }}
-                    className="text-[9px] text-red-650 hover:underline finance-input uppercase"
+                    className="text-[9px] text-red-650 hover:underline peek-button uppercase"
                   >
                     CLEAR SELECTION
                   </button>
@@ -1413,13 +1464,13 @@ const LoanEntry: React.FC = () => {
                   }}
                   onFocus={() => setG2DropdownOpen(true)}
                   placeholder="Select or Search Existing Guarantor 2..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
                 />
                 
                 {g2DropdownOpen && (
                   <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
                     {filteredGuarantorsForSelectG2.length === 0 ? (
-                      <div className="px-4 py-3 text-slate-400 text-center finance-header-time uppercase">
+                      <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase">
                         No matching guarantors
                       </div>
                     ) : (
@@ -1434,13 +1485,13 @@ const LoanEntry: React.FC = () => {
                           className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
                         >
                           <div>
-                            <div className="text-slate-900 finance-header-time">{g.name}</div>
-                            <div className="text-[9px] text-slate-400 mt-0.5 finance-input uppercase">
+                            <div className="text-slate-900 peek-caption-12">{g.name}</div>
+                            <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">
                               ID: #{g.guarantor_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
                             </div>
                           </div>
                           {g.phone && (
-                            <div className="text-[9px] text-slate-500 font-mono finance-input">
+                            <div className="text-[9px] text-slate-500 font-mono peek-button">
                               {g.phone}
                             </div>
                           )}
@@ -1454,13 +1505,15 @@ const LoanEntry: React.FC = () => {
               {/* Guarantor 2 details */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 <Input label="Name" value={g2Name} onChange={setG2Name} placeholder="Full Name" readOnly={!!g2SelectedId} />
-                <Input label="Aadhaar" value={g2Aadhaar} onChange={setG2Aadhaar} placeholder="Aadhaar UID" readOnly={!!g2SelectedId} />
-                <Input label="Phone" value={g2Phone} onChange={setG2Phone} placeholder="Phone No" readOnly={!!g2SelectedId} />
-                <Input label="Address" value={g2Address} onChange={setG2Address} placeholder="Address details" readOnly={!!g2SelectedId} />
+                <Input label="Aadhaar" value={g2Aadhaar} onChange={setG2Aadhaar} placeholder="Aadhaar UID" readOnly={!!g2SelectedId} required={!!g2Name} />
+                <Input label="Phone" value={g2Phone} onChange={setG2Phone} placeholder="Phone No" readOnly={!!g2SelectedId} required={!!g2Name} />
+
+                <Input label="Aadhaar Address" value={g2AadhaarAddress} onChange={setG2AadhaarAddress} placeholder="Address as per Aadhaar" readOnly={!!g2SelectedId} required={!!g2Name} />
+                <Input label="Present Address" value={g2PresentAddress} onChange={setG2PresentAddress} placeholder="Current residential address" readOnly={!!g2SelectedId} required={!!g2Name} />
                 {/* Guarantor 2 Photo & Biometrics */}
                 <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center space-y-3">
-                    <span className="finance-caption uppercase text-slate-500 font-semibold mb-1">Guarantor 2 Photo</span>
+                    <span className="peek-label uppercase text-slate-500 font-semibold mb-1">Guarantor 2 Photo</span>
                     <div className="w-24 h-24 bg-white rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden relative group">
                       {g2Photo ? (
                         <>
@@ -1471,17 +1524,17 @@ const LoanEntry: React.FC = () => {
                             className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <Trash2 className="w-5 h-5 mb-1" />
-                            <span className="finance-small-label uppercase">REMOVE</span>
+                            <span className="peek-small-10 uppercase">REMOVE</span>
                           </button>
                         </>
                       ) : (
                         <div className="flex flex-col items-center text-slate-400 gap-1">
                           <User className="w-6 h-6 stroke-1" />
-                          <span className="text-[9px] finance-input uppercase">NO PHOTO</span>
+                          <span className="text-[9px] peek-button uppercase">NO PHOTO</span>
                         </div>
                       )}
                     </div>
-                    <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm finance-input uppercase inline-flex items-center gap-1.5 transition-colors">
+                    <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm peek-button uppercase inline-flex items-center gap-1.5 transition-colors">
                       <Camera className="w-3.5 h-3.5" />
                       {g2Photo ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
                       <input
@@ -1519,53 +1572,56 @@ const LoanEntry: React.FC = () => {
 
           {/* Card 4: LOAN TERMS */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
               LOAN TERMS
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Row 1 */}
               <div>
-                <label className="finance-caption uppercase mb-1 block">LOAN AMOUNT *</label>
+                <label className="peek-label uppercase mb-1 block">LOAN AMOUNT <span className="text-red-500 ml-1">*</span></label>
                 <input
                   type="number"
+                  ref={amountRef}
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={(e) => { setAmount(e.target.value); setErrors(p => ({...p, amount: false})) }}
                   placeholder="e.g. 50000"
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
+                  className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-button ${errors.amount ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                   required
                 />
               </div>
               <div>
-                <label className="finance-caption uppercase mb-1 block">RATE OF INTEREST (%) *</label>
+                <label className="peek-label uppercase mb-1 block">RATE OF INTEREST (%) <span className="text-red-500 ml-1">*</span></label>
                 <input
                   type="number"
+                  ref={interestRateRef}
                   value={interestRate}
-                  onChange={(e) => setInterestRate(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
+                  onChange={(e) => { setInterestRate(e.target.value); setErrors(p => ({...p, interestRate: false})) }}
+                  className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-button ${errors.interestRate ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                   required
                 />
-                <span className="text-[9px] text-slate-400 mt-1 block finance-input uppercase">DEFAULT: 3%</span>
+                <span className="text-[9px] text-slate-400 mt-1 block peek-button uppercase">DEFAULT: 3%</span>
               </div>
 
               {/* Row 2 */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
-                  <label className="finance-caption uppercase mb-1 block">PERIOD *</label>
+                  <label className="peek-label uppercase mb-1 block">PERIOD <span className="text-red-500 ml-1">*</span></label>
                   <input
                     type="number"
+                    ref={durationMonthsRef}
                     value={durationMonths}
-                    onChange={(e) => setDurationMonths(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
+                    onChange={(e) => { setDurationMonths(e.target.value); setErrors(p => ({...p, durationMonths: false})) }}
+                    className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-button ${errors.durationMonths ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                     required
                   />
-                  <span className="text-[9px] text-slate-400 mt-1 block finance-input uppercase">DAYS FOR CD/OD, INSTALMENTS FOR HP/STBD, MONTHS FOR TBD</span>
+                  <span className="text-[9px] text-slate-400 mt-1 block peek-button uppercase">DAYS FOR CD/OD, INSTALMENTS FOR HP/STBD, MONTHS FOR TBD</span>
                 </div>
                 <div className="col-span-1">
-                  <label className="finance-caption uppercase mb-1 block">DUE TYPE *</label>
+                  <label className="peek-label uppercase mb-1 block">DUE TYPE <span className="text-red-500 ml-1">*</span></label>
                   <select
                     value={dueType}
                     onChange={(e) => setDueType(e.target.value as any)}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-button"
                     required
                   >
                     <option value="Daily">Daily</option>
@@ -1575,45 +1631,46 @@ const LoanEntry: React.FC = () => {
                 </div>
               </div>
               <div>
-                <label className="finance-caption uppercase mb-1 block">DOCUMENT CHARGES (₹)</label>
+                <label className="peek-label uppercase mb-1 block">DOCUMENT CHARGES (₹)</label>
                 <input
                   type="number"
                   value={docCharges}
                   onChange={(e) => setDocCharges(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-button"
                 />
               </div>
 
               {/* Row 3 */}
               <div>
-                <label className="finance-caption uppercase mb-1 block">ANNUAL HOLD %</label>
+                <label className="peek-label uppercase mb-1 block">ANNUAL HOLD %</label>
                 <input
                   type="number"
                   value={annualHold}
                   onChange={(e) => setAnnualHold(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-button"
                 />
-                <span className="text-[9px] text-slate-400 mt-1 block finance-input uppercase">PRE-DEDUCTED FROM DISBURSAL, PRORATED OVER TENURE</span>
+                <span className="text-[9px] text-slate-400 mt-1 block peek-button uppercase">PRE-DEDUCTED FROM DISBURSAL, PRORATED OVER TENURE</span>
               </div>
               <div>
-                <label className="finance-caption uppercase mb-1 block">PARTIAL PAID (₹)</label>
+                <label className="peek-label uppercase mb-1 block">PARTIAL PAID (₹)</label>
                 <input
                   type="number"
                   value={partialPaid}
                   onChange={(e) => setPartialPaid(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-button"
                 />
-                <span className="text-[9px] text-slate-400 mt-1 block finance-input uppercase">ANY AMOUNT ALREADY COLLECTED AT ENTRY</span>
+                <span className="text-[9px] text-slate-400 mt-1 block peek-button uppercase">ANY AMOUNT ALREADY COLLECTED AT ENTRY</span>
               </div>
 
               {/* Row 4 */}
               <div className="sm:col-span-2">
-                <label className="finance-caption uppercase mb-1 block">PARTICULARS</label>
+                <label className="peek-label uppercase mb-1 block">PARTICULARS</label>
                 <textarea
+                  ref={particularsRef}
                   value={particulars}
-                  onChange={(e) => setParticulars(e.target.value)}
+                  onChange={(e) => { setParticulars(e.target.value); setErrors(p => ({...p, particulars: false})) }}
                   rows={2}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-input resize-none"
+                  className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-button resize-none ${errors.particulars ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                   placeholder="e.g. Gold weight or pledge card particulars"
                 />
               </div>
@@ -1622,18 +1679,18 @@ const LoanEntry: React.FC = () => {
 
           {/* Card 5: PARTNER */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
               PARTNER
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="finance-caption uppercase">
+                <label className="peek-label uppercase">
                   SELECT PARTNER
                 </label>
                 <select
                   value={selectedPartnerId}
                   onChange={(e) => setSelectedPartnerId(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
                 >
                   <option value="">-- SELECT PARTNER --</option>
                   {partners.map(p => (
@@ -1652,17 +1709,17 @@ const LoanEntry: React.FC = () => {
           {/* Card 6: DOCUMENTS SUBMITTED */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-slate-900 finance-header-time uppercase">
+              <h3 className="text-slate-900 peek-h3 uppercase">
                 DOCUMENTS SUBMITTED
               </h3>
               <div className="flex gap-2">
-                <span className="text-[9px] text-blue-650 bg-blue-50 border border-blue-150 px-2 py-0.5 rounded finance-input uppercase">
+                <span className="text-[9px] text-blue-650 bg-blue-50 border border-blue-150 px-2 py-0.5 rounded peek-button uppercase">
                   FIN: {documents.filter(d => d.category === 'Financial' && (d.checked || d.fileUrl)).length}
                 </span>
-                <span className="text-[9px] text-purple-650 bg-purple-50 border border-purple-150 px-2 py-0.5 rounded finance-input uppercase">
+                <span className="text-[9px] text-purple-650 bg-purple-50 border border-purple-150 px-2 py-0.5 rounded peek-button uppercase">
                   ORIG: {documents.filter(d => d.category === 'Original' && (d.checked || d.fileUrl)).length}
                 </span>
-                <span className="text-[9px] text-amber-650 bg-amber-50 border border-amber-150 px-2 py-0.5 rounded finance-input uppercase">
+                <span className="text-[9px] text-amber-650 bg-amber-50 border border-amber-150 px-2 py-0.5 rounded peek-button uppercase">
                   REG: {documents.filter(d => d.category === 'Registration' && (d.checked || d.fileUrl)).length}
                 </span>
               </div>
@@ -1672,7 +1729,7 @@ const LoanEntry: React.FC = () => {
             {(['Financial', 'Original', 'Registration'] as const).map((cat, catIdx) => (
               <div key={catIdx} className="space-y-2 pt-2 first:pt-0">
                 <div className="flex justify-between items-center">
-                  <h4 className="text-slate-400 finance-small-label uppercase">
+                  <h4 className="text-slate-400 peek-small-10 uppercase">
                     {catIdx + 1}. {cat.toUpperCase()} DOCUMENTS
                   </h4>
                   <button 
@@ -1690,7 +1747,7 @@ const LoanEntry: React.FC = () => {
                       };
                       setDocuments(prev => [...prev, newDoc]);
                     }}
-                    className="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded hover:bg-slate-200 transition-colors finance-input uppercase font-semibold"
+                    className="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded hover:bg-slate-200 transition-colors peek-button uppercase font-semibold"
                   >
                     + ADD
                   </button>
@@ -1712,10 +1769,10 @@ const LoanEntry: React.FC = () => {
                             value={doc.label}
                             onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, label: e.target.value } : d))}
                             placeholder="DOCUMENT NAME..."
-                            className="bg-white border border-slate-200 rounded p-1 text-[11px] text-slate-700 w-full focus:outline-none finance-input"
+                            className="bg-white border border-slate-200 rounded p-1 text-[11px] text-slate-700 w-full focus:outline-none peek-button"
                           />
                         ) : (
-                          <span className="text-slate-800 select-none finance-input w-full">
+                          <span className="text-slate-800 select-none peek-button w-full">
                             {doc.label}
                           </span>
                         )}
@@ -1727,7 +1784,7 @@ const LoanEntry: React.FC = () => {
                           value={doc.refNo}
                           onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, refNo: e.target.value } : d))}
                           placeholder="REF NO..."
-                          className="bg-white border border-slate-200 rounded p-1 text-[11px] text-slate-700 w-full sm:w-48 focus:outline-none finance-input"
+                          className="bg-white border border-slate-200 rounded p-1 text-[11px] text-slate-700 w-full sm:w-48 focus:outline-none peek-button"
                         />
                         
                         {doc.fileUrl ? (
@@ -1736,13 +1793,13 @@ const LoanEntry: React.FC = () => {
                               href={doc.fileUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="px-2 py-1 text-[9px] bg-green-550 text-white rounded hover:bg-green-600 transition-colors shadow-sm finance-input uppercase"
+                              className="px-2 py-1 text-[9px] bg-green-550 text-white rounded hover:bg-green-600 transition-colors shadow-sm peek-button uppercase"
                             >
                               VIEW
                             </a>
                           </div>
                         ) : (
-                          <label className="px-2.5 py-1 text-[9px] bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 cursor-pointer rounded shrink-0 transition-colors select-none shadow-sm flex items-center gap-1 finance-input uppercase">
+                          <label className="px-2.5 py-1 text-[9px] bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 cursor-pointer rounded shrink-0 transition-colors select-none shadow-sm flex items-center gap-1 peek-button uppercase">
                             <Upload className="w-3 h-3" />
                             {doc.uploading ? 'UPLOADING...' : 'UPLOAD'}
                             <input
@@ -1780,13 +1837,13 @@ const LoanEntry: React.FC = () => {
           {/* Card 7: ASSET / COLLATERAL LOCATION */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-slate-900 finance-header-time uppercase">
+              <h3 className="text-slate-900 peek-h3 uppercase">
                 ASSET / COLLATERAL LOCATION
               </h3>
               <button
                 type="button"
                 onClick={handleDetectGPS}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 rounded transition-colors shadow-sm finance-small-label"
+                className="inline-flex items-center gap-1 px-3 py-1 bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 rounded transition-colors shadow-sm peek-small-10"
               >
                 <Navigation className="w-3.5 h-3.5 text-slate-600 animate-pulse" />
                 DETECT GPS
@@ -1796,8 +1853,7 @@ const LoanEntry: React.FC = () => {
             <div className="space-y-3">
               <Input
                 label="ADDRESS"
-                value={locAddress}
-                onChange={setLocAddress}
+                ref={locAddressRef} error={errors.locAddress} value={locAddress} onChange={(val) => { setLocAddress(val); setErrors(p => ({...p, locAddress: false})) }}
                 placeholder="DOOR NO, STREET, VILLAGE / TOWN"
               />
               
@@ -1820,7 +1876,7 @@ const LoanEntry: React.FC = () => {
               />
               
               <div className="pt-2 border-t border-slate-100">
-                <label className="finance-caption uppercase block mb-2">
+                <label className="peek-label uppercase block mb-2">
                   COLLATERAL PHOTO (OPTIONAL)
                 </label>
                 <div className="flex items-center gap-4">
@@ -1837,13 +1893,13 @@ const LoanEntry: React.FC = () => {
                         className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <Trash2 className="w-5 h-5 mb-1" />
-                        <span className="finance-small-label uppercase">REMOVE</span>
+                        <span className="peek-small-10 uppercase">REMOVE</span>
                       </button>
                     </div>
                   ) : (
                     <label className="w-32 h-32 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-xl hover:border-slate-400 hover:bg-slate-50 transition-colors cursor-pointer bg-slate-50/50">
                       <Camera className="w-6 h-6 text-slate-400 mb-2" />
-                      <span className="finance-small-label uppercase text-slate-500 text-center px-2">
+                      <span className="peek-small-10 uppercase text-slate-500 text-center px-2">
                         UPLOAD PHOTO
                       </span>
                       <input
@@ -1861,12 +1917,12 @@ const LoanEntry: React.FC = () => {
 
           {/* Card 8: DESCRIPTION & EXTRA FEATURES */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
               DESCRIPTION & EXTRA FEATURES
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="finance-caption uppercase">
+                <label className="peek-label uppercase">
                   REMARKS
                 </label>
                 <textarea
@@ -1874,12 +1930,12 @@ const LoanEntry: React.FC = () => {
                   onChange={(e) => setRemarks(e.target.value)}
                   placeholder="REASON FOR BORROWING, REPAYMENT ARRANGEMENT..."
                   rows={3}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
                 />
               </div>
 
               <div>
-                <label className="finance-caption uppercase">
+                <label className="peek-label uppercase">
                   EXTRA DETAILS
                 </label>
                 <textarea
@@ -1887,7 +1943,7 @@ const LoanEntry: React.FC = () => {
                   onChange={(e) => setExtraDetails(e.target.value)}
                   placeholder="SPECIAL CONDITIONS, ETC."
                   rows={2}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
                 />
               </div>
             </div>
@@ -1901,40 +1957,40 @@ const LoanEntry: React.FC = () => {
           {/* Card 9: LIVE CALCULATION */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4 h-fit">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-slate-900 finance-header-time uppercase">
+              <h3 className="text-slate-900 peek-h3 uppercase">
                 LIVE CALCULATION
               </h3>
-              <span className="text-[9px] text-slate-500 bg-slate-50 border border-slate-150 px-2 py-0.5 rounded finance-input uppercase">
+              <span className="text-[9px] text-slate-500 bg-slate-50 border border-slate-150 px-2 py-0.5 rounded peek-button uppercase">
                 {dueType}
               </span>
             </div>
 
             {!liveCalculations ? (
-              <div className="py-8 text-center text-slate-400 finance-header-time uppercase">
+              <div className="py-8 text-center text-slate-400 peek-h3 uppercase">
                 FILL IN THE LOAN AMOUNT TO SEE THE CALCULATION PREVIEW.
               </div>
             ) : (
               <div className="space-y-4 text-slate-700 finance-caption">
                 <div className="grid grid-cols-2 gap-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <span className="text-slate-400 finance-small-label uppercase">Principal:</span>
-                  <span className="text-right text-slate-900 finance-input">₹{liveCalculations.principal.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 peek-small-10 uppercase">Principal:</span>
+                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.principal.toLocaleString('en-IN')}</span>
 
-                  <span className="text-slate-400 finance-small-label uppercase">Doc Fees:</span>
-                  <span className="text-right text-slate-900 finance-input">₹{liveCalculations.docFees.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 peek-small-10 uppercase">Doc Fees:</span>
+                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.docFees.toLocaleString('en-IN')}</span>
 
-                  <span className="text-slate-400 finance-small-label uppercase">Net Disbursed:</span>
-                  <span className="text-right text-slate-900 text-blue-650 finance-input">₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 peek-small-10 uppercase">Net Disbursed:</span>
+                  <span className="text-right text-slate-900 text-blue-650 peek-button">₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-y-2 border-t pt-2.5">
-                  <span className="text-slate-400 finance-small-label uppercase">Interest Component:</span>
-                  <span className="text-right text-slate-900 finance-input">₹{liveCalculations.interestAmount.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 peek-small-10 uppercase">Interest Component:</span>
+                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.interestAmount.toLocaleString('en-IN')}</span>
 
-                  <span className="text-slate-400 finance-small-label uppercase">Total Repayment:</span>
-                  <span className="text-right text-slate-900 finance-input">₹{liveCalculations.totalRepayment.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 peek-small-10 uppercase">Total Repayment:</span>
+                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.totalRepayment.toLocaleString('en-IN')}</span>
 
-                  <span className="text-slate-400 finance-small-label uppercase">Instalment Count:</span>
-                  <span className="text-right text-slate-900 finance-input">{liveCalculations.duesCount} {dueType} Dues</span>
+                  <span className="text-slate-400 peek-small-10 uppercase">Instalment Count:</span>
+                  <span className="text-right text-slate-900 peek-button">{liveCalculations.duesCount} {dueType} Dues</span>
 
                   <span className="text-slate-800 mt-1 border-t pt-1.5 finance-sidebar-link uppercase">Instalment:</span>
                   <span className="text-right text-green-700 mt-1 border-t pt-1.5 finance-sidebar-link">₹{liveCalculations.dueAmount.toLocaleString('en-IN')}</span>
@@ -1945,12 +2001,12 @@ const LoanEntry: React.FC = () => {
 
           {/* Card 10: RECENT LOANS */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
+            <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
               RECENT LOANS
             </h3>
             
             {activeLoans.length === 0 ? (
-              <div className="py-8 text-center text-slate-400 finance-header-time uppercase">
+              <div className="py-8 text-center text-slate-400 peek-h3 uppercase">
                 NO LOANS YET
               </div>
             ) : (
@@ -1958,12 +2014,12 @@ const LoanEntry: React.FC = () => {
                 {activeLoans.slice(0, 5).map(loan => (
                   <div key={loan.id} className="p-3 border border-slate-100 rounded-lg hover:bg-slate-50 transition-all flex justify-between items-center bg-slate-50/20">
                     <div>
-                      <div className="text-slate-900 finance-header-time">{loan.customer?.name}</div>
-                      <div className="text-[9px] text-slate-400 mt-0.5 finance-input uppercase">{loan.due_type} Mode</div>
+                      <div className="text-slate-900 peek-caption-12">{loan.customer?.name}</div>
+                      <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">{loan.due_type} Mode</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-mono text-slate-700 finance-header-time">{loan.loan_id}</div>
-                      <div className="text-slate-900 mt-0.5 finance-header-time">₹{Number(loan.amount).toLocaleString('en-IN')}</div>
+                      <div className="font-mono text-slate-700 peek-caption-12">{loan.loan_id}</div>
+                      <div className="text-slate-900 mt-0.5 peek-caption-12">₹{Number(loan.amount).toLocaleString('en-IN')}</div>
                     </div>
                   </div>
                 ))}
@@ -1985,7 +2041,7 @@ const LoanEntry: React.FC = () => {
         <div className="space-y-6">
           {/* Top Header */}
           <div className="text-center border-b pb-4">
-            <h1 className="finance-h1">THIRUMALA GROUP - LOAN ENTRY</h1>
+            <h1 className="peek-h1">THIRUMALA GROUP - LOAN ENTRY</h1>
             <p className="text-slate-500 mt-1 finance-sidebar-link">Date: {date} | Loan Type: {loanCategory}</p>
           </div>
           
@@ -1993,11 +2049,11 @@ const LoanEntry: React.FC = () => {
           <div>
             <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Customer Details</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="text-gray-500 finance-header-time">NAME:</span> {custName}</div>
-               <div><span className="text-gray-500 finance-header-time">F/W/H:</span> {custFatherName}</div>
-               <div><span className="text-gray-500 finance-header-time">PHONE:</span> {custPhone}</div>
-               <div><span className="text-gray-500 finance-header-time">AADHAAR:</span> {custAadhaar}</div>
-               <div className="col-span-2"><span className="text-gray-500 finance-header-time">ADDRESS:</span> {custPresentAddress}</div>
+               <div><span className="text-gray-500 peek-caption-12">NAME:</span> {custName}</div>
+               <div><span className="text-gray-500 peek-caption-12">F/W/H:</span> {custFatherName}</div>
+               <div><span className="text-gray-500 peek-caption-12">PHONE:</span> {custPhone}</div>
+               <div><span className="text-gray-500 peek-caption-12">AADHAAR:</span> {custAadhaar}</div>
+               <div className="col-span-2"><span className="text-gray-500 peek-caption-12">ADDRESS:</span> {custPresentAddress}</div>
             </div>
           </div>
 
@@ -2005,10 +2061,10 @@ const LoanEntry: React.FC = () => {
           <div>
             <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Guarantor Details</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="text-gray-500 finance-header-time">G1 NAME:</span> {g1Name}</div>
-               <div><span className="text-gray-500 finance-header-time">G1 PHONE:</span> {g1Phone}</div>
-               {g2Name && <div><span className="text-gray-500 finance-header-time">G2 NAME:</span> {g2Name}</div>}
-               {g2Phone && <div><span className="text-gray-500 finance-header-time">G2 PHONE:</span> {g2Phone}</div>}
+               <div><span className="text-gray-500 peek-caption-12">G1 NAME:</span> {g1Name}</div>
+               <div><span className="text-gray-500 peek-caption-12">G1 PHONE:</span> {g1Phone}</div>
+               {g2Name && <div><span className="text-gray-500 peek-caption-12">G2 NAME:</span> {g2Name}</div>}
+               {g2Phone && <div><span className="text-gray-500 peek-caption-12">G2 PHONE:</span> {g2Phone}</div>}
             </div>
           </div>
 
@@ -2016,12 +2072,12 @@ const LoanEntry: React.FC = () => {
           <div>
             <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Loan Terms</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="text-gray-500 finance-header-time">PRINCIPAL:</span> ₹{Number(amount).toLocaleString('en-IN')}</div>
-               <div><span className="text-gray-500 finance-header-time">INTEREST RATE:</span> {interestRate}% / MONTH</div>
-               <div><span className="text-gray-500 finance-header-time">DURATION:</span> {durationMonths} MONTHS</div>
-               <div><span className="text-gray-500 finance-header-time">DUE TYPE:</span> {dueType}</div>
-               <div><span className="text-gray-500 finance-header-time">DOC CHARGES:</span> ₹{Number(docCharges).toLocaleString('en-IN')}</div>
-               <div className="col-span-2"><span className="text-gray-500 finance-header-time">PARTICULARS:</span> {particulars}</div>
+               <div><span className="text-gray-500 peek-caption-12">PRINCIPAL:</span> ₹{Number(amount).toLocaleString('en-IN')}</div>
+               <div><span className="text-gray-500 peek-caption-12">INTEREST RATE:</span> {interestRate}% / MONTH</div>
+               <div><span className="text-gray-500 peek-caption-12">DURATION:</span> {durationMonths} MONTHS</div>
+               <div><span className="text-gray-500 peek-caption-12">DUE TYPE:</span> {dueType}</div>
+               <div><span className="text-gray-500 peek-caption-12">DOC CHARGES:</span> ₹{Number(docCharges).toLocaleString('en-IN')}</div>
+               <div className="col-span-2"><span className="text-gray-500 peek-caption-12">PARTICULARS:</span> {particulars}</div>
             </div>
           </div>
 
@@ -2030,10 +2086,10 @@ const LoanEntry: React.FC = () => {
           <div>
             <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Calculations</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="text-gray-500 finance-header-time">NET DISBURSED:</span> ₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</div>
-               <div><span className="text-gray-500 finance-header-time">TOTAL REPAYMENT:</span> ₹{liveCalculations.totalRepayment.toLocaleString('en-IN')}</div>
-               <div><span className="text-gray-500 finance-header-time">INSTALMENT COUNT:</span> {liveCalculations.duesCount}</div>
-               <div><span className="text-gray-500 finance-header-time">INSTALMENT AMOUNT:</span> ₹{liveCalculations.dueAmount.toLocaleString('en-IN')}</div>
+               <div><span className="text-gray-500 peek-caption-12">NET DISBURSED:</span> ₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</div>
+               <div><span className="text-gray-500 peek-caption-12">TOTAL REPAYMENT:</span> ₹{liveCalculations.totalRepayment.toLocaleString('en-IN')}</div>
+               <div><span className="text-gray-500 peek-caption-12">INSTALMENT COUNT:</span> {liveCalculations.duesCount}</div>
+               <div><span className="text-gray-500 peek-caption-12">INSTALMENT AMOUNT:</span> ₹{liveCalculations.dueAmount.toLocaleString('en-IN')}</div>
             </div>
           </div>
           )}

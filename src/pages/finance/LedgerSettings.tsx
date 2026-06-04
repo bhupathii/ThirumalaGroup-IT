@@ -227,7 +227,7 @@ export default function LedgerSettings() {
 
               <div className="p-4 grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-slate-400 block mb-1 finance-small-label uppercase">Rate (% / Month) - Default {DEFAULT_LEDGER_SETTINGS[type.code].rate}</label>
+                  <label className="text-slate-400 block mb-1 finance-small-label uppercase">Rate (% / Month) - Default {DEFAULT_LEDGER_SETTINGS[type.code].rate} <span className="text-red-500 ml-0.5">*</span></label>
                   <input
                     type="number"
                     step="0.01"
@@ -238,7 +238,7 @@ export default function LedgerSettings() {
                   />
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1 finance-small-label uppercase">Overdue (% / Month) - Default {DEFAULT_LEDGER_SETTINGS[type.code].overdue}</label>
+                  <label className="text-slate-400 block mb-1 finance-small-label uppercase">Overdue (% / Month) - Default {DEFAULT_LEDGER_SETTINGS[type.code].overdue} <span className="text-red-500 ml-0.5">*</span></label>
                   <input
                     type="number"
                     step="0.01"
@@ -249,7 +249,7 @@ export default function LedgerSettings() {
                   />
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1 finance-small-label uppercase">Method - Default {DEFAULT_LEDGER_SETTINGS[type.code].method}</label>
+                  <label className="text-slate-400 block mb-1 finance-small-label uppercase">Method - Default {DEFAULT_LEDGER_SETTINGS[type.code].method} <span className="text-red-500 ml-0.5">*</span></label>
                   <select
                     disabled={!isCustom}
                     value={setting.method}
@@ -262,7 +262,7 @@ export default function LedgerSettings() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1 finance-small-label uppercase">Days / Year - Default {DEFAULT_LEDGER_SETTINGS[type.code].days_per_year}</label>
+                  <label className="text-slate-400 block mb-1 finance-small-label uppercase">Days / Year - Default {DEFAULT_LEDGER_SETTINGS[type.code].days_per_year} <span className="text-red-500 ml-0.5">*</span></label>
                   <select
                     disabled={!isCustom}
                     value={setting.days_per_year}
@@ -274,7 +274,7 @@ export default function LedgerSettings() {
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="text-slate-400 block mb-1 finance-small-label uppercase">Principal Rolls On Renewal</label>
+                  <label className="text-slate-400 block mb-1 finance-small-label uppercase">Principal Rolls On Renewal <span className="text-red-500 ml-0.5">*</span></label>
                   <select
                     disabled={!isCustom}
                     value={setting.principal_rolls_on_renewal ? 'YES' : 'NO'}

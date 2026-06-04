@@ -13,11 +13,19 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { BiometricScanner } from '../../components/finance/BiometricScanner';
+import { validateFinanceForm, ValidationField } from '../../utils/financeValidation';
 
 const NewCustomer: React.FC = () => {
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
   const [estimatedId, setEstimatedId] = useState<number>(1);
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+
+  const nameRef = useRef<HTMLInputElement>(null);
+  const aadhaarRef = useRef<HTMLInputElement>(null);
+  const aadhaarAddressRef = useRef<HTMLTextAreaElement>(null);
+  const presentAddressRef = useRef<HTMLTextAreaElement>(null);
+  const phone1Ref = useRef<HTMLInputElement>(null);
 
   // Form State
   const [aadhaar, setAadhaar] = useState('');
@@ -260,18 +268,27 @@ const NewCustomer: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      toast.error('Customer Name is required');
-      return;
-    }
-
     const cleanAadhaar = aadhaar.trim();
-    if (cleanAadhaar) {
-      if (!/^\d{12}$/.test(cleanAadhaar)) {
-        toast.error('Aadhaar must be exactly 12 digits.');
-        return;
+
+    const fields: ValidationField[] = [
+      { name: 'name', label: 'Customer Name', value: name, required: true, ref: nameRef },
+      { name: 'aadhaarAddress', label: 'Aadhaar Address', value: aadhaarAddress, required: true, ref: aadhaarAddressRef },
+      { name: 'presentAddress', label: 'Present Address', value: presentAddress, required: true, ref: presentAddressRef },
+      { name: 'phone1', label: 'Phone 1', value: phone1, required: true, ref: phone1Ref },
+      { 
+        name: 'aadhaar', 
+        label: 'Aadhaar', 
+        value: cleanAadhaar, 
+        required: false, 
+        ref: aadhaarRef,
+        customValidation: (val) => /^\d{12}$/.test(val) ? null : 'Aadhaar must be exactly 12 digits'
       }
-    }
+    ];
+
+    const { isValid, errors: newErrors } = validateFinanceForm(fields);
+    setErrors(newErrors);
+
+    if (!isValid) return;
 
     setSaving(true);
     try {
@@ -453,10 +470,11 @@ const NewCustomer: React.FC = () => {
                   </label>
                   <input
                     type="text"
+                    ref={aadhaarRef}
                     value={aadhaar}
-                    onChange={(e) => setAadhaar(e.target.value)}
+                    onChange={(e) => { setAadhaar(e.target.value); setErrors(p => ({...p, aadhaar: false})) }}
                     placeholder="12-digit Aadhaar UID"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                    className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none finance-header-time ${errors.aadhaar ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                   />
                 </div>
               </div>
@@ -467,11 +485,12 @@ const NewCustomer: React.FC = () => {
                 </label>
                 <input
                   type="text"
+                  ref={nameRef}
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => { setName(e.target.value); setErrors(p => ({...p, name: false})) }}
                   placeholder="e.g. Ramesh Kumar"
                   required
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                  className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none finance-header-time ${errors.name ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                 />
               </div>
 
@@ -533,27 +552,31 @@ const NewCustomer: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
                 <div>
                   <label className="finance-caption uppercase">
-                    AADHAAR ADDRESS
+                    AADHAAR ADDRESS <span className="text-red-500">*</span>
                   </label>
                   <textarea
+                    ref={aadhaarAddressRef}
                     value={aadhaarAddress}
-                    onChange={(e) => setAadhaarAddress(e.target.value)}
+                    onChange={(e) => { setAadhaarAddress(e.target.value); setErrors(p => ({...p, aadhaarAddress: false})) }}
                     placeholder="Address details as printed on Aadhaar card"
                     rows={3}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y finance-header-time"
+                    required
+                    className={`w-full bg-white border rounded-lg p-2.5 text-slate-800 focus:outline-none resize-y finance-header-time ${errors.aadhaarAddress ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                   />
                 </div>
 
                 <div>
                   <label className="finance-caption uppercase">
-                    PRESENT ADDRESS
+                    PRESENT ADDRESS <span className="text-red-500">*</span>
                   </label>
                   <textarea
+                    ref={presentAddressRef}
                     value={presentAddress}
-                    onChange={(e) => setPresentAddress(e.target.value)}
+                    onChange={(e) => { setPresentAddress(e.target.value); setErrors(p => ({...p, presentAddress: false})) }}
                     placeholder="Current residential address details"
                     rows={3}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y finance-header-time"
+                    required
+                    className={`w-full bg-white border rounded-lg p-2.5 text-slate-800 focus:outline-none resize-y finance-header-time ${errors.presentAddress ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                   />
                 </div>
               </div>
@@ -562,14 +585,16 @@ const NewCustomer: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
                 <div>
                   <label className="finance-caption uppercase">
-                    PHONE 1
+                    PHONE 1 <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
+                    ref={phone1Ref}
                     value={phone1}
-                    onChange={(e) => setPhone1(e.target.value)}
+                    onChange={(e) => { setPhone1(e.target.value); setErrors(p => ({...p, phone1: false})) }}
                     placeholder="Primary 10-digit number"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                    required
+                    className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none finance-header-time ${errors.phone1 ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                   />
                 </div>
 

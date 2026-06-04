@@ -6,6 +6,7 @@ import { supabaseFinance, FinancePartner } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, RotateCcw, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { validateFinanceForm, ValidationField } from '../../utils/financeValidation';
 import { useAuth } from '../../contexts/AuthContext';
 
 const NewPartner: React.FC = () => {
@@ -24,6 +25,9 @@ const NewPartner: React.FC = () => {
   const [mdName, setMdName] = useState('');
   const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const nameRef = React.useRef<HTMLInputElement>(null);
 
   // Fetch data on load depending on mode
   useEffect(() => {
@@ -102,10 +106,14 @@ const NewPartner: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     if (e && e.preventDefault) e.preventDefault();
 
-    if (!name.trim()) {
-      toast.error('Name is required');
-      return;
-    }
+    const fields: ValidationField[] = [
+      { name: 'name', label: 'Name', value: name, required: true, ref: nameRef }
+    ];
+
+    const { isValid, errors: newErrors } = validateFinanceForm(fields);
+    setErrors(newErrors);
+
+    if (!isValid) return;
 
     setSaving(true);
     const savingToastId = toast.loading(editId ? 'Updating partner details...' : 'Registering partner...');
@@ -231,9 +239,11 @@ const NewPartner: React.FC = () => {
               <Input
                 label="NAME"
                 value={name}
-                onChange={setName}
+                onChange={(val) => { setName(val); setErrors(p => ({...p, name: false})) }}
                 placeholder="Full Name"
                 required
+                ref={nameRef}
+                error={errors.name}
               />
 
               {/* Phones (Grid of 2) */}

@@ -23,7 +23,8 @@ const NewGuarantor: React.FC = () => {
   const [aadhaar, setAadhaar] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
+  const [aadhaarAddress, setAadhaarAddress] = useState('');
+  const [presentAddress, setPresentAddress] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   // Fingerprint State
@@ -39,6 +40,7 @@ const NewGuarantor: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
 
   useEffect(() => {
     fetchNextId();
@@ -193,7 +195,8 @@ const NewGuarantor: React.FC = () => {
     setAadhaar('');
     setName('');
     setPhone('');
-    setAddress('');
+    setAadhaarAddress('');
+    setPresentAddress('');
     handleClearPhoto();
     setFingerprintUrl(null);
     setFingerprintTemplate(null);
@@ -213,7 +216,8 @@ const NewGuarantor: React.FC = () => {
       const result = await supabaseFinance.createGuarantor({
         name: name.trim(),
         phone: phone || null,
-        address: address || null,
+        aadhaar_address: aadhaarAddress.trim() || null,
+        present_address: presentAddress.trim() || null,
         aadhaar: aadhaar || null,
         photo_url: photoUrl,
         fingerprint_template: fingerprintTemplate || null,
@@ -336,7 +340,7 @@ const NewGuarantor: React.FC = () => {
 
               <div>
                 <label className="finance-caption uppercase">
-                  PHONE
+                  PHONE <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -349,13 +353,28 @@ const NewGuarantor: React.FC = () => {
 
               <div>
                 <label className="finance-caption uppercase">
-                  ADDRESS
+                  AADHAAR ADDRESS <span className="text-red-500">*</span>
                 </label>
                 <textarea
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Full residential address"
-                  rows={3}
+                  value={aadhaarAddress}
+                  onChange={(e) => setAadhaarAddress(e.target.value)}
+                  placeholder="Address as per Aadhaar Card"
+                  rows={2}
+                  required
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y finance-header-time"
+                />
+              </div>
+
+              <div>
+                <label className="finance-caption uppercase">
+                  PRESENT ADDRESS <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={presentAddress}
+                  onChange={(e) => setPresentAddress(e.target.value)}
+                  placeholder="Current residential address"
+                  rows={2}
+                  required
                   className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y finance-header-time"
                 />
               </div>

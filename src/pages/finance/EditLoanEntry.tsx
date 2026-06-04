@@ -43,6 +43,8 @@ const EditLoanEntry: React.FC = () => {
   const [suretyName, setSuretyName] = useState('');
   const [suretyPhone, setSuretyPhone] = useState('');
   const [suretyAadhaar, setSuretyAadhaar] = useState('');
+  const [suretyAadhaarAddress, setSuretyAadhaarAddress] = useState('');
+  const [suretyPresentAddress, setSuretyPresentAddress] = useState('');
   const [suretyPhoto, setSuretyPhoto] = useState<string | null>(null);
   const [suretyFingerprintUrl, setSuretyFingerprintUrl] = useState<string | null>(null);
   const [suretyFingerprintTemplate, setSuretyFingerprintTemplate] = useState<string | null>(null);
@@ -111,6 +113,8 @@ const EditLoanEntry: React.FC = () => {
     setSuretyName(loan.surety_name || '');
     setSuretyPhone(loan.surety_phone || '');
     setSuretyAadhaar(loan.surety_aadhaar || '');
+    setSuretyAadhaarAddress(loan.surety_aadhaar_address || '');
+    setSuretyPresentAddress(loan.surety_present_address || '');
     setSuretyPhoto(loan.surety_photo_url || null);
     setSuretyFingerprintUrl(loan.surety_fingerprint_image_url || null);
     setSuretyFingerprintTemplate(loan.surety_fingerprint_template || null);
@@ -145,6 +149,17 @@ const EditLoanEntry: React.FC = () => {
         }, staffName);
       }
 
+      // Update linked guarantor if exists (best effort for guarantor_1_id)
+      if (selectedLoan.guarantor_1_id) {
+        await supabaseFinance.updateGuarantor(selectedLoan.guarantor_1_id, {
+          aadhaar_address: suretyAadhaarAddress || null,
+          present_address: suretyPresentAddress || null,
+          name: suretyName || '',
+          phone: suretyPhone || '',
+          aadhaar: suretyAadhaar || null,
+        }, staffName);
+      }
+
       // 2. Update loan record
       const updatedLoan = await supabaseFinance.updateLoan(selectedLoan.id, {
         date,
@@ -158,6 +173,8 @@ const EditLoanEntry: React.FC = () => {
         surety_name: suretyName || null,
         surety_phone: suretyPhone || null,
         surety_aadhaar: suretyAadhaar || null,
+        surety_aadhaar_address: suretyAadhaarAddress || null,
+        surety_present_address: suretyPresentAddress || null,
         customer_photo_url: custPhoto,
         surety_photo_url: suretyPhoto,
         fingerprint_url: custFingerprintUrl,
@@ -302,6 +319,8 @@ const EditLoanEntry: React.FC = () => {
                 <Input label="Surety Person Name" value={suretyName} onChange={setSuretyName} />
                 <Input label="Surety Phone" value={suretyPhone} onChange={setSuretyPhone} />
                 <Input label="Surety Aadhaar" value={suretyAadhaar} onChange={setSuretyAadhaar} />
+                <Input label="Surety Aadhaar Address" value={suretyAadhaarAddress} onChange={setSuretyAadhaarAddress} />
+                <Input label="Surety Present Address" value={suretyPresentAddress} onChange={setSuretyPresentAddress} />
                 
                 <CameraCapture
                   label="Surety Photo Capture"

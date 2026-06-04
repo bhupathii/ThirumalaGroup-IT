@@ -64,8 +64,9 @@ export interface FinanceGuarantor {
   guarantor_id?: number;
   name: string;
   aadhaar: string | null;
+  aadhaar_address?: string | null;
+  present_address?: string | null;
   phone: string | null;
-  address: string | null;
   photo_url?: string | null;
   fingerprint_template?: string | null;
   fingerprint_image_url?: string | null;
@@ -87,7 +88,8 @@ export interface FinanceLoan {
   surety_name: string | null;
   surety_phone: string | null;
   surety_aadhaar: string | null;
-  surety_address?: string | null;
+  surety_aadhaar_address?: string | null;
+  surety_present_address?: string | null;
   surety_relation?: string | null;
   remarks: string | null;
   status: 'Active' | 'Closed';
@@ -312,6 +314,23 @@ class SupabaseFinance {
     } catch (error) {
       console.error('Error creating finance guarantor:', error);
       return null;
+    }
+  }
+
+  async updateGuarantor(id: string, guarantor: Partial<FinanceGuarantor>, _editedBy: string): Promise<FinanceGuarantor | null> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_guarantors')
+        .update({ ...guarantor, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+
+      return data;
+    } catch (error) {
+      console.error('Error updating finance guarantor:', error);
+      throw error;
     }
   }
 

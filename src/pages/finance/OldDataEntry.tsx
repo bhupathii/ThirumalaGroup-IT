@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
@@ -12,6 +12,7 @@ import {
   Info
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { validateFinanceForm, ValidationField } from '../../utils/financeValidation';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface RenewalRow {
@@ -30,6 +31,15 @@ const OldDataEntry: React.FC = () => {
   const [customers, setCustomers] = useState<FinanceCustomer[]>([]);
   const [partners, setPartners] = useState<FinancePartner[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const custNameRef = useRef<HTMLInputElement>(null);
+  const loanNumberRef = useRef<HTMLInputElement>(null);
+  const rateRef = useRef<HTMLInputElement>(null);
+  const loanDateRef = useRef<HTMLInputElement>(null);
+  const billingPeriodRef = useRef<HTMLInputElement>(null);
+  const principalRef = useRef<HTMLInputElement>(null);
+
 
   // Form State - Customer
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
@@ -320,22 +330,27 @@ const OldDataEntry: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     if (e && e.preventDefault) e.preventDefault();
 
-    if (!loanNumber.trim()) {
-      toast.error('Loan Number is required');
-      return;
+
+    const fields: ValidationField[] = [
+      { name: 'loanNumber', label: 'Loan Number', value: loanNumber, required: true, ref: loanNumberRef },
+      { name: 'loanDate', label: 'Loan Date', value: loanDate, required: true, ref: loanDateRef },
+      { name: 'principal', label: 'Principal', value: principal, required: true, ref: principalRef },
+      { name: 'rate', label: 'Rate', value: rate, required: true, ref: rateRef },
+      { name: 'billingPeriod', label: 'Billing Period', value: billingPeriod, required: true, ref: billingPeriodRef },
+    ];
+    if (!selectedCustomerId) {
+      fields.push({ name: 'custName', label: 'Customer Name', value: custName, required: true, ref: custNameRef });
     }
-    if (!loanDate) {
-      toast.error('Loan Date is required');
-      return;
-    }
+    
+    const { isValid, errors: newErrors } = validateFinanceForm(fields);
+    setErrors(newErrors);
+    if (!isValid) return;
+
     if (parsedPrincipal <= 0) {
       toast.error('Principal must be greater than 0');
       return;
     }
-    if (!selectedCustomerId && !custName.trim()) {
-      toast.error('Customer name is required');
-      return;
-    }
+
 
     // Validate renewal rows
     for (const r of renewals) {
@@ -648,8 +663,7 @@ const OldDataEntry: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input 
                   label="CUSTOMER NAME" 
-                  value={custName} 
-                  onChange={setCustName} 
+                  ref={custNameRef} error={errors.custName} value={custName} onChange={(val) => { setCustName(val); setErrors(p => ({...p, custName: false})) }} 
                   placeholder="Full Name" 
                   readOnly={!!selectedCustomerId} 
                   required 
@@ -748,16 +762,14 @@ const OldDataEntry: React.FC = () => {
                 </div>
                 <Input
                   label="LOAN NUMBER"
-                  value={loanNumber}
-                  onChange={setLoanNumber}
+                  ref={loanNumberRef} error={errors.loanNumber} value={loanNumber} onChange={(val) => { setLoanNumber(val); setErrors(p => ({...p, loanNumber: false})) }}
                   placeholder="e.g. CD-1020"
                   required
                 />
                 <Input
                   label="RATE (% / MONTH)"
                   type="number"
-                  value={rate}
-                  onChange={setRate}
+                  ref={rateRef} error={errors.rate} value={rate} onChange={(val) => { setRate(val); setErrors(p => ({...p, rate: false})) }}
                   step="0.01"
                   required
                 />
@@ -767,8 +779,7 @@ const OldDataEntry: React.FC = () => {
                 <Input
                   label="LOAN DATE"
                   type="date"
-                  value={loanDate}
-                  onChange={setLoanDate}
+                  ref={loanDateRef} error={errors.loanDate} value={loanDate} onChange={(val) => { setLoanDate(val); setErrors(p => ({...p, loanDate: false})) }}
                   required
                 />
                 <Input
@@ -780,8 +791,7 @@ const OldDataEntry: React.FC = () => {
                 <Input
                   label="BILLING PERIOD (DAYS)"
                   type="number"
-                  value={billingPeriod}
-                  onChange={setBillingPeriod}
+                  ref={billingPeriodRef} error={errors.billingPeriod} value={billingPeriod} onChange={(val) => { setBillingPeriod(val); setErrors(p => ({...p, billingPeriod: false})) }}
                   required
                 />
               </div>
@@ -790,8 +800,7 @@ const OldDataEntry: React.FC = () => {
                 <Input
                   label="PRINCIPAL (₹)"
                   type="number"
-                  value={principal}
-                  onChange={setPrincipal}
+                  ref={principalRef} error={errors.principal} value={principal} onChange={(val) => { setPrincipal(val); setErrors(p => ({...p, principal: false})) }}
                   required
                 />
                 <Input

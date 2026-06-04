@@ -3,6 +3,20 @@
 @tailwind utilities;
 
 @layer components {
+
+  /* Peek Typography System */
+  .peek-h1 { @apply text-[20px] font-semibold leading-[1.40] tracking-[0.16px]; }
+  .peek-header { @apply text-[16px] font-bold leading-[1.50] tracking-[0.16px]; }
+  .peek-h3 { @apply text-[16px] font-semibold leading-[1.50] tracking-[0.16px]; }
+  .peek-link { @apply text-[14px] font-bold leading-[1.43] tracking-[0.16px]; }
+  .peek-subheading { @apply text-[14px] font-semibold leading-[1.43] tracking-[0.16px]; }
+  .peek-button { @apply text-[14px] font-medium leading-[1.43] tracking-[0.16px]; }
+  .peek-caption { @apply text-[12px] font-bold leading-[1.33] tracking-[0.16px]; }
+  .peek-caption-12 { @apply text-[12px] font-semibold leading-[1.33] tracking-[0.3px]; }
+  .peek-label { @apply text-[12px] font-medium leading-[1.33] tracking-[0.16px]; }
+  .peek-small { @apply text-[10px] font-bold leading-[1.25] tracking-[0.16px]; }
+  .peek-small-10 { @apply text-[10px] font-semibold leading-[1.50] tracking-[0.5px]; }
+
   /* Finance Typography System - DO NOT MODIFY WITHOUT CHECKING PEEK SPECS */
   .finance-h1 {
     @apply text-[20px] font-semibold leading-[1.40] tracking-[0.16px];
