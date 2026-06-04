@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
-import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
+import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 const CashBook: React.FC = () => {
   const { user } = useAuth();

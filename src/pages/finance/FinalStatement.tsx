@@ -4,7 +4,7 @@ import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer, Scale } from 'lucide-react';
 import toast from 'react-hot-toast';
-import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
+import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 interface BalanceItem {
   name: string;
@@ -39,17 +39,17 @@ const FinalStatement: React.FC = () => {
       const partnerBalances: Record<string, number> = {};
       let totalCapital = 0;
       capEntries.forEach(entry => {
-        const amt = Number(entry.amount);
         if (!partnerBalances[entry.partner_id]) {
           partnerBalances[entry.partner_id] = 0;
         }
-        if (entry.type === 'Credit') {
-          partnerBalances[entry.partner_id] += amt;
-          totalCapital += amt;
-        } else {
-          partnerBalances[entry.partner_id] -= amt;
-          totalCapital -= amt;
-        }
+        const credit = Number(entry.credit) || 0;
+        const debit = Number(entry.debit) || 0;
+        
+        partnerBalances[entry.partner_id] += credit;
+        totalCapital += credit;
+        
+        partnerBalances[entry.partner_id] -= debit;
+        totalCapital -= debit;
       });
 
       const capitalsList = partners.map(p => ({

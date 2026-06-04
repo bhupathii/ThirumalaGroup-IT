@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
-import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
+import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 interface DisplayCapitalEntry extends FinanceCapitalEntry {
   partner?: FinancePartner;

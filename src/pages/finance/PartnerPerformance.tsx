@@ -4,7 +4,7 @@ import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
-import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
+import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 interface PartnerPerfRow {
   id: string;
@@ -43,17 +43,17 @@ const PartnerPerformance: React.FC = () => {
       let totalNetCapital = 0;
 
       capEntries.forEach(entry => {
-        const amt = Number(entry.amount);
         if (!partnerCapitals[entry.partner_id]) {
           partnerCapitals[entry.partner_id] = 0;
         }
-        if (entry.type === 'Credit') {
-          partnerCapitals[entry.partner_id] += amt;
-          totalNetCapital += amt;
-        } else {
-          partnerCapitals[entry.partner_id] -= amt;
-          totalNetCapital -= amt;
-        }
+        const credit = Number(entry.credit) || 0;
+        const debit = Number(entry.debit) || 0;
+
+        partnerCapitals[entry.partner_id] += credit;
+        totalNetCapital += credit;
+
+        partnerCapitals[entry.partner_id] -= debit;
+        totalNetCapital -= debit;
       });
 
       // 2. Calculate Total Accrued Interest (Revenue)

@@ -5,7 +5,7 @@ import Button from '../../components/UI/Button';
 import { supabase } from '../../lib/supabase';
 import { Printer, User, Phone, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
-import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
+import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 interface NewCustItem {
   id: string;

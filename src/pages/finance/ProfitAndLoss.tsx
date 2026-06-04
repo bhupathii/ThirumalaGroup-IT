@@ -6,7 +6,7 @@ import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
-import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
+import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 const ProfitAndLoss: React.FC = () => {
   const [loading, setLoading] = useState(true);

@@ -18,7 +18,7 @@ import {
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { BiometricScanner } from '../../components/finance/BiometricScanner';
-import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
+import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 interface DocumentItem {
   key: string;
@@ -1816,6 +1816,7 @@ const LoanEntry: React.FC = () => {
         isOpen={showPrintPreview}
         onClose={() => setShowPrintPreview(false)}
         title="Loan Entry - Preview"
+        documentTitle="LOAN ENTRY FORM"
       >
         <div className="space-y-6">
           {/* Top Header */}

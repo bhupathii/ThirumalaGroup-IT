@@ -5,7 +5,7 @@ import {
   ArrowLeft, 
   Printer 
 } from 'lucide-react';
-import FinancePrintPreview from '../../components/Finance/FinancePrintPreview';
+import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 // Default rates for each ledger type
 const DEFAULT_RATES: Record<string, { label: string; rate: number; overdue: number; doc: number }> = {
