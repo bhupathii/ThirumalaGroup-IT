@@ -28,7 +28,15 @@ const CustomCalendar = ({
   dotColor = 'red',
 }: CustomCalendarProps) => {
   const { mode: tableMode } = useTableMode();
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    if (selectedDate) {
+      const d = new Date(selectedDate);
+      if (!isNaN(d.getTime())) {
+        return d;
+      }
+    }
+    return new Date();
+  });
   const [loadedEntries, setLoadedEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
