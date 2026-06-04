@@ -1,13 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import Card from '../../components/UI/Card';
-import Input from '../../components/UI/Input';
+import React, { useEffect, useState, useMemo } from 'react';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
-import { Printer, Calendar, Clock, DollarSign } from 'lucide-react';
+import { Printer, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useAuth } from '../../contexts/AuthContext';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
+import { useNavigate } from 'react-router-dom';
 
 interface OverdueDueItem {
   id: string;
@@ -17,40 +15,47 @@ interface OverdueDueItem {
   pendingAmount: number;
   status: string;
   loanId: string;
+  loanCategory: string;
   customerName: string;
+  aadhaar: string;
+  partnerName: string;
   phone: string;
-  loanUuid: string;
+  overdueDays: number;
+  isNPA: boolean;
+  penalty: number;
 }
 
+type ReportType = 'OUTSTANDING' | 'TOTAL DUE LIST' | 'CD DUE LIST' | 'A -> B DUE LIST' | 'NPA LIST';
+
 const DuesLedger: React.FC = () => {
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  
   const [dues, setDues] = useState<OverdueDueItem[]>([]);
-  const [filteredDues, setFilteredDues] = useState<OverdueDueItem[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [overdueOnly, setOverdueOnly] = useState(true);
+  const [partners, setPartners] = useState<{ id: string; name: string }[]>([]);
+  
+  const [activeReport, setActiveReport] = useState<ReportType>('OUTSTANDING');
+  const [selectedPartner, setSelectedPartner] = useState<string>('ALL PARTNERS');
+  
+  const [searchAadhaar, setSearchAadhaar] = useState('');
+  const [searchName, setSearchName] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [loading, setLoading] = useState(true);
   
-  // Quick collection modal/fields
-  const [selectedDue, setSelectedDue] = useState<OverdueDueItem | null>(null);
-  const [collectAmount, setCollectAmount] = useState('');
-  const [collectRemarks, setCollectRemarks] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   useEffect(() => {
-    fetchDuesData();
+    fetchData();
   }, []);
 
-  useEffect(() => {
-    applyFilters();
-  }, [searchQuery, overdueOnly, startDate, endDate, dues]);
-
-  const fetchDuesData = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch all pending / partially paid dues from database
+      // 1. Fetch Partners
+      const partnersData = await supabaseFinance.getPartners();
+      setPartners(partnersData.map(p => ({ id: p.id, name: p.name })));
+
+      // 2. Fetch all dues with loan and customer details
       const { data, error } = await supabase
         .from('finance_dues')
         .select(`
@@ -62,367 +67,415 @@ const DuesLedger: React.FC = () => {
           loan:finance_loans(
             id,
             loan_id,
+            loan_category,
             customer:finance_customers(
               name,
-              phone
+              phone,
+              aadhaar,
+              partner_name
             )
           )
         `)
-        .in('status', ['Pending', 'Partially Paid'])
         .order('due_date', { ascending: true });
 
       if (error) throw error;
 
+      const today = new Date();
       const formatted: OverdueDueItem[] = (data || []).map((d: any) => {
-        const amt = Number(d.amount);
-        const paid = Number(d.paid_amount || 0);
+        const amt = Number(d.amount) || 0;
+        const paid = Number(d.paid_amount) || 0;
+        const pending = amt - paid;
+        
+        const dueDate = new Date(d.due_date);
+        const diffTime = today.getTime() - dueDate.getTime();
+        const overdueDays = diffTime > 0 ? Math.floor(diffTime / (1000 * 60 * 60 * 24)) : 0;
+        
+        // NPA Definition: > 90 days overdue and still pending
+        const isPending = d.status === 'Pending' || d.status === 'Partially Paid';
+        const isNPA = isPending && overdueDays > 90;
+
+        // Basic penalty logic: Example 1% per month overdue (placeholder, adjust to true business logic)
+        let penalty = 0;
+        if (isPending && overdueDays > 30) {
+           const monthsOverdue = Math.floor(overdueDays / 30);
+           penalty = Math.round(pending * 0.01 * monthsOverdue);
+        }
+
         return {
           id: d.id,
           dueDate: d.due_date,
           amount: amt,
           paidAmount: paid,
-          pendingAmount: amt - paid,
+          pendingAmount: pending,
           status: d.status,
           loanId: d.loan?.loan_id || 'N/A',
+          loanCategory: d.loan?.loan_category || '',
           customerName: d.loan?.customer?.name || 'N/A',
+          aadhaar: d.loan?.customer?.aadhaar || 'N/A',
+          partnerName: d.loan?.customer?.partner_name || 'Unassigned',
           phone: d.loan?.customer?.phone || '',
-          loanUuid: d.loan?.id || ''
+          overdueDays: overdueDays,
+          isNPA: isNPA,
+          penalty: penalty
         };
       });
 
       setDues(formatted);
-      setFilteredDues(formatted);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load dues schedule');
+      toast.error('Failed to load dues ledger');
     } finally {
       setLoading(false);
     }
   };
 
-  const applyFilters = () => {
-    let result = [...dues];
-    const today = new Date().toISOString().split('T')[0];
-
-    // 1. Overdue Only
-    if (overdueOnly) {
-      result = result.filter(d => d.dueDate <= today);
-    }
-
-    // 2. Date Ranges
-    if (startDate) {
-      result = result.filter(d => d.dueDate >= startDate);
-    }
-    if (endDate) {
-      result = result.filter(d => d.dueDate <= endDate);
-    }
-
-    // 3. Search text
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(d => 
-        d.loanId.toLowerCase().includes(q) ||
-        d.customerName.toLowerCase().includes(q) ||
-        d.phone.includes(q)
-      );
-    }
-
-    setFilteredDues(result);
-  };
-
-  const handleOpenCollect = (due: OverdueDueItem) => {
-    setSelectedDue(due);
-    setCollectAmount(String(due.pendingAmount));
-    setCollectRemarks(`Instalment due date: ${due.dueDate}`);
-  };
-
-  const handleCollect = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedDue) return;
-    const numAmt = Number(collectAmount);
-    if (isNaN(numAmt) || numAmt <= 0) {
-      toast.error('Please enter a valid amount');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const staffName = user?.username || 'Operator';
-      // Create collection transaction
-      const tx = await supabaseFinance.createTransaction({
-        loan_id: selectedDue.loanUuid,
-        date: new Date().toISOString().split('T')[0],
-        amount: numAmt,
-        type: 'Collection',
-        collected_by: staffName,
-        remarks: collectRemarks || null
-      }, staffName);
-
-      if (tx) {
-        toast.success(`Collected ₹${numAmt} for ${selectedDue.customerName} (${selectedDue.loanId})`);
-        setSelectedDue(null);
-        setCollectRemarks('');
-        fetchDuesData();
-      } else {
-        toast.error('Collection failed');
+  const filteredDues = useMemo(() => {
+    return dues.filter(due => {
+      // 1. Report Type Filter
+      if (activeReport === 'OUTSTANDING') {
+        if (due.status !== 'Pending' && due.status !== 'Partially Paid') return false;
+      } else if (activeReport === 'NPA LIST') {
+        if (!due.isNPA) return false;
+      } else if (activeReport === 'CD DUE LIST') {
+        if (!due.loanId.startsWith('CD') && !due.loanCategory.includes('CD')) return false;
+      } else if (activeReport === 'A -> B DUE LIST') {
+        if (startDate && due.dueDate < startDate) return false;
+        if (endDate && due.dueDate > endDate) return false;
       }
-    } catch (err) {
-      console.error(err);
-      toast.error('Something went wrong');
-    } finally {
-      setSaving(false);
-    }
+
+      // 2. Partner Filter
+      if (selectedPartner !== 'ALL PARTNERS' && due.partnerName !== selectedPartner) return false;
+
+      // 3. Search Filters
+      if (searchAadhaar && !due.aadhaar.includes(searchAadhaar)) return false;
+      if (searchName && !due.customerName.toLowerCase().includes(searchName.toLowerCase())) return false;
+
+      return true;
+    });
+  }, [dues, activeReport, selectedPartner, searchAadhaar, searchName, startDate, endDate]);
+
+  const npaTotalAmount = useMemo(() => {
+    return filteredDues.filter(d => d.isNPA).reduce((sum, d) => sum + d.pendingAmount, 0);
+  }, [filteredDues]);
+
+  const renderReportMenu = () => {
+    const options: ReportType[] = ['OUTSTANDING', 'TOTAL DUE LIST', 'CD DUE LIST', 'A -> B DUE LIST', 'NPA LIST'];
+    return (
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden sticky top-6">
+        <div className="p-4 border-b border-slate-100 bg-slate-50">
+          <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">REPORT</h3>
+        </div>
+        <div className="flex flex-col">
+          {options.map((opt) => (
+            <button
+              key={opt}
+              onClick={() => setActiveReport(opt)}
+              className={`text-left px-4 py-3 text-xs font-black uppercase tracking-wider border-b border-slate-100 last:border-0 transition-colors
+                ${activeReport === opt 
+                  ? 'bg-[#0b1329] text-white' 
+                  : 'text-slate-700 hover:bg-slate-50'
+                }`}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
   };
+
+
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
+    <div className="space-y-6 max-w-[1400px] mx-auto print:hidden">
       {/* Header */}
-      <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <div className="flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Dues & Overdue Ledger</h1>
-          <p className="text-gray-500 text-sm mt-1">Monitor pending/overdue instalments and execute immediate collections</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Dues Ledger</h1>
+          <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mt-1">
+            Outstanding, NPA, and Partner-wise Due Lists with Grace/Penalty already applied
+          </p>
         </div>
-        <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
-          Print Dues Sheet
-        </Button>
-      </div>
-
-      {/* Filter Options */}
-      <div className={`grid grid-cols-1 sm:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-100 ${showPrintPreview ? 'print:hidden' : ''}`}>
-        <div className="sm:col-span-2">
-          <Input
-            label="Search Accounts"
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Search by ID, Name, Phone..."
-          />
-        </div>
-        <div>
-          <Input
-            label="From Due Date"
-            type="date"
-            value={startDate}
-            onChange={setStartDate}
-          />
-        </div>
-        <div>
-          <Input
-            label="To Due Date"
-            type="date"
-            value={endDate}
-            onChange={setEndDate}
-          />
-        </div>
-        <div className="pb-3 flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="overdue"
-            checked={overdueOnly}
-            onChange={(e) => setOverdueOnly(e.target.checked)}
-            className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
-          />
-          <label htmlFor="overdue" className="text-sm font-bold text-gray-700 select-none">
-            Show Overdue Only
-          </label>
+        <div className="flex gap-2">
+          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold uppercase tracking-wider text-xs">
+            Back
+          </Button>
+          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white font-bold uppercase tracking-wider text-xs">
+            Print
+          </Button>
         </div>
       </div>
 
-      {/* Dues Collection Popup Modal */}
-      {selectedDue && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 space-y-4">
-            <div className="border-b pb-2">
-              <h3 className="text-lg font-bold text-gray-900">Record Payment</h3>
-              <p className="text-xs text-gray-500">Collect due amount for {selectedDue.customerName}</p>
-            </div>
-            <form onSubmit={handleCollect} className="space-y-3">
-              <div className="text-xs font-semibold text-gray-600 space-y-1">
-                <p>Loan ID: <span className="text-gray-900 font-bold">{selectedDue.loanId}</span></p>
-                <p>Due Date: <span className="text-gray-900 font-bold">{new Date(selectedDue.dueDate).toLocaleDateString('en-IN')}</span></p>
-                <p>Pending Amount: <span className="text-green-700 font-bold">₹{selectedDue.pendingAmount}</span></p>
-              </div>
-
-              <Input
-                label="Amount Collected (₹)"
-                type="number"
-                value={collectAmount}
-                onChange={setCollectAmount}
-                required
-              />
-
-              <Input
-                label="Remarks"
-                value={collectRemarks}
-                onChange={setCollectRemarks}
-              />
-
-              <div className="flex gap-2 justify-end pt-2">
-                <Button type="submit" variant="success" size="sm" disabled={saving}>
-                  {saving ? 'Saving...' : 'Collect'}
-                </Button>
-                <Button onClick={() => setSelectedDue(null)} variant="secondary" size="sm">
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Dues Table list */}
-      <div className={showPrintPreview ? 'print:hidden' : ''}>
-        <Card title="Dues Statement List" subtitle={`${filteredDues.length} pending instalments listed`} className="shadow-md">
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-green-500"></div>
-          </div>
-        ) : filteredDues.length === 0 ? (
-          <div className="text-center py-8 text-gray-400">No pending dues found matching filters</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Due Date</th>
-                  <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Loan ID</th>
-                  <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Customer Name</th>
-                  <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Due Amount</th>
-                  <th className="px-3 py-3 text-right font-bold text-green-700 uppercase">Paid Amount</th>
-                  <th className="px-3 py-3 text-right font-bold text-red-700 uppercase">Pending Amount</th>
-                  <th className="px-3 py-3 text-center font-bold text-gray-700 uppercase">Status</th>
-                  <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase print:hidden">Action</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredDues.map(due => {
-                  const today = new Date().toISOString().split('T')[0];
-                  const isOverdue = due.dueDate <= today;
-                  return (
-                    <tr key={due.id} className="hover:bg-gray-50/50">
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          {isOverdue ? (
-                            <Clock className="w-3.5 h-3.5 text-red-500" />
-                          ) : (
-                            <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                          )}
-                          <span className={`font-mono font-bold ${isOverdue ? 'text-red-600' : 'text-gray-700'}`}>
-                            {new Date(due.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap font-bold text-gray-900 font-mono">{due.loanId}</td>
-                      <td className="px-3 py-3">
-                        <div className="font-bold text-gray-900">{due.customerName}</div>
-                        {due.phone && <div className="text-[10px] text-gray-400">{due.phone}</div>}
-                      </td>
-                      <td className="px-3 py-3 text-right font-semibold">₹{due.amount.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-green-600 font-bold">₹{due.paidAmount.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-red-600 font-black">₹{due.pendingAmount.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                           due.status === 'Partially Paid' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {due.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-right whitespace-nowrap print:hidden">
-                        <Button
-                          onClick={() => handleOpenCollect(due)}
-                          variant="success"
-                          size="sm"
-                          icon={DollarSign}
-                        >
-                          Collect
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot className="bg-gray-50 border-t-2 border-gray-200">
-                <tr className="font-extrabold text-gray-900 text-xs md:text-sm">
-                  <td colSpan={3} className="px-3 py-3 text-right uppercase">Total:</td>
-                  <td className="px-3 py-3 text-right">₹{filteredDues.reduce((sum, d) => sum + d.amount, 0).toLocaleString('en-IN')}</td>
-                  <td className="px-3 py-3 text-right text-green-700">₹{filteredDues.reduce((sum, d) => sum + d.paidAmount, 0).toLocaleString('en-IN')}</td>
-                  <td className="px-3 py-3 text-right text-red-700">₹{filteredDues.reduce((sum, d) => sum + d.pendingAmount, 0).toLocaleString('en-IN')}</td>
-                  <td className="px-3 py-3"></td>
-                  <td className="px-3 py-3 print:hidden"></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-      </Card>
-      </div>
-
-      <FinancePrintPreview
-        isOpen={showPrintPreview}
-        onClose={() => setShowPrintPreview(false)}
-        title="Dues & Overdue Ledger"
-        documentTitle="DUES AND OVERDUE REPORT"
-      >
-        <div className="space-y-6 mt-6">
-          <Card title="Dues Statement List" subtitle={`${filteredDues.length} pending instalments listed`} className="shadow-none border-0">
-            {filteredDues.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">No pending dues found matching filters</div>
+      {/* Top Summary Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        {/* Partners Card */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+          <div className="px-4 pt-4 pb-2">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Partners</span>
+            {partners.length === 0 ? (
+              <span className="text-sm font-bold text-slate-500 uppercase">No Partners</span>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
+              <select
+                value={selectedPartner}
+                onChange={(e) => setSelectedPartner(e.target.value)}
+                className="w-full text-sm font-black text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer uppercase tracking-wider"
+              >
+                <option value="ALL PARTNERS">ALL PARTNERS</option>
+                {partners.map(p => (
+                  <option key={p.id} value={p.name}>{p.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          <div className="mt-auto bg-[#0b1329] text-white px-4 py-2 text-[10px] font-black uppercase tracking-widest">
+            {selectedPartner}
+          </div>
+        </div>
+
+        {/* Records Card */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Records</span>
+          <span className="text-3xl font-black text-slate-900 tracking-tight mt-1">{filteredDues.length}</span>
+        </div>
+
+        {/* NPA Total Card */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">NPA Total</span>
+          <span className="text-3xl font-black text-red-600 tracking-tight mt-1">₹{npaTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+        </div>
+
+        {/* Filter Card */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Filter</span>
+          <span className="text-xl font-black text-slate-900 tracking-tight mt-1 uppercase">{selectedPartner}</span>
+        </div>
+      </div>
+
+      {/* Main Layout */}
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+        
+        {/* Left Side: Report Menu */}
+        <div className="xl:col-span-1">
+          {renderReportMenu()}
+        </div>
+
+        {/* Right Side: Main Content */}
+        <div className="xl:col-span-3">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px] flex flex-col">
+            
+            {/* Main Content Header */}
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center relative">
+              <div>
+                <h2 className="text-lg font-black text-slate-900 uppercase tracking-wider">{activeReport}</h2>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">
+                  {activeReport === 'A -> B DUE LIST' 
+                    ? 'FILTER BY AADHAAR, CUSTOMER NAME, OR DATE RANGE'
+                    : 'FILTER BY AADHAAR OR CUSTOMER NAME'}
+                </p>
+              </div>
+              <div className="absolute top-4 right-4 bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest border border-blue-100">
+                LIVE
+              </div>
+            </div>
+
+            {/* Search/Filter Row */}
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-slate-100 bg-slate-50">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Aadhaar</label>
+                <input
+                  type="text"
+                  placeholder="SEARCH BY AADHAAR"
+                  value={searchAadhaar}
+                  onChange={(e) => setSearchAadhaar(e.target.value)}
+                  className="w-full text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Name</label>
+                <input
+                  type="text"
+                  placeholder="SEARCH BY NAME"
+                  value={searchName}
+                  onChange={(e) => setSearchName(e.target.value)}
+                  className="w-full text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              {activeReport === 'A -> B DUE LIST' && (
+                <>
+                  <div className="md:col-span-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Start Date (A)</label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="md:col-span-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">End Date (B)</label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Main Results Area */}
+            {loading ? (
+              <div className="flex-1 flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-[#0b1329]"></div>
+              </div>
+            ) : filteredDues.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center p-8">
+                <div className="text-center border border-dashed border-slate-200 rounded-xl p-12 w-full max-w-md bg-slate-50">
+                  <p className="text-sm font-black text-slate-900 uppercase tracking-widest mb-2">No Records</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase">Try adjusting the filters above.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto flex-1">
+                <table className="w-full text-left border-collapse min-w-[800px]">
                   <thead>
-                    <tr className="bg-gray-100">
-                      <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Due Date</th>
-                      <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Loan ID</th>
-                      <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Customer Name</th>
-                      <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Due Amount</th>
-                      <th className="px-3 py-3 text-right font-bold text-green-700 uppercase">Paid Amount</th>
-                      <th className="px-3 py-3 text-right font-bold text-red-700 uppercase">Pending Amount</th>
-                      <th className="px-3 py-3 text-center font-bold text-gray-700 uppercase">Status</th>
+                    <tr className="bg-white border-b border-slate-200">
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">S.No</th>
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Customer Name</th>
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Aadhaar</th>
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Loan No</th>
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Partner</th>
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Due Date</th>
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">Prin. Due</th>
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">Penalty</th>
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">Total Due</th>
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredDues.map(due => {
-                      const today = new Date().toISOString().split('T')[0];
-                      const isOverdue = due.dueDate <= today;
-                      return (
-                        <tr key={due.id}>
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <span className={`font-mono font-bold ${isOverdue ? 'text-red-600' : 'text-gray-700'}`}>
-                              {new Date(due.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3 whitespace-nowrap font-bold text-gray-900 font-mono">{due.loanId}</td>
-                          <td className="px-3 py-3">
-                            <div className="font-bold text-gray-900">{due.customerName}</div>
-                            {due.phone && <div className="text-[10px] text-gray-400">{due.phone}</div>}
-                          </td>
-                          <td className="px-3 py-3 text-right font-semibold">₹{due.amount.toLocaleString('en-IN')}</td>
-                          <td className="px-3 py-3 text-right text-green-600 font-bold">₹{due.paidAmount.toLocaleString('en-IN')}</td>
-                          <td className="px-3 py-3 text-right text-red-600 font-black">₹{due.pendingAmount.toLocaleString('en-IN')}</td>
-                          <td className="px-3 py-3 text-center">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                               due.status === 'Partially Paid' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                            }`}>
-                              {due.status}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredDues.map((due, idx) => (
+                      <tr key={due.id} className={`transition-colors hover:bg-slate-50 ${due.isNPA ? 'bg-red-50/30' : ''}`}>
+                        <td className="px-4 py-3 text-xs font-bold text-slate-500">{idx + 1}</td>
+                        <td className="px-4 py-3 text-xs font-black text-slate-900">{due.customerName}</td>
+                        <td className="px-4 py-3 text-xs font-bold text-slate-600">{due.aadhaar}</td>
+                        <td className="px-4 py-3 text-xs font-bold text-blue-600">{due.loanId}</td>
+                        <td className="px-4 py-3 text-xs font-bold text-slate-600">{due.partnerName}</td>
+                        <td className="px-4 py-3 text-xs font-bold text-slate-600 whitespace-nowrap">
+                          {new Date(due.dueDate).toLocaleDateString('en-GB')}
+                          {due.overdueDays > 0 && <span className="block text-[9px] text-red-500 font-black">{due.overdueDays} days late</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-black text-slate-700 text-right">₹{due.pendingAmount.toLocaleString('en-IN')}</td>
+                        <td className="px-4 py-3 text-xs font-black text-orange-600 text-right">₹{due.penalty.toLocaleString('en-IN')}</td>
+                        <td className="px-4 py-3 text-xs font-black text-red-600 text-right">₹{(due.pendingAmount + due.penalty).toLocaleString('en-IN')}</td>
+                        <td className="px-4 py-3 text-[10px] font-black uppercase tracking-wider">
+                          <span className={`px-2 py-1 rounded-full ${
+                            due.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' :
+                            due.status === 'Partially Paid' ? 'bg-orange-100 text-orange-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {due.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
-                  <tfoot className="bg-gray-50 border-t-2 border-gray-200">
-                    <tr className="font-extrabold text-gray-900 text-xs md:text-sm">
-                      <td colSpan={3} className="px-3 py-3 text-right uppercase">Total:</td>
-                      <td className="px-3 py-3 text-right">₹{filteredDues.reduce((sum, d) => sum + d.amount, 0).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-green-700">₹{filteredDues.reduce((sum, d) => sum + d.paidAmount, 0).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-red-700">₹{filteredDues.reduce((sum, d) => sum + d.pendingAmount, 0).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3"></td>
-                    </tr>
-                  </tfoot>
                 </table>
               </div>
             )}
-          </Card>
+          </div>
+        </div>
+      </div>
+
+      {/* Print Preview Modal */}
+      <FinancePrintPreview
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        title="Dues Ledger"
+        documentTitle={`DUES LEDGER: ${activeReport}`}
+      >
+        <div className="space-y-6 pb-12">
+          {/* Print Summary */}
+          <div className="grid grid-cols-4 gap-4 border-b border-t border-slate-900 py-4 mb-6 text-center">
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase">Report Type</p>
+              <p className="text-sm font-black text-slate-900">{activeReport}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase">Partner</p>
+              <p className="text-sm font-black text-slate-900">{selectedPartner}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase">Records</p>
+              <p className="text-sm font-black text-slate-900">{filteredDues.length}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase">NPA Total</p>
+              <p className="text-sm font-black text-red-700">₹{npaTotalAmount.toLocaleString('en-IN')}</p>
+            </div>
+          </div>
+
+          {(searchAadhaar || searchName || startDate || endDate) && (
+            <div className="text-xs font-bold text-slate-600 mb-4 border border-slate-200 p-2 rounded bg-slate-50">
+              <span className="text-[10px] uppercase text-slate-400 mr-2">Filters Applied:</span>
+              {searchAadhaar && <span className="mr-4">Aadhaar: {searchAadhaar}</span>}
+              {searchName && <span className="mr-4">Name: {searchName}</span>}
+              {startDate && <span className="mr-4">From: {startDate}</span>}
+              {endDate && <span>To: {endDate}</span>}
+            </div>
+          )}
+
+          {/* Transactions Print Table */}
+          <div className="border border-slate-900">
+            <div className="bg-slate-100 border-b border-slate-900 px-4 py-2 flex justify-between">
+              <h4 className="text-[10px] font-black uppercase text-slate-900">Due List</h4>
+              <span className="text-[10px] font-bold text-slate-500">{filteredDues.length} ROWS</span>
+            </div>
+            <table className="w-full text-left text-[10px]">
+              <thead>
+                <tr className="border-b border-slate-900 bg-slate-50">
+                  <th className="px-2 py-2 font-bold text-slate-800 border-r border-slate-300">S.No</th>
+                  <th className="px-2 py-2 font-bold text-slate-800 border-r border-slate-300">Name / Aadhaar</th>
+                  <th className="px-2 py-2 font-bold text-slate-800 border-r border-slate-300">Loan / Partner</th>
+                  <th className="px-2 py-2 font-bold text-slate-800 border-r border-slate-300">Due Date</th>
+                  <th className="px-2 py-2 font-bold text-slate-800 text-right border-r border-slate-300">Prin. Due</th>
+                  <th className="px-2 py-2 font-bold text-slate-800 text-right border-r border-slate-300">Penalty</th>
+                  <th className="px-2 py-2 font-bold text-slate-900 text-right border-r border-slate-300">Total Due</th>
+                  <th className="px-2 py-2 font-bold text-slate-800">Status</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono">
+                {filteredDues.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-8 text-slate-500 font-sans font-bold uppercase">No records found</td>
+                  </tr>
+                ) : (
+                  filteredDues.map((due, idx) => (
+                    <tr key={due.id} className="border-b border-slate-200 last:border-0">
+                      <td className="px-2 py-1 border-r border-slate-200 text-center">{idx + 1}</td>
+                      <td className="px-2 py-1 border-r border-slate-200">
+                        <div className="font-bold text-slate-900 truncate max-w-[150px]">{due.customerName}</div>
+                        <div className="text-[9px] text-slate-500">{due.aadhaar}</div>
+                      </td>
+                      <td className="px-2 py-1 border-r border-slate-200">
+                        <div className="font-bold text-slate-900">{due.loanId}</div>
+                        <div className="text-[9px] text-slate-500 truncate max-w-[100px]">{due.partnerName}</div>
+                      </td>
+                      <td className="px-2 py-1 border-r border-slate-200 whitespace-nowrap">
+                        {new Date(due.dueDate).toLocaleDateString('en-GB')}
+                        {due.overdueDays > 0 && <span className="ml-1 text-[8px] text-red-500">({due.overdueDays}d)</span>}
+                      </td>
+                      <td className="px-2 py-1 text-right text-slate-700 border-r border-slate-200">{due.pendingAmount > 0 ? due.pendingAmount.toLocaleString('en-IN') : '-'}</td>
+                      <td className="px-2 py-1 text-right text-slate-700 border-r border-slate-200">{due.penalty > 0 ? due.penalty.toLocaleString('en-IN') : '-'}</td>
+                      <td className="px-2 py-1 text-right font-bold text-slate-900 border-r border-slate-200">₹{(due.pendingAmount + due.penalty).toLocaleString('en-IN')}</td>
+                      <td className="px-2 py-1 text-[8px] uppercase tracking-wider">{due.status}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </FinancePrintPreview>
     </div>
