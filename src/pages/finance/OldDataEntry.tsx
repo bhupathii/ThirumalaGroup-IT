@@ -852,12 +852,12 @@ const OldDataEntry: React.FC = () => {
                 <table className="min-w-full divide-y divide-slate-100 text-xs md:text-sm">
                   <thead>
                     <tr className="bg-slate-50/50">
-                      <th className="px-3 py-2 text-left font-bold text-slate-500 uppercase tracking-wider">Date</th>
-                      <th className="px-3 py-2 text-left font-bold text-slate-500 uppercase tracking-wider">Days</th>
-                      <th className="px-3 py-2 text-left font-bold text-slate-500 uppercase tracking-wider">Interest Paid</th>
-                      <th className="px-3 py-2 text-left font-bold text-slate-500 uppercase tracking-wider">Penalty Paid</th>
-                      <th className="px-3 py-2 text-left font-bold text-slate-500 uppercase tracking-wider">Partial Paid</th>
-                      <th className="px-3 py-2 text-center font-bold text-slate-500 uppercase tracking-wider">Action</th>
+                      <th className="finance-table-header">Date</th>
+                      <th className="finance-table-header">Days</th>
+                      <th className="finance-table-header">Interest Paid</th>
+                      <th className="finance-table-header">Penalty Paid</th>
+                      <th className="finance-table-header">Partial Paid</th>
+                      <th className="finance-table-header text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">

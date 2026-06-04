@@ -143,7 +143,7 @@ const ProfitAndLoss: React.FC = () => {
       <div className="flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
           <h1 className="finance-page-title">Profit & Loss</h1>
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mt-1">
+          <p className="finance-page-subtitle">
             Income vs Expenses over a date range, with per-partner share
           </p>
         </div>

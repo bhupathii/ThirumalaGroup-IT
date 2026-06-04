@@ -70,7 +70,7 @@ const EditedDeletedLogs: React.FC = () => {
       <div className="flex justify-between items-center border-b border-green-100 pb-4">
         <div>
           <h1 className="finance-page-title">Audit Logs Registry</h1>
-          <p className="text-gray-500 text-sm mt-1">Review full audit histories of edited or deleted finance entries</p>
+          <p className="finance-page-subtitle">Review full audit histories of edited or deleted finance entries</p>
         </div>
       </div>
 
@@ -160,7 +160,7 @@ const EditedDeletedLogs: React.FC = () => {
                     <th className="finance-table-header">Table</th>
                     <th className="finance-table-header">Operator</th>
                     <th className="finance-table-header">Old Values</th>
-                    <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Action</th>
+                    <th className="finance-table-header text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">

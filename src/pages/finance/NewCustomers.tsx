@@ -106,12 +106,12 @@ const NewCustomers: React.FC = () => {
       <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
         <thead>
           <tr className="bg-gray-100">
-            <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Registration Date</th>
-            <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Customer Profile</th>
-            <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Address</th>
-            <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Aadhaar UID</th>
-            <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Active Loan ID</th>
-            <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Loan Amount</th>
+            <th className="finance-table-header">Registration Date</th>
+            <th className="finance-table-header">Customer Profile</th>
+            <th className="finance-table-header">Address</th>
+            <th className="finance-table-header">Aadhaar UID</th>
+            <th className="finance-table-header">Active Loan ID</th>
+            <th className="finance-table-header text-right">Loan Amount</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -163,7 +163,7 @@ const NewCustomers: React.FC = () => {
       <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
           <h1 className="finance-page-title">New Customer Registrations</h1>
-          <p className="text-gray-500 text-sm mt-1">Audit log of customers added within specific calendar ranges</p>
+          <p className="finance-page-subtitle">Audit log of customers added within specific calendar ranges</p>
         </div>
         <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
           Print Registrations

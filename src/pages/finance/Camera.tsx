@@ -154,7 +154,7 @@ const Camera: React.FC = () => {
       <div className="flex justify-between items-center border-b border-green-100 pb-4">
         <div>
           <h1 className="finance-page-title">Camera Attachment</h1>
-          <p className="text-gray-500 text-sm mt-1">Capture customer/surety photos and link them to active loan records</p>
+          <p className="finance-page-subtitle">Capture customer/surety photos and link them to active loan records</p>
         </div>
       </div>
 
@@ -281,8 +281,8 @@ const Camera: React.FC = () => {
           {!selectedLoanId ? (
             <div className="flex flex-col items-center justify-center border border-dashed rounded-lg py-16 px-4 bg-gray-50/50">
               <AlertCircle className="w-10 h-10 text-gray-400 stroke-1 mb-2" />
-              <p className="text-gray-500 text-sm font-semibold">No loan selected</p>
-              <p className="text-gray-400 text-xs mt-1">Select an active loan to inspect attached documents</p>
+              <p className="finance-page-subtitle">No loan selected</p>
+              <p className="finance-page-subtitle">Select an active loan to inspect attached documents</p>
             </div>
           ) : existingPhotos.length === 0 ? (
             <div className="text-center py-8 text-gray-400 text-sm">No photos attached to this loan yet</div>

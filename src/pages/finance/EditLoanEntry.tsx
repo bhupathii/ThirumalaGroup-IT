@@ -386,10 +386,10 @@ const EditLoanEntry: React.FC = () => {
                       <th className="finance-table-header">Loan ID</th>
                       <th className="finance-table-header">Customer</th>
                       <th className="finance-table-header">Aadhaar</th>
-                      <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Principal</th>
+                      <th className="finance-table-header text-right">Principal</th>
                       <th className="finance-table-header">Instalment</th>
-                      <th className="px-3 py-3 text-center font-bold text-gray-500 uppercase">Status</th>
-                      <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Action</th>
+                      <th className="finance-table-header text-center">Status</th>
+                      <th className="finance-table-header text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">

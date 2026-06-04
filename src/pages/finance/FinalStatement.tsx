@@ -128,7 +128,7 @@ const FinalStatement: React.FC = () => {
       <div className="flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
           <h1 className="finance-page-title">Final Statement</h1>
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mt-1">
+          <p className="finance-page-subtitle">
             Net worth snapshot with share value for each partner
           </p>
         </div>

@@ -128,7 +128,7 @@ const Daybook: React.FC = () => {
       <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
           <h1 className="finance-page-title">Finance Daybook</h1>
-          <p className="text-gray-500 text-sm mt-1">Review cash inflow and outflow transactions for any specific business day</p>
+          <p className="finance-page-subtitle">Review cash inflow and outflow transactions for any specific business day</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
@@ -197,11 +197,11 @@ const Daybook: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-300 text-xs md:text-sm">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Particulars / Account</th>
-                    <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Voucher Type</th>
-                    <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Remarks</th>
-                    <th className="px-3 py-3 text-right font-bold text-green-700 uppercase">Receipts (Cr)</th>
-                    <th className="px-3 py-3 text-right font-bold text-red-700 uppercase">Payments (Dr)</th>
+                    <th className="finance-table-header">Particulars / Account</th>
+                    <th className="finance-table-header">Voucher Type</th>
+                    <th className="finance-table-header">Remarks</th>
+                    <th className="finance-table-header text-right">Receipts (Cr)</th>
+                    <th className="finance-table-header text-right">Payments (Dr)</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -283,11 +283,11 @@ const Daybook: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-300 text-xs md:text-sm">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Particulars / Account</th>
-                    <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Voucher Type</th>
-                    <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Remarks</th>
-                    <th className="px-3 py-3 text-right font-bold text-green-700 uppercase">Receipts (Cr)</th>
-                    <th className="px-3 py-3 text-right font-bold text-red-700 uppercase">Payments (Dr)</th>
+                    <th className="finance-table-header">Particulars / Account</th>
+                    <th className="finance-table-header">Voucher Type</th>
+                    <th className="finance-table-header">Remarks</th>
+                    <th className="finance-table-header text-right">Receipts (Cr)</th>
+                    <th className="finance-table-header text-right">Payments (Dr)</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">

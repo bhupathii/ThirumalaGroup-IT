@@ -367,7 +367,7 @@ const CDLedger: React.FC = () => {
         
         <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-4 flex-1">
           <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
+            <label className="finance-label">
               Today Date
             </label>
             <input 
@@ -379,7 +379,7 @@ const CDLedger: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
+            <label className="finance-label">
               Ledger Type
             </label>
             <select
@@ -395,7 +395,7 @@ const CDLedger: React.FC = () => {
           </div>
 
           <div className="sm:col-span-2">
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
+            <label className="finance-label">
               Search Accounts
             </label>
             <div className="relative">
@@ -484,7 +484,7 @@ const CDLedger: React.FC = () => {
         <div className="text-center py-24 bg-white rounded-3xl border border-gray-100 shadow-sm space-y-3">
           <FileText className="w-16 h-16 mx-auto text-gray-300" />
           <h2 className="text-lg font-bold text-gray-800">No Account Loaded</h2>
-          <p className="text-gray-400 text-sm max-w-sm mx-auto">
+          <p className="finance-page-subtitle">
             Use the search panel above to filter and load customer accounts, view ledger sheets, guarantor cards, and print statements.
           </p>
         </div>
@@ -908,10 +908,10 @@ const CDLedger: React.FC = () => {
                   <thead>
                     <tr className="bg-gray-50/50">
                       <th className="finance-table-header">Due Date</th>
-                      <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Amount</th>
-                      <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Paid</th>
-                      <th className="px-3 py-3 text-center font-bold text-gray-500 uppercase">Status</th>
-                      <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Balance</th>
+                      <th className="finance-table-header text-right">Amount</th>
+                      <th className="finance-table-header text-right">Paid</th>
+                      <th className="finance-table-header text-center">Status</th>
+                      <th className="finance-table-header text-right">Balance</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
@@ -1135,12 +1135,12 @@ const CDLedger: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-300 text-xs border border-gray-200">
                 <thead>
                   <tr className="bg-gray-50">
-                    <th className="px-3 py-2 text-left font-bold text-gray-700 uppercase">Date</th>
-                    <th className="px-3 py-2 text-left font-bold text-gray-700 uppercase">Particulars</th>
-                    <th className="px-3 py-2 text-right font-bold text-gray-700 uppercase">Credit (Col)</th>
-                    <th className="px-3 py-2 text-right font-bold text-gray-700 uppercase">Debit (Disb)</th>
-                    <th className="px-3 py-2 text-right font-bold text-gray-700 uppercase">Balance</th>
-                    <th className="px-3 py-2 text-left font-bold text-gray-700 uppercase">Mode</th>
+                    <th className="finance-table-header">Date</th>
+                    <th className="finance-table-header">Particulars</th>
+                    <th className="finance-table-header text-right">Credit (Col)</th>
+                    <th className="finance-table-header text-right">Debit (Disb)</th>
+                    <th className="finance-table-header text-right">Balance</th>
+                    <th className="finance-table-header">Mode</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white font-mono">
@@ -1172,11 +1172,11 @@ const CDLedger: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-300 text-xs border border-gray-200">
                 <thead>
                   <tr className="bg-gray-50">
-                    <th className="px-3 py-2 text-left font-bold text-gray-700 uppercase">Due Date</th>
-                    <th className="px-3 py-2 text-right font-bold text-gray-700 uppercase">Instalment</th>
-                    <th className="px-3 py-2 text-right font-bold text-gray-700 uppercase">Paid Amount</th>
-                    <th className="px-3 py-2 text-center font-bold text-gray-700 uppercase">Status</th>
-                    <th className="px-3 py-2 text-right font-bold text-gray-700 uppercase">Balance</th>
+                    <th className="finance-table-header">Due Date</th>
+                    <th className="finance-table-header text-right">Instalment</th>
+                    <th className="finance-table-header text-right">Paid Amount</th>
+                    <th className="finance-table-header text-center">Status</th>
+                    <th className="finance-table-header text-right">Balance</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white font-mono">

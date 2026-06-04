@@ -980,7 +980,7 @@ const LoanEntry: React.FC = () => {
             <div className="space-y-4">
               {/* Search input for existing customer */}
               <div ref={dropdownRef} className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 print:hidden">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <label className="finance-label">
                   SELECT EXISTING CUSTOMER (OR TYPE DETAILS DIRECTLY BELOW)
                 </label>
                 <div className="relative">

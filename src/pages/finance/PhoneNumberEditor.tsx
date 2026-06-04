@@ -82,7 +82,7 @@ const PhoneNumberEditor: React.FC = () => {
       <div className="flex justify-between items-center border-b border-green-100 pb-4">
         <div>
           <h1 className="finance-page-title">Phone Number Editor</h1>
-          <p className="text-gray-500 text-sm mt-1">Quickly search and update contact details for customers in the finance registry</p>
+          <p className="finance-page-subtitle">Quickly search and update contact details for customers in the finance registry</p>
         </div>
       </div>
 
@@ -146,7 +146,7 @@ const PhoneNumberEditor: React.FC = () => {
                     <th className="finance-table-header">Customer Name</th>
                     <th className="finance-table-header">Aadhaar UID</th>
                     <th className="finance-table-header">Phone Number</th>
-                    <th className="px-3 py-3 text-right font-bold text-gray-500 uppercase">Action</th>
+                    <th className="finance-table-header text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">

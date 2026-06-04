@@ -204,7 +204,7 @@ const Customers: React.FC = () => {
           <div className="p-4 bg-slate-50 rounded-full border border-slate-100 max-w-fit mx-auto">
             <Info className="w-12 h-12 text-slate-350" />
           </div>
-          <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">No customers found</h2>
+          <h2 className="finance-section-title">No customers found</h2>
           <p className="finance-page-subtitle max-w-sm mx-auto leading-normal">
             No active customer profiles match your search criteria. Click below to add a new borrower.
           </p>
@@ -234,7 +234,7 @@ const Customers: React.FC = () => {
                   <th className="finance-table-header">Contact Info</th>
                   <th className="finance-table-header">Aadhaar UID</th>
                   <th className="px-3 py-3 text-left font-bold text-slate-500 tracking-wider uppercase">Village/Mandal</th>
-                  <th className="px-3 py-3 text-right font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                  <th className="finance-table-header text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">

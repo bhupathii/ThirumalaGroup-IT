@@ -285,7 +285,7 @@ const BusinessReport: React.FC = () => {
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div>
           <h1 className="finance-page-title">Business Details</h1>
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mt-1">
+          <p className="finance-page-subtitle">
             Partner-wise & MD Business, Outstanding, and Disbursal Activity
           </p>
         </div>

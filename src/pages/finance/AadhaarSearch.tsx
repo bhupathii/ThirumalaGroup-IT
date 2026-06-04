@@ -112,7 +112,7 @@ const AadhaarSearch: React.FC = () => {
       <div className="flex justify-between items-center border-b border-green-100 pb-4">
         <div>
           <h1 className="finance-page-title">Aadhaar Search Engine</h1>
-          <p className="text-gray-500 text-sm mt-1">Look up customer risk profile and full historical loan sheets using Aadhaar UID</p>
+          <p className="finance-page-subtitle">Look up customer risk profile and full historical loan sheets using Aadhaar UID</p>
         </div>
       </div>
 
@@ -264,7 +264,7 @@ const AadhaarSearch: React.FC = () => {
       ) : searched ? (
         <div className="flex flex-col items-center justify-center border border-dashed rounded-lg py-16 bg-gray-50/20">
           <CreditCard className="w-10 h-10 text-gray-300 mb-2 stroke-1" />
-          <p className="text-gray-400 text-sm">Registry search was negative. Check Aadhaar spacing and digit counts.</p>
+          <p className="finance-page-subtitle">Registry search was negative. Check Aadhaar spacing and digit counts.</p>
         </div>
       ) : null}
     </div>

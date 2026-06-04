@@ -601,7 +601,7 @@ const CashBook: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">NO ENTRIES</h3>
-                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mt-1">
+                    <p className="finance-page-subtitle">
                       Post an entry from the form on the left.
                     </p>
                   </div>
@@ -615,10 +615,10 @@ const CashBook: React.FC = () => {
                         <th className="finance-table-header">Head of A/C</th>
                         <th className="finance-table-header">Acc No</th>
                         <th className="finance-table-header">Particulars</th>
-                        <th className="px-3 py-3 text-right font-bold text-slate-500 uppercase tracking-wider">Credit</th>
-                        <th className="px-3 py-3 text-right font-bold text-slate-500 uppercase tracking-wider">Debit</th>
+                        <th className="finance-table-header text-right">Credit</th>
+                        <th className="finance-table-header text-right">Debit</th>
                         <th className="finance-table-header">By</th>
-                        <th className="px-3 py-3 text-right font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                        <th className="finance-table-header text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">

@@ -419,8 +419,8 @@ const SearchPage: React.FC = () => {
       ) : (
         <div className="flex flex-col items-center justify-center border border-dashed rounded-lg py-20 bg-gray-50/30">
           <SearchIcon className="w-12 h-12 text-gray-400 stroke-1 mb-2" />
-          <p className="text-gray-500 text-sm font-semibold">Account Detail Panel is idle</p>
-          <p className="text-gray-400 text-xs mt-1">Use the search box above to lookup customer records and make collections</p>
+          <p className="finance-page-subtitle">Account Detail Panel is idle</p>
+          <p className="finance-page-subtitle">Use the search box above to lookup customer records and make collections</p>
         </div>
       )}
     </div>

@@ -203,7 +203,7 @@ const GeneralCalculator: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 font-sans">
+                <label className="finance-label">
                   DATE
                 </label>
                 <input
@@ -262,7 +262,7 @@ const GeneralCalculator: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 font-sans">
+                <label className="finance-label">
                   AMOUNT PAID (₹)
                 </label>
                 <input

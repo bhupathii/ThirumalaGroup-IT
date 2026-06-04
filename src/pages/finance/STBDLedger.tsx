@@ -93,7 +93,7 @@ const STBDLedger: React.FC = () => {
       <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
           <h1 className="finance-page-title">STBD Ledger</h1>
-          <p className="text-gray-500 text-sm mt-1">Review accounts starting with the 'STBD' identifier prefix</p>
+          <p className="finance-page-subtitle">Review accounts starting with the 'STBD' identifier prefix</p>
         </div>
         <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
           Print Ledger
@@ -140,15 +140,15 @@ const STBDLedger: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Loan ID</th>
-                  <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Customer</th>
-                  <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Disbursed</th>
-                  <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Principal</th>
-                  <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Interest</th>
-                  <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Total Repayable</th>
-                  <th className="px-3 py-3 text-right font-bold text-green-700 uppercase">Collected (Cr)</th>
-                  <th className="px-3 py-3 text-right font-bold text-orange-700 uppercase">Receivable (Dr)</th>
-                  <th className="px-3 py-3 text-center font-bold text-gray-700 uppercase">Status</th>
+                  <th className="finance-table-header">Loan ID</th>
+                  <th className="finance-table-header">Customer</th>
+                  <th className="finance-table-header">Disbursed</th>
+                  <th className="finance-table-header text-right">Principal</th>
+                  <th className="finance-table-header text-right">Interest</th>
+                  <th className="finance-table-header text-right">Total Repayable</th>
+                  <th className="finance-table-header text-right">Collected (Cr)</th>
+                  <th className="finance-table-header text-right">Receivable (Dr)</th>
+                  <th className="finance-table-header text-center">Status</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -215,15 +215,15 @@ const STBDLedger: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Loan ID</th>
-                  <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Customer</th>
-                  <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Disbursed</th>
-                  <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Principal</th>
-                  <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Interest</th>
-                  <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Total Repayable</th>
-                  <th className="px-3 py-3 text-right font-bold text-green-700 uppercase">Collected (Cr)</th>
-                  <th className="px-3 py-3 text-right font-bold text-orange-700 uppercase">Receivable (Dr)</th>
-                  <th className="px-3 py-3 text-center font-bold text-gray-700 uppercase">Status</th>
+                  <th className="finance-table-header">Loan ID</th>
+                  <th className="finance-table-header">Customer</th>
+                  <th className="finance-table-header">Disbursed</th>
+                  <th className="finance-table-header text-right">Principal</th>
+                  <th className="finance-table-header text-right">Interest</th>
+                  <th className="finance-table-header text-right">Total Repayable</th>
+                  <th className="finance-table-header text-right">Collected (Cr)</th>
+                  <th className="finance-table-header text-right">Receivable (Dr)</th>
+                  <th className="finance-table-header text-center">Status</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">

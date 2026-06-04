@@ -471,7 +471,7 @@ const CapitalEntry: React.FC = () => {
               
               {/* Credit All Group */}
               <div className="space-y-2">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <label className="finance-label">
                   CREDIT ALL AMOUNT (₹)
                 </label>
                 <div className="flex gap-2">
@@ -495,7 +495,7 @@ const CapitalEntry: React.FC = () => {
 
               {/* Debit All Group */}
               <div className="space-y-2">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <label className="finance-label">
                   DEBIT ALL AMOUNT (₹)
                 </label>
                 <div className="flex gap-2">

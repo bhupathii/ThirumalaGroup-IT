@@ -187,7 +187,7 @@ const GeneralLedger: React.FC = () => {
       <div className="flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
           <h1 className="finance-page-title">General Ledger</h1>
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mt-1">Drill from Account Types &rarr; Accounts &rarr; Transaction Detail</p>
+          <p className="finance-page-subtitle">Drill from Account Types &rarr; Accounts &rarr; Transaction Detail</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold uppercase tracking-wider text-xs">

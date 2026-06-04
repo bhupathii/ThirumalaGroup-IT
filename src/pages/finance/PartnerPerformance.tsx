@@ -133,7 +133,7 @@ const PartnerPerformance: React.FC = () => {
       <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
           <h1 className="finance-page-title">Partner Performance Sheet</h1>
-          <p className="text-gray-500 text-sm mt-1">Review capital share holding percentages and estimated interest profit distribution</p>
+          <p className="finance-page-subtitle">Review capital share holding percentages and estimated interest profit distribution</p>
         </div>
         <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
           Print Statement
@@ -167,10 +167,10 @@ const PartnerPerformance: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Partner Name</th>
-                    <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Net Contribution</th>
-                    <th className="px-3 py-3 text-center font-bold text-gray-700 uppercase">Share holding</th>
-                    <th className="px-3 py-3 text-right font-bold text-green-700 uppercase">Realised Profit Share (Cash)</th>
+                    <th className="finance-table-header">Partner Name</th>
+                    <th className="finance-table-header text-right">Net Contribution</th>
+                    <th className="finance-table-header text-center">Share holding</th>
+                    <th className="finance-table-header text-right">Realised Profit Share (Cash)</th>
                     <th className="px-3 py-3 text-right font-bold text-blue-700 uppercase">Accrued Profit Share (Accrual)</th>
                   </tr>
                 </thead>
@@ -238,10 +238,10 @@ const PartnerPerformance: React.FC = () => {
               <table className="min-w-full divide-y divide-gray-200 text-xs md:text-sm">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="px-3 py-3 text-left font-bold text-gray-700 uppercase">Partner Name</th>
-                    <th className="px-3 py-3 text-right font-bold text-gray-700 uppercase">Net Contribution</th>
-                    <th className="px-3 py-3 text-center font-bold text-gray-700 uppercase">Share holding</th>
-                    <th className="px-3 py-3 text-right font-bold text-green-700 uppercase">Realised Profit Share (Cash)</th>
+                    <th className="finance-table-header">Partner Name</th>
+                    <th className="finance-table-header text-right">Net Contribution</th>
+                    <th className="finance-table-header text-center">Share holding</th>
+                    <th className="finance-table-header text-right">Realised Profit Share (Cash)</th>
                     <th className="px-3 py-3 text-right font-bold text-blue-700 uppercase">Accrued Profit Share (Accrual)</th>
                   </tr>
                 </thead>
