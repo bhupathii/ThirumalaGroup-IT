@@ -36,9 +36,9 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-4 md:p-8 print:p-0 print:bg-white print:block">
-        <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-5xl w-full mx-auto overflow-hidden print:max-w-none print:border-none print:shadow-none print:rounded-none">
-          
+      <div className="fixed inset-0 z-[100] overflow-y-auto print:static print:overflow-visible">
+        <div className="min-h-screen bg-slate-900/60 backdrop-blur-sm p-4 md:p-8 flex justify-center items-start print:bg-white print:block print:p-0 print:min-h-0">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-5xl w-full overflow-hidden print:max-w-none print:border-none print:shadow-none print:rounded-none">
           {/* Header Actions */}
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 print:hidden">
             <div>
@@ -80,6 +80,7 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <style>{`
