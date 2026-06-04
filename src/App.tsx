@@ -43,6 +43,7 @@ import GeneralCalculator from './pages/finance/GeneralCalculator';
 import CapitalEntry from './pages/finance/CapitalEntry';
 import Camera from './pages/finance/Camera';
 import Daybook from './pages/finance/Daybook';
+import DailyReportFinance from './pages/finance/DailyReport';
 import GeneralLedger from './pages/finance/GeneralLedger';
 import CDLedger from './pages/finance/CDLedger';
 import STBDLedger from './pages/finance/STBDLedger';
@@ -221,6 +222,7 @@ const AppContent: React.FC = () => {
           <Route path='finance/capital-entry' element={<CapitalEntry />} />
           <Route path='finance/camera' element={<Camera />} />
           <Route path='finance/daybook' element={<Daybook />} />
+          <Route path='finance/daily-report' element={<DailyReportFinance />} />
           <Route path='finance/general-ledger' element={<GeneralLedger />} />
           <Route path='finance/cd-ledger' element={<CDLedger />} />
           <Route path='finance/stbd-ledger' element={<STBDLedger />} />
