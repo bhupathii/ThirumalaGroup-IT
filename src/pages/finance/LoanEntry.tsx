@@ -14,7 +14,8 @@ import {
   Navigation,
   Check,
   Search,
-  Camera
+  Camera,
+  AlertCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { validateFinanceForm, ValidationField } from '../../utils/financeValidation';
@@ -79,6 +80,7 @@ const LoanEntry: React.FC = () => {
   const [custFingerprintAdded, setCustFingerprintAdded] = useState(false);
   const [custSearch, setCustSearch] = useState('');
   const [custDropdownOpen, setCustDropdownOpen] = useState(false);
+  const [npaWarning, setNpaWarning] = useState<any>(null);
 
   // Form State - Guarantor 1
   const [g1SelectedId, setG1SelectedId] = useState('');
@@ -119,8 +121,7 @@ const LoanEntry: React.FC = () => {
   const [docCharges, setDocCharges] = useState('');
   const [interestRate, setInterestRate] = useState('3'); // 3% default
   const [durationMonths, setDurationMonths] = useState('');
-  const [annualHold, setAnnualHold] = useState('3'); // 3% default
-  const [partialPaid, setPartialPaid] = useState('');
+  const [penaltyPercent, setPenaltyPercent] = useState('0.75'); // 0.75% default
   const [dueType, setDueType] = useState<'Daily' | 'Weekly' | 'Monthly'>('Daily');
   const [particulars, setParticulars] = useState('');
 
@@ -272,6 +273,20 @@ const LoanEntry: React.FC = () => {
 
   // Autofill customer data
   useEffect(() => {
+    const checkNPA = async (id: string, aadhaar: string) => {
+        try {
+            const { data } = await supabase.from('finance_npa_records').select('*').or(`customer_id.eq.${id},aadhaar.eq.${aadhaar}`).limit(1);
+            if (data && data.length > 0) {
+                setNpaWarning(data[0]);
+                toast.error(`WARNING: This customer has an NPA record closed on ${new Date(data[0].closed_at).toLocaleDateString('en-IN')}`, { duration: 6000 });
+            } else {
+                setNpaWarning(null);
+            }
+        } catch (e) {
+            setNpaWarning(null);
+        }
+    };
+
     if (selectedCustomerId) {
       const selected = customers.find(c => c.id === selectedCustomerId);
       if (selected) {
@@ -285,13 +300,14 @@ const LoanEntry: React.FC = () => {
         setCustFingerprintTemplate(selected.customer_fingerprint_template || selected.fingerprint_template || null);
         setCustFingerprintAdded(!!(selected.customer_fingerprint_added || selected.fingerprint_added));
         
-        // Redesign fields
         setCustVillage(selected.village || '');
         setCustMandal(selected.mandal || '');
         setCustDistrict(selected.district || '');
         setCustAadhaarAddress(selected.aadhaar_address || '');
         setCustPresentAddress(selected.present_address || selected.address || '');
         
+        checkNPA(selected.id, selected.aadhaar || '');
+
         if (selected.partner_name) {
           const matchPartner = partners.find(p => p.name === selected.partner_name);
           if (matchPartner) {
@@ -456,31 +472,43 @@ const LoanEntry: React.FC = () => {
       return null;
     }
 
-    const interestAmount = P * (R / 100) * D;
-    const totalRepayment = P + interestAmount;
-
+    let interestAmount = 0;
+    let penalty = 0;
     let duesCount = 0;
-    if (dueType === 'Daily') {
-      duesCount = D * 30;
-    } else if (dueType === 'Weekly') {
-      duesCount = Math.round(D * 4.33);
-    } else {
+    let dueAmount = 0;
+
+    if (loanCategory === 'CD') {
+      interestAmount = P * (R / 100) * (D / 30);
       duesCount = D;
+    } else {
+      interestAmount = P * (R / 100) * D;
+      if (dueType === 'Daily') {
+        duesCount = D * 30;
+      } else if (dueType === 'Weekly') {
+        duesCount = Math.round(D * 4.33);
+      } else {
+        duesCount = D;
+      }
+      dueAmount = duesCount > 0 ? ((P + interestAmount) / duesCount) : 0;
     }
 
-    const dueAmount = duesCount > 0 ? (totalRepayment / duesCount) : 0;
     const netDisbursed = P - docFees;
+    const totalRenewal = interestAmount + penalty;
+    const totalClose = P + interestAmount + penalty;
 
     return {
       principal: P,
       interestAmount: parseFloat(interestAmount.toFixed(2)),
-      totalRepayment: parseFloat(totalRepayment.toFixed(2)),
+      penalty: penalty,
+      totalRenewal: parseFloat(totalRenewal.toFixed(2)),
+      totalClose: parseFloat(totalClose.toFixed(2)),
+      totalRepayment: parseFloat(totalClose.toFixed(2)),
       duesCount,
       dueAmount: parseFloat(dueAmount.toFixed(2)),
       docFees,
       netDisbursed: parseFloat(netDisbursed.toFixed(2))
     };
-  }, [amount, interestRate, durationMonths, dueType, docCharges]);
+  }, [amount, interestRate, durationMonths, dueType, docCharges, loanCategory]);
 
   // Form Reset / Clear
   const handleClearForm = () => {
@@ -505,6 +533,7 @@ const LoanEntry: React.FC = () => {
     setCustPresentAddress('');
     setCustSearch('');
     setCustDropdownOpen(false);
+    setNpaWarning(null);
 
     setG1SelectedId('');
     setG1Name('');
@@ -534,8 +563,9 @@ const LoanEntry: React.FC = () => {
 
     setAmount('');
     setDocCharges('');
-    setInterestRate('2');
-    setDurationMonths('3');
+    setInterestRate('3');
+    setDurationMonths('');
+    setPenaltyPercent('0.75');
     setDueType('Daily');
     setParticulars('');
 
@@ -811,7 +841,9 @@ const LoanEntry: React.FC = () => {
         father_husband_name: custFatherName || null,
         loan_category: loanCategory,
         guarantor_1_id: resolvedG1Id || null,
-        guarantor_2_id: resolvedG2Id || null
+        guarantor_2_id: resolvedG2Id || null,
+        penalty_percent: Number(penaltyPercent) || 0.75,
+        document_charges: Number(docCharges) || 0
       };
 
       const photosArray: any[] = [];
@@ -1026,6 +1058,29 @@ const LoanEntry: React.FC = () => {
             </div>
           </div>
 
+          {/* NPA Warning Banner */}
+          {npaWarning && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <AlertCircle className="h-5 w-5 text-red-500" />
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800 uppercase">
+                    NPA Record Found
+                  </h3>
+                  <div className="mt-2 text-sm text-red-700">
+                    <p>
+                      This customer had a previous Non-Performing Asset (NPA) closed on <strong>{new Date(npaWarning.closed_at).toLocaleDateString('en-IN')}</strong>. 
+                      Reason: {npaWarning.reason || 'N/A'}. 
+                      Settlement Amount: ₹{npaWarning.settlement_amount?.toLocaleString('en-IN') || 0}.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Card 2: CUSTOMER */}
           <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
@@ -1051,6 +1106,7 @@ const LoanEntry: React.FC = () => {
                     setCustDistrict('');
                     setCustAadhaarAddress('');
                     setCustPresentAddress('');
+                    setNpaWarning(null);
                   }}
                   className="text-red-650 hover:underline peek-small-10 uppercase"
                 >
@@ -1164,21 +1220,21 @@ const LoanEntry: React.FC = () => {
                     readOnly={!!selectedCustomerId} 
                   />
                   <Input 
-                    label="Village" 
+                    label="Village (Aadhaar Address)" 
                     value={custVillage} 
                     onChange={setCustVillage} 
                     placeholder="Village" 
                     readOnly={!!selectedCustomerId} 
                   />
                   <Input 
-                    label="Mandal" 
+                    label="Mandal (Aadhaar Address)" 
                     value={custMandal} 
                     onChange={setCustMandal} 
                     placeholder="Mandal" 
                     readOnly={!!selectedCustomerId} 
                   />
                   <Input 
-                    label="District" 
+                    label="District (Aadhaar Address)" 
                     value={custDistrict} 
                     onChange={setCustDistrict} 
                     placeholder="District" 
@@ -1607,7 +1663,7 @@ const LoanEntry: React.FC = () => {
 
               {/* Row 2 */}
               <div>
-                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">PERIOD (DAYS / INSTALMENTS)</label>
+                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">PERIOD (DAYS)</label>
                 <input
                   type="number"
                   ref={durationMonthsRef}
@@ -1615,7 +1671,7 @@ const LoanEntry: React.FC = () => {
                   onChange={(e) => { setDurationMonths(e.target.value); setErrors(p => ({...p, durationMonths: false})) }}
                   className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[42px] ${errors.durationMonths ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                 />
-                <span className="text-[10px] font-bold tracking-wider text-slate-400 mt-2 block uppercase leading-relaxed">DAYS FOR CD/OD, INSTALMENTS FOR HP/STBD, MONTHS FOR TBD</span>
+                <span className="text-[10px] font-bold tracking-wider text-slate-400 mt-2 block uppercase leading-relaxed">DAYS FOR CD/OD</span>
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">DOCUMENT CHARGES (₹)</label>
@@ -1629,25 +1685,15 @@ const LoanEntry: React.FC = () => {
 
               {/* Row 3 */}
               <div>
-                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">ANNUAL HOLD % (3% DEFAULT)</label>
+                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">PENALTY PERCENT (0.75% DEFAULT)</label>
                 <input
                   type="number"
-                  value={annualHold}
-                  onChange={(e) => setAnnualHold(e.target.value)}
+                  value={penaltyPercent}
+                  onChange={(e) => setPenaltyPercent(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[42px]"
                 />
-                <span className="text-[10px] font-bold tracking-wider text-slate-400 mt-2 block uppercase leading-relaxed">PRE-DEDUCTED FROM DISBURSAL, PRORATED OVER TENURE</span>
               </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">PARTIAL PAID (₹)</label>
-                <input
-                  type="number"
-                  value={partialPaid}
-                  onChange={(e) => setPartialPaid(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[42px]"
-                />
-                <span className="text-[10px] font-bold tracking-wider text-slate-400 mt-2 block uppercase leading-relaxed">ANY AMOUNT ALREADY COLLECTED AT ENTRY</span>
-              </div>
+              <div className="hidden sm:block"></div>
 
               {/* Row 4 */}
               <div className="sm:col-span-2">
@@ -1982,6 +2028,33 @@ const LoanEntry: React.FC = () => {
             {!liveCalculations ? (
               <div className="py-8 text-center text-slate-400 peek-h3 uppercase">
                 FILL IN THE LOAN AMOUNT TO SEE THE CALCULATION PREVIEW.
+              </div>
+            ) : loanCategory === 'CD' ? (
+              <div className="space-y-4 text-slate-700 finance-caption">
+                <div className="grid grid-cols-2 gap-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                  <span className="text-slate-400 peek-small-10 uppercase">Principal:</span>
+                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.principal.toLocaleString('en-IN')}</span>
+
+                  <span className="text-slate-400 peek-small-10 uppercase">Document Charges:</span>
+                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.docFees.toLocaleString('en-IN')}</span>
+
+                  <span className="text-slate-400 peek-small-10 uppercase">Net Disbursement:</span>
+                  <span className="text-right text-slate-900 text-blue-650 peek-button">₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-y-2 border-t pt-2.5">
+                  <span className="text-slate-400 peek-small-10 uppercase">Interest:</span>
+                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.interestAmount.toLocaleString('en-IN')}</span>
+
+                  <span className="text-slate-400 peek-small-10 uppercase">Penalty:</span>
+                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.penalty.toLocaleString('en-IN')}</span>
+
+                  <span className="text-slate-400 mt-1 border-t pt-1.5 peek-small-10 uppercase">Total for Renewal:</span>
+                  <span className="text-right text-slate-900 mt-1 border-t pt-1.5 peek-button">₹{liveCalculations.totalRenewal.toLocaleString('en-IN')}</span>
+
+                  <span className="text-slate-800 border-t pt-1.5 finance-sidebar-link uppercase">Total for Close:</span>
+                  <span className="text-right text-green-700 border-t pt-1.5 finance-sidebar-link">₹{liveCalculations.totalClose.toLocaleString('en-IN')}</span>
+                </div>
               </div>
             ) : (
               <div className="space-y-4 text-slate-700 finance-caption">

@@ -108,6 +108,9 @@ export interface FinanceLoan {
   surety_fingerprint_added?: boolean;
   father_husband_name?: string | null;
   loan_category?: string;
+  npa_closed?: boolean;
+  document_charges?: number;
+  penalty_percent?: number;
   guarantor_1_id?: string | null;
   guarantor_2_id?: string | null;
 }
@@ -217,6 +220,91 @@ export interface FinanceCashbookEntry {
   updated_at: string;
 }
 
+export interface FinanceNPARecord {
+  id: string;
+  loan_id: string | null;
+  customer_id: string | null;
+  customer_name: string;
+  aadhaar: string | null;
+  phone: string | null;
+  loan_type: string | null;
+  loan_amount: number;
+  paid_amount: number;
+  balance_amount: number;
+  interest_due: number;
+  penalty_due: number;
+  settlement_amount: number;
+  reason: string | null;
+  full_history_json: any;
+  closed_by: string | null;
+  closed_at: string;
+  created_at: string;
+}
+
+export interface FinanceCDLedgerEntry {
+  id: string;
+  loan_id: string;
+  customer_id: string | null;
+  entry_date: string;
+  account_name: string | null;
+  credit: number;
+  debit: number;
+  receipt_no: string | null;
+  particulars: string | null;
+  user_name: string | null;
+  entry_type: string | null;
+  created_at: string;
+}
+
+export interface FinanceCDInterestDetail {
+  id: string;
+  loan_id: string;
+  entry_id: string;
+  entry_date: string;
+  credit: number;
+  receipt_no: string | null;
+  particulars: string | null;
+  renewed_days: number;
+  renewed_till_date: string | null;
+  row_type: string | null;
+  created_at: string;
+}
+
+export interface FinanceNPARecord {
+  id: string;
+  loan_id: string | null;
+  customer_id: string | null;
+  customer_name: string;
+  aadhaar: string | null;
+  phone: string | null;
+  loan_type: string | null;
+  loan_amount: number;
+  paid_amount: number;
+  balance_amount: number;
+  interest_due: number;
+  penalty_due: number;
+  settlement_amount: number;
+  reason: string | null;
+  full_history_json: any | null;
+  closed_by: string | null;
+  closed_at: string;
+  created_at: string;
+}
+
+export interface FinanceDocumentReturned {
+  id: string;
+  loan_id: string;
+  returned_date: string;
+  returned_to: string;
+  received_by_signature: string | null;
+  remarks: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+// --------------------------------------------------
+// Settings & System Configuration Interfaces
+
 class SupabaseFinance {
   // --- Partners ---
   async getPartners(): Promise<FinancePartner[]> {
@@ -325,6 +413,311 @@ class SupabaseFinance {
       return data;
     } catch (error) {
       console.error('Error creating finance guarantor:', error);
+      return null;
+    }
+  }
+
+  async addTransaction(payload: Partial<FinanceTransaction>): Promise<FinanceTransaction | null> {
+    try {
+      const { data, error } = await supabase.from('finance_transactions').insert(payload).select().single();
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('Error adding finance transaction:', err);
+      return null;
+    }
+  }
+
+  async addCDLedgerEntry(payload: Partial<FinanceCDLedgerEntry>): Promise<FinanceCDLedgerEntry | null> {
+    try {
+      const { data, error } = await supabase.from('finance_cd_ledger_entries').insert(payload).select().single();
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('Error adding CD ledger entry:', err);
+      return null;
+    }
+  }
+
+  async addCDInterestDetail(payload: Partial<FinanceCDInterestDetail>): Promise<FinanceCDInterestDetail | null> {
+    try {
+      const { data, error } = await supabase.from('finance_cd_interest_details').insert(payload).select().single();
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('Error adding CD interest detail:', err);
+      return null;
+    }
+  }
+
+  async generateUniqueReceiptNo(): Promise<string> {
+    while (true) {
+      const receiptNo = `REC-${Math.floor(100000 + Math.random() * 900000)}`;
+      const { data } = await supabase
+        .from('finance_cd_ledger_entries')
+        .select('receipt_no')
+        .eq('receipt_no', receiptNo)
+        .limit(1);
+      if (!data || data.length === 0) {
+        return receiptNo;
+      }
+    }
+  }
+
+  async postCdLedgerPayment(params: {
+    loanId: string;
+    customerId: string;
+    accountName: string | null;
+    userName: string;
+    actionType: 'Renew' | 'Partial' | 'Close';
+    principalPaid: number;
+    interestPaid: number;
+    penaltyPaid: number;
+    renewedDays: number;
+  }): Promise<{ success: boolean; receiptNo?: string }> {
+    try {
+      const receiptNo = await this.generateUniqueReceiptNo();
+      const entryDate = new Date().toISOString();
+      const totalAmount = params.principalPaid + params.interestPaid + params.penaltyPaid;
+
+      // 1. Post to finance_transactions (Daybook)
+      await this.addTransaction({
+        loan_id: params.loanId,
+        type: 'Collection',
+        amount: totalAmount,
+        date: entryDate,
+        remarks: `${params.actionType} Payment - ${receiptNo}`,
+        collected_by: params.userName
+      });
+
+      // 2. Post Penalty
+      if (params.penaltyPaid > 0) {
+        const entry = await this.addCDLedgerEntry({
+          loan_id: params.loanId,
+          customer_id: params.customerId,
+          account_name: params.accountName,
+          entry_date: entryDate,
+          credit: params.penaltyPaid,
+          debit: 0,
+          receipt_no: receiptNo,
+          particulars: `${params.actionType} - Penalty Paid`,
+          user_name: params.userName,
+          entry_type: params.actionType === 'Renew' ? 'Renewal' : params.actionType === 'Partial' ? 'Partial Payment' : 'Settlement'
+        });
+
+        if (entry) {
+          await this.addCDInterestDetail({
+            loan_id: params.loanId,
+            entry_id: entry.id,
+            entry_date: entryDate,
+            credit: params.penaltyPaid,
+            receipt_no: receiptNo,
+            particulars: `${params.actionType} - Penalty Paid`,
+            renewed_days: 0,
+            renewed_till_date: null,
+            row_type: entry.entry_type
+          });
+        }
+      }
+
+      // 3. Post Interest
+      if (params.interestPaid > 0) {
+        const entry = await this.addCDLedgerEntry({
+          loan_id: params.loanId,
+          customer_id: params.customerId,
+          account_name: params.accountName,
+          entry_date: entryDate,
+          credit: params.interestPaid,
+          debit: 0,
+          receipt_no: receiptNo,
+          particulars: `${params.actionType} - Interest Paid`,
+          user_name: params.userName,
+          entry_type: params.actionType === 'Renew' ? 'Renewal' : params.actionType === 'Partial' ? 'Partial Payment' : 'Settlement'
+        });
+
+        if (entry) {
+          await this.addCDInterestDetail({
+            loan_id: params.loanId,
+            entry_id: entry.id,
+            entry_date: entryDate,
+            credit: params.interestPaid,
+            receipt_no: receiptNo,
+            particulars: `${params.actionType} - Interest Paid`,
+            renewed_days: params.renewedDays,
+            renewed_till_date: params.renewedDays > 0 ? entryDate : null,
+            row_type: entry.entry_type
+          });
+        }
+      }
+
+      // 4. Post Principal
+      if (params.principalPaid > 0) {
+        await this.addCDLedgerEntry({
+          loan_id: params.loanId,
+          customer_id: params.customerId,
+          account_name: params.accountName,
+          entry_date: entryDate,
+          credit: params.principalPaid,
+          debit: 0,
+          receipt_no: receiptNo,
+          particulars: `${params.actionType} - Principal Paid`,
+          user_name: params.userName,
+          entry_type: params.actionType === 'Renew' ? 'Renewal' : params.actionType === 'Partial' ? 'Partial Payment' : 'Settlement'
+        });
+      }
+
+      return { success: true, receiptNo };
+    } catch (e) {
+      console.error('Error posting CD ledger payment:', e);
+      return { success: false };
+    }
+  }
+
+  async getCDLedgerEntries(loanId: string): Promise<FinanceCDLedgerEntry[]> {
+    try {
+      const [{ data: nativeEntries, error: nativeError }, { data: legacyTransactions, error: legacyError }, { data: loanData }] = await Promise.all([
+        supabase.from('finance_cd_ledger_entries').select('*').eq('loan_id', loanId).order('created_at', { ascending: true }),
+        supabase.from('finance_transactions').select('*').eq('loan_id', loanId).order('date', { ascending: true }),
+        supabase.from('finance_loans').select('*').eq('id', loanId).single()
+      ]);
+
+      if (nativeError) throw nativeError;
+      if (legacyError) throw legacyError;
+
+      const entries: FinanceCDLedgerEntry[] = nativeEntries || [];
+      const legacy: any[] = legacyTransactions || [];
+
+      const existingReceipts = new Set(entries.map(e => e.receipt_no).filter(Boolean));
+      const mappedEntries: FinanceCDLedgerEntry[] = [];
+
+      // Check if there's any disbursement transaction. If not, map from loan
+      const hasDisbursement = legacy.some(tx => tx.type === 'Disbursement');
+      if (!hasDisbursement && loanData) {
+         mappedEntries.push({
+            id: `legacy-loan-${loanData.id}`,
+            loan_id: loanData.id,
+            customer_id: loanData.customer_id,
+            account_name: null,
+            entry_date: loanData.date,
+            credit: 0,
+            debit: Number(loanData.amount),
+            receipt_no: null,
+            particulars: 'Original Loan Disbursement',
+            user_name: 'System',
+            entry_type: 'Disbursement',
+            created_at: loanData.created_at || loanData.date
+         });
+      }
+
+      for (const tx of legacy) {
+        const remarks = tx.remarks || '';
+        const match = remarks.match(/REC-\d+/);
+        const receiptNo = match ? match[0] : null;
+
+        if (receiptNo && existingReceipts.has(receiptNo)) {
+          continue;
+        }
+
+        if (tx.type === 'Disbursement') {
+          mappedEntries.push({
+            id: `legacy-${tx.id}`,
+            loan_id: tx.loan_id,
+            customer_id: '',
+            account_name: null,
+            entry_date: tx.date,
+            credit: 0,
+            debit: Number(tx.amount),
+            receipt_no: null,
+            particulars: 'Original Loan Disbursement',
+            user_name: tx.collected_by || 'System',
+            entry_type: 'Disbursement',
+            created_at: tx.created_at || tx.date
+          });
+        } else if (tx.type === 'Collection') {
+          // If a native entry already matched this amount on this date, assume it's the same and skip
+          // Note: a single collection tx might be split into native Penalty + native Interest rows, so sum them per receipt
+          // But since legacy transactions don't have native rows, this is just a fallback.
+          const hasExactMatch = entries.some(e => e.entry_date === tx.date && e.credit === Number(tx.amount) && !e.receipt_no);
+          if (!hasExactMatch) {
+            mappedEntries.push({
+              id: `legacy-${tx.id}`,
+              loan_id: tx.loan_id,
+              customer_id: '',
+              account_name: null,
+              entry_date: tx.date,
+              credit: Number(tx.amount),
+              debit: 0,
+              receipt_no: receiptNo,
+              particulars: tx.remarks || 'Legacy Payment',
+              user_name: tx.collected_by || 'System',
+              entry_type: 'Legacy Payment',
+              created_at: tx.created_at || tx.date
+            });
+          }
+        }
+      }
+
+      const finalEntries = [...entries, ...mappedEntries].sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime());
+      return finalEntries;
+    } catch (err) {
+      console.error('Error fetching CD ledger entries:', err);
+      return [];
+    }
+  }
+
+  async getCDInterestDetails(loanId: string): Promise<FinanceCDInterestDetail[]> {
+    try {
+      const { data, error } = await supabase.from('finance_cd_interest_details').select('*').eq('loan_id', loanId).order('created_at', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error('Error fetching CD interest details:', err);
+      return [];
+    }
+  }
+
+  async addNPARecord(payload: Partial<FinanceNPARecord>): Promise<FinanceNPARecord | null> {
+    try {
+      const { data, error } = await supabase.from('finance_npa_records').insert(payload).select().single();
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('Error adding NPA record:', err);
+      return null;
+    }
+  }
+
+  async checkNPARecord(aadhaar: string): Promise<FinanceNPARecord | null> {
+    try {
+      if (!aadhaar) return null;
+      const { data, error } = await supabase.from('finance_npa_records').select('*').eq('aadhaar', aadhaar).limit(1).maybeSingle();
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('Error checking NPA record:', err);
+      return null;
+    }
+  }
+
+  async checkNPARecordByCustomer(customerId: string): Promise<FinanceNPARecord | null> {
+    try {
+      if (!customerId) return null;
+      const { data, error } = await supabase.from('finance_npa_records').select('*').eq('customer_id', customerId).limit(1).maybeSingle();
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('Error checking NPA record by customer ID:', err);
+      return null;
+    }
+  }
+
+  async addDocumentReturned(payload: Partial<FinanceDocumentReturned>): Promise<FinanceDocumentReturned | null> {
+    try {
+      const { data, error } = await supabase.from('finance_documents_returned').insert(payload).select().single();
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('Error adding document returned record:', err);
       return null;
     }
   }
