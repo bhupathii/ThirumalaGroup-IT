@@ -321,6 +321,20 @@ class SupabaseFinance {
     }
   }
 
+  async getPartnerBasics(): Promise<Partial<FinancePartner>[]> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_partners')
+        .select('id, partner_id, name, phone, is_md')
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching finance partner basics:', error);
+      return [];
+    }
+  }
+
   async createPartner(partner: Omit<FinancePartner, 'id' | 'created_at' | 'updated_at'>): Promise<FinancePartner | null> {
     try {
       const { data, error } = await supabase
@@ -399,6 +413,39 @@ class SupabaseFinance {
     } catch (error) {
       console.error('Error fetching finance guarantors:', error);
       return [];
+    }
+  }
+
+  async searchGuarantors(query: string): Promise<Partial<FinanceGuarantor>[]> {
+    try {
+      if (!query || query.length < 2) return [];
+      
+      const { data, error } = await supabase
+        .from('finance_guarantors')
+        .select('id, guarantor_id, name, aadhaar, phone, present_address, aadhaar_address')
+        .or(`name.ilike.%${query}%,guarantor_id.eq.${!isNaN(Number(query)) ? Number(query) : 0},phone.ilike.%${query}%,aadhaar.ilike.%${query}%`)
+        .limit(10);
+      
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error searching finance guarantors:', error);
+      return [];
+    }
+  }
+
+  async getGuarantorById(id: string): Promise<FinanceGuarantor | null> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_guarantors')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching finance guarantor by id:', error);
+      return null;
     }
   }
 
@@ -754,6 +801,39 @@ class SupabaseFinance {
     }
   }
 
+  async searchCustomers(query: string): Promise<Partial<FinanceCustomer>[]> {
+    try {
+      if (!query || query.length < 2) return [];
+
+      const { data, error } = await supabase
+        .from('finance_customers')
+        .select('id, customer_id, name, aadhaar, phone_1, phone_2, phone, father_name, father_husband_name, present_address, address, partner_name')
+        .or(`name.ilike.%${query}%,customer_id.eq.${!isNaN(Number(query)) ? Number(query) : 0},phone.ilike.%${query}%,phone_1.ilike.%${query}%,phone_2.ilike.%${query}%,aadhaar.ilike.%${query}%`)
+        .limit(10);
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error searching finance customers:', error);
+      return [];
+    }
+  }
+
+  async getCustomerById(id: string): Promise<FinanceCustomer | null> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_customers')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching finance customer by id:', error);
+      return null;
+    }
+  }
+
   async createCustomer(customer: Omit<FinanceCustomer, 'id' | 'created_at' | 'updated_at'>): Promise<FinanceCustomer | null> {
     try {
       const { data, error } = await supabase
@@ -866,6 +946,21 @@ class SupabaseFinance {
       return data || [];
     } catch (error) {
       console.error('Error fetching finance loans:', error);
+      return [];
+    }
+  }
+
+  async getRecentLoans(limit: number = 5): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_loans')
+        .select('id, loan_id, loan_category, due_type, amount, created_at, customer:finance_customers(name)')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching recent finance loans:', error);
       return [];
     }
   }

@@ -394,19 +394,21 @@ const CDLedger: React.FC = () => {
     const penaltyRate = selectedLoan.penalty_percent !== undefined ? Number(selectedLoan.penalty_percent) : 0.75;
     
     let interest = 0;
-    if (daysPastDue > 0) {
-      interest = principal * (interestRate / 100) * (daysPastDue / 30);
+    if (daysCount > 0) {
+      interest = principal * (interestRate / 100) * (daysCount / 30);
     }
     
     let penalty = 0;
-    if (daysPastDue > 5) {
-      penalty = principal * (penaltyRate / 100) * ((daysPastDue - 5) / 30);
+    const penaltyDays = Math.max(0, daysPastDue - 5);
+    if (penaltyDays > 0) {
+      penalty = principal * (penaltyRate / 100) * (penaltyDays / 30);
     }
     
     return {
       daysCount,
       dueDate: dueDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       daysPastDue,
+      penaltyDays,
       interest: Math.round(interest),
       penalty: Math.round(penalty),
       principal
@@ -778,23 +780,25 @@ const CDLedger: React.FC = () => {
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                     <div>
                       <div className="text-gray-500 finance-caption uppercase">Amount</div>
-                      <div className="text-gray-900 font-semibold finance-input">₹{renewCalculations?.principal?.toLocaleString('en-IN') || 0}</div>
+                      <div className="text-gray-900 font-semibold finance-input">₹{renewCalculations?.principal?.toLocaleString('en-IN').replace(/\s/g, '') || 0}</div>
                     </div>
                     <div>
                       <div className="text-gray-500 finance-caption uppercase">Interest</div>
-                      <div className="text-orange-600 font-semibold finance-input">₹{renewCalculations?.interest?.toLocaleString('en-IN') || 0}</div>
+                      <div className="text-orange-600 font-semibold finance-input">₹{renewCalculations?.interest?.toLocaleString('en-IN').replace(/\s/g, '') || 0}</div>
+                      {renewCalculations?.daysCount !== undefined && <div className="text-[10px] text-gray-400 mt-0.5">{renewCalculations.daysCount} Interest Days</div>}
                     </div>
                     <div>
                       <div className="text-gray-500 finance-caption uppercase">Penalty</div>
-                      <div className="text-red-600 font-semibold finance-input">₹{renewCalculations?.penalty?.toLocaleString('en-IN') || 0}</div>
+                      <div className="text-red-600 font-semibold finance-input">₹{renewCalculations?.penalty?.toLocaleString('en-IN').replace(/\s/g, '') || 0}</div>
+                      {renewCalculations?.penaltyDays !== undefined && <div className="text-[10px] text-gray-400 mt-0.5">{renewCalculations.penaltyDays} Penalty Days</div>}
                     </div>
                     <div className="sm:col-span-1">
                       <div className="text-gray-500 finance-caption uppercase">Total For Renewal</div>
-                      <div className="text-emerald-600 font-bold finance-brand">₹{((renewCalculations?.interest || 0) + (renewCalculations?.penalty || 0)).toLocaleString('en-IN')}</div>
+                      <div className="text-emerald-600 font-bold finance-brand">₹{((renewCalculations?.interest || 0) + (renewCalculations?.penalty || 0)).toLocaleString('en-IN').replace(/\s/g, '')}</div>
                     </div>
                     <div className="sm:col-span-1">
                       <div className="text-gray-500 finance-caption uppercase">Total For Close</div>
-                      <div className="text-indigo-700 font-bold finance-brand">₹{((renewCalculations?.principal || 0) + (renewCalculations?.interest || 0) + (renewCalculations?.penalty || 0)).toLocaleString('en-IN')}</div>
+                      <div className="text-indigo-700 font-bold finance-brand">₹{((renewCalculations?.principal || 0) + (renewCalculations?.interest || 0) + (renewCalculations?.penalty || 0)).toLocaleString('en-IN').replace(/\s/g, '')}</div>
                     </div>
                   </div>
                 </div>
@@ -984,7 +988,7 @@ const CDLedger: React.FC = () => {
 
                   <div>
                     <div className="text-gray-400 finance-header-time">Principal Amount</div>
-                    <div className="text-gray-900 finance-brand">₹{Number(selectedLoan.amount).toLocaleString('en-IN')}</div>
+                    <div className="text-gray-900 finance-brand">₹{Number(selectedLoan.amount).toLocaleString('en-IN').replace(/\s/g, '')}</div>
                   </div>
 
                   <div>
@@ -1013,22 +1017,22 @@ const CDLedger: React.FC = () => {
 
                   <div>
                     <div className="text-gray-400 finance-header-time">Present Interest Due</div>
-                    <div className="text-orange-600 finance-brand">₹{(renewCalculations?.interest || 0).toLocaleString('en-IN')}</div>
+                    <div className="text-orange-600 finance-brand">₹{(renewCalculations?.interest || 0).toLocaleString('en-IN').replace(/\s/g, '')}</div>
                   </div>
 
                   <div>
                     <div className="text-gray-400 finance-header-time">Present Penalty Due</div>
-                    <div className="text-red-600 finance-brand">₹{(renewCalculations?.penalty || 0).toLocaleString('en-IN')}</div>
+                    <div className="text-red-600 finance-brand">₹{(renewCalculations?.penalty || 0).toLocaleString('en-IN').replace(/\s/g, '')}</div>
                   </div>
 
                   <div>
                     <div className="text-gray-400 finance-header-time">Total Required for Renewal</div>
-                    <div className="text-green-600 finance-brand">₹{((renewCalculations?.interest || 0) + (renewCalculations?.penalty || 0)).toLocaleString('en-IN')}</div>
+                    <div className="text-green-600 finance-brand">₹{((renewCalculations?.interest || 0) + (renewCalculations?.penalty || 0)).toLocaleString('en-IN').replace(/\s/g, '')}</div>
                   </div>
 
                   <div>
                     <div className="text-gray-400 finance-header-time">Total Account Closing Balance</div>
-                    <div className="text-indigo-700 finance-brand">₹{((renewCalculations?.principal || 0) + (renewCalculations?.interest || 0) + (renewCalculations?.penalty || 0)).toLocaleString('en-IN')}</div>
+                    <div className="text-indigo-700 finance-brand">₹{((renewCalculations?.principal || 0) + (renewCalculations?.interest || 0) + (renewCalculations?.penalty || 0)).toLocaleString('en-IN').replace(/\s/g, '')}</div>
                   </div>
                 </div>
               </Card>
@@ -1324,10 +1328,10 @@ const CDLedger: React.FC = () => {
                           {entry.account_name || '-'}
                         </td>
                         <td className="px-3 py-3 text-green-600 finance-input text-right">
-                          {entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
+                          {entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN').replace(/\s/g, '')}` : '-'}
                         </td>
                         <td className="px-3 py-3 text-red-600 finance-input text-right">
-                          {entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN')}` : '-'}
+                          {entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN').replace(/\s/g, '')}` : '-'}
                         </td>
                         <td className="px-3 py-3 text-gray-500 finance-input">
                           {entry.user_name || 'Staff'}
@@ -1376,7 +1380,7 @@ const CDLedger: React.FC = () => {
                             {new Date(detail.entry_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                           </td>
                           <td className="px-3 py-3 text-right text-green-600 finance-input">
-                            ₹{Number(detail.credit).toLocaleString('en-IN')}
+                            ₹{Number(detail.credit).toLocaleString('en-IN').replace(/\s/g, '')}
                           </td>
                           <td className="px-3 py-3 text-gray-500 finance-input">
                             {detail.receipt_no || '-'}
@@ -1408,32 +1412,32 @@ const CDLedger: React.FC = () => {
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm grid grid-cols-2 md:grid-cols-6 gap-6 text-center">
             <div>
               <div className="text-gray-400 finance-header-time uppercase">Total Credit (Col)</div>
-              <div className="text-green-600 mt-1 finance-brand">₹{cdLedgerEntries.reduce((sum, entry) => sum + Number(entry.credit), 0).toLocaleString('en-IN')}</div>
+              <div className="text-green-600 mt-1 finance-brand">₹{cdLedgerEntries.reduce((sum, entry) => sum + Number(entry.credit), 0).toLocaleString('en-IN').replace(/\s/g, '')}</div>
             </div>
 
             <div>
               <div className="text-gray-400 finance-header-time uppercase">Total Debit (Dis)</div>
-              <div className="text-red-600 mt-1 finance-brand">₹{cdLedgerEntries.reduce((sum, entry) => sum + Number(entry.debit), 0).toLocaleString('en-IN')}</div>
+              <div className="text-red-600 mt-1 finance-brand">₹{cdLedgerEntries.reduce((sum, entry) => sum + Number(entry.debit), 0).toLocaleString('en-IN').replace(/\s/g, '')}</div>
             </div>
 
             <div>
               <div className="text-gray-400 finance-header-time uppercase">Present Balance</div>
-              <div className="text-orange-700 mt-1 finance-brand">₹{selectedLoan.amount ? Number(selectedLoan.amount).toLocaleString('en-IN') : '0'}</div>
+              <div className="text-orange-700 mt-1 finance-brand">₹{selectedLoan.amount ? Number(selectedLoan.amount).toLocaleString('en-IN').replace(/\s/g, '') : '0'}</div>
             </div>
 
             <div>
               <div className="text-gray-400 finance-header-time uppercase">Total Dues</div>
-              <div className="text-gray-900 mt-1 finance-brand">₹{ledgerComputations?.totalDues.toLocaleString('en-IN') || '0'}</div>
+              <div className="text-gray-900 mt-1 finance-brand">₹{ledgerComputations?.totalDues.toLocaleString('en-IN').replace(/\s/g, '') || '0'}</div>
             </div>
 
             <div>
               <div className="text-gray-400 finance-header-time uppercase">Paid Dues</div>
-              <div className="text-emerald-600 mt-1 finance-brand">₹{ledgerComputations?.paidDues.toLocaleString('en-IN') || '0'}</div>
+              <div className="text-emerald-600 mt-1 finance-brand">₹{ledgerComputations?.paidDues.toLocaleString('en-IN').replace(/\s/g, '') || '0'}</div>
             </div>
 
             <div>
               <div className="text-gray-400 finance-header-time uppercase">Pending Dues</div>
-              <div className="text-red-700 mt-1 finance-brand">₹{ledgerComputations?.pendingDues.toLocaleString('en-IN') || '0'}</div>
+              <div className="text-red-700 mt-1 finance-brand">₹{ledgerComputations?.pendingDues.toLocaleString('en-IN').replace(/\s/g, '') || '0'}</div>
             </div>
           </div>
         </>
@@ -1454,7 +1458,7 @@ const CDLedger: React.FC = () => {
             {/* Header Title */}
             <div className="text-center border-b-2 border-double border-gray-300 pb-4">
               <div className="flex justify-between items-center text-gray-400 mt-4 font-mono finance-small-label">
-                <span>PRINTED: {new Date().toLocaleString('en-IN')}</span>
+                <span>PRINTED: {new Date().toLocaleString('en-IN').replace(/\s/g, '')}</span>
                 <span>ACC ID: {selectedLoan.loan_id}</span>
               </div>
             </div>
@@ -1504,7 +1508,7 @@ const CDLedger: React.FC = () => {
                   <tbody>
                     <tr>
                       <td className="text-gray-400 py-0.5 pr-2 w-28 finance-input">Principal:</td>
-                      <td className="text-gray-900 finance-input">₹{renewCalculations.principal.toLocaleString('en-IN')}</td>
+                      <td className="text-gray-900 finance-input">₹{renewCalculations.principal.toLocaleString('en-IN').replace(/\s/g, '')}</td>
                     </tr>
                     <tr>
                       <th className="px-3 py-1 text-gray-500 text-left border-r border-gray-200 finance-small-label uppercase">Rate / Penalty</th>
@@ -1512,11 +1516,11 @@ const CDLedger: React.FC = () => {
                     </tr>
                     <tr>
                       <td className="text-gray-400 py-0.5 pr-2 finance-input">Present Interest Due:</td>
-                      <td className="text-gray-900 finance-input">₹{renewCalculations.interest.toLocaleString('en-IN')}</td>
+                      <td className="text-gray-900 finance-input">₹{renewCalculations.interest.toLocaleString('en-IN').replace(/\s/g, '')}</td>
                     </tr>
                     <tr>
                       <td className="text-gray-400 py-0.5 pr-2 finance-input">Present Penalty Due:</td>
-                      <td className="text-red-700 finance-input">₹{renewCalculations.penalty.toLocaleString('en-IN')}</td>
+                      <td className="text-red-700 finance-input">₹{renewCalculations.penalty.toLocaleString('en-IN').replace(/\s/g, '')}</td>
                     </tr>
                     <tr>
                       <td className="text-gray-400 py-0.5 pr-2 finance-input">Days Count:</td>
@@ -1622,7 +1626,7 @@ const CDLedger: React.FC = () => {
                           {new Date(detail.entry_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </td>
                         <td className="px-3 py-1.5 text-right text-green-600 finance-input">
-                          ₹{Number(detail.credit).toLocaleString('en-IN')}
+                          ₹{Number(detail.credit).toLocaleString('en-IN').replace(/\s/g, '')}
                         </td>
                         <td className="px-3 py-1.5 text-gray-500 finance-input">
                           {detail.receipt_no || '-'}
@@ -1669,13 +1673,13 @@ const CDLedger: React.FC = () => {
                           {new Date(tx.entry_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </td>
                         <td className="px-3 py-1.5 text-right text-red-600 finance-input">
-                          {tx.debit > 0 ? `₹${Number(tx.debit).toLocaleString('en-IN')}` : '-'}
+                          {tx.debit > 0 ? `₹${Number(tx.debit).toLocaleString('en-IN').replace(/\s/g, '')}` : '-'}
                         </td>
                         <td className="px-3 py-1.5 text-right text-green-600 finance-input">
-                          {tx.credit > 0 ? `₹${Number(tx.credit).toLocaleString('en-IN')}` : '-'}
+                          {tx.credit > 0 ? `₹${Number(tx.credit).toLocaleString('en-IN').replace(/\s/g, '')}` : '-'}
                         </td>
                         <td className="px-3 py-1.5 text-right text-gray-900 finance-input">
-                          ₹{Number(tx.balance).toLocaleString('en-IN')}
+                          ₹{Number(tx.balance).toLocaleString('en-IN').replace(/\s/g, '')}
                         </td>
                         <td className="px-3 py-1.5 font-sans text-gray-500 finance-input">{tx.receipt_no || '-'}</td>
                         <td className="px-3 py-1.5 font-sans text-gray-500 finance-input">{tx.particulars || '-'}</td>

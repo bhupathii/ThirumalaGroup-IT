@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Input from '../../components/UI/Input';
-import { supabaseFinance, FinanceLoan, FinanceCustomer, FinancePartner, FinanceGuarantor } from '../../lib/supabaseFinance';
+import { supabaseFinance, FinanceCustomer, FinancePartner, FinanceGuarantor } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { 
   ArrowLeft, 
@@ -111,10 +111,16 @@ const LoanEntry: React.FC = () => {
   const [g2DropdownOpen, setG2DropdownOpen] = useState(false);
 
   // Reference Data lists
-  const [customers, setCustomers] = useState<FinanceCustomer[]>([]);
-  const [guarantors, setGuarantors] = useState<FinanceGuarantor[]>([]);
-  const [partners, setPartners] = useState<FinancePartner[]>([]);
-  const [activeLoans, setActiveLoans] = useState<(FinanceLoan & { customer: FinanceCustomer })[]>([]);
+  const [partners, setPartners] = useState<Partial<FinancePartner>[]>([]);
+  const [activeLoans, setActiveLoans] = useState<any[]>([]);
+
+  // Search Results State
+  const [customerSearchResults, setCustomerSearchResults] = useState<Partial<FinanceCustomer>[]>([]);
+  const [g1SearchResults, setG1SearchResults] = useState<Partial<FinanceGuarantor>[]>([]);
+  const [g2SearchResults, setG2SearchResults] = useState<Partial<FinanceGuarantor>[]>([]);
+  const [isSearchingCust, setIsSearchingCust] = useState(false);
+  const [isSearchingG1, setIsSearchingG1] = useState(false);
+  const [isSearchingG2, setIsSearchingG2] = useState(false);
 
   // Form State - Loan Terms
   const [amount, setAmount] = useState('');
@@ -150,39 +156,77 @@ const LoanEntry: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  const filteredCustomersForSelect = useMemo(() => {
-    if (!custSearch) return customers.slice(0, 10);
-    const q = custSearch.toLowerCase();
-    return customers.filter(c => 
-      c.name.toLowerCase().includes(q) ||
-      (c.customer_id && String(c.customer_id).includes(q)) ||
-      (c.phone && c.phone.includes(q)) ||
-      (c.phone_1 && c.phone_1.includes(q)) ||
-      (c.aadhaar && c.aadhaar.includes(q))
-    );
-  }, [custSearch, customers]);
+  const searchCache = useRef<Record<string, any[]>>({});
 
-  const filteredGuarantorsForSelectG1 = useMemo(() => {
-    if (!g1Search) return guarantors.slice(0, 10);
-    const q = g1Search.toLowerCase();
-    return guarantors.filter(g => 
-      g.name.toLowerCase().includes(q) ||
-      (g.guarantor_id && String(g.guarantor_id).includes(q)) ||
-      (g.phone && g.phone.includes(q)) ||
-      (g.aadhaar && g.aadhaar.includes(q))
-    );
-  }, [g1Search, guarantors]);
+  // Debounced search hooks
+  useEffect(() => {
+    if (!custSearch || custSearch.length < 2) {
+      setCustomerSearchResults([]);
+      return;
+    }
+    const q = custSearch.trim();
+    if (!q) return;
+    const cacheKey = `cust_${q.toLowerCase()}`;
+    if (searchCache.current[cacheKey]) {
+      setCustomerSearchResults(searchCache.current[cacheKey]);
+      return;
+    }
 
-  const filteredGuarantorsForSelectG2 = useMemo(() => {
-    if (!g2Search) return guarantors.slice(0, 10);
-    const q = g2Search.toLowerCase();
-    return guarantors.filter(g => 
-      g.name.toLowerCase().includes(q) ||
-      (g.guarantor_id && String(g.guarantor_id).includes(q)) ||
-      (g.phone && g.phone.includes(q)) ||
-      (g.aadhaar && g.aadhaar.includes(q))
-    );
-  }, [g2Search, guarantors]);
+    setIsSearchingCust(true);
+    const delay = setTimeout(async () => {
+      const results = await supabaseFinance.searchCustomers(q);
+      searchCache.current[cacheKey] = results;
+      setCustomerSearchResults(results);
+      setIsSearchingCust(false);
+    }, 300);
+    return () => clearTimeout(delay);
+  }, [custSearch]);
+
+  useEffect(() => {
+    if (!g1Search || g1Search.length < 2) {
+      setG1SearchResults([]);
+      return;
+    }
+    const q = g1Search.trim();
+    if (!q) return;
+    const cacheKey = `g1_${q.toLowerCase()}`;
+    if (searchCache.current[cacheKey]) {
+      setG1SearchResults(searchCache.current[cacheKey]);
+      return;
+    }
+
+    setIsSearchingG1(true);
+    const delay = setTimeout(async () => {
+      const results = await supabaseFinance.searchGuarantors(q);
+      searchCache.current[cacheKey] = results;
+      setG1SearchResults(results);
+      setIsSearchingG1(false);
+    }, 300);
+    return () => clearTimeout(delay);
+  }, [g1Search]);
+
+  useEffect(() => {
+    if (!g2Search || g2Search.length < 2) {
+      setG2SearchResults([]);
+      return;
+    }
+    const q = g2Search.trim();
+    if (!q) return;
+    const cacheKey = `g2_${q.toLowerCase()}`;
+    if (searchCache.current[cacheKey]) {
+      setG2SearchResults(searchCache.current[cacheKey]);
+      return;
+    }
+
+    setIsSearchingG2(true);
+    const delay = setTimeout(async () => {
+      const results = await supabaseFinance.searchGuarantors(q);
+      searchCache.current[cacheKey] = results;
+      setG2SearchResults(results);
+      setIsSearchingG2(false);
+    }, 300);
+    return () => clearTimeout(delay);
+  }, [g2Search]);
 
   // Form State - Documents Checklist
   const [documents, setDocuments] = useState<DocumentItem[]>([
@@ -223,20 +267,14 @@ const LoanEntry: React.FC = () => {
   const fetchReferenceData = async () => {
     setLoading(true);
     try {
-      const custs = await supabaseFinance.getCustomers();
-      setCustomers(custs);
-
-      const guars = await supabaseFinance.getGuarantors();
-      setGuarantors(guars);
-
-      const prts = await supabaseFinance.getPartners();
+      const prts = await supabaseFinance.getPartnerBasics();
       setPartners(prts);
 
-      const loans = await supabaseFinance.getLoans();
+      const loans = await supabaseFinance.getRecentLoans(5);
       setActiveLoans(loans);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load credit reference registry');
+      toast.error('Failed to load reference data');
     } finally {
       setLoading(false);
     }
@@ -287,8 +325,9 @@ const LoanEntry: React.FC = () => {
         }
     };
 
-    if (selectedCustomerId) {
-      const selected = customers.find(c => c.id === selectedCustomerId);
+    const fetchCustomer = async () => {
+      if (!selectedCustomerId) return;
+      const selected = await supabaseFinance.getCustomerById(selectedCustomerId);
       if (selected) {
         setCustName(selected.name);
         setCustFatherName(selected.father_name || selected.father_husband_name || '');
@@ -311,20 +350,23 @@ const LoanEntry: React.FC = () => {
         if (selected.partner_name) {
           const matchPartner = partners.find(p => p.name === selected.partner_name);
           if (matchPartner) {
-            setSelectedPartnerId(matchPartner.id);
-            setPartnerName(matchPartner.name);
+            setSelectedPartnerId(matchPartner.id as string);
+            setPartnerName(matchPartner.name as string);
           } else {
             setPartnerName(selected.partner_name);
           }
         }
       }
-    }
-  }, [selectedCustomerId, customers, partners]);
+    };
+
+    fetchCustomer();
+  }, [selectedCustomerId, partners]);
 
   // Autofill guarantor 1 data
   useEffect(() => {
-    if (g1SelectedId) {
-      const selected = guarantors.find(g => g.id === g1SelectedId);
+    const fetchG1 = async () => {
+      if (!g1SelectedId) return;
+      const selected = await supabaseFinance.getGuarantorById(g1SelectedId);
       if (selected) {
         setG1Name(selected.name);
         setG1Phone(selected.phone || '');
@@ -336,13 +378,15 @@ const LoanEntry: React.FC = () => {
         setG1FingerprintTemplate(selected.fingerprint_template || null);
         setG1FingerprintAdded(!!selected.fingerprint_added);
       }
-    }
-  }, [g1SelectedId, guarantors]);
+    };
+    fetchG1();
+  }, [g1SelectedId]);
 
   // Autofill guarantor 2 data
   useEffect(() => {
-    if (g2SelectedId) {
-      const selected = guarantors.find(g => g.id === g2SelectedId);
+    const fetchG2 = async () => {
+      if (!g2SelectedId) return;
+      const selected = await supabaseFinance.getGuarantorById(g2SelectedId);
       if (selected) {
         setG2Name(selected.name);
         setG2Phone(selected.phone || '');
@@ -354,14 +398,15 @@ const LoanEntry: React.FC = () => {
         setG2FingerprintTemplate(selected.fingerprint_template || null);
         setG2FingerprintAdded(!!selected.fingerprint_added);
       }
-    }
-  }, [g2SelectedId, guarantors]);
+    };
+    fetchG2();
+  }, [g2SelectedId]);
 
   // Autofill partner name
   useEffect(() => {
     if (selectedPartnerId) {
       const selected = partners.find(p => p.id === selectedPartnerId);
-      if (selected) {
+      if (selected && selected.name) {
         setPartnerName(selected.name);
       }
     } else {
@@ -660,15 +705,15 @@ const LoanEntry: React.FC = () => {
       let resolvedCustomerId = selectedCustomerId;
       if (!resolvedCustomerId) {
         // Check if customer already exists by Aadhaar, Phone, or exact Name + Father match
-        const match = customers.find(c => 
+        const match = customerSearchResults.find(c => 
           (c.aadhaar && custAadhaar && c.aadhaar === custAadhaar) ||
           (c.phone_1 && custPhone && c.phone_1 === custPhone) ||
           (c.phone && custPhone && c.phone === custPhone) ||
-          (c.name.toLowerCase() === custName.toLowerCase().trim() && 
-           (c.father_name || c.father_husband_name || '').toLowerCase() === custFatherName.toLowerCase().trim())
+          (c.name && c.name.toLowerCase() === custName.toLowerCase().trim() && 
+           ((c.father_name || c.father_husband_name || '').toLowerCase() === custFatherName.toLowerCase().trim()))
         );
 
-        if (match) {
+        if (match && match.id) {
           resolvedCustomerId = match.id;
         } else {
           // Create new customer
@@ -705,13 +750,13 @@ const LoanEntry: React.FC = () => {
       // 2. Resolve Guarantor 1 ID
       let resolvedG1Id = g1SelectedId;
       if (!resolvedG1Id && g1Name.trim()) {
-        const matchG1 = guarantors.find(g => 
+        const matchG1 = g1SearchResults.find(g => 
           (g.aadhaar && g1Aadhaar && g.aadhaar === g1Aadhaar) ||
           (g.phone && g1Phone && g.phone === g1Phone) ||
-          g.name.toLowerCase() === g1Name.toLowerCase().trim()
+          (g.name && g.name.toLowerCase() === g1Name.toLowerCase().trim())
         );
 
-        if (matchG1) {
+        if (matchG1 && matchG1.id) {
           resolvedG1Id = matchG1.id;
         } else {
           const newGuar = await supabaseFinance.createGuarantor({
@@ -738,13 +783,13 @@ const LoanEntry: React.FC = () => {
       // 3. Resolve Guarantor 2 ID
       let resolvedG2Id = g2SelectedId;
       if (!resolvedG2Id && g2Name.trim()) {
-        const matchG2 = guarantors.find(g => 
+        const matchG2 = g2SearchResults.find(g => 
           (g.aadhaar && g2Aadhaar && g.aadhaar === g2Aadhaar) ||
           (g.phone && g2Phone && g.phone === g2Phone) ||
-          g.name.toLowerCase() === g2Name.toLowerCase().trim()
+          (g.name && g.name.toLowerCase() === g2Name.toLowerCase().trim())
         );
 
-        if (matchG2) {
+        if (matchG2 && matchG2.id) {
           resolvedG2Id = matchG2.id;
         } else {
           const newGuar = await supabaseFinance.createGuarantor({
@@ -1137,18 +1182,23 @@ const LoanEntry: React.FC = () => {
                     className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
                   />
                   
+                  {isSearchingCust && (
+                    <div className="absolute inset-y-0 right-10 pr-3 flex items-center pointer-events-none">
+                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-slate-400"></div>
+                    </div>
+                  )}
                   {custDropdownOpen && (
                     <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      {filteredCustomersForSelect.length === 0 ? (
+                      {customerSearchResults.length === 0 && !isSearchingCust ? (
                         <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase">
                           No matching customers found
                         </div>
                       ) : (
-                        filteredCustomersForSelect.map((c) => (
+                        customerSearchResults.map((c) => (
                           <div
                             key={c.id}
                             onClick={() => {
-                              setSelectedCustomerId(c.id);
+                              if (c.id) setSelectedCustomerId(c.id);
                               setCustDropdownOpen(false);
                               setCustSearch('');
                             }}
@@ -1177,7 +1227,7 @@ const LoanEntry: React.FC = () => {
               <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-150 space-y-4">
                 <div className="flex justify-between items-center pb-2">
                   <span className="bg-[#0b1329] text-white text-[9px] px-2 py-1 rounded peek-button uppercase">
-                    {selectedCustomerId ? `ID: #${customers.find(c => c.id === selectedCustomerId)?.customer_id || 'N/A'}` : 'NEW ENTRY'}
+                    {selectedCustomerId ? `ID: SELECTED` : 'NEW ENTRY'}
                   </span>
                 </div>
 
@@ -1375,22 +1425,27 @@ const LoanEntry: React.FC = () => {
                     setG1DropdownOpen(true);
                   }}
                   onFocus={() => setG1DropdownOpen(true)}
-                  placeholder="Select or Search Existing Guarantor 1..."
+                  placeholder="Type to search guarantor 1..."
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
                 />
                 
+                {isSearchingG1 && (
+                  <div className="absolute inset-y-0 right-10 pr-3 flex items-center pointer-events-none">
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-slate-400"></div>
+                  </div>
+                )}
                 {g1DropdownOpen && (
                   <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                    {filteredGuarantorsForSelectG1.length === 0 ? (
+                    {g1SearchResults.length === 0 && !isSearchingG1 ? (
                       <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase">
                         No matching guarantors
                       </div>
                     ) : (
-                      filteredGuarantorsForSelectG1.map((g) => (
+                      g1SearchResults.map((g) => (
                         <div
                           key={g.id}
                           onClick={() => {
-                            setG1SelectedId(g.id);
+                            if (g.id) setG1SelectedId(g.id);
                             setG1DropdownOpen(false);
                             setG1Search('');
                           }}
@@ -1519,22 +1574,27 @@ const LoanEntry: React.FC = () => {
                     setG2DropdownOpen(true);
                   }}
                   onFocus={() => setG2DropdownOpen(true)}
-                  placeholder="Select or Search Existing Guarantor 2..."
+                  placeholder="Type to search guarantor 2..."
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
                 />
                 
+                {isSearchingG2 && (
+                  <div className="absolute inset-y-0 right-10 pr-3 flex items-center pointer-events-none">
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-slate-400"></div>
+                  </div>
+                )}
                 {g2DropdownOpen && (
                   <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                    {filteredGuarantorsForSelectG2.length === 0 ? (
+                    {g2SearchResults.length === 0 && !isSearchingG2 ? (
                       <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase">
                         No matching guarantors
                       </div>
                     ) : (
-                      filteredGuarantorsForSelectG2.map((g) => (
+                      g2SearchResults.map((g) => (
                         <div
                           key={g.id}
                           onClick={() => {
-                            setG2SelectedId(g.id);
+                            if (g.id) setG2SelectedId(g.id);
                             setG2DropdownOpen(false);
                             setG2Search('');
                           }}
