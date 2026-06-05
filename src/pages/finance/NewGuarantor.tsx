@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { 
@@ -12,10 +12,14 @@ import {
   RefreshCw 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../contexts/AuthContext';
 import { BiometricScanner } from '../../components/finance/BiometricScanner';
 
 const NewGuarantor: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('edit');
+  const { user } = useAuth();
   const [saving, setSaving] = useState(false);
   const [estimatedId, setEstimatedId] = useState<number>(1);
 
@@ -23,6 +27,12 @@ const NewGuarantor: React.FC = () => {
   const [aadhaar, setAadhaar] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [phone2, setPhone2] = useState('');
+  const [fatherName, setFatherName] = useState('');
+  const [village, setVillage] = useState('');
+  const [mandal, setMandal] = useState('');
+  const [district, setDistrict] = useState('');
+  const [notes, setNotes] = useState('');
   const [aadhaarAddress, setAadhaarAddress] = useState('');
   const [presentAddress, setPresentAddress] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -43,11 +53,47 @@ const NewGuarantor: React.FC = () => {
 
 
   useEffect(() => {
-    fetchNextId();
+    if (editId) {
+      loadGuarantorData(editId);
+    } else {
+      fetchNextId();
+    }
     return () => {
       stopCamera();
     };
-  }, []);
+  }, [editId]);
+
+  const loadGuarantorData = async (id: string) => {
+    try {
+      const data = await supabaseFinance.getGuarantorById(id);
+      if (data) {
+        setEstimatedId(data.guarantor_id || 0);
+        setName(data.name || '');
+        setAadhaar(data.aadhaar || '');
+        setPhone(data.phone || '');
+        setPhone2(data.phone_2 || '');
+        setFatherName(data.father_name || '');
+        setVillage(data.village || '');
+        setMandal(data.mandal || '');
+        setDistrict(data.district || '');
+        setAadhaarAddress(data.permanent_address || data.aadhaar_address || '');
+        setPresentAddress(data.current_address || data.present_address || '');
+        setNotes(data.notes || '');
+        
+        if (data.photo_url) {
+          setPhotoUrl(data.photo_url);
+          setCapturedImage(data.photo_url);
+        }
+        
+        setFingerprintTemplate(data.fingerprint_template || null);
+        setFingerprintUrl(data.fingerprint_image_url || null);
+        setFingerprintAdded(data.fingerprint_added || false);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to load guarantor data');
+    }
+  };
 
   const fetchNextId = async () => {
     try {
@@ -213,23 +259,37 @@ const NewGuarantor: React.FC = () => {
 
     setSaving(true);
     try {
-      const result = await supabaseFinance.createGuarantor({
+      const payload = {
         name: name.trim(),
         phone: phone || null,
-        aadhaar_address: aadhaarAddress.trim() || null,
-        present_address: presentAddress.trim() || null,
+        phone_2: phone2 || null,
+        father_name: fatherName || null,
+        village: village || null,
+        mandal: mandal || null,
+        district: district || null,
+        permanent_address: aadhaarAddress.trim() || null,
+        current_address: presentAddress.trim() || null,
         aadhaar: aadhaar || null,
         photo_url: photoUrl,
         fingerprint_template: fingerprintTemplate || null,
         fingerprint_image_url: fingerprintUrl || null,
-        fingerprint_added: fingerprintAdded
-      });
+        fingerprint_added: fingerprintAdded,
+        notes: notes || null
+      };
+
+      let result;
+      if (editId) {
+        result = await supabaseFinance.updateGuarantor(editId, payload, user?.username || 'Staff');
+        if (result) toast.success(`Guarantor ${name} updated successfully!`);
+      } else {
+        result = await supabaseFinance.createGuarantor(payload);
+        if (result) toast.success(`Guarantor ${name} registered successfully!`);
+      }
 
       if (result) {
-        toast.success(`Guarantor ${name} registered successfully!`);
-        navigate('/finance');
+        navigate('/finance/guarantors');
       } else {
-        toast.error('Failed to register guarantor. Check if Aadhaar is duplicate.');
+        toast.error('Failed to save guarantor. Check if Aadhaar is duplicate.');
       }
     } catch (err) {
       console.error(err);
@@ -246,11 +306,11 @@ const NewGuarantor: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5">
         <div>
           <div className="text-slate-400 finance-small-label uppercase">
-            DASHBOARD / GUARANTORS / NEW
+            DASHBOARD / GUARANTORS / {editId ? 'EDIT' : 'NEW'}
           </div>
-          <h1 className="mt-1 finance-h1">NEW GUARANTOR</h1>
+          <h1 className="mt-1 finance-h1">{editId ? 'EDIT GUARANTOR' : 'NEW GUARANTOR'}</h1>
           <p className="mt-0.5 finance-small-label uppercase">
-            REGISTER A NEW GUARANTOR IN THE MASTER LIST
+            {editId ? 'UPDATE EXISTING GUARANTOR MASTER RECORD' : 'REGISTER A NEW GUARANTOR IN THE MASTER LIST'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -353,7 +413,48 @@ const NewGuarantor: React.FC = () => {
 
               <div>
                 <label className="finance-caption uppercase">
-                  AADHAAR ADDRESS <span className="text-red-500">*</span>
+                  PHONE 2
+                </label>
+                <input
+                  type="text"
+                  value={phone2}
+                  onChange={(e) => setPhone2(e.target.value)}
+                  placeholder="Alternate contact number"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                />
+              </div>
+              
+              <div>
+                <label className="finance-caption uppercase">
+                  FATHER / HUSBAND NAME
+                </label>
+                <input
+                  type="text"
+                  value={fatherName}
+                  onChange={(e) => setFatherName(e.target.value)}
+                  placeholder="Guarantor's Father/Husband"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="finance-caption uppercase">VILLAGE</label>
+                  <input type="text" value={village} onChange={(e) => setVillage(e.target.value)} placeholder="Village" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time" />
+                </div>
+                <div>
+                  <label className="finance-caption uppercase">MANDAL</label>
+                  <input type="text" value={mandal} onChange={(e) => setMandal(e.target.value)} placeholder="Mandal" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time" />
+                </div>
+                <div>
+                  <label className="finance-caption uppercase">DISTRICT</label>
+                  <input type="text" value={district} onChange={(e) => setDistrict(e.target.value)} placeholder="District" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time" />
+                </div>
+              </div>
+
+              <div>
+                <label className="finance-caption uppercase">
+                  PERMANENT ADDRESS <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   value={aadhaarAddress}
@@ -375,6 +476,19 @@ const NewGuarantor: React.FC = () => {
                   placeholder="Current residential address"
                   rows={2}
                   required
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y finance-header-time"
+                />
+              </div>
+
+              <div>
+                <label className="finance-caption uppercase">
+                  NOTES / REMARKS
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Any additional notes..."
+                  rows={2}
                   className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y finance-header-time"
                 />
               </div>

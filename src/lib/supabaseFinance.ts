@@ -67,12 +67,23 @@ export interface FinanceGuarantor {
   aadhaar_address?: string | null;
   present_address?: string | null;
   phone: string | null;
+  phone_2?: string | null;
+  father_name?: string | null;
+  village?: string | null;
+  mandal?: string | null;
+  district?: string | null;
+  permanent_address?: string | null;
+  current_address?: string | null;
   photo_url?: string | null;
   fingerprint_template?: string | null;
   fingerprint_image_url?: string | null;
   fingerprint_added?: boolean;
+  fingerprint_status?: string | null;
+  fingerprint_id?: string | null;
+  notes?: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
 }
 
 export interface FinanceLoan {
@@ -407,7 +418,8 @@ class SupabaseFinance {
       const { data, error } = await supabase
         .from('finance_guarantors')
         .select('*')
-        .order('name');
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
     } catch (error) {
@@ -422,7 +434,8 @@ class SupabaseFinance {
       
       const { data, error } = await supabase
         .from('finance_guarantors')
-        .select('id, guarantor_id, name, aadhaar, phone, present_address, aadhaar_address')
+        .select('id, guarantor_id, name, aadhaar, phone, phone_2, permanent_address, current_address')
+        .is('deleted_at', null)
         .or(`name.ilike.%${query}%,guarantor_id.eq.${!isNaN(Number(query)) ? Number(query) : 0},phone.ilike.%${query}%,aadhaar.ilike.%${query}%`)
         .limit(10);
       
@@ -461,6 +474,77 @@ class SupabaseFinance {
     } catch (error) {
       console.error('Error creating finance guarantor:', error);
       return null;
+    }
+  }
+
+  async updateGuarantor(id: string, guarantor: Partial<FinanceGuarantor>, editedBy: string): Promise<FinanceGuarantor | null> {
+    try {
+      const { data: oldData } = await supabase
+        .from('finance_guarantors')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      const { data, error } = await supabase
+        .from('finance_guarantors')
+        .update({ ...guarantor, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+
+      if (oldData) {
+        await this.logEdit('finance_guarantors', id, oldData, data, editedBy);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error updating finance guarantor:', error);
+      return null;
+    }
+  }
+
+  async deleteGuarantor(id: string, deletedBy: string): Promise<boolean> {
+    try {
+      // Check for active loans
+      const { count: loanCount1, error: error1 } = await supabase
+        .from('finance_loans')
+        .select('*', { count: 'exact', head: true })
+        .eq('guarantor_1_id', id)
+        .neq('status', 'Closed');
+      const { count: loanCount2, error: error2 } = await supabase
+        .from('finance_loans')
+        .select('*', { count: 'exact', head: true })
+        .eq('guarantor_2_id', id)
+        .neq('status', 'Closed');
+
+      if (error1 || error2) throw error1 || error2;
+      
+      if ((loanCount1 || 0) > 0 || (loanCount2 || 0) > 0) {
+        return false;
+      }
+
+      const { data: oldData } = await supabase
+        .from('finance_guarantors')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      // Soft delete
+      const { error } = await supabase
+        .from('finance_guarantors')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id);
+        
+      if (error) throw error;
+
+      if (oldData) {
+        await this.logDelete('finance_guarantors', id, oldData, deletedBy);
+      }
+      return true;
+    } catch (error) {
+      console.error('Error deleting finance guarantor:', error);
+      return false;
     }
   }
 
@@ -766,23 +850,6 @@ class SupabaseFinance {
     } catch (err) {
       console.error('Error adding document returned record:', err);
       return null;
-    }
-  }
-
-  async updateGuarantor(id: string, guarantor: Partial<FinanceGuarantor>, _editedBy: string): Promise<FinanceGuarantor | null> {
-    try {
-      const { data, error } = await supabase
-        .from('finance_guarantors')
-        .update({ ...guarantor, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single();
-      if (error) throw error;
-
-      return data;
-    } catch (error) {
-      console.error('Error updating finance guarantor:', error);
-      throw error;
     }
   }
 
