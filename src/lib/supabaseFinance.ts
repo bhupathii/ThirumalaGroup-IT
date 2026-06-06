@@ -605,10 +605,11 @@ class SupabaseFinance {
     interestPaid: number;
     penaltyPaid: number;
     renewedDays: number;
+    paymentDate?: string;
   }): Promise<{ success: boolean; receiptNo?: string }> {
     try {
       const receiptNo = await this.generateUniqueReceiptNo();
-      const entryDate = new Date().toISOString();
+      const entryDate = params.paymentDate ? new Date(params.paymentDate).toISOString() : new Date().toISOString();
       const totalAmount = params.principalPaid + params.interestPaid + params.penaltyPaid;
 
       // 1. Post to finance_transactions (Daybook)
@@ -1028,6 +1029,25 @@ class SupabaseFinance {
       return data || [];
     } catch (error) {
       console.error('Error fetching recent finance loans:', error);
+      return [];
+    }
+  }
+
+  async getCDLoansList(): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_loans')
+        .select(`
+          id, loan_id, amount, date, status, npa_closed, loan_category,
+          customer:finance_customers(name, phone, phone2, phone_1, phone_2, aadhaar, partner_name),
+          guarantor_1:finance_guarantors!guarantor_1_id(name, village, mandal, district, phone, aadhaar),
+          guarantor_2:finance_guarantors!guarantor_2_id(name, village, mandal, district, phone, aadhaar)
+        `)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching CD loans list:', error);
       return [];
     }
   }

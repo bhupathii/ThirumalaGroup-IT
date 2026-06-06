@@ -40,9 +40,13 @@ const CDLedger: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loansList, setLoansList] = useState<(FinanceLoan & { customer: FinanceCustomer })[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<(FinanceLoan & { customer: FinanceCustomer })[]>([]);
   const [selectedLoan, setSelectedLoan] = useState<(FinanceLoan & { customer: FinanceCustomer; transactions: FinanceTransaction[]; photos: any[]; dues: FinanceDue[]; documents: FinanceDocument[] }) | null>(null);
   
+  // New List / Payment State
+  const [viewMode, setViewMode] = useState<'list' | 'details'>('list');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Pending/Open' | 'Closed' | 'NPA Closed'>('Pending/Open');
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split('T')[0]);
+
   // Settings state
   const [ledgerSettings, setLedgerSettings] = useState<any>({});
   
@@ -114,7 +118,7 @@ const CDLedger: React.FC = () => {
     setLoading(true);
     try {
       const [allLoans, settings] = await Promise.all([
-        supabaseFinance.getLoans(),
+        supabaseFinance.getCDLoansList(),
         financeLedgerSettingsService.getAllLedgerSettings()
       ]);
       setLedgerSettings(settings);
@@ -127,26 +131,29 @@ const CDLedger: React.FC = () => {
     }
   };
 
-  // Perform search locally
-  const handleSearch = () => {
-    const query = searchQuery.toLowerCase().trim();
-    if (!query) {
-      setSearchResults([]);
-      return;
-    }
-
-    const filtered = loansList.filter(loan => {
-      const cust = loan.customer;
-      
+  const filteredLoans = useMemo(() => {
+    return loansList.filter(loan => {
       const isRightCategory = loan.loan_category === selectedLedgerType;
       const isActive = loan.status === 'Active' && !loan.npa_closed;
+      const isClosed = loan.status === 'Closed';
+      const isNpaClosed = !!loan.npa_closed;
+      
+      const matchesStatus = statusFilter === 'All' 
+        ? true 
+        : statusFilter === 'Pending/Open' 
+          ? isActive 
+          : statusFilter === 'Closed'
+            ? isClosed
+            : isNpaClosed;
 
-      if (!isRightCategory || !isActive) return false;
+      if (!isRightCategory || !matchesStatus) return false;
 
-      // Filter by ledger category or search query
-      const matchesQuery = 
-        loan.loan_id.toLowerCase().includes(query) ||
-        cust?.name.toLowerCase().includes(query) ||
+      const query = searchQuery.toLowerCase().trim();
+      if (!query) return true;
+
+      const cust = loan.customer;
+      return loan.loan_id.toLowerCase().includes(query) ||
+        (cust?.name && cust.name.toLowerCase().includes(query)) ||
         (cust?.phone && cust.phone.includes(query)) ||
         (cust?.phone2 && cust.phone2.includes(query)) ||
         (cust?.phone_1 && cust.phone_1.includes(query)) ||
@@ -156,21 +163,8 @@ const CDLedger: React.FC = () => {
         (loan.surety_name && loan.surety_name.toLowerCase().includes(query)) ||
         (loan.surety_phone && loan.surety_phone.includes(query)) ||
         (loan.remarks && loan.remarks.toLowerCase().includes(query));
-
-      return matchesQuery;
     });
-
-    setSearchResults(filtered);
-  };
-
-  // Trigger search on typing or ledger type changes
-  useEffect(() => {
-    if (searchQuery.trim().length > 1) {
-      handleSearch();
-    } else {
-      setSearchResults([]);
-    }
-  }, [searchQuery]);
+  }, [loansList, searchQuery, selectedLedgerType, statusFilter]);
 
   const loadLedgerDetails = async (loanId: string) => {
     setLoading(true);
@@ -381,7 +375,7 @@ const CDLedger: React.FC = () => {
     if (!selectedLoan) return null;
     const principal = Number(selectedLoan.amount);
     const entryDate = new Date(selectedLoan.date);
-    const today = new Date();
+    const today = new Date(paymentDate);
     
     const diffTime = Math.max(0, today.getTime() - entryDate.getTime());
     const daysCount = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -413,7 +407,7 @@ const CDLedger: React.FC = () => {
       penalty: Math.round(penalty),
       principal
     };
-  }, [selectedLoan]);
+  }, [selectedLoan, paymentDate]);
 
   const handleActionSubmit = async (actionType: 'Renew' | 'Partial' | 'Close') => {
     if (!selectedLoan || !renewCalculations) return;
@@ -455,7 +449,8 @@ const CDLedger: React.FC = () => {
         principalPaid,
         interestPaid,
         penaltyPaid,
-        renewedDays: isFullyRenewed ? renewCalculations.daysCount : 0
+        renewedDays: isFullyRenewed ? renewCalculations.daysCount : 0,
+        paymentDate
       });
       
       if (!res.success) {
@@ -474,8 +469,8 @@ const CDLedger: React.FC = () => {
         const updates: any = {};
         
         if (isFullyRenewed) {
-          // Shift loan date to today
-          updates.date = new Date().toISOString();
+          // Shift loan date to selected custom date
+          updates.date = new Date(paymentDate).toISOString();
         }
         
         if (principalPaid > 0) {
@@ -516,14 +511,14 @@ const CDLedger: React.FC = () => {
         loan_amount: Number(selectedLoan.amount),
         settlement_amount: amount,
         reason: npaReason,
-        closed_at: new Date().toISOString()
+        closed_at: new Date(paymentDate).toISOString()
       });
 
       await supabaseFinance.addCDLedgerEntry({
         loan_id: selectedLoan.id,
         customer_id: selectedLoan.customer_id,
         account_name: selectedLoan.customer?.name || null,
-        entry_date: new Date().toISOString(),
+        entry_date: new Date(paymentDate).toISOString(),
         credit: amount,
         debit: 0,
         receipt_no: `NPA-${Date.now().toString().slice(-6)}`,
@@ -638,22 +633,10 @@ const CDLedger: React.FC = () => {
       {/* Top row: search inputs and action buttons */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm print:hidden">
         
-        <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-4 flex-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
           <div>
             <label className="finance-caption uppercase">
-              Today Date
-            </label>
-            <input 
-              type="text"
-              readOnly
-              value={new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-gray-600 outline-none finance-section-heading"
-            />
-          </div>
-
-          <div>
-            <label className="finance-caption uppercase">
-              Ledger Type
+              Ledger Category
             </label>
             <select
               value={selectedLedgerType}
@@ -667,7 +650,23 @@ const CDLedger: React.FC = () => {
             </select>
           </div>
 
-          <div className="sm:col-span-2">
+          <div>
+            <label className="finance-caption uppercase">
+              Status Filter
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none finance-sidebar-link"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Pending/Open">Pending/Open Only</option>
+              <option value="Closed">Closed Only</option>
+              <option value="NPA Closed">NPA Closed Only</option>
+            </select>
+          </div>
+
+          <div>
             <label className="finance-caption uppercase">
               Search Accounts
             </label>
@@ -676,38 +675,10 @@ const CDLedger: React.FC = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search Name, ID, Phone, Aadhaar..."
+                placeholder="Search Name, ID, Phone..."
                 className="w-full bg-white border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none finance-section-heading"
               />
               <Search className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
-              
-              {/* Live search results overlay */}
-              {searchResults.length > 0 && (
-                <div className="absolute top-12 left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto pr-1">
-                  {searchResults.map(loan => (
-                    <div
-                      key={loan.id}
-                      onClick={() => {
-                        loadLedgerDetails(loan.id);
-                        setSearchQuery('');
-                        setSearchResults([]);
-                      }}
-                      className="p-3 hover:bg-green-50/50 cursor-pointer flex items-center justify-between border-b last:border-0 transition-colors"
-                    >
-                      <div>
-                        <div className="text-gray-900 finance-sidebar-link">{loan.customer?.name}</div>
-                        <div className="text-gray-500 finance-caption">Phone: {loan.customer?.phone || 'N/A'}</div>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-700 finance-header-time">
-                          {loan.loan_id}
-                        </span>
-                        <div className="text-gray-400 mt-1 finance-small-label">{loan.loan_category} Mode</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -753,16 +724,69 @@ const CDLedger: React.FC = () => {
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-600"></div>
           <p className="text-gray-500 finance-section-heading">Compiling CD ledger registry...</p>
         </div>
-      ) : !selectedLoan ? (
-        <div className="text-center py-24 bg-white rounded-3xl border border-gray-100 shadow-sm space-y-3">
-          <FileText className="w-16 h-16 mx-auto text-gray-300" />
-          <h2 className="text-gray-800 finance-brand">No Account Loaded</h2>
-          <p className="finance-small-label uppercase">
-            Use the search panel above to filter and load customer accounts, view ledger sheets, guarantor cards, and print statements.
-          </p>
-        </div>
+      ) : !selectedLoan || viewMode === 'list' ? (
+        <Card title="Loans Ledger" subtitle={`Showing ${filteredLoans.length} accounts`} className="shadow-sm border-gray-100 rounded-3xl">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-100 finance-caption">
+              <thead>
+                <tr className="bg-gray-50/50">
+                  <th className="finance-small-label uppercase">Account ID</th>
+                  <th className="finance-small-label uppercase">Customer Info</th>
+                  <th className="finance-small-label uppercase">Amount</th>
+                  <th className="finance-small-label uppercase">Start Date</th>
+                  <th className="finance-small-label uppercase">Status</th>
+                  <th className="text-right finance-small-label uppercase">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 bg-white">
+                {filteredLoans.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-8 text-center text-gray-400 italic">No loans found matching the filters.</td>
+                  </tr>
+                ) : (
+                  filteredLoans.map(loan => (
+                    <tr key={loan.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-3 py-3 font-mono text-gray-700">{loan.loan_id}</td>
+                      <td className="px-3 py-3">
+                        <div className="text-gray-900 font-medium">{loan.customer?.name}</div>
+                        <div className="text-gray-500 text-xs mt-0.5">{loan.customer?.phone}</div>
+                      </td>
+                      <td className="px-3 py-3 text-gray-700 font-medium">₹{Number(loan.amount).toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-3 text-gray-500">{new Date(loan.date).toLocaleDateString('en-IN')}</td>
+                      <td className="px-3 py-3">
+                        <span className={`px-2 py-1 rounded-md text-xs ${loan.status === 'Closed' ? 'bg-indigo-50 text-indigo-700' : loan.npa_closed ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                          {loan.status} {loan.npa_closed && '(NPA)'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <button
+                          onClick={() => {
+                            loadLedgerDetails(loan.id);
+                            setViewMode('details');
+                          }}
+                          className="px-3 py-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors font-medium text-xs border border-emerald-100"
+                        >
+                          View Ledger
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       ) : (
         <>
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => setViewMode('list')}
+              className="flex items-center gap-2 px-3 py-1.5 text-gray-600 hover:text-gray-900 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <X className="w-4 h-4" />
+              <span className="finance-input">Close Ledger</span>
+            </button>
+          </div>
           {/* Main workspace area */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
@@ -803,7 +827,16 @@ const CDLedger: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
+                  <div>
+                    <label className="finance-caption uppercase mb-1 block">Payment/Transaction Date</label>
+                    <input 
+                      type="date"
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none finance-input"
+                    />
+                  </div>
                   <Input 
                     label="Receipt No (Auto-Generated)" 
                     value={receiptNo} 
@@ -1075,15 +1108,22 @@ const CDLedger: React.FC = () => {
                       <div className="flex items-center gap-3">
                         <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
                         <div>
-                          <div className="text-gray-400 finance-header-time">Permanent Address (Aadhaar)</div>
-                          <div className="text-gray-900 finance-input">{guarantor1.aadhaar_address || guarantor1.address || 'N/A'}</div>
+                          <div className="text-gray-400 finance-header-time">Origin (Village/Mandal)</div>
+                          <div className="text-gray-900 finance-input">{[guarantor1.village, guarantor1.mandal].filter(Boolean).join(', ') || 'N/A'}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
                         <div>
-                          <div className="text-gray-400 finance-header-time">Present Address</div>
-                          <div className="text-gray-900 finance-input">{guarantor1.present_address || 'N/A'}</div>
+                          <div className="text-gray-400 finance-header-time">Permanent Address</div>
+                          <div className="text-gray-900 finance-input">{guarantor1.permanent_address || guarantor1.aadhaar_address || guarantor1.address || 'N/A'}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
+                        <div>
+                          <div className="text-gray-400 finance-header-time">Current Address</div>
+                          <div className="text-gray-900 finance-input">{guarantor1.current_address || guarantor1.present_address || 'N/A'}</div>
                         </div>
                       </div>
                     </div>
@@ -1118,15 +1158,22 @@ const CDLedger: React.FC = () => {
                       <div className="flex items-center gap-3">
                         <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
                         <div>
-                          <div className="text-gray-400 finance-header-time">Permanent Address (Aadhaar)</div>
-                          <div className="text-gray-900 finance-input">{guarantor2.aadhaar_address || guarantor2.address || 'N/A'}</div>
+                          <div className="text-gray-400 finance-header-time">Origin (Village/Mandal)</div>
+                          <div className="text-gray-900 finance-input">{[guarantor2.village, guarantor2.mandal].filter(Boolean).join(', ') || 'N/A'}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
                         <div>
-                          <div className="text-gray-400 finance-header-time">Present Address</div>
-                          <div className="text-gray-900 finance-input">{guarantor2.present_address || 'N/A'}</div>
+                          <div className="text-gray-400 finance-header-time">Permanent Address</div>
+                          <div className="text-gray-900 finance-input">{guarantor2.permanent_address || guarantor2.aadhaar_address || guarantor2.address || 'N/A'}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
+                        <div>
+                          <div className="text-gray-400 finance-header-time">Current Address</div>
+                          <div className="text-gray-900 finance-input">{guarantor2.current_address || guarantor2.present_address || 'N/A'}</div>
                         </div>
                       </div>
                     </div>
@@ -1560,12 +1607,16 @@ const CDLedger: React.FC = () => {
                           <td className="text-gray-800 finance-input">{guarantor1.aadhaar}</td>
                         </tr>
                         <tr>
-                          <td className="text-gray-400 py-0.5 pr-2 finance-input">Permanent Address (Aadhaar):</td>
-                          <td className="text-gray-700 finance-input">{guarantor1.aadhaar_address || guarantor1.address || 'N/A'}</td>
+                          <td className="text-gray-400 py-0.5 pr-2 finance-input">Origin (Village/Mandal):</td>
+                          <td className="text-gray-700 finance-input">{[guarantor1.village, guarantor1.mandal].filter(Boolean).join(', ') || 'N/A'}</td>
                         </tr>
                         <tr>
-                          <td className="text-gray-400 py-0.5 pr-2 finance-input">Present Address:</td>
-                          <td className="text-gray-700 finance-input">{guarantor1.present_address || 'N/A'}</td>
+                          <td className="text-gray-400 py-0.5 pr-2 finance-input">Permanent Address:</td>
+                          <td className="text-gray-700 finance-input">{guarantor1.permanent_address || guarantor1.aadhaar_address || guarantor1.address || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                          <td className="text-gray-400 py-0.5 pr-2 finance-input">Current Address:</td>
+                          <td className="text-gray-700 finance-input">{guarantor1.current_address || guarantor1.present_address || 'N/A'}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -1590,12 +1641,16 @@ const CDLedger: React.FC = () => {
                           <td className="text-gray-800 finance-input">{guarantor2.aadhaar}</td>
                         </tr>
                         <tr>
-                          <td className="text-gray-400 py-0.5 pr-2 finance-input">Permanent Address (Aadhaar):</td>
-                          <td className="text-gray-700 finance-input">{guarantor2.aadhaar_address || guarantor2.address || 'N/A'}</td>
+                          <td className="text-gray-400 py-0.5 pr-2 finance-input">Origin (Village/Mandal):</td>
+                          <td className="text-gray-700 finance-input">{[guarantor2.village, guarantor2.mandal].filter(Boolean).join(', ') || 'N/A'}</td>
                         </tr>
                         <tr>
-                          <td className="text-gray-400 py-0.5 pr-2 finance-input">Present Address:</td>
-                          <td className="text-gray-700 finance-input">{guarantor2.present_address || 'N/A'}</td>
+                          <td className="text-gray-400 py-0.5 pr-2 finance-input">Permanent Address:</td>
+                          <td className="text-gray-700 finance-input">{guarantor2.permanent_address || guarantor2.aadhaar_address || guarantor2.address || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                          <td className="text-gray-400 py-0.5 pr-2 finance-input">Current Address:</td>
+                          <td className="text-gray-700 finance-input">{guarantor2.current_address || guarantor2.present_address || 'N/A'}</td>
                         </tr>
                       </tbody>
                     </table>

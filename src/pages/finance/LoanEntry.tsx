@@ -95,6 +95,11 @@ const LoanEntry: React.FC = () => {
   const [g1FingerprintAdded, setG1FingerprintAdded] = useState(false);
   const [g1Search, setG1Search] = useState('');
   const [g1DropdownOpen, setG1DropdownOpen] = useState(false);
+  const [g1Village, setG1Village] = useState('');
+  const [g1Mandal, setG1Mandal] = useState('');
+  const [g1District, setG1District] = useState('');
+  const [g1PermanentAddress, setG1PermanentAddress] = useState('');
+  const [g1CurrentAddress, setG1CurrentAddress] = useState('');
 
   // Form State - Guarantor 2
   const [g2SelectedId, setG2SelectedId] = useState('');
@@ -109,6 +114,11 @@ const LoanEntry: React.FC = () => {
   const [g2FingerprintAdded, setG2FingerprintAdded] = useState(false);
   const [g2Search, setG2Search] = useState('');
   const [g2DropdownOpen, setG2DropdownOpen] = useState(false);
+  const [g2Village, setG2Village] = useState('');
+  const [g2Mandal, setG2Mandal] = useState('');
+  const [g2District, setG2District] = useState('');
+  const [g2PermanentAddress, setG2PermanentAddress] = useState('');
+  const [g2CurrentAddress, setG2CurrentAddress] = useState('');
 
   // Reference Data lists
   const [partners, setPartners] = useState<Partial<FinancePartner>[]>([]);
@@ -377,6 +387,11 @@ const LoanEntry: React.FC = () => {
         setG1FingerprintUrl(selected.fingerprint_image_url || null);
         setG1FingerprintTemplate(selected.fingerprint_template || null);
         setG1FingerprintAdded(!!selected.fingerprint_added);
+        setG1Village(selected.village || '');
+        setG1Mandal(selected.mandal || '');
+        setG1District(selected.district || '');
+        setG1PermanentAddress(selected.permanent_address || '');
+        setG1CurrentAddress(selected.current_address || '');
       }
     };
     fetchG1();
@@ -397,6 +412,11 @@ const LoanEntry: React.FC = () => {
         setG2FingerprintUrl(selected.fingerprint_image_url || null);
         setG2FingerprintTemplate(selected.fingerprint_template || null);
         setG2FingerprintAdded(!!selected.fingerprint_added);
+        setG2Village(selected.village || '');
+        setG2Mandal(selected.mandal || '');
+        setG2District(selected.district || '');
+        setG2PermanentAddress(selected.permanent_address || '');
+        setG2CurrentAddress(selected.current_address || '');
       }
     };
     fetchG2();
@@ -592,6 +612,11 @@ const LoanEntry: React.FC = () => {
     setG1FingerprintAdded(false);
     setG1Search('');
     setG1DropdownOpen(false);
+    setG1Village('');
+    setG1Mandal('');
+    setG1District('');
+    setG1PermanentAddress('');
+    setG1CurrentAddress('');
 
     setG2SelectedId('');
     setG2Name('');
@@ -605,6 +630,11 @@ const LoanEntry: React.FC = () => {
     setG2FingerprintAdded(false);
     setG2Search('');
     setG2DropdownOpen(false);
+    setG2Village('');
+    setG2Mandal('');
+    setG2District('');
+    setG2PermanentAddress('');
+    setG2CurrentAddress('');
 
     setAmount('');
     setDocCharges('');
@@ -768,7 +798,12 @@ const LoanEntry: React.FC = () => {
             photo_url: g1Photo,
             fingerprint_template: g1FingerprintTemplate || null,
             fingerprint_image_url: g1FingerprintUrl || null,
-            fingerprint_added: g1FingerprintAdded
+            fingerprint_added: g1FingerprintAdded,
+            village: g1Village || null,
+            mandal: g1Mandal || null,
+            district: g1District || null,
+            permanent_address: g1PermanentAddress || null,
+            current_address: g1CurrentAddress || null
           });
           if (newGuar) {
             resolvedG1Id = newGuar.id;
@@ -801,7 +836,12 @@ const LoanEntry: React.FC = () => {
             photo_url: g2Photo,
             fingerprint_template: g2FingerprintTemplate || null,
             fingerprint_image_url: g2FingerprintUrl || null,
-            fingerprint_added: g2FingerprintAdded
+            fingerprint_added: g2FingerprintAdded,
+            village: g2Village || null,
+            mandal: g2Mandal || null,
+            district: g2District || null,
+            permanent_address: g2PermanentAddress || null,
+            current_address: g2CurrentAddress || null
           });
           if (newGuar) {
             resolvedG2Id = newGuar.id;
@@ -1475,8 +1515,12 @@ const LoanEntry: React.FC = () => {
                 <Input label="Aadhaar" value={g1Aadhaar} onChange={setG1Aadhaar} placeholder="Aadhaar UID" readOnly={!!g1SelectedId} required={!!g1Name} />
                 <Input label="Phone" ref={g1PhoneRef} error={errors.g1Phone} value={g1Phone} onChange={(val) => { setG1Phone(val); setErrors(p => ({...p, g1Phone: false})) }} placeholder="Phone No" readOnly={!!g1SelectedId} required={!!g1Name} />
 
-                <Input label="Aadhaar Address" value={g1AadhaarAddress} onChange={setG1AadhaarAddress} placeholder="Address as per Aadhaar" readOnly={!!g1SelectedId} required={!!g1Name} />
-                <Input label="Present Address" value={g1PresentAddress} onChange={setG1PresentAddress} placeholder="Current residential address" readOnly={!!g1SelectedId} required={!!g1Name} />
+                <Input label="Village" value={g1Village} onChange={setG1Village} placeholder="Village" readOnly={!!g1SelectedId} />
+                <Input label="Mandal" value={g1Mandal} onChange={setG1Mandal} placeholder="Mandal" readOnly={!!g1SelectedId} />
+                <Input label="District" value={g1District} onChange={setG1District} placeholder="District" readOnly={!!g1SelectedId} />
+                <Input label="Permanent Address" value={g1PermanentAddress} onChange={setG1PermanentAddress} placeholder="Permanent Address" readOnly={!!g1SelectedId} />
+                <Input label="Current Address" value={g1CurrentAddress} onChange={setG1CurrentAddress} placeholder="Current Address" readOnly={!!g1SelectedId} />
+
                 {/* Guarantor 1 Photo & Biometrics */}
                 <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center space-y-3">
@@ -1622,10 +1666,14 @@ const LoanEntry: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 <Input label="Name" value={g2Name} onChange={setG2Name} placeholder="Full Name" readOnly={!!g2SelectedId} />
                 <Input label="Aadhaar" value={g2Aadhaar} onChange={setG2Aadhaar} placeholder="Aadhaar UID" readOnly={!!g2SelectedId} required={!!g2Name} />
-                <Input label="Phone" value={g2Phone} onChange={setG2Phone} placeholder="Phone No" readOnly={!!g2SelectedId} required={!!g2Name} />
+                <Input label="Phone" value={g2Phone} onChange={setG2Phone} placeholder="Phone No" readOnly={!!g2SelectedId} />
 
-                <Input label="Aadhaar Address" value={g2AadhaarAddress} onChange={setG2AadhaarAddress} placeholder="Address as per Aadhaar" readOnly={!!g2SelectedId} required={!!g2Name} />
-                <Input label="Present Address" value={g2PresentAddress} onChange={setG2PresentAddress} placeholder="Current residential address" readOnly={!!g2SelectedId} required={!!g2Name} />
+                <Input label="Village" value={g2Village} onChange={setG2Village} placeholder="Village" readOnly={!!g2SelectedId} />
+                <Input label="Mandal" value={g2Mandal} onChange={setG2Mandal} placeholder="Mandal" readOnly={!!g2SelectedId} />
+                <Input label="District" value={g2District} onChange={setG2District} placeholder="District" readOnly={!!g2SelectedId} />
+                <Input label="Permanent Address" value={g2PermanentAddress} onChange={setG2PermanentAddress} placeholder="Permanent Address" readOnly={!!g2SelectedId} />
+                <Input label="Current Address" value={g2CurrentAddress} onChange={setG2CurrentAddress} placeholder="Current Address" readOnly={!!g2SelectedId} />
+
                 {/* Guarantor 2 Photo & Biometrics */}
                 <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center space-y-3">

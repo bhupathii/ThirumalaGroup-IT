@@ -468,7 +468,7 @@ const NewGuarantor: React.FC = () => {
 
               <div>
                 <label className="finance-caption uppercase">
-                  PRESENT ADDRESS <span className="text-red-500">*</span>
+                  CURRENT ADDRESS <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   value={presentAddress}

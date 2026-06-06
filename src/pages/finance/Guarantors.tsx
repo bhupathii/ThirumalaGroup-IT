@@ -261,7 +261,7 @@ const Guarantors: React.FC = () => {
                   <th className="finance-small-label uppercase">Name</th>
                   <th className="finance-small-label uppercase">Aadhaar</th>
                   <th className="finance-small-label uppercase">Contact Info</th>
-                  <th className="finance-small-label uppercase">Address</th>
+                  <th className="finance-small-label uppercase">Origin / Address</th>
                   <th className="finance-small-label uppercase text-center">Linked Loans</th>
                   <th className="text-right finance-small-label uppercase">Actions</th>
                 </tr>
@@ -308,9 +308,14 @@ const Guarantors: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-3 py-3 text-slate-600 max-w-xs truncate finance-input">
-                      <div className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span className="truncate" title={guar.permanent_address || ''}>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5" title={guar.village ? `${guar.village}, ${guar.mandal}` : 'N/A'}>
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="truncate font-medium text-slate-700">
+                            {[guar.village, guar.mandal].filter(Boolean).join(', ') || '—'}
+                          </span>
+                        </div>
+                        <span className="truncate text-xs text-slate-400 pl-5" title={guar.permanent_address || ''}>
                           {guar.permanent_address || '—'}
                         </span>
                       </div>
