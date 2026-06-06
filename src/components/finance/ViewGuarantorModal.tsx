@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { X, User, Phone, MapPin, Calendar, FileText, Activity } from 'lucide-react';
-import { FinanceGuarantor, supabaseFinance } from '../../lib/supabaseFinance';
+import { X, User, Phone, MapPin, FileText, Activity } from 'lucide-react';
+import { FinanceGuarantor } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 
 interface ViewGuarantorModalProps {
@@ -15,7 +15,7 @@ const ViewGuarantorModal: React.FC<ViewGuarantorModalProps> = ({ guarantor, onCl
   useEffect(() => {
     const fetchLinkedLoans = async () => {
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('finance_loans')
           .select('id, loan_id, customer_id, amount, status, date, finance_customers (name)')
           .or(`guarantor_1_id.eq.${guarantor.id},guarantor_2_id.eq.${guarantor.id}`);
@@ -110,32 +110,49 @@ const ViewGuarantorModal: React.FC<ViewGuarantorModalProps> = ({ guarantor, onCl
                     <div className="flex items-center gap-1.5 text-slate-500 finance-caption uppercase">
                       <MapPin className="w-3.5 h-3.5" /> Permanent Address
                     </div>
-                    <p className="finance-input text-slate-800 bg-slate-50 p-3 rounded-lg border border-slate-100 min-h-[80px]">
-                      {guarantor.permanent_address || '—'}
-                    </p>
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 min-h-[80px]">
+                      <p className="finance-input text-slate-800 mb-2">
+                        {guarantor.permanent_address || guarantor.aadhaar_address || '—'}
+                      </p>
+                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/60">
+                        <div>
+                          <p className="text-[9px] text-slate-400 uppercase">Village</p>
+                          <p className="finance-input text-slate-700">{guarantor.permanent_village || guarantor.village || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-400 uppercase">Mandal</p>
+                          <p className="finance-input text-slate-700">{guarantor.permanent_mandal || guarantor.mandal || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-400 uppercase">District</p>
+                          <p className="finance-input text-slate-700">{guarantor.permanent_district || guarantor.district || '—'}</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5 text-slate-500 finance-caption uppercase">
                       <MapPin className="w-3.5 h-3.5" /> Current Address
                     </div>
-                    <p className="finance-input text-slate-800 bg-slate-50 p-3 rounded-lg border border-slate-100 min-h-[80px]">
-                      {guarantor.current_address || '—'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4 pt-2">
-                  <div>
-                    <p className="finance-caption text-slate-500 uppercase">Village</p>
-                    <p className="finance-input text-slate-800 mt-1">{guarantor.village || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="finance-caption text-slate-500 uppercase">Mandal</p>
-                    <p className="finance-input text-slate-800 mt-1">{guarantor.mandal || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="finance-caption text-slate-500 uppercase">District</p>
-                    <p className="finance-input text-slate-800 mt-1">{guarantor.district || '—'}</p>
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 min-h-[80px]">
+                      <p className="finance-input text-slate-800 mb-2">
+                        {guarantor.current_address || guarantor.present_address || '—'}
+                      </p>
+                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/60">
+                        <div>
+                          <p className="text-[9px] text-slate-400 uppercase">Village</p>
+                          <p className="finance-input text-slate-700">{guarantor.current_village || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-400 uppercase">Mandal</p>
+                          <p className="finance-input text-slate-700">{guarantor.current_mandal || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-400 uppercase">District</p>
+                          <p className="finance-input text-slate-700">{guarantor.current_district || '—'}</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

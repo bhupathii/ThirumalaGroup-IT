@@ -1105,25 +1105,32 @@ const CDLedger: React.FC = () => {
                           <div className="text-gray-900 finance-input">{guarantor1.aadhaar}</div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
-                        <div>
-                          <div className="text-gray-400 finance-header-time">Origin (Village/Mandal)</div>
-                          <div className="text-gray-900 finance-input">{[guarantor1.village, guarantor1.mandal].filter(Boolean).join(', ') || 'N/A'}</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 sm:col-span-2">
                         <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
                         <div>
                           <div className="text-gray-400 finance-header-time">Permanent Address</div>
-                          <div className="text-gray-900 finance-input">{guarantor1.permanent_address || guarantor1.aadhaar_address || guarantor1.address || 'N/A'}</div>
+                          <div className="text-gray-900 finance-input">
+                            {[
+                              guarantor1.permanent_address || guarantor1.aadhaar_address || guarantor1.address,
+                              guarantor1.permanent_village || guarantor1.village,
+                              guarantor1.permanent_mandal || guarantor1.mandal,
+                              guarantor1.permanent_district || guarantor1.district
+                            ].filter(Boolean).join(', ') || 'N/A'}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 sm:col-span-2">
                         <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
                         <div>
                           <div className="text-gray-400 finance-header-time">Current Address</div>
-                          <div className="text-gray-900 finance-input">{guarantor1.current_address || guarantor1.present_address || 'N/A'}</div>
+                          <div className="text-gray-900 finance-input">
+                            {[
+                              guarantor1.current_address || guarantor1.present_address,
+                              guarantor1.current_village,
+                              guarantor1.current_mandal,
+                              guarantor1.current_district
+                            ].filter(Boolean).join(', ') || 'N/A'}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1155,25 +1162,32 @@ const CDLedger: React.FC = () => {
                           <div className="text-gray-900 finance-input">{guarantor2.aadhaar}</div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
-                        <div>
-                          <div className="text-gray-400 finance-header-time">Origin (Village/Mandal)</div>
-                          <div className="text-gray-900 finance-input">{[guarantor2.village, guarantor2.mandal].filter(Boolean).join(', ') || 'N/A'}</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 sm:col-span-2">
                         <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
                         <div>
                           <div className="text-gray-400 finance-header-time">Permanent Address</div>
-                          <div className="text-gray-900 finance-input">{guarantor2.permanent_address || guarantor2.aadhaar_address || guarantor2.address || 'N/A'}</div>
+                          <div className="text-gray-900 finance-input">
+                            {[
+                              guarantor2.permanent_address || guarantor2.aadhaar_address || guarantor2.address,
+                              guarantor2.permanent_village || guarantor2.village,
+                              guarantor2.permanent_mandal || guarantor2.mandal,
+                              guarantor2.permanent_district || guarantor2.district
+                            ].filter(Boolean).join(', ') || 'N/A'}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 sm:col-span-2">
                         <MapPin className="w-5 h-5 text-gray-400 shrink-0" />
                         <div>
                           <div className="text-gray-400 finance-header-time">Current Address</div>
-                          <div className="text-gray-900 finance-input">{guarantor2.current_address || guarantor2.present_address || 'N/A'}</div>
+                          <div className="text-gray-900 finance-input">
+                            {[
+                              guarantor2.current_address || guarantor2.present_address,
+                              guarantor2.current_village,
+                              guarantor2.current_mandal,
+                              guarantor2.current_district
+                            ].filter(Boolean).join(', ') || 'N/A'}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1607,16 +1621,26 @@ const CDLedger: React.FC = () => {
                           <td className="text-gray-800 finance-input">{guarantor1.aadhaar}</td>
                         </tr>
                         <tr>
-                          <td className="text-gray-400 py-0.5 pr-2 finance-input">Origin (Village/Mandal):</td>
-                          <td className="text-gray-700 finance-input">{[guarantor1.village, guarantor1.mandal].filter(Boolean).join(', ') || 'N/A'}</td>
-                        </tr>
-                        <tr>
                           <td className="text-gray-400 py-0.5 pr-2 finance-input">Permanent Address:</td>
-                          <td className="text-gray-700 finance-input">{guarantor1.permanent_address || guarantor1.aadhaar_address || guarantor1.address || 'N/A'}</td>
+                          <td className="text-gray-700 finance-input">
+                            {[
+                              guarantor1.permanent_address || guarantor1.aadhaar_address || guarantor1.address,
+                              guarantor1.permanent_village || guarantor1.village,
+                              guarantor1.permanent_mandal || guarantor1.mandal,
+                              guarantor1.permanent_district || guarantor1.district
+                            ].filter(Boolean).join(', ') || 'N/A'}
+                          </td>
                         </tr>
                         <tr>
                           <td className="text-gray-400 py-0.5 pr-2 finance-input">Current Address:</td>
-                          <td className="text-gray-700 finance-input">{guarantor1.current_address || guarantor1.present_address || 'N/A'}</td>
+                          <td className="text-gray-700 finance-input">
+                            {[
+                              guarantor1.current_address || guarantor1.present_address,
+                              guarantor1.current_village,
+                              guarantor1.current_mandal,
+                              guarantor1.current_district
+                            ].filter(Boolean).join(', ') || 'N/A'}
+                          </td>
                         </tr>
                       </tbody>
                     </table>
@@ -1641,16 +1665,26 @@ const CDLedger: React.FC = () => {
                           <td className="text-gray-800 finance-input">{guarantor2.aadhaar}</td>
                         </tr>
                         <tr>
-                          <td className="text-gray-400 py-0.5 pr-2 finance-input">Origin (Village/Mandal):</td>
-                          <td className="text-gray-700 finance-input">{[guarantor2.village, guarantor2.mandal].filter(Boolean).join(', ') || 'N/A'}</td>
-                        </tr>
-                        <tr>
                           <td className="text-gray-400 py-0.5 pr-2 finance-input">Permanent Address:</td>
-                          <td className="text-gray-700 finance-input">{guarantor2.permanent_address || guarantor2.aadhaar_address || guarantor2.address || 'N/A'}</td>
+                          <td className="text-gray-700 finance-input">
+                            {[
+                              guarantor2.permanent_address || guarantor2.aadhaar_address || guarantor2.address,
+                              guarantor2.permanent_village || guarantor2.village,
+                              guarantor2.permanent_mandal || guarantor2.mandal,
+                              guarantor2.permanent_district || guarantor2.district
+                            ].filter(Boolean).join(', ') || 'N/A'}
+                          </td>
                         </tr>
                         <tr>
                           <td className="text-gray-400 py-0.5 pr-2 finance-input">Current Address:</td>
-                          <td className="text-gray-700 finance-input">{guarantor2.current_address || guarantor2.present_address || 'N/A'}</td>
+                          <td className="text-gray-700 finance-input">
+                            {[
+                              guarantor2.current_address || guarantor2.present_address,
+                              guarantor2.current_village,
+                              guarantor2.current_mandal,
+                              guarantor2.current_district
+                            ].filter(Boolean).join(', ') || 'N/A'}
+                          </td>
                         </tr>
                       </tbody>
                     </table>

@@ -29,12 +29,20 @@ const NewGuarantor: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [phone2, setPhone2] = useState('');
   const [fatherName, setFatherName] = useState('');
-  const [village, setVillage] = useState('');
-  const [mandal, setMandal] = useState('');
-  const [district, setDistrict] = useState('');
   const [notes, setNotes] = useState('');
-  const [aadhaarAddress, setAadhaarAddress] = useState('');
-  const [presentAddress, setPresentAddress] = useState('');
+  
+  // Permanent Address
+  const [permanentAddress, setPermanentAddress] = useState('');
+  const [permanentVillage, setPermanentVillage] = useState('');
+  const [permanentMandal, setPermanentMandal] = useState('');
+  const [permanentDistrict, setPermanentDistrict] = useState('');
+  
+  // Current Address
+  const [currentAddress, setCurrentAddress] = useState('');
+  const [currentVillage, setCurrentVillage] = useState('');
+  const [currentMandal, setCurrentMandal] = useState('');
+  const [currentDistrict, setCurrentDistrict] = useState('');
+
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   // Fingerprint State
@@ -73,11 +81,16 @@ const NewGuarantor: React.FC = () => {
         setPhone(data.phone || '');
         setPhone2(data.phone_2 || '');
         setFatherName(data.father_name || '');
-        setVillage(data.village || '');
-        setMandal(data.mandal || '');
-        setDistrict(data.district || '');
-        setAadhaarAddress(data.permanent_address || data.aadhaar_address || '');
-        setPresentAddress(data.current_address || data.present_address || '');
+        setPermanentAddress(data.permanent_address || data.aadhaar_address || '');
+        setPermanentVillage(data.permanent_village || data.village || '');
+        setPermanentMandal(data.permanent_mandal || data.mandal || '');
+        setPermanentDistrict(data.permanent_district || data.district || '');
+        
+        setCurrentAddress(data.current_address || data.present_address || '');
+        setCurrentVillage(data.current_village || '');
+        setCurrentMandal(data.current_mandal || '');
+        setCurrentDistrict(data.current_district || '');
+        
         setNotes(data.notes || '');
         
         if (data.photo_url) {
@@ -241,8 +254,17 @@ const NewGuarantor: React.FC = () => {
     setAadhaar('');
     setName('');
     setPhone('');
-    setAadhaarAddress('');
-    setPresentAddress('');
+    setPhone2('');
+    setFatherName('');
+    setPermanentAddress('');
+    setPermanentVillage('');
+    setPermanentMandal('');
+    setPermanentDistrict('');
+    setCurrentAddress('');
+    setCurrentVillage('');
+    setCurrentMandal('');
+    setCurrentDistrict('');
+    setNotes('');
     handleClearPhoto();
     setFingerprintUrl(null);
     setFingerprintTemplate(null);
@@ -264,11 +286,14 @@ const NewGuarantor: React.FC = () => {
         phone: phone || null,
         phone_2: phone2 || null,
         father_name: fatherName || null,
-        village: village || null,
-        mandal: mandal || null,
-        district: district || null,
-        permanent_address: aadhaarAddress.trim() || null,
-        current_address: presentAddress.trim() || null,
+        permanent_address: permanentAddress.trim() || null,
+        permanent_village: permanentVillage.trim() || null,
+        permanent_mandal: permanentMandal.trim() || null,
+        permanent_district: permanentDistrict.trim() || null,
+        current_address: currentAddress.trim() || null,
+        current_village: currentVillage.trim() || null,
+        current_mandal: currentMandal.trim() || null,
+        current_district: currentDistrict.trim() || null,
         aadhaar: aadhaar || null,
         photo_url: photoUrl,
         fingerprint_template: fingerprintTemplate || null,
@@ -437,47 +462,70 @@ const NewGuarantor: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-slate-50/50 border border-slate-150 rounded-lg p-4 space-y-4">
+                <h4 className="text-slate-700 finance-caption uppercase font-semibold">
+                  PERMANENT ADDRESS
+                </h4>
                 <div>
-                  <label className="finance-caption uppercase">VILLAGE</label>
-                  <input type="text" value={village} onChange={(e) => setVillage(e.target.value)} placeholder="Village" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time" />
+                  <label className="finance-caption uppercase">
+                    ADDRESS <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={permanentAddress}
+                    onChange={(e) => setPermanentAddress(e.target.value)}
+                    placeholder="Address as per Aadhaar Card"
+                    rows={2}
+                    required
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y finance-header-time"
+                  />
                 </div>
-                <div>
-                  <label className="finance-caption uppercase">MANDAL</label>
-                  <input type="text" value={mandal} onChange={(e) => setMandal(e.target.value)} placeholder="Mandal" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time" />
-                </div>
-                <div>
-                  <label className="finance-caption uppercase">DISTRICT</label>
-                  <input type="text" value={district} onChange={(e) => setDistrict(e.target.value)} placeholder="District" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time" />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="finance-caption uppercase">VILLAGE</label>
+                    <input type="text" value={permanentVillage} onChange={(e) => setPermanentVillage(e.target.value)} placeholder="Village" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time" />
+                  </div>
+                  <div>
+                    <label className="finance-caption uppercase">MANDAL</label>
+                    <input type="text" value={permanentMandal} onChange={(e) => setPermanentMandal(e.target.value)} placeholder="Mandal" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time" />
+                  </div>
+                  <div>
+                    <label className="finance-caption uppercase">DISTRICT</label>
+                    <input type="text" value={permanentDistrict} onChange={(e) => setPermanentDistrict(e.target.value)} placeholder="District" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time" />
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="finance-caption uppercase">
-                  PERMANENT ADDRESS <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={aadhaarAddress}
-                  onChange={(e) => setAadhaarAddress(e.target.value)}
-                  placeholder="Address as per Aadhaar Card"
-                  rows={2}
-                  required
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y finance-header-time"
-                />
-              </div>
-
-              <div>
-                <label className="finance-caption uppercase">
-                  CURRENT ADDRESS <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={presentAddress}
-                  onChange={(e) => setPresentAddress(e.target.value)}
-                  placeholder="Current residential address"
-                  rows={2}
-                  required
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y finance-header-time"
-                />
+              <div className="bg-slate-50/50 border border-slate-150 rounded-lg p-4 space-y-4">
+                <h4 className="text-slate-700 finance-caption uppercase font-semibold">
+                  CURRENT ADDRESS
+                </h4>
+                <div>
+                  <label className="finance-caption uppercase">
+                    ADDRESS <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={currentAddress}
+                    onChange={(e) => setCurrentAddress(e.target.value)}
+                    placeholder="Current residential address"
+                    rows={2}
+                    required
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none resize-y finance-header-time"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="finance-caption uppercase">VILLAGE</label>
+                    <input type="text" value={currentVillage} onChange={(e) => setCurrentVillage(e.target.value)} placeholder="Village" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time" />
+                  </div>
+                  <div>
+                    <label className="finance-caption uppercase">MANDAL</label>
+                    <input type="text" value={currentMandal} onChange={(e) => setCurrentMandal(e.target.value)} placeholder="Mandal" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time" />
+                  </div>
+                  <div>
+                    <label className="finance-caption uppercase">DISTRICT</label>
+                    <input type="text" value={currentDistrict} onChange={(e) => setCurrentDistrict(e.target.value)} placeholder="District" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time" />
+                  </div>
+                </div>
               </div>
 
               <div>

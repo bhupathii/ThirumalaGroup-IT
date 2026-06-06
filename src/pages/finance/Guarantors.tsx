@@ -107,11 +107,14 @@ const Guarantors: React.FC = () => {
         const phoneStr = (g.phone || '').toLowerCase();
         const phone2Str = (g.phone_2 || '').toLowerCase();
         const aadhaarStr = (g.aadhaar || '').toLowerCase();
-        const villageStr = (g.village || '').toLowerCase();
-        const mandalStr = (g.mandal || '').toLowerCase();
-        const districtStr = (g.district || '').toLowerCase();
-        const pAddrStr = (g.permanent_address || '').toLowerCase();
-        const cAddrStr = (g.current_address || '').toLowerCase();
+        const villageStr = (g.permanent_village || g.village || '').toLowerCase();
+        const mandalStr = (g.permanent_mandal || g.mandal || '').toLowerCase();
+        const districtStr = (g.permanent_district || g.district || '').toLowerCase();
+        const pAddrStr = (g.permanent_address || g.aadhaar_address || '').toLowerCase();
+        const cAddrStr = (g.current_address || g.present_address || '').toLowerCase();
+        const cVillageStr = (g.current_village || '').toLowerCase();
+        const cMandalStr = (g.current_mandal || '').toLowerCase();
+        const cDistrictStr = (g.current_district || '').toLowerCase();
 
         return (
           idStr.includes(query) ||
@@ -123,7 +126,10 @@ const Guarantors: React.FC = () => {
           mandalStr.includes(query) ||
           districtStr.includes(query) ||
           pAddrStr.includes(query) ||
-          cAddrStr.includes(query)
+          cAddrStr.includes(query) ||
+          cVillageStr.includes(query) ||
+          cMandalStr.includes(query) ||
+          cDistrictStr.includes(query)
         );
       });
     }
@@ -309,14 +315,14 @@ const Guarantors: React.FC = () => {
                     </td>
                     <td className="px-3 py-3 text-slate-600 max-w-xs truncate finance-input">
                       <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1.5" title={guar.village ? `${guar.village}, ${guar.mandal}` : 'N/A'}>
+                        <div className="flex items-center gap-1.5" title={(guar.permanent_village || guar.village) ? `${guar.permanent_village || guar.village}, ${guar.permanent_mandal || guar.mandal}` : 'N/A'}>
                           <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <span className="truncate font-medium text-slate-700">
-                            {[guar.village, guar.mandal].filter(Boolean).join(', ') || '—'}
+                            {[guar.permanent_village || guar.village, guar.permanent_mandal || guar.mandal].filter(Boolean).join(', ') || '—'}
                           </span>
                         </div>
-                        <span className="truncate text-xs text-slate-400 pl-5" title={guar.permanent_address || ''}>
-                          {guar.permanent_address || '—'}
+                        <span className="truncate text-xs text-slate-400 pl-5" title={guar.permanent_address || guar.aadhaar_address || ''}>
+                          {guar.permanent_address || guar.aadhaar_address || '—'}
                         </span>
                       </div>
                     </td>

@@ -100,6 +100,9 @@ const LoanEntry: React.FC = () => {
   const [g1District, setG1District] = useState('');
   const [g1PermanentAddress, setG1PermanentAddress] = useState('');
   const [g1CurrentAddress, setG1CurrentAddress] = useState('');
+  const [g1CurrentVillage, setG1CurrentVillage] = useState('');
+  const [g1CurrentMandal, setG1CurrentMandal] = useState('');
+  const [g1CurrentDistrict, setG1CurrentDistrict] = useState('');
 
   // Form State - Guarantor 2
   const [g2SelectedId, setG2SelectedId] = useState('');
@@ -119,6 +122,9 @@ const LoanEntry: React.FC = () => {
   const [g2District, setG2District] = useState('');
   const [g2PermanentAddress, setG2PermanentAddress] = useState('');
   const [g2CurrentAddress, setG2CurrentAddress] = useState('');
+  const [g2CurrentVillage, setG2CurrentVillage] = useState('');
+  const [g2CurrentMandal, setG2CurrentMandal] = useState('');
+  const [g2CurrentDistrict, setG2CurrentDistrict] = useState('');
 
   // Reference Data lists
   const [partners, setPartners] = useState<Partial<FinancePartner>[]>([]);
@@ -387,11 +393,14 @@ const LoanEntry: React.FC = () => {
         setG1FingerprintUrl(selected.fingerprint_image_url || null);
         setG1FingerprintTemplate(selected.fingerprint_template || null);
         setG1FingerprintAdded(!!selected.fingerprint_added);
-        setG1Village(selected.village || '');
-        setG1Mandal(selected.mandal || '');
-        setG1District(selected.district || '');
-        setG1PermanentAddress(selected.permanent_address || '');
-        setG1CurrentAddress(selected.current_address || '');
+        setG1Village(selected.permanent_village || selected.village || '');
+        setG1Mandal(selected.permanent_mandal || selected.mandal || '');
+        setG1District(selected.permanent_district || selected.district || '');
+        setG1PermanentAddress(selected.permanent_address || selected.aadhaar_address || '');
+        setG1CurrentAddress(selected.current_address || selected.present_address || '');
+        setG1CurrentVillage(selected.current_village || '');
+        setG1CurrentMandal(selected.current_mandal || '');
+        setG1CurrentDistrict(selected.current_district || '');
       }
     };
     fetchG1();
@@ -412,11 +421,14 @@ const LoanEntry: React.FC = () => {
         setG2FingerprintUrl(selected.fingerprint_image_url || null);
         setG2FingerprintTemplate(selected.fingerprint_template || null);
         setG2FingerprintAdded(!!selected.fingerprint_added);
-        setG2Village(selected.village || '');
-        setG2Mandal(selected.mandal || '');
-        setG2District(selected.district || '');
-        setG2PermanentAddress(selected.permanent_address || '');
-        setG2CurrentAddress(selected.current_address || '');
+        setG2Village(selected.permanent_village || selected.village || '');
+        setG2Mandal(selected.permanent_mandal || selected.mandal || '');
+        setG2District(selected.permanent_district || selected.district || '');
+        setG2PermanentAddress(selected.permanent_address || selected.aadhaar_address || '');
+        setG2CurrentAddress(selected.current_address || selected.present_address || '');
+        setG2CurrentVillage(selected.current_village || '');
+        setG2CurrentMandal(selected.current_mandal || '');
+        setG2CurrentDistrict(selected.current_district || '');
       }
     };
     fetchG2();
@@ -617,6 +629,9 @@ const LoanEntry: React.FC = () => {
     setG1District('');
     setG1PermanentAddress('');
     setG1CurrentAddress('');
+    setG1CurrentVillage('');
+    setG1CurrentMandal('');
+    setG1CurrentDistrict('');
 
     setG2SelectedId('');
     setG2Name('');
@@ -635,6 +650,9 @@ const LoanEntry: React.FC = () => {
     setG2District('');
     setG2PermanentAddress('');
     setG2CurrentAddress('');
+    setG2CurrentVillage('');
+    setG2CurrentMandal('');
+    setG2CurrentDistrict('');
 
     setAmount('');
     setDocCharges('');
@@ -799,10 +817,13 @@ const LoanEntry: React.FC = () => {
             fingerprint_template: g1FingerprintTemplate || null,
             fingerprint_image_url: g1FingerprintUrl || null,
             fingerprint_added: g1FingerprintAdded,
-            village: g1Village || null,
-            mandal: g1Mandal || null,
-            district: g1District || null,
+            permanent_village: g1Village || null,
+            permanent_mandal: g1Mandal || null,
+            permanent_district: g1District || null,
             permanent_address: g1PermanentAddress || null,
+            current_village: g1CurrentVillage || null,
+            current_mandal: g1CurrentMandal || null,
+            current_district: g1CurrentDistrict || null,
             current_address: g1CurrentAddress || null
           });
           if (newGuar) {
@@ -837,10 +858,13 @@ const LoanEntry: React.FC = () => {
             fingerprint_template: g2FingerprintTemplate || null,
             fingerprint_image_url: g2FingerprintUrl || null,
             fingerprint_added: g2FingerprintAdded,
-            village: g2Village || null,
-            mandal: g2Mandal || null,
-            district: g2District || null,
+            permanent_village: g2Village || null,
+            permanent_mandal: g2Mandal || null,
+            permanent_district: g2District || null,
             permanent_address: g2PermanentAddress || null,
+            current_village: g2CurrentVillage || null,
+            current_mandal: g2CurrentMandal || null,
+            current_district: g2CurrentDistrict || null,
             current_address: g2CurrentAddress || null
           });
           if (newGuar) {
@@ -1515,11 +1539,26 @@ const LoanEntry: React.FC = () => {
                 <Input label="Aadhaar" value={g1Aadhaar} onChange={setG1Aadhaar} placeholder="Aadhaar UID" readOnly={!!g1SelectedId} required={!!g1Name} />
                 <Input label="Phone" ref={g1PhoneRef} error={errors.g1Phone} value={g1Phone} onChange={(val) => { setG1Phone(val); setErrors(p => ({...p, g1Phone: false})) }} placeholder="Phone No" readOnly={!!g1SelectedId} required={!!g1Name} />
 
-                <Input label="Village" value={g1Village} onChange={setG1Village} placeholder="Village" readOnly={!!g1SelectedId} />
-                <Input label="Mandal" value={g1Mandal} onChange={setG1Mandal} placeholder="Mandal" readOnly={!!g1SelectedId} />
-                <Input label="District" value={g1District} onChange={setG1District} placeholder="District" readOnly={!!g1SelectedId} />
-                <Input label="Permanent Address" value={g1PermanentAddress} onChange={setG1PermanentAddress} placeholder="Permanent Address" readOnly={!!g1SelectedId} />
-                <Input label="Current Address" value={g1CurrentAddress} onChange={setG1CurrentAddress} placeholder="Current Address" readOnly={!!g1SelectedId} />
+                <div className="sm:col-span-2 space-y-4 pt-2 border-t border-slate-100">
+                  <div>
+                    <h5 className="text-[10px] text-slate-500 font-semibold uppercase mb-2">Permanent Address</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Input label="Permanent Address *" value={g1PermanentAddress} onChange={setG1PermanentAddress} placeholder="Permanent Address" readOnly={!!g1SelectedId} required={!!g1Name} />
+                      <Input label="Permanent Village" value={g1Village} onChange={setG1Village} placeholder="Village" readOnly={!!g1SelectedId} />
+                      <Input label="Permanent Mandal" value={g1Mandal} onChange={setG1Mandal} placeholder="Mandal" readOnly={!!g1SelectedId} />
+                      <Input label="Permanent District" value={g1District} onChange={setG1District} placeholder="District" readOnly={!!g1SelectedId} />
+                    </div>
+                  </div>
+                  <div>
+                    <h5 className="text-[10px] text-slate-500 font-semibold uppercase mb-2">Current Address</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Input label="Current Address *" value={g1CurrentAddress} onChange={setG1CurrentAddress} placeholder="Current Address" readOnly={!!g1SelectedId} required={!!g1Name} />
+                      <Input label="Current Village" value={g1CurrentVillage} onChange={setG1CurrentVillage} placeholder="Village" readOnly={!!g1SelectedId} />
+                      <Input label="Current Mandal" value={g1CurrentMandal} onChange={setG1CurrentMandal} placeholder="Mandal" readOnly={!!g1SelectedId} />
+                      <Input label="Current District" value={g1CurrentDistrict} onChange={setG1CurrentDistrict} placeholder="District" readOnly={!!g1SelectedId} />
+                    </div>
+                  </div>
+                </div>
 
                 {/* Guarantor 1 Photo & Biometrics */}
                 <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">
@@ -1668,11 +1707,26 @@ const LoanEntry: React.FC = () => {
                 <Input label="Aadhaar" value={g2Aadhaar} onChange={setG2Aadhaar} placeholder="Aadhaar UID" readOnly={!!g2SelectedId} required={!!g2Name} />
                 <Input label="Phone" value={g2Phone} onChange={setG2Phone} placeholder="Phone No" readOnly={!!g2SelectedId} />
 
-                <Input label="Village" value={g2Village} onChange={setG2Village} placeholder="Village" readOnly={!!g2SelectedId} />
-                <Input label="Mandal" value={g2Mandal} onChange={setG2Mandal} placeholder="Mandal" readOnly={!!g2SelectedId} />
-                <Input label="District" value={g2District} onChange={setG2District} placeholder="District" readOnly={!!g2SelectedId} />
-                <Input label="Permanent Address" value={g2PermanentAddress} onChange={setG2PermanentAddress} placeholder="Permanent Address" readOnly={!!g2SelectedId} />
-                <Input label="Current Address" value={g2CurrentAddress} onChange={setG2CurrentAddress} placeholder="Current Address" readOnly={!!g2SelectedId} />
+                <div className="sm:col-span-2 space-y-4 pt-2 border-t border-slate-100">
+                  <div>
+                    <h5 className="text-[10px] text-slate-500 font-semibold uppercase mb-2">Permanent Address</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Input label="Permanent Address *" value={g2PermanentAddress} onChange={setG2PermanentAddress} placeholder="Permanent Address" readOnly={!!g2SelectedId} required={!!g2Name} />
+                      <Input label="Permanent Village" value={g2Village} onChange={setG2Village} placeholder="Village" readOnly={!!g2SelectedId} />
+                      <Input label="Permanent Mandal" value={g2Mandal} onChange={setG2Mandal} placeholder="Mandal" readOnly={!!g2SelectedId} />
+                      <Input label="Permanent District" value={g2District} onChange={setG2District} placeholder="District" readOnly={!!g2SelectedId} />
+                    </div>
+                  </div>
+                  <div>
+                    <h5 className="text-[10px] text-slate-500 font-semibold uppercase mb-2">Current Address</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Input label="Current Address *" value={g2CurrentAddress} onChange={setG2CurrentAddress} placeholder="Current Address" readOnly={!!g2SelectedId} required={!!g2Name} />
+                      <Input label="Current Village" value={g2CurrentVillage} onChange={setG2CurrentVillage} placeholder="Village" readOnly={!!g2SelectedId} />
+                      <Input label="Current Mandal" value={g2CurrentMandal} onChange={setG2CurrentMandal} placeholder="Mandal" readOnly={!!g2SelectedId} />
+                      <Input label="Current District" value={g2CurrentDistrict} onChange={setG2CurrentDistrict} placeholder="District" readOnly={!!g2SelectedId} />
+                    </div>
+                  </div>
+                </div>
 
                 {/* Guarantor 2 Photo & Biometrics */}
                 <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">

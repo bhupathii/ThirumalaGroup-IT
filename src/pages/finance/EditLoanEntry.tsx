@@ -49,6 +49,12 @@ const EditLoanEntry: React.FC = () => {
   const [suretyFingerprintUrl, setSuretyFingerprintUrl] = useState<string | null>(null);
   const [suretyFingerprintTemplate, setSuretyFingerprintTemplate] = useState<string | null>(null);
   const [suretyFingerprintAdded, setSuretyFingerprintAdded] = useState(false);
+  const [suretyPermanentVillage, setSuretyPermanentVillage] = useState('');
+  const [suretyPermanentMandal, setSuretyPermanentMandal] = useState('');
+  const [suretyPermanentDistrict, setSuretyPermanentDistrict] = useState('');
+  const [suretyCurrentVillage, setSuretyCurrentVillage] = useState('');
+  const [suretyCurrentMandal, setSuretyCurrentMandal] = useState('');
+  const [suretyCurrentDistrict, setSuretyCurrentDistrict] = useState('');
 
   useEffect(() => {
     fetchLoans();
@@ -119,6 +125,28 @@ const EditLoanEntry: React.FC = () => {
     setSuretyFingerprintUrl(loan.surety_fingerprint_image_url || null);
     setSuretyFingerprintTemplate(loan.surety_fingerprint_template || null);
     setSuretyFingerprintAdded(!!loan.surety_fingerprint_added);
+
+    if (loan.guarantor_1_id) {
+      supabaseFinance.getGuarantorById(loan.guarantor_1_id).then((g: any) => {
+        if (g) {
+          setSuretyAadhaarAddress(g.permanent_address || g.aadhaar_address || loan.surety_aadhaar_address || '');
+          setSuretyPresentAddress(g.current_address || g.present_address || loan.surety_present_address || '');
+          setSuretyPermanentVillage(g.permanent_village || g.village || '');
+          setSuretyPermanentMandal(g.permanent_mandal || g.mandal || '');
+          setSuretyPermanentDistrict(g.permanent_district || g.district || '');
+          setSuretyCurrentVillage(g.current_village || '');
+          setSuretyCurrentMandal(g.current_mandal || '');
+          setSuretyCurrentDistrict(g.current_district || '');
+        }
+      });
+    } else {
+      setSuretyPermanentVillage('');
+      setSuretyPermanentMandal('');
+      setSuretyPermanentDistrict('');
+      setSuretyCurrentVillage('');
+      setSuretyCurrentMandal('');
+      setSuretyCurrentDistrict('');
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -152,8 +180,14 @@ const EditLoanEntry: React.FC = () => {
       // Update linked guarantor if exists (best effort for guarantor_1_id)
       if (selectedLoan.guarantor_1_id) {
         await supabaseFinance.updateGuarantor(selectedLoan.guarantor_1_id, {
-          aadhaar_address: suretyAadhaarAddress || null,
-          present_address: suretyPresentAddress || null,
+          permanent_address: suretyAadhaarAddress || null,
+          current_address: suretyPresentAddress || null,
+          permanent_village: suretyPermanentVillage || null,
+          permanent_mandal: suretyPermanentMandal || null,
+          permanent_district: suretyPermanentDistrict || null,
+          current_village: suretyCurrentVillage || null,
+          current_mandal: suretyCurrentMandal || null,
+          current_district: suretyCurrentDistrict || null,
           name: suretyName || '',
           phone: suretyPhone || '',
           aadhaar: suretyAadhaar || null,
@@ -319,8 +353,22 @@ const EditLoanEntry: React.FC = () => {
                 <Input label="Surety Person Name" value={suretyName} onChange={setSuretyName} />
                 <Input label="Surety Phone" value={suretyPhone} onChange={setSuretyPhone} />
                 <Input label="Surety Aadhaar" value={suretyAadhaar} onChange={setSuretyAadhaar} />
-                <Input label="Surety Aadhaar Address" value={suretyAadhaarAddress} onChange={setSuretyAadhaarAddress} />
-                <Input label="Surety Present Address" value={suretyPresentAddress} onChange={setSuretyPresentAddress} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-gray-100">
+                  <div className="space-y-3">
+                    <h5 className="text-[10px] text-gray-500 font-semibold uppercase">Permanent Address</h5>
+                    <Input label="Permanent Address" value={suretyAadhaarAddress} onChange={setSuretyAadhaarAddress} />
+                    <Input label="Permanent Village" value={suretyPermanentVillage} onChange={setSuretyPermanentVillage} />
+                    <Input label="Permanent Mandal" value={suretyPermanentMandal} onChange={setSuretyPermanentMandal} />
+                    <Input label="Permanent District" value={suretyPermanentDistrict} onChange={setSuretyPermanentDistrict} />
+                  </div>
+                  <div className="space-y-3">
+                    <h5 className="text-[10px] text-gray-500 font-semibold uppercase">Current Address</h5>
+                    <Input label="Current Address" value={suretyPresentAddress} onChange={setSuretyPresentAddress} />
+                    <Input label="Current Village" value={suretyCurrentVillage} onChange={setSuretyCurrentVillage} />
+                    <Input label="Current Mandal" value={suretyCurrentMandal} onChange={setSuretyCurrentMandal} />
+                    <Input label="Current District" value={suretyCurrentDistrict} onChange={setSuretyCurrentDistrict} />
+                  </div>
+                </div>
                 
                 <CameraCapture
                   label="Surety Photo Capture"

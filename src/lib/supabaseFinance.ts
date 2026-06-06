@@ -73,7 +73,13 @@ export interface FinanceGuarantor {
   mandal?: string | null;
   district?: string | null;
   permanent_address?: string | null;
+  permanent_village?: string | null;
+  permanent_mandal?: string | null;
+  permanent_district?: string | null;
   current_address?: string | null;
+  current_village?: string | null;
+  current_mandal?: string | null;
+  current_district?: string | null;
   photo_url?: string | null;
   fingerprint_template?: string | null;
   fingerprint_image_url?: string | null;
@@ -434,7 +440,7 @@ class SupabaseFinance {
       
       const { data, error } = await supabase
         .from('finance_guarantors')
-        .select('id, guarantor_id, name, aadhaar, phone, phone_2, permanent_address, current_address')
+        .select('id, guarantor_id, name, aadhaar, phone, phone_2, permanent_address, permanent_village, permanent_mandal, permanent_district, current_address, current_village, current_mandal, current_district, village, mandal, district, aadhaar_address, present_address')
         .is('deleted_at', null)
         .or(`name.ilike.%${query}%,guarantor_id.eq.${!isNaN(Number(query)) ? Number(query) : 0},phone.ilike.%${query}%,aadhaar.ilike.%${query}%`)
         .limit(10);
