@@ -127,16 +127,16 @@ const EditLoanEntry: React.FC = () => {
     setSuretyFingerprintAdded(!!loan.surety_fingerprint_added);
 
     if (loan.guarantor_1_id) {
-      supabaseFinance.getGuarantorById(loan.guarantor_1_id).then((g: any) => {
+      supabaseFinance.getCustomerById(loan.guarantor_1_id).then((g: any) => {
         if (g) {
-          setSuretyAadhaarAddress(g.permanent_address || g.aadhaar_address || loan.surety_aadhaar_address || '');
-          setSuretyPresentAddress(g.current_address || g.present_address || loan.surety_present_address || '');
-          setSuretyPermanentVillage(g.permanent_village || g.village || '');
-          setSuretyPermanentMandal(g.permanent_mandal || g.mandal || '');
-          setSuretyPermanentDistrict(g.permanent_district || g.district || '');
-          setSuretyCurrentVillage(g.current_village || '');
-          setSuretyCurrentMandal(g.current_mandal || '');
-          setSuretyCurrentDistrict(g.current_district || '');
+          setSuretyAadhaarAddress(g.aadhaar_address || g.permanent_address || loan.surety_aadhaar_address || '');
+          setSuretyPresentAddress(g.present_address || g.current_address || g.address || loan.surety_present_address || '');
+          setSuretyPermanentVillage(g.aadhaar_village || g.permanent_village || g.village || '');
+          setSuretyPermanentMandal(g.aadhaar_mandal || g.permanent_mandal || g.mandal || '');
+          setSuretyPermanentDistrict(g.aadhaar_district || g.permanent_district || g.district || '');
+          setSuretyCurrentVillage(g.present_village || g.current_village || '');
+          setSuretyCurrentMandal(g.present_mandal || g.current_mandal || '');
+          setSuretyCurrentDistrict(g.present_district || g.current_district || '');
         }
       });
     } else {
@@ -179,18 +179,23 @@ const EditLoanEntry: React.FC = () => {
 
       // Update linked guarantor if exists (best effort for guarantor_1_id)
       if (selectedLoan.guarantor_1_id) {
-        await supabaseFinance.updateGuarantor(selectedLoan.guarantor_1_id, {
-          permanent_address: suretyAadhaarAddress || null,
-          current_address: suretyPresentAddress || null,
-          permanent_village: suretyPermanentVillage || null,
-          permanent_mandal: suretyPermanentMandal || null,
-          permanent_district: suretyPermanentDistrict || null,
-          current_village: suretyCurrentVillage || null,
-          current_mandal: suretyCurrentMandal || null,
-          current_district: suretyCurrentDistrict || null,
+        await supabaseFinance.updateCustomer(selectedLoan.guarantor_1_id, {
           name: suretyName || '',
-          phone: suretyPhone || '',
+          phone: suretyPhone || null,
+          phone_1: suretyPhone || null,
           aadhaar: suretyAadhaar || null,
+          aadhaar_address: suretyAadhaarAddress || null,
+          aadhaar_village: suretyPermanentVillage || null,
+          aadhaar_mandal: suretyPermanentMandal || null,
+          aadhaar_district: suretyPermanentDistrict || null,
+          present_address: suretyPresentAddress || null,
+          present_village: suretyCurrentVillage || null,
+          present_mandal: suretyCurrentMandal || null,
+          present_district: suretyCurrentDistrict || null,
+          address: suretyPresentAddress || null,
+          village: suretyCurrentVillage || null,
+          mandal: suretyCurrentMandal || null,
+          district: suretyCurrentDistrict || null
         }, staffName);
       }
 

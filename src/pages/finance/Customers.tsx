@@ -79,10 +79,10 @@ const Customers: React.FC = () => {
         const phone2Str = (c.phone2 || '').toLowerCase();
         const fatherStr = (c.father_husband_name || c.father_name || '').toLowerCase();
         const aadhaarStr = (c.aadhaar || '').toLowerCase();
-        const villageStr = (c.village || '').toLowerCase();
-        const mandalStr = (c.mandal || '').toLowerCase();
-        const districtStr = (c.district || '').toLowerCase();
-        const addressStr = (c.address || '').toLowerCase();
+        const villageStr = (c.village || c.present_village || c.aadhaar_village || '').toLowerCase();
+        const mandalStr = (c.mandal || c.present_mandal || c.aadhaar_mandal || '').toLowerCase();
+        const districtStr = (c.district || c.present_district || c.aadhaar_district || '').toLowerCase();
+        const addressStr = (c.address || c.present_address || c.aadhaar_address || '').toLowerCase();
 
         return (
           cIdStr.includes(query) ||
@@ -285,9 +285,15 @@ const Customers: React.FC = () => {
                       <div className="flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span>
-                          {cust.village ? `${cust.village.toUpperCase()}` : ''}
-                          {cust.mandal ? `, ${cust.mandal.toUpperCase()}` : ''}
-                          {!cust.village && !cust.mandal && (cust.address || '—')}
+                          {cust.present_village || cust.aadhaar_village || cust.village 
+                            ? `${(cust.present_village || cust.aadhaar_village || cust.village || '').toUpperCase()}` 
+                            : ''}
+                          {cust.present_mandal || cust.aadhaar_mandal || cust.mandal 
+                            ? `, ${(cust.present_mandal || cust.aadhaar_mandal || cust.mandal || '').toUpperCase()}` 
+                            : ''}
+                          {!(cust.present_village || cust.aadhaar_village || cust.village) && 
+                           !(cust.present_mandal || cust.aadhaar_mandal || cust.mandal) && 
+                           (cust.address || cust.present_address || cust.aadhaar_address || '—')}
                         </span>
                       </div>
                     </td>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Input from '../../components/UI/Input';
-import { supabaseFinance, FinanceCustomer, FinancePartner, FinanceGuarantor } from '../../lib/supabaseFinance';
+import { supabaseFinance, FinanceCustomer, FinancePartner } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { 
   ArrowLeft, 
@@ -132,8 +132,8 @@ const LoanEntry: React.FC = () => {
 
   // Search Results State
   const [customerSearchResults, setCustomerSearchResults] = useState<Partial<FinanceCustomer>[]>([]);
-  const [g1SearchResults, setG1SearchResults] = useState<Partial<FinanceGuarantor>[]>([]);
-  const [g2SearchResults, setG2SearchResults] = useState<Partial<FinanceGuarantor>[]>([]);
+  const [g1SearchResults, setG1SearchResults] = useState<Partial<FinanceCustomer>[]>([]);
+  const [g2SearchResults, setG2SearchResults] = useState<Partial<FinanceCustomer>[]>([]);
   const [isSearchingCust, setIsSearchingCust] = useState(false);
   const [isSearchingG1, setIsSearchingG1] = useState(false);
   const [isSearchingG2, setIsSearchingG2] = useState(false);
@@ -213,7 +213,7 @@ const LoanEntry: React.FC = () => {
 
     setIsSearchingG1(true);
     const delay = setTimeout(async () => {
-      const results = await supabaseFinance.searchGuarantors(q);
+      const results = await supabaseFinance.searchCustomers(q);
       searchCache.current[cacheKey] = results;
       setG1SearchResults(results);
       setIsSearchingG1(false);
@@ -236,7 +236,7 @@ const LoanEntry: React.FC = () => {
 
     setIsSearchingG2(true);
     const delay = setTimeout(async () => {
-      const results = await supabaseFinance.searchGuarantors(q);
+      const results = await supabaseFinance.searchCustomers(q);
       searchCache.current[cacheKey] = results;
       setG2SearchResults(results);
       setIsSearchingG2(false);
@@ -382,25 +382,25 @@ const LoanEntry: React.FC = () => {
   useEffect(() => {
     const fetchG1 = async () => {
       if (!g1SelectedId) return;
-      const selected = await supabaseFinance.getGuarantorById(g1SelectedId);
+      const selected = await supabaseFinance.getCustomerById(g1SelectedId);
       if (selected) {
         setG1Name(selected.name);
-        setG1Phone(selected.phone || '');
+        setG1Phone(selected.phone_1 || selected.phone || '');
         setG1Aadhaar(selected.aadhaar || '');
         setG1AadhaarAddress(selected.aadhaar_address || '');
-        setG1PresentAddress(selected.present_address || '');
-        setG1Photo(selected.photo_url || null);
-        setG1FingerprintUrl(selected.fingerprint_image_url || null);
-        setG1FingerprintTemplate(selected.fingerprint_template || null);
-        setG1FingerprintAdded(!!selected.fingerprint_added);
-        setG1Village(selected.permanent_village || selected.village || '');
-        setG1Mandal(selected.permanent_mandal || selected.mandal || '');
-        setG1District(selected.permanent_district || selected.district || '');
-        setG1PermanentAddress(selected.permanent_address || selected.aadhaar_address || '');
-        setG1CurrentAddress(selected.current_address || selected.present_address || '');
-        setG1CurrentVillage(selected.current_village || '');
-        setG1CurrentMandal(selected.current_mandal || '');
-        setG1CurrentDistrict(selected.current_district || '');
+        setG1PresentAddress(selected.present_address || selected.address || '');
+        setG1Photo(selected.customer_photo_url || null);
+        setG1FingerprintUrl(selected.customer_fingerprint_image_url || selected.fingerprint_url || null);
+        setG1FingerprintTemplate(selected.customer_fingerprint_template || selected.fingerprint_template || null);
+        setG1FingerprintAdded(!!(selected.customer_fingerprint_added || selected.fingerprint_added));
+        setG1Village(selected.aadhaar_village || selected.village || '');
+        setG1Mandal(selected.aadhaar_mandal || selected.mandal || '');
+        setG1District(selected.aadhaar_district || selected.district || '');
+        setG1PermanentAddress(selected.aadhaar_address || '');
+        setG1CurrentAddress(selected.present_address || selected.address || '');
+        setG1CurrentVillage(selected.present_village || selected.village || '');
+        setG1CurrentMandal(selected.present_mandal || selected.mandal || '');
+        setG1CurrentDistrict(selected.present_district || selected.district || '');
       }
     };
     fetchG1();
@@ -410,25 +410,25 @@ const LoanEntry: React.FC = () => {
   useEffect(() => {
     const fetchG2 = async () => {
       if (!g2SelectedId) return;
-      const selected = await supabaseFinance.getGuarantorById(g2SelectedId);
+      const selected = await supabaseFinance.getCustomerById(g2SelectedId);
       if (selected) {
         setG2Name(selected.name);
-        setG2Phone(selected.phone || '');
+        setG2Phone(selected.phone_1 || selected.phone || '');
         setG2Aadhaar(selected.aadhaar || '');
         setG2AadhaarAddress(selected.aadhaar_address || '');
-        setG2PresentAddress(selected.present_address || '');
-        setG2Photo(selected.photo_url || null);
-        setG2FingerprintUrl(selected.fingerprint_image_url || null);
-        setG2FingerprintTemplate(selected.fingerprint_template || null);
-        setG2FingerprintAdded(!!selected.fingerprint_added);
-        setG2Village(selected.permanent_village || selected.village || '');
-        setG2Mandal(selected.permanent_mandal || selected.mandal || '');
-        setG2District(selected.permanent_district || selected.district || '');
-        setG2PermanentAddress(selected.permanent_address || selected.aadhaar_address || '');
-        setG2CurrentAddress(selected.current_address || selected.present_address || '');
-        setG2CurrentVillage(selected.current_village || '');
-        setG2CurrentMandal(selected.current_mandal || '');
-        setG2CurrentDistrict(selected.current_district || '');
+        setG2PresentAddress(selected.present_address || selected.address || '');
+        setG2Photo(selected.customer_photo_url || null);
+        setG2FingerprintUrl(selected.customer_fingerprint_image_url || selected.fingerprint_url || null);
+        setG2FingerprintTemplate(selected.customer_fingerprint_template || selected.fingerprint_template || null);
+        setG2FingerprintAdded(!!(selected.customer_fingerprint_added || selected.fingerprint_added));
+        setG2Village(selected.aadhaar_village || selected.village || '');
+        setG2Mandal(selected.aadhaar_mandal || selected.mandal || '');
+        setG2District(selected.aadhaar_district || selected.district || '');
+        setG2PermanentAddress(selected.aadhaar_address || '');
+        setG2CurrentAddress(selected.present_address || selected.address || '');
+        setG2CurrentVillage(selected.present_village || selected.village || '');
+        setG2CurrentMandal(selected.present_mandal || selected.mandal || '');
+        setG2CurrentDistrict(selected.present_district || selected.district || '');
       }
     };
     fetchG2();
@@ -800,6 +800,7 @@ const LoanEntry: React.FC = () => {
       if (!resolvedG1Id && g1Name.trim()) {
         const matchG1 = g1SearchResults.find(g => 
           (g.aadhaar && g1Aadhaar && g.aadhaar === g1Aadhaar) ||
+          (g.phone_1 && g1Phone && g.phone_1 === g1Phone) ||
           (g.phone && g1Phone && g.phone === g1Phone) ||
           (g.name && g.name.toLowerCase() === g1Name.toLowerCase().trim())
         );
@@ -807,24 +808,31 @@ const LoanEntry: React.FC = () => {
         if (matchG1 && matchG1.id) {
           resolvedG1Id = matchG1.id;
         } else {
-          const newGuar = await supabaseFinance.createGuarantor({
+          const newGuar = await supabaseFinance.createCustomer({
             name: g1Name.trim(),
             aadhaar: g1Aadhaar || null,
             phone: g1Phone || null,
+            phone2: null,
             aadhaar_address: g1AadhaarAddress || null,
+            aadhaar_village: g1Village || null,
+            aadhaar_mandal: g1Mandal || null,
+            aadhaar_district: g1District || null,
             present_address: g1PresentAddress || null,
-            photo_url: g1Photo,
-            fingerprint_template: g1FingerprintTemplate || null,
-            fingerprint_image_url: g1FingerprintUrl || null,
-            fingerprint_added: g1FingerprintAdded,
-            permanent_village: g1Village || null,
-            permanent_mandal: g1Mandal || null,
-            permanent_district: g1District || null,
-            permanent_address: g1PermanentAddress || null,
-            current_village: g1CurrentVillage || null,
-            current_mandal: g1CurrentMandal || null,
-            current_district: g1CurrentDistrict || null,
-            current_address: g1CurrentAddress || null
+            present_village: g1CurrentVillage || null,
+            present_mandal: g1CurrentMandal || null,
+            present_district: g1CurrentDistrict || null,
+            customer_photo_url: g1Photo || null,
+            customer_fingerprint_template: g1FingerprintTemplate || null,
+            customer_fingerprint_image_url: g1FingerprintUrl || null,
+            customer_fingerprint_added: g1FingerprintAdded,
+            father_name: null,
+            father_husband_name: null,
+            phone_1: g1Phone || null,
+            phone_2: null,
+            address: g1PresentAddress || null,
+            village: g1CurrentVillage || null,
+            mandal: g1CurrentMandal || null,
+            district: g1CurrentDistrict || null
           });
           if (newGuar) {
             resolvedG1Id = newGuar.id;
@@ -841,6 +849,7 @@ const LoanEntry: React.FC = () => {
       if (!resolvedG2Id && g2Name.trim()) {
         const matchG2 = g2SearchResults.find(g => 
           (g.aadhaar && g2Aadhaar && g.aadhaar === g2Aadhaar) ||
+          (g.phone_1 && g2Phone && g.phone_1 === g2Phone) ||
           (g.phone && g2Phone && g.phone === g2Phone) ||
           (g.name && g.name.toLowerCase() === g2Name.toLowerCase().trim())
         );
@@ -848,24 +857,31 @@ const LoanEntry: React.FC = () => {
         if (matchG2 && matchG2.id) {
           resolvedG2Id = matchG2.id;
         } else {
-          const newGuar = await supabaseFinance.createGuarantor({
+          const newGuar = await supabaseFinance.createCustomer({
             name: g2Name.trim(),
             aadhaar: g2Aadhaar || null,
             phone: g2Phone || null,
+            phone2: null,
             aadhaar_address: g2AadhaarAddress || null,
+            aadhaar_village: g2Village || null,
+            aadhaar_mandal: g2Mandal || null,
+            aadhaar_district: g2District || null,
             present_address: g2PresentAddress || null,
-            photo_url: g2Photo,
-            fingerprint_template: g2FingerprintTemplate || null,
-            fingerprint_image_url: g2FingerprintUrl || null,
-            fingerprint_added: g2FingerprintAdded,
-            permanent_village: g2Village || null,
-            permanent_mandal: g2Mandal || null,
-            permanent_district: g2District || null,
-            permanent_address: g2PermanentAddress || null,
-            current_village: g2CurrentVillage || null,
-            current_mandal: g2CurrentMandal || null,
-            current_district: g2CurrentDistrict || null,
-            current_address: g2CurrentAddress || null
+            present_village: g2CurrentVillage || null,
+            present_mandal: g2CurrentMandal || null,
+            present_district: g2CurrentDistrict || null,
+            customer_photo_url: g2Photo || null,
+            customer_fingerprint_template: g2FingerprintTemplate || null,
+            customer_fingerprint_image_url: g2FingerprintUrl || null,
+            customer_fingerprint_added: g2FingerprintAdded,
+            father_name: null,
+            father_husband_name: null,
+            phone_1: g2Phone || null,
+            phone_2: null,
+            address: g2PresentAddress || null,
+            village: g2CurrentVillage || null,
+            mandal: g2CurrentMandal || null,
+            district: g2CurrentDistrict || null
           });
           if (newGuar) {
             resolvedG2Id = newGuar.id;
@@ -1518,12 +1534,12 @@ const LoanEntry: React.FC = () => {
                           <div>
                             <div className="text-slate-900 peek-caption-12">{g.name}</div>
                             <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">
-                              ID: #{g.guarantor_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
+                              ID: #{g.customer_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
                             </div>
                           </div>
-                          {g.phone && (
+                          {(g.phone || g.phone_1) && (
                             <div className="text-[9px] text-slate-500 font-mono peek-button">
-                              {g.phone}
+                              {g.phone || g.phone_1}
                             </div>
                           )}
                         </div>
@@ -1686,12 +1702,12 @@ const LoanEntry: React.FC = () => {
                           <div>
                             <div className="text-slate-900 peek-caption-12">{g.name}</div>
                             <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">
-                              ID: #{g.guarantor_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
+                              ID: #{g.customer_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
                             </div>
                           </div>
-                          {g.phone && (
+                          {(g.phone || g.phone_1) && (
                             <div className="text-[9px] text-slate-500 font-mono peek-button">
-                              {g.phone}
+                              {g.phone || g.phone_1}
                             </div>
                           )}
                         </div>

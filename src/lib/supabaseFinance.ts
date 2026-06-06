@@ -54,7 +54,13 @@ export interface FinanceCustomer {
   mandal?: string | null;
   district?: string | null;
   aadhaar_address?: string | null;
+  aadhaar_village?: string | null;
+  aadhaar_mandal?: string | null;
+  aadhaar_district?: string | null;
   present_address?: string | null;
+  present_village?: string | null;
+  present_mandal?: string | null;
+  present_district?: string | null;
   phone_1?: string | null;
   phone_2?: string | null;
 }
@@ -153,6 +159,7 @@ export interface FinanceTransaction {
   collected_by: string | null;
   remarks: string | null;
   payment_mode?: string | null;
+  receipt_no?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -587,18 +594,59 @@ class SupabaseFinance {
     }
   }
 
-  async generateUniqueReceiptNo(): Promise<string> {
-    while (true) {
-      const receiptNo = `REC-${Math.floor(100000 + Math.random() * 900000)}`;
-      const { data } = await supabase
+  async getNextReceiptNumber(): Promise<string> {
+    try {
+      let maxNum = 0;
+
+      const extractMax = (rows: Array<{ receipt_no?: string | null }>) => {
+        if (!rows) return;
+        for (const row of rows) {
+          if (row.receipt_no) {
+            const match = row.receipt_no.match(/RC(\d+)/i);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (num > maxNum) maxNum = num;
+            }
+          }
+        }
+      };
+
+      // Query finance_cd_ledger_entries
+      const { data: ledgerData } = await supabase
         .from('finance_cd_ledger_entries')
         .select('receipt_no')
-        .eq('receipt_no', receiptNo)
-        .limit(1);
-      if (!data || data.length === 0) {
-        return receiptNo;
+        .like('receipt_no', 'RC%');
+      extractMax(ledgerData || []);
+
+      // Query finance_cd_interest_details
+      const { data: interestData } = await supabase
+        .from('finance_cd_interest_details')
+        .select('receipt_no')
+        .like('receipt_no', 'RC%');
+      extractMax(interestData || []);
+
+      // Query finance_transactions (safe - column may not exist in all envs)
+      try {
+        const { data: txData } = await supabase
+          .from('finance_transactions')
+          .select('receipt_no')
+          .like('receipt_no', 'RC%');
+        extractMax(txData || []);
+      } catch (_) {
+        // Ignore if receipt_no column does not exist yet
       }
+
+      const nextNum = maxNum + 1;
+      const padded = String(nextNum).padStart(3, '0');
+      return `RC${padded}`;
+    } catch (e) {
+      console.error('Error generating receipt number:', e);
+      return 'RC001';
     }
+  }
+
+  async generateUniqueReceiptNo(): Promise<string> {
+    return this.getNextReceiptNumber();
   }
 
   async postCdLedgerPayment(params: {
@@ -612,9 +660,10 @@ class SupabaseFinance {
     penaltyPaid: number;
     renewedDays: number;
     paymentDate?: string;
+    receiptNo?: string;
   }): Promise<{ success: boolean; receiptNo?: string }> {
     try {
-      const receiptNo = await this.generateUniqueReceiptNo();
+      const receiptNo = params.receiptNo || await this.generateUniqueReceiptNo();
       const entryDate = params.paymentDate ? new Date(params.paymentDate).toISOString() : new Date().toISOString();
       const totalAmount = params.principalPaid + params.interestPaid + params.penaltyPaid;
 
@@ -625,8 +674,11 @@ class SupabaseFinance {
         amount: totalAmount,
         date: entryDate,
         remarks: `${params.actionType} Payment - ${receiptNo}`,
-        collected_by: params.userName
+        collected_by: params.userName,
+        receipt_no: receiptNo
       });
+
+      let mainEntryId: string | null = null;
 
       // 2. Post Penalty
       if (params.penaltyPaid > 0) {
@@ -644,6 +696,7 @@ class SupabaseFinance {
         });
 
         if (entry) {
+          mainEntryId = entry.id;
           await this.addCDInterestDetail({
             loan_id: params.loanId,
             entry_id: entry.id,
@@ -674,6 +727,11 @@ class SupabaseFinance {
         });
 
         if (entry) {
+          if (!mainEntryId) mainEntryId = entry.id;
+          const renewedTillDate = params.renewedDays > 0 
+            ? new Date(new Date(entryDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            : null;
+
           await this.addCDInterestDetail({
             loan_id: params.loanId,
             entry_id: entry.id,
@@ -682,7 +740,7 @@ class SupabaseFinance {
             receipt_no: receiptNo,
             particulars: `${params.actionType} - Interest Paid`,
             renewed_days: params.renewedDays,
-            renewed_till_date: params.renewedDays > 0 ? entryDate : null,
+            renewed_till_date: renewedTillDate,
             row_type: entry.entry_type
           });
         }
@@ -690,7 +748,7 @@ class SupabaseFinance {
 
       // 4. Post Principal
       if (params.principalPaid > 0) {
-        await this.addCDLedgerEntry({
+        const entry = await this.addCDLedgerEntry({
           loan_id: params.loanId,
           customer_id: params.customerId,
           account_name: params.accountName,
@@ -701,6 +759,40 @@ class SupabaseFinance {
           particulars: `${params.actionType} - Principal Paid`,
           user_name: params.userName,
           entry_type: params.actionType === 'Renew' ? 'Renewal' : params.actionType === 'Partial' ? 'Partial Payment' : 'Settlement'
+        });
+
+        if (entry) {
+          if (!mainEntryId) mainEntryId = entry.id;
+          await this.addCDInterestDetail({
+            loan_id: params.loanId,
+            entry_id: entry.id,
+            entry_date: entryDate,
+            credit: params.principalPaid,
+            receipt_no: receiptNo,
+            particulars: `${params.actionType} - Principal Paid`,
+            renewed_days: 0,
+            renewed_till_date: null,
+            row_type: entry.entry_type
+          });
+        }
+      }
+
+      // 5. Post Note row to Interest Details (Credit = 0, contains full split detail description)
+      if (mainEntryId) {
+        const renewedTillDate = params.renewedDays > 0 
+          ? new Date(new Date(entryDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+          : null;
+
+        await this.addCDInterestDetail({
+          loan_id: params.loanId,
+          entry_id: mainEntryId,
+          entry_date: entryDate,
+          credit: 0,
+          receipt_no: receiptNo,
+          particulars: `${params.actionType} Note: Total Paid ₹${totalAmount} (Penalty: ₹${params.penaltyPaid}, Interest: ₹${params.interestPaid}, Principal: ₹${params.principalPaid})`,
+          renewed_days: params.renewedDays,
+          renewed_till_date: renewedTillDate,
+          row_type: params.actionType === 'Renew' ? 'Renewal' : 'Partial Payment'
         });
       }
 
@@ -749,7 +841,7 @@ class SupabaseFinance {
 
       for (const tx of legacy) {
         const remarks = tx.remarks || '';
-        const match = remarks.match(/REC-\d+/);
+        const match = remarks.match(/(REC-\d+|RC\d+)/i);
         const receiptNo = match ? match[0] : null;
 
         if (receiptNo && existingReceipts.has(receiptNo)) {
@@ -1014,7 +1106,7 @@ class SupabaseFinance {
     try {
       const { data, error } = await supabase
         .from('finance_loans')
-        .select('*, customer:finance_customers(*)')
+        .select('*, customer:finance_customers!customer_id(*)')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
@@ -1028,7 +1120,7 @@ class SupabaseFinance {
     try {
       const { data, error } = await supabase
         .from('finance_loans')
-        .select('id, loan_id, loan_category, due_type, amount, created_at, customer:finance_customers(name)')
+        .select('id, loan_id, loan_category, due_type, amount, created_at, customer:finance_customers!customer_id(name)')
         .order('created_at', { ascending: false })
         .limit(limit);
       if (error) throw error;
@@ -1044,10 +1136,10 @@ class SupabaseFinance {
       const { data, error } = await supabase
         .from('finance_loans')
         .select(`
-          id, loan_id, amount, date, status, npa_closed, loan_category,
-          customer:finance_customers(name, phone, phone2, phone_1, phone_2, aadhaar, partner_name),
-          guarantor_1:finance_guarantors!guarantor_1_id(name, village, mandal, district, phone, aadhaar),
-          guarantor_2:finance_guarantors!guarantor_2_id(name, village, mandal, district, phone, aadhaar)
+          id, loan_id, amount, date, status, npa_closed, loan_category, interest_rate, penalty_percent, duration_months,
+          customer:finance_customers!customer_id(*),
+          guarantor_1:finance_customers!guarantor_1_id(*),
+          guarantor_2:finance_customers!guarantor_2_id(*)
         `)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -1062,7 +1154,7 @@ class SupabaseFinance {
     try {
       const { data: loan, error: loanError } = await supabase
         .from('finance_loans')
-        .select('*, customer:finance_customers(*)')
+        .select('*, customer:finance_customers!customer_id(*)')
         .eq('id', id)
         .single();
       if (loanError) throw loanError;
@@ -1417,7 +1509,7 @@ class SupabaseFinance {
     try {
       let query = supabase
         .from('finance_transactions')
-        .select('*, loan:finance_loans(*, customer:finance_customers(*))')
+        .select('*, loan:finance_loans(*, customer:finance_customers!customer_id(*))')
         .order('date', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -1704,10 +1796,39 @@ class SupabaseFinance {
     }
   }
 
+  async addLoanDocument(doc: {
+    loan_id: string;
+    category: string;
+    document_name: string;
+    remarks?: string | null;
+    file_url: string | null;
+    is_submitted?: boolean;
+  }): Promise<any> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_loan_documents')
+        .insert([{
+          loan_id: doc.loan_id,
+          category: doc.category,
+          document_name: doc.document_name,
+          remarks: doc.remarks || null,
+          file_url: doc.file_url,
+          is_submitted: doc.is_submitted ?? true
+        }])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error adding finance loan document:', error);
+      return null;
+    }
+  }
+
   async deleteDocument(id: string): Promise<boolean> {
     try {
       const { error } = await supabase
-        .from('finance_documents')
+        .from('finance_loan_documents')
         .delete()
         .eq('id', id);
       if (error) throw error;
@@ -1717,6 +1838,7 @@ class SupabaseFinance {
       return false;
     }
   }
+
 
   // --- Audit Logs ---
   async logEdit(tableName: string, recordId: string, oldValues: any, newValues: any, editedBy: string): Promise<void> {

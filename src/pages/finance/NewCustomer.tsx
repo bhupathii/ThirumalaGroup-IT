@@ -31,9 +31,12 @@ const NewCustomer: React.FC = () => {
   const [aadhaar, setAadhaar] = useState('');
   const [name, setName] = useState('');
   const [fatherName, setFatherName] = useState('');
-  const [village, setVillage] = useState('');
-  const [mandal, setMandal] = useState('');
-  const [district, setDistrict] = useState('');
+  const [aadhaarVillage, setAadhaarVillage] = useState('');
+  const [aadhaarMandal, setAadhaarMandal] = useState('');
+  const [aadhaarDistrict, setAadhaarDistrict] = useState('');
+  const [presentVillage, setPresentVillage] = useState('');
+  const [presentMandal, setPresentMandal] = useState('');
+  const [presentDistrict, setPresentDistrict] = useState('');
   const [aadhaarAddress, setAadhaarAddress] = useState('');
   const [presentAddress, setPresentAddress] = useState('');
   const [phone1, setPhone1] = useState('');
@@ -81,9 +84,12 @@ const NewCustomer: React.FC = () => {
         setAadhaar(data.aadhaar || '');
         setName(data.name || '');
         setFatherName(data.father_name || data.father_husband_name || '');
-        setVillage(data.village || '');
-        setMandal(data.mandal || '');
-        setDistrict(data.district || '');
+        setAadhaarVillage(data.aadhaar_village || data.village || '');
+        setAadhaarMandal(data.aadhaar_mandal || data.mandal || '');
+        setAadhaarDistrict(data.aadhaar_district || data.district || '');
+        setPresentVillage(data.present_village || data.village || '');
+        setPresentMandal(data.present_mandal || data.mandal || '');
+        setPresentDistrict(data.present_district || data.district || '');
         setAadhaarAddress(data.aadhaar_address || '');
         setPresentAddress(data.present_address || data.address || '');
         setPhone1(data.phone_1 || data.phone || '');
@@ -250,9 +256,12 @@ const NewCustomer: React.FC = () => {
       setAadhaar('');
       setName('');
       setFatherName('');
-      setVillage('');
-      setMandal('');
-      setDistrict('');
+      setAadhaarVillage('');
+      setAadhaarMandal('');
+      setAadhaarDistrict('');
+      setPresentVillage('');
+      setPresentMandal('');
+      setPresentDistrict('');
       setAadhaarAddress('');
       setPresentAddress('');
       setPhone1('');
@@ -327,11 +336,17 @@ const NewCustomer: React.FC = () => {
         
         // Redesign columns
         father_name: fatherName.trim() || null,
-        village: village.trim() || null,
-        mandal: mandal.trim() || null,
-        district: district.trim() || null,
+        village: presentVillage.trim() || null,
+        mandal: presentMandal.trim() || null,
+        district: presentDistrict.trim() || null,
         aadhaar_address: aadhaarAddress.trim() || null,
+        aadhaar_village: aadhaarVillage.trim() || null,
+        aadhaar_mandal: aadhaarMandal.trim() || null,
+        aadhaar_district: aadhaarDistrict.trim() || null,
         present_address: presentAddress.trim() || null,
+        present_village: presentVillage.trim() || null,
+        present_mandal: presentMandal.trim() || null,
+        present_district: presentDistrict.trim() || null,
         phone_1: phone1.trim() || null,
         phone_2: phone2.trim() || null,
 
@@ -361,9 +376,12 @@ const NewCustomer: React.FC = () => {
           setAadhaar('');
           setName('');
           setFatherName('');
-          setVillage('');
-          setMandal('');
-          setDistrict('');
+          setAadhaarVillage('');
+          setAadhaarMandal('');
+          setAadhaarDistrict('');
+          setPresentVillage('');
+          setPresentMandal('');
+          setPresentDistrict('');
           setAadhaarAddress('');
           setPresentAddress('');
           setPhone1('');
@@ -494,90 +512,134 @@ const NewCustomer: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="finance-caption uppercase">
-                    FATHER
-                  </label>
-                  <input
-                    type="text"
-                    value={fatherName}
-                    onChange={(e) => setFatherName(e.target.value)}
-                    placeholder="Father's or Husband's name"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
-                  />
-                </div>
+              <div>
+                <label className="finance-caption uppercase">
+                  FATHER
+                </label>
+                <input
+                  type="text"
+                  value={fatherName}
+                  onChange={(e) => setFatherName(e.target.value)}
+                  placeholder="Father's or Husband's name"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                />
+              </div>
 
-                <div>
-                  <label className="finance-caption uppercase">
-                    VILLAGE
-                  </label>
-                  <input
-                    type="text"
-                    value={village}
-                    onChange={(e) => setVillage(e.target.value)}
-                    placeholder="Village Name"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
-                  />
-                </div>
-
-                <div>
-                  <label className="finance-caption uppercase">
-                    MANDAL
-                  </label>
-                  <input
-                    type="text"
-                    value={mandal}
-                    onChange={(e) => setMandal(e.target.value)}
-                    placeholder="Mandal Name"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
-                  />
-                </div>
-
-                <div>
-                  <label className="finance-caption uppercase">
-                    DISTRICT
-                  </label>
-                  <input
-                    type="text"
-                    value={district}
-                    onChange={(e) => setDistrict(e.target.value)}
-                    placeholder="District Name"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
-                  />
+              {/* Permanent / Aadhaar Address Details */}
+              <div className="border-t border-slate-100 pt-4 space-y-4">
+                <h4 className="text-sm font-bold text-slate-950 uppercase tracking-wide">
+                  Permanent Address (Aadhaar)
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="finance-caption uppercase">
+                      AADHAAR ADDRESS <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      ref={aadhaarAddressRef}
+                      value={aadhaarAddress}
+                      onChange={(e) => { setAadhaarAddress(e.target.value); setErrors(p => ({...p, aadhaarAddress: false})) }}
+                      placeholder="Address details as printed on Aadhaar card"
+                      rows={2}
+                      required
+                      className={`w-full bg-white border rounded-lg p-2.5 text-slate-800 focus:outline-none resize-y finance-header-time ${errors.aadhaarAddress ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
+                    />
+                  </div>
+                  <div>
+                    <label className="finance-caption uppercase">
+                      AADHAAR VILLAGE
+                    </label>
+                    <input
+                      type="text"
+                      value={aadhaarVillage}
+                      onChange={(e) => setAadhaarVillage(e.target.value)}
+                      placeholder="Village"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                    />
+                  </div>
+                  <div>
+                    <label className="finance-caption uppercase">
+                      AADHAAR MANDAL
+                    </label>
+                    <input
+                      type="text"
+                      value={aadhaarMandal}
+                      onChange={(e) => setAadhaarMandal(e.target.value)}
+                      placeholder="Mandal"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="finance-caption uppercase">
+                      AADHAAR DISTRICT
+                    </label>
+                    <input
+                      type="text"
+                      value={aadhaarDistrict}
+                      onChange={(e) => setAadhaarDistrict(e.target.value)}
+                      placeholder="District"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Address Fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
-                <div>
-                  <label className="finance-caption uppercase">
-                    AADHAAR ADDRESS <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    ref={aadhaarAddressRef}
-                    value={aadhaarAddress}
-                    onChange={(e) => { setAadhaarAddress(e.target.value); setErrors(p => ({...p, aadhaarAddress: false})) }}
-                    placeholder="Address details as printed on Aadhaar card"
-                    rows={3}
-                    required
-                    className={`w-full bg-white border rounded-lg p-2.5 text-slate-800 focus:outline-none resize-y finance-header-time ${errors.aadhaarAddress ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                  />
-                </div>
-
-                <div>
-                  <label className="finance-caption uppercase">
-                    PRESENT ADDRESS <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    ref={presentAddressRef}
-                    value={presentAddress}
-                    onChange={(e) => { setPresentAddress(e.target.value); setErrors(p => ({...p, presentAddress: false})) }}
-                    placeholder="Current residential address details"
-                    rows={3}
-                    required
-                    className={`w-full bg-white border rounded-lg p-2.5 text-slate-800 focus:outline-none resize-y finance-header-time ${errors.presentAddress ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                  />
+              {/* Present Address Details */}
+              <div className="border-t border-slate-100 pt-4 space-y-4">
+                <h4 className="text-sm font-bold text-slate-950 uppercase tracking-wide">
+                  Present Address
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="finance-caption uppercase">
+                      PRESENT ADDRESS <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      ref={presentAddressRef}
+                      value={presentAddress}
+                      onChange={(e) => { setPresentAddress(e.target.value); setErrors(p => ({...p, presentAddress: false})) }}
+                      placeholder="Current residential address details"
+                      rows={2}
+                      required
+                      className={`w-full bg-white border rounded-lg p-2.5 text-slate-800 focus:outline-none resize-y finance-header-time ${errors.presentAddress ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
+                    />
+                  </div>
+                  <div>
+                    <label className="finance-caption uppercase">
+                      PRESENT VILLAGE
+                    </label>
+                    <input
+                      type="text"
+                      value={presentVillage}
+                      onChange={(e) => setPresentVillage(e.target.value)}
+                      placeholder="Village"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                    />
+                  </div>
+                  <div>
+                    <label className="finance-caption uppercase">
+                      PRESENT MANDAL
+                    </label>
+                    <input
+                      type="text"
+                      value={presentMandal}
+                      onChange={(e) => setPresentMandal(e.target.value)}
+                      placeholder="Mandal"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="finance-caption uppercase">
+                      PRESENT DISTRICT
+                    </label>
+                    <input
+                      type="text"
+                      value={presentDistrict}
+                      onChange={(e) => setPresentDistrict(e.target.value)}
+                      placeholder="District"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -122,5 +122,81 @@ export const financeCalculationService = {
       pendingDues,
       processedTransactions
     };
+  },
+
+  /**
+   * CD Ledger Specific Calculations
+   */
+  calculateInterest(principal: number, rate: number, interestDays: number): number {
+    if (interestDays <= 0) return 0;
+    return Math.round((principal * (rate / 100) * interestDays) / 30);
+  },
+
+  calculatePenalty(principal: number, penaltyRate: number, dueDays: number): number {
+    if (dueDays <= 5) return 0;
+    // Penalty includes all dueDays once grace period is crossed
+    return Math.round((principal * (penaltyRate / 100) * dueDays) / 30);
+  },
+
+  calculateRenewalTotal(interest: number, penalty: number): number {
+    return Math.round(interest + penalty);
+  },
+
+  calculateCloseTotal(principal: number, interest: number, penalty: number): number {
+    return Math.round(principal + interest + penalty);
+  },
+
+  applyPaymentSplit(
+    amountPaying: number,
+    interestDue: number,
+    penaltyDue: number,
+    principalBalance: number
+  ) {
+    let remaining = amountPaying;
+    let penaltyPaid = 0;
+    let interestPaid = 0;
+    let principalPaid = 0;
+
+    // Split order: (1) Penalty first, (2) Interest second, (3) Principal last
+    if (remaining > 0) {
+      penaltyPaid = Math.min(remaining, penaltyDue);
+      remaining -= penaltyPaid;
+    }
+    if (remaining > 0) {
+      interestPaid = Math.min(remaining, interestDue);
+      remaining -= interestPaid;
+    }
+    if (remaining > 0) {
+      principalPaid = Math.min(remaining, principalBalance);
+      remaining -= principalPaid;
+    }
+
+    return {
+      penaltyPaid: Math.round(penaltyPaid),
+      interestPaid: Math.round(interestPaid),
+      principalPaid: Math.round(principalPaid),
+      remaining: Math.round(remaining)
+    };
+  },
+
+  calculateNextDueDate(paymentDate: string | Date): string {
+    const dateObj = new Date(paymentDate);
+    const nextDueDate = new Date(dateObj.getTime() + 10 * 24 * 60 * 60 * 1000);
+    return nextDueDate.toISOString().split('T')[0];
+  },
+
+  getNextReceiptNumber(latestReceiptNo: string | null): string {
+    if (!latestReceiptNo) {
+      return 'RC001';
+    }
+    const match = latestReceiptNo.match(/RC(\d+)/i);
+    if (!match) {
+      return 'RC001';
+    }
+    const num = parseInt(match[1], 10);
+    const nextNum = num + 1;
+    const padded = String(nextNum).padStart(3, '0');
+    return `RC${padded}`;
   }
 };
+

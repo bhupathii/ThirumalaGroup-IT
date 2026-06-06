@@ -100,13 +100,17 @@ const CDLedger: React.FC = () => {
 
   // NPA Modal State
   const [showNpaModal, setShowNpaModal] = useState(false);
-  const [npaSettlementAmount, setNpaSettlementAmount] = useState('');
   const [npaReason, setNpaReason] = useState('');
   const [isNpaClosing, setIsNpaClosing] = useState(false);
 
   // Guarantor Full Objects for Display
   const [guarantor1, setGuarantor1] = useState<any | null>(null);
   const [guarantor2, setGuarantor2] = useState<any | null>(null);
+  const [loanDocuments, setLoanDocuments] = useState<any[]>([]);
+  const [collateralLog, setCollateralLog] = useState<any | null>(null);
+  const [documentReturned, setDocumentReturned] = useState<any | null>(null);
+  const [partnersList, setPartnersList] = useState<any[]>([]);
+  const [selectedPartnerFilter, setSelectedPartnerFilter] = useState<string>('All');
 
   useEffect(() => {
     if (hasAccess) {
@@ -117,12 +121,14 @@ const CDLedger: React.FC = () => {
   const fetchLedgerData = async () => {
     setLoading(true);
     try {
-      const [allLoans, settings] = await Promise.all([
+      const [allLoans, settings, partners] = await Promise.all([
         supabaseFinance.getCDLoansList(),
-        financeLedgerSettingsService.getAllLedgerSettings()
+        financeLedgerSettingsService.getAllLedgerSettings(),
+        supabaseFinance.getPartners()
       ]);
       setLedgerSettings(settings);
       setLoansList(allLoans);
+      setPartnersList(partners || []);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load ledger data');
@@ -146,7 +152,11 @@ const CDLedger: React.FC = () => {
             ? isClosed
             : isNpaClosed;
 
-      if (!isRightCategory || !matchesStatus) return false;
+      const matchesPartner = selectedPartnerFilter === 'All'
+        ? true
+        : loan.customer?.partner_name === selectedPartnerFilter;
+
+      if (!isRightCategory || !matchesStatus || !matchesPartner) return false;
 
       const query = searchQuery.toLowerCase().trim();
       if (!query) return true;
@@ -160,11 +170,19 @@ const CDLedger: React.FC = () => {
         (cust?.phone_2 && cust.phone_2.includes(query)) ||
         (cust?.aadhaar && cust.aadhaar.includes(query)) ||
         (cust?.partner_name && cust.partner_name.toLowerCase().includes(query)) ||
+        (cust?.aadhaar_address && cust.aadhaar_address.toLowerCase().includes(query)) ||
+        (cust?.aadhaar_village && cust.aadhaar_village.toLowerCase().includes(query)) ||
+        (cust?.aadhaar_mandal && cust.aadhaar_mandal.toLowerCase().includes(query)) ||
+        (cust?.aadhaar_district && cust.aadhaar_district.toLowerCase().includes(query)) ||
+        (cust?.present_address && cust.present_address.toLowerCase().includes(query)) ||
+        (cust?.present_village && cust.present_village.toLowerCase().includes(query)) ||
+        (cust?.present_mandal && cust.present_mandal.toLowerCase().includes(query)) ||
+        (cust?.present_district && cust.present_district.toLowerCase().includes(query)) ||
         (loan.surety_name && loan.surety_name.toLowerCase().includes(query)) ||
         (loan.surety_phone && loan.surety_phone.includes(query)) ||
         (loan.remarks && loan.remarks.toLowerCase().includes(query));
     });
-  }, [loansList, searchQuery, selectedLedgerType, statusFilter]);
+  }, [loansList, searchQuery, selectedLedgerType, statusFilter, selectedPartnerFilter]);
 
   const loadLedgerDetails = async (loanId: string) => {
     setLoading(true);
@@ -195,23 +213,54 @@ const CDLedger: React.FC = () => {
         setCdLedgerEntries(entries);
         setCdInterestDetails(interests);
 
-        // Fetch Guarantors if present
+        // Fetch Guarantors if present from finance_customers
         if (fullDetails.guarantor_1_id) {
-          const { data: g1 } = await supabase.from('finance_guarantors').select('*').eq('id', fullDetails.guarantor_1_id).single();
+          const { data: g1 } = await supabase.from('finance_customers').select('*').eq('id', fullDetails.guarantor_1_id).single();
           setGuarantor1(g1 || null);
         } else {
           setGuarantor1(null);
         }
         
         if (fullDetails.guarantor_2_id) {
-          const { data: g2 } = await supabase.from('finance_guarantors').select('*').eq('id', fullDetails.guarantor_2_id).single();
+          const { data: g2 } = await supabase.from('finance_customers').select('*').eq('id', fullDetails.guarantor_2_id).single();
           setGuarantor2(g2 || null);
         } else {
           setGuarantor2(null);
         }
 
-        // Set auto-generated receipt number
-        setReceiptNo(`REC-${Date.now().toString().slice(-6)}`);
+        // Fetch loan documents from finance_loan_documents
+        const { data: loanDocs } = await supabase
+          .from('finance_loan_documents')
+          .select('*')
+          .eq('loan_id', loanId);
+        setLoanDocuments(loanDocs || []);
+
+        // Fetch collateral logs from finance_edited_logs
+        const { data: colLogs } = await supabase
+          .from('finance_edited_logs')
+          .select('*')
+          .eq('table_name', 'finance_loans_collateral')
+          .eq('record_id', loanId)
+          .order('edited_at', { ascending: false })
+          .limit(1);
+        if (colLogs && colLogs.length > 0) {
+          setCollateralLog(colLogs[0].new_values);
+        } else {
+          setCollateralLog(null);
+        }
+
+        // Fetch returned document status
+        const { data: retDocs } = await supabase
+          .from('finance_documents_returned')
+          .select('*')
+          .eq('loan_id', loanId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        setDocumentReturned(retDocs && retDocs.length > 0 ? retDocs[0] : null);
+
+        // Set auto-generated receipt number (sequential)
+        const nextReceipt = await supabaseFinance.getNextReceiptNumber();
+        setReceiptNo(nextReceipt);
         setTotalAmountPaying('');
 
         setIsEditing(false);
@@ -327,11 +376,13 @@ const CDLedger: React.FC = () => {
         .from('finance-photos')
         .getPublicUrl(data.path).data.publicUrl;
 
-      // 4. Save to finance_documents
-      const docResult = await supabaseFinance.addDocument({
+      // 4. Save to finance_loan_documents
+      const docResult = await supabaseFinance.addLoanDocument({
         loan_id: selectedLoan.id,
-        document_type: docType,
-        document_url: publicUrl
+        category: docType === 'Pledge Document' ? 'Financial' : docType === 'Land Registry Copy' ? 'Original' : 'Registration',
+        document_name: docType,
+        file_url: publicUrl,
+        is_submitted: true
       });
 
       if (docResult) {
@@ -376,6 +427,25 @@ const CDLedger: React.FC = () => {
     const principal = Number(selectedLoan.amount);
     const entryDate = new Date(selectedLoan.date);
     const today = new Date(paymentDate);
+
+    // Validate: payment date must not be before loan date
+    const isDateInvalid = today.getTime() < entryDate.getTime();
+    if (isDateInvalid) {
+      return {
+        isDateInvalid: true,
+        daysCount: 0,
+        loanDate: entryDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        dueDate: '',
+        daysPastDue: 0,
+        nextDueDate: '',
+        penaltyDays: 0,
+        interest: 0,
+        penalty: 0,
+        principal,
+        grossInterest: 0,
+        grossPenalty: 0
+      };
+    }
     
     const diffTime = Math.max(0, today.getTime() - entryDate.getTime());
     const daysCount = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -387,30 +457,264 @@ const CDLedger: React.FC = () => {
     const interestRate = Number(selectedLoan.interest_rate) || 3;
     const penaltyRate = selectedLoan.penalty_percent !== undefined ? Number(selectedLoan.penalty_percent) : 0.75;
     
-    let interest = 0;
-    if (daysCount > 0) {
-      interest = principal * (interestRate / 100) * (daysCount / 30);
+    const grossInterest = Math.round(financeCalculationService.calculateInterest(principal, interestRate, daysCount));
+    const grossPenalty = Math.round(financeCalculationService.calculatePenalty(principal, penaltyRate, daysPastDue));
+    const penaltyDays = daysPastDue <= 5 ? 0 : daysPastDue;
+    const nextDueDate = new Date(today.getTime() + 10 * 24 * 60 * 60 * 1000);
+
+    // Sum all credit entries in the current cycle (since selectedLoan.date, excluding 'Renewal' and 'Principal Paid' entries)
+    const startMillis = entryDate.getTime();
+    const totalPaidInCycle = cdLedgerEntries
+      .filter(entry => {
+        const entryDateVal = new Date(entry.entry_date);
+        const isPrincipalPaid = (entry.particulars || '').toLowerCase().includes('principal paid');
+        return entry.credit > 0 && entryDateVal.getTime() >= startMillis && entry.entry_type !== 'Renewal' && !isPrincipalPaid;
+      })
+      .reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
+
+    // Deduct payments: Penalty first, Interest second, Principal last
+    let remainingPenalty = grossPenalty;
+    let remainingInterest = grossInterest;
+    let remainingPrincipal = principal;
+
+    let remPaid = totalPaidInCycle;
+    if (remPaid > 0) {
+      const penaltyDeduction = Math.min(remPaid, remainingPenalty);
+      remainingPenalty -= penaltyDeduction;
+      remPaid -= penaltyDeduction;
     }
-    
-    let penalty = 0;
-    const penaltyDays = Math.max(0, daysPastDue - 5);
-    if (penaltyDays > 0) {
-      penalty = principal * (penaltyRate / 100) * (penaltyDays / 30);
+    if (remPaid > 0) {
+      const interestDeduction = Math.min(remPaid, remainingInterest);
+      remainingInterest -= interestDeduction;
+      remPaid -= interestDeduction;
     }
+    // Do not subtract from remainingPrincipal here — principal balance is managed in the DB
     
     return {
+      isDateInvalid: false,
       daysCount,
+      loanDate: entryDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       dueDate: dueDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       daysPastDue,
+      nextDueDate: nextDueDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       penaltyDays,
-      interest: Math.round(interest),
-      penalty: Math.round(penalty),
-      principal
+      interest: remainingInterest,
+      penalty: remainingPenalty,
+      principal: remainingPrincipal,
+      grossInterest,
+      grossPenalty
     };
-  }, [selectedLoan, paymentDate]);
+  }, [selectedLoan, paymentDate, cdLedgerEntries]);
+
+
+  const displayedInterestDetails = useMemo(() => {
+    // Start with the real interest details from database
+    const list = [...cdInterestDetails];
+    
+    // For every credit in cdLedgerEntries, if it's not represented in list, add a fallback detail row
+    cdLedgerEntries.forEach(entry => {
+      if (entry.credit > 0) {
+        // Check if there is already an interest detail referencing this entry_id or having the same date, credit and receipt_no
+        const exists = list.some(d => 
+          d.entry_id === entry.id || 
+          (d.entry_date === entry.entry_date && Number(d.credit) === Number(entry.credit) && d.receipt_no === entry.receipt_no)
+        );
+        if (!exists) {
+          list.push({
+            id: `fallback-${entry.id}`,
+            loan_id: entry.loan_id,
+            entry_id: entry.id,
+            entry_date: entry.entry_date,
+            credit: entry.credit,
+            receipt_no: entry.receipt_no,
+            particulars: entry.particulars || 'Payment',
+            renewed_days: 0,
+            renewed_till_date: null,
+            row_type: entry.entry_type,
+            created_at: entry.created_at
+          });
+        }
+      }
+    });
+
+    // Sort by date/created_at ascending
+    return list.sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime());
+  }, [cdInterestDetails, cdLedgerEntries]);
+
+  const bottomTotals = useMemo(() => {
+    if (!selectedLoan || !renewCalculations) return {
+      totalCredit: 0,
+      totalDebit: 0,
+      presentBalance: 0,
+      totalDues: 0,
+      paidDues: 0,
+      pendingDues: 0
+    };
+
+    const totalCredit = cdLedgerEntries.reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
+    const totalDebit = cdLedgerEntries.reduce((sum, entry) => sum + Number(entry.debit || 0), 0);
+    const presentBalance = Number(selectedLoan.amount || 0);
+
+    // Paid Dues = sum of all credits in interest details except principal payments and note entries
+    const paidDues = displayedInterestDetails
+      .filter(detail => {
+        const part = (detail.particulars || '').toLowerCase();
+        return !part.includes('principal paid') && !part.includes('note:');
+      })
+      .reduce((sum, detail) => sum + Number(detail.credit || 0), 0);
+
+    // Dues before payments in the current cycle
+    const totalDues = (renewCalculations.grossInterest || 0) + (renewCalculations.grossPenalty || 0);
+    const pendingDues = (renewCalculations.interest || 0) + (renewCalculations.penalty || 0);
+
+    return {
+      totalCredit,
+      totalDebit,
+      presentBalance,
+      totalDues,
+      paidDues,
+      pendingDues
+    };
+  }, [selectedLoan, cdLedgerEntries, displayedInterestDetails, renewCalculations]);
+
+  const aggregatedDocs = useMemo(() => {
+    const list: any[] = [];
+
+    // 1. From finance_loan_documents (from loanDocuments state)
+    loanDocuments.forEach(doc => {
+      list.push({
+        id: doc.id,
+        source: 'loan_doc',
+        category: doc.category || 'Loan Doc',
+        name: doc.document_name || 'Document',
+        remarks: doc.remarks || 'N/A',
+        fileUrl: doc.file_url,
+        returnedStatus: documentReturned ? 'Returned' : 'Not Returned',
+        allowDelete: true
+      });
+    });
+
+    // 2. Collateral Log
+    if (collateralLog) {
+      list.push({
+        id: 'collateral-metadata',
+        source: 'collateral',
+        category: 'Collateral',
+        name: 'Collateral Assets Details',
+        remarks: `Address: ${collateralLog.collateral_address || 'N/A'}, particulars: ${collateralLog.particulars || 'N/A'}`,
+        fileUrl: null,
+        returnedStatus: documentReturned ? 'Returned' : 'Not Returned',
+        allowDelete: false
+      });
+
+      if (collateralLog.collateral_image) {
+        list.push({
+          id: 'collateral-image',
+          source: 'collateral',
+          category: 'Collateral',
+          name: 'Collateral Asset Image',
+          remarks: `GPS: ${collateralLog.gps_latitude || 'N/A'}, ${collateralLog.gps_longitude || 'N/A'}`,
+          fileUrl: collateralLog.collateral_image,
+          returnedStatus: documentReturned ? 'Returned' : 'Not Returned',
+          allowDelete: false
+        });
+      }
+    }
+
+    // 3. Customer & Guarantor Photos / Fingerprints
+    if (selectedLoan?.customer) {
+      if (selectedLoan.customer.customer_photo_url) {
+        list.push({
+          id: 'customer-photo',
+          source: 'customer',
+          category: 'Registration',
+          name: 'Customer Photo',
+          remarks: `Aadhaar: ${selectedLoan.customer.aadhaar || 'N/A'}`,
+          fileUrl: selectedLoan.customer.customer_photo_url,
+          returnedStatus: 'Active',
+          allowDelete: false
+        });
+      }
+      if (selectedLoan.customer.customer_fingerprint_image_url || selectedLoan.customer.fingerprint_url) {
+        list.push({
+          id: 'customer-fingerprint',
+          source: 'customer',
+          category: 'Registration',
+          name: 'Customer Fingerprint',
+          remarks: selectedLoan.customer.fingerprint_template ? 'Template Captured' : 'Image Captured',
+          fileUrl: selectedLoan.customer.customer_fingerprint_image_url || selectedLoan.customer.fingerprint_url,
+          returnedStatus: 'Active',
+          allowDelete: false
+        });
+      }
+    }
+
+    if (guarantor1) {
+      if (guarantor1.customer_photo_url) {
+        list.push({
+          id: 'guarantor1-photo',
+          source: 'customer',
+          category: 'Registration',
+          name: 'Guarantor 1 Photo',
+          remarks: `Aadhaar: ${guarantor1.aadhaar || 'N/A'}`,
+          fileUrl: guarantor1.customer_photo_url,
+          returnedStatus: 'Active',
+          allowDelete: false
+        });
+      }
+      if (guarantor1.customer_fingerprint_image_url || guarantor1.fingerprint_url) {
+        list.push({
+          id: 'guarantor1-fingerprint',
+          source: 'customer',
+          category: 'Registration',
+          name: 'Guarantor 1 Fingerprint',
+          remarks: guarantor1.fingerprint_template ? 'Template Captured' : 'Image Captured',
+          fileUrl: guarantor1.customer_fingerprint_image_url || guarantor1.fingerprint_url,
+          returnedStatus: 'Active',
+          allowDelete: false
+        });
+      }
+    }
+
+    if (guarantor2) {
+      if (guarantor2.customer_photo_url) {
+        list.push({
+          id: 'guarantor2-photo',
+          source: 'customer',
+          category: 'Registration',
+          name: 'Guarantor 2 Photo',
+          remarks: `Aadhaar: ${guarantor2.aadhaar || 'N/A'}`,
+          fileUrl: guarantor2.customer_photo_url,
+          returnedStatus: 'Active',
+          allowDelete: false
+        });
+      }
+      if (guarantor2.customer_fingerprint_image_url || guarantor2.fingerprint_url) {
+        list.push({
+          id: 'guarantor2-fingerprint',
+          source: 'customer',
+          category: 'Registration',
+          name: 'Guarantor 2 Fingerprint',
+          remarks: guarantor2.fingerprint_template ? 'Template Captured' : 'Image Captured',
+          fileUrl: guarantor2.customer_fingerprint_image_url || guarantor2.fingerprint_url,
+          returnedStatus: 'Active',
+          allowDelete: false
+        });
+      }
+    }
+
+    return list;
+  }, [loanDocuments, collateralLog, documentReturned, selectedLoan, guarantor1, guarantor2]);
 
   const handleActionSubmit = async (actionType: 'Renew' | 'Partial' | 'Close') => {
     if (!selectedLoan || !renewCalculations) return;
+    
+    // Block if payment date is before loan date
+    if (renewCalculations.isDateInvalid) {
+      toast.error('Payment date cannot be before loan date.');
+      return;
+    }
+    
     const amount = Number(totalAmountPaying);
     if (amount <= 0 || isNaN(amount)) {
       toast.error('Enter a valid payment amount.');
@@ -419,23 +723,13 @@ const CDLedger: React.FC = () => {
     
     setIsRenewing(true);
     try {
-      let remainingAmount = amount;
-      let penaltyPaid = 0;
-      let interestPaid = 0;
-      let principalPaid = 0;
-      
-      if (remainingAmount > 0 && renewCalculations.penalty > 0) {
-        penaltyPaid = Math.min(remainingAmount, renewCalculations.penalty);
-        remainingAmount -= penaltyPaid;
-      }
-      if (remainingAmount > 0 && renewCalculations.interest > 0) {
-        interestPaid = Math.min(remainingAmount, renewCalculations.interest);
-        remainingAmount -= interestPaid;
-      }
-      if (remainingAmount > 0) {
-        principalPaid = Math.min(remainingAmount, renewCalculations.principal);
-        remainingAmount -= principalPaid;
-      }
+      const splitResult = financeCalculationService.applyPaymentSplit(
+        amount,
+        renewCalculations.interest,
+        renewCalculations.penalty,
+        renewCalculations.principal
+      );
+      const { penaltyPaid, interestPaid, principalPaid } = splitResult;
 
       const totalAmountForRenewal = renewCalculations.penalty + renewCalculations.interest;
       const isFullyRenewed = actionType === 'Renew' && amount >= totalAmountForRenewal && amount > 0;
@@ -450,7 +744,8 @@ const CDLedger: React.FC = () => {
         interestPaid,
         penaltyPaid,
         renewedDays: isFullyRenewed ? renewCalculations.daysCount : 0,
-        paymentDate
+        paymentDate,
+        receiptNo
       });
       
       if (!res.success) {
@@ -498,7 +793,8 @@ const CDLedger: React.FC = () => {
     if (!selectedLoan) return;
     setIsNpaClosing(true);
     try {
-      const amount = Number(npaSettlementAmount) || 0;
+      const amount = 0;
+      const npaReceiptNo = await supabaseFinance.getNextReceiptNumber();
       
       await supabase.from('finance_loans')
         .update({ status: 'Closed', npa_closed: true })
@@ -521,7 +817,7 @@ const CDLedger: React.FC = () => {
         entry_date: new Date(paymentDate).toISOString(),
         credit: amount,
         debit: 0,
-        receipt_no: `NPA-${Date.now().toString().slice(-6)}`,
+        receipt_no: npaReceiptNo,
         particulars: `NPA Settlement Close - ${npaReason}`,
         user_name: user?.username || 'Staff',
         entry_type: 'Settlement'
@@ -551,6 +847,8 @@ const CDLedger: React.FC = () => {
         }
       }
 
+      const docReceiptNo = await supabaseFinance.getNextReceiptNumber();
+
       await supabase.from('finance_documents_returned').insert({
         loan_id: selectedLoan.id,
         returned_date: returnDate,
@@ -567,7 +865,7 @@ const CDLedger: React.FC = () => {
         entry_date: returnDate,
         credit: 0,
         debit: 0,
-        receipt_no: `DOC-${Date.now().toString().slice(-6)}`,
+        receipt_no: docReceiptNo,
         particulars: `Documents Returned to ${returnedTo} - ${returnRemarks}`,
         user_name: user?.username || 'Staff',
         entry_type: 'Settlement'
@@ -575,12 +873,14 @@ const CDLedger: React.FC = () => {
 
       toast.success('Documents returned successfully.');
       setShowReturnDocModal(false);
+      loadLedgerDetails(selectedLoan.id);
     } catch(e) {
       toast.error('Error recording document return');
     } finally {
       setIsReturningDoc(false);
     }
   };
+
 
   // Export to Excel / CSV
   const handleExport = (format: 'xlsx' | 'csv') => {
@@ -633,7 +933,7 @@ const CDLedger: React.FC = () => {
       {/* Top row: search inputs and action buttons */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm print:hidden">
         
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 flex-1">
           <div>
             <label className="finance-caption uppercase">
               Ledger Category
@@ -668,6 +968,22 @@ const CDLedger: React.FC = () => {
 
           <div>
             <label className="finance-caption uppercase">
+              Partner Filter
+            </label>
+            <select
+              value={selectedPartnerFilter}
+              onChange={(e) => setSelectedPartnerFilter(e.target.value)}
+              className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none finance-sidebar-link"
+            >
+              <option value="All">All Partners</option>
+              {partnersList.map(p => (
+                <option key={p.id} value={p.name}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="finance-caption uppercase">
               Search Accounts
             </label>
             <div className="relative">
@@ -675,7 +991,7 @@ const CDLedger: React.FC = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search Name, ID, Phone..."
+                placeholder="Search Name, ID, Phone, Village..."
                 className="w-full bg-white border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:outline-none finance-section-heading"
               />
               <Search className="w-5 h-5 text-gray-400 absolute left-3 top-3" />
@@ -727,50 +1043,100 @@ const CDLedger: React.FC = () => {
       ) : !selectedLoan || viewMode === 'list' ? (
         <Card title="Loans Ledger" subtitle={`Showing ${filteredLoans.length} accounts`} className="shadow-sm border-gray-100 rounded-3xl">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-100 finance-caption">
+            <table className="min-w-full divide-y divide-gray-100 finance-caption text-left">
               <thead>
                 <tr className="bg-gray-50/50">
-                  <th className="finance-small-label uppercase">Account ID</th>
-                  <th className="finance-small-label uppercase">Customer Info</th>
-                  <th className="finance-small-label uppercase">Amount</th>
-                  <th className="finance-small-label uppercase">Start Date</th>
-                  <th className="finance-small-label uppercase">Status</th>
-                  <th className="text-right finance-small-label uppercase">Action</th>
+                  <th className="finance-small-label uppercase p-3">S.No</th>
+                  <th className="finance-small-label uppercase p-3">A/C Number</th>
+                  <th className="finance-small-label uppercase p-3">Customer Name</th>
+                  <th className="finance-small-label uppercase p-3">Phone</th>
+                  <th className="finance-small-label uppercase p-3">Aadhaar</th>
+                  <th className="finance-small-label uppercase p-3">Aadhaar Address</th>
+                  <th className="finance-small-label uppercase p-3">Present Address</th>
+                  <th className="finance-small-label uppercase p-3">Partner</th>
+                  <th className="finance-small-label uppercase p-3">Loan Amount</th>
+                  <th className="finance-small-label uppercase p-3">Loan Date</th>
+                  <th className="finance-small-label uppercase p-3">Due Date</th>
+                  <th className="finance-small-label uppercase p-3">Due Days</th>
+                  <th className="finance-small-label uppercase p-3">Status</th>
+                  <th className="text-right finance-small-label uppercase p-3">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 bg-white">
                 {filteredLoans.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-8 text-center text-gray-400 italic">No loans found matching the filters.</td>
+                    <td colSpan={14} className="px-3 py-8 text-center text-gray-400 italic">No loans found matching the filters.</td>
                   </tr>
                 ) : (
-                  filteredLoans.map(loan => (
-                    <tr key={loan.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-3 py-3 font-mono text-gray-700">{loan.loan_id}</td>
-                      <td className="px-3 py-3">
-                        <div className="text-gray-900 font-medium">{loan.customer?.name}</div>
-                        <div className="text-gray-500 text-xs mt-0.5">{loan.customer?.phone}</div>
-                      </td>
-                      <td className="px-3 py-3 text-gray-700 font-medium">₹{Number(loan.amount).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-gray-500">{new Date(loan.date).toLocaleDateString('en-IN')}</td>
-                      <td className="px-3 py-3">
-                        <span className={`px-2 py-1 rounded-md text-xs ${loan.status === 'Closed' ? 'bg-indigo-50 text-indigo-700' : loan.npa_closed ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                          {loan.status} {loan.npa_closed && '(NPA)'}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <button
-                          onClick={() => {
-                            loadLedgerDetails(loan.id);
-                            setViewMode('details');
-                          }}
-                          className="px-3 py-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors font-medium text-xs border border-emerald-100"
-                        >
-                          View Ledger
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  filteredLoans.map((loan, index) => {
+                    const cust = loan.customer;
+                    const aadhaarAddr = [
+                      cust?.aadhaar_address || cust?.address,
+                      cust?.aadhaar_village || cust?.village,
+                      cust?.aadhaar_mandal || cust?.mandal,
+                      cust?.aadhaar_district || cust?.district
+                    ].filter(Boolean).join(', ') || 'N/A';
+                    
+                    const presentAddr = [
+                      cust?.present_address || cust?.address,
+                      cust?.present_village || cust?.village,
+                      cust?.present_mandal || cust?.mandal,
+                      cust?.present_district || cust?.district
+                    ].filter(Boolean).join(', ') || 'N/A';
+
+                    const loanAmt = Number(loan.amount);
+                    const loanDate = new Date(loan.date);
+                    const dueDate = new Date(loanDate.getTime() + 10 * 24 * 60 * 60 * 1000);
+                    
+                    let dueDays = 0;
+                    if (loan.status === 'Active' && !loan.npa_closed) {
+                      const today = new Date();
+                      dueDays = Math.max(0, Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)));
+                    }
+
+                    return (
+                      <tr key={loan.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-3 py-3 text-gray-500">{index + 1}</td>
+                        <td className="px-3 py-3 font-mono text-gray-700">{loan.loan_id}</td>
+                        <td className="px-3 py-3 text-gray-900 font-medium">{cust?.name || 'N/A'}</td>
+                        <td className="px-3 py-3 text-gray-500">{cust?.phone || cust?.phone_1 || 'N/A'}</td>
+                        <td className="px-3 py-3 text-gray-500">{cust?.aadhaar || 'N/A'}</td>
+                        <td className="px-3 py-3 text-gray-500 max-w-[150px] truncate" title={aadhaarAddr}>{aadhaarAddr}</td>
+                        <td className="px-3 py-3 text-gray-500 max-w-[150px] truncate" title={presentAddr}>{presentAddr}</td>
+                        <td className="px-3 py-3 text-gray-500">{cust?.partner_name || 'N/A'}</td>
+                        <td className="px-3 py-3 text-gray-750 font-medium">₹{loanAmt.toLocaleString('en-IN')}</td>
+                        <td className="px-3 py-3 text-gray-500">{loanDate.toLocaleDateString('en-IN')}</td>
+                        <td className="px-3 py-3 text-gray-500">{dueDate.toLocaleDateString('en-IN')}</td>
+                        <td className="px-3 py-3">
+                          <span className={dueDays > 0 ? 'text-red-650 font-medium' : 'text-gray-500'}>
+                            {dueDays} {dueDays === 1 ? 'day' : 'days'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className={`px-2 py-1 rounded-md text-xs font-medium ${
+                            loan.status === 'Closed' 
+                              ? 'bg-indigo-50 text-indigo-750' 
+                              : loan.npa_closed 
+                                ? 'bg-red-50 text-red-750' 
+                                : 'bg-emerald-50 text-emerald-750'
+                          }`}>
+                            {loan.status} {loan.npa_closed && '(NPA)'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <button
+                            onClick={() => {
+                              loadLedgerDetails(loan.id);
+                              setViewMode('details');
+                            }}
+                            className="px-3 py-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors font-medium text-xs border border-emerald-100"
+                          >
+                            Open
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -784,7 +1150,7 @@ const CDLedger: React.FC = () => {
               className="flex items-center gap-2 px-3 py-1.5 text-gray-600 hover:text-gray-900 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
             >
               <X className="w-4 h-4" />
-              <span className="finance-input">Close Ledger</span>
+              <span className="finance-input">Back to Loan List</span>
             </button>
           </div>
           {/* Main workspace area */}
@@ -801,30 +1167,37 @@ const CDLedger: React.FC = () => {
               >
                 <div className="bg-white border border-emerald-100 rounded-xl p-4 mb-6">
                   <h4 className="text-emerald-800 font-semibold mb-3 finance-input border-b border-emerald-50 pb-2">Calculated Requirements</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                    <div>
-                      <div className="text-gray-500 finance-caption uppercase">Amount</div>
-                      <div className="text-gray-900 font-semibold finance-input">₹{renewCalculations?.principal?.toLocaleString('en-IN').replace(/\s/g, '') || 0}</div>
+                  {renewCalculations?.isDateInvalid ? (
+                    <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 finance-input">
+                      <ShieldAlert className="w-4 h-4 shrink-0" />
+                      <span>Payment date cannot be before loan date ({renewCalculations.loanDate}). Please select a valid date.</span>
                     </div>
-                    <div>
-                      <div className="text-gray-500 finance-caption uppercase">Interest</div>
-                      <div className="text-orange-600 font-semibold finance-input">₹{renewCalculations?.interest?.toLocaleString('en-IN').replace(/\s/g, '') || 0}</div>
-                      {renewCalculations?.daysCount !== undefined && <div className="text-[10px] text-gray-400 mt-0.5">{renewCalculations.daysCount} Interest Days</div>}
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                      <div>
+                        <div className="text-gray-500 finance-caption uppercase">Amount</div>
+                        <div className="text-gray-900 font-semibold finance-input">₹{renewCalculations?.principal?.toLocaleString('en-IN').replace(/\s/g, '') || 0}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500 finance-caption uppercase">Interest</div>
+                        <div className="text-orange-600 font-semibold finance-input">₹{renewCalculations?.interest?.toLocaleString('en-IN').replace(/\s/g, '') || 0}</div>
+                        {renewCalculations?.daysCount !== undefined && <div className="text-[10px] text-gray-400 mt-0.5">{renewCalculations.daysCount} Interest Days</div>}
+                      </div>
+                      <div>
+                        <div className="text-gray-500 finance-caption uppercase">Penalty</div>
+                        <div className="text-red-600 font-semibold finance-input">₹{renewCalculations?.penalty?.toLocaleString('en-IN').replace(/\s/g, '') || 0}</div>
+                        {renewCalculations?.penaltyDays !== undefined && <div className="text-[10px] text-gray-400 mt-0.5">{renewCalculations.penaltyDays} Penalty Days</div>}
+                      </div>
+                      <div className="sm:col-span-1">
+                        <div className="text-gray-500 finance-caption uppercase">Total For Renewal</div>
+                        <div className="text-emerald-600 font-bold finance-brand">₹{((renewCalculations?.interest || 0) + (renewCalculations?.penalty || 0)).toLocaleString('en-IN').replace(/\s/g, '')}</div>
+                      </div>
+                      <div className="sm:col-span-1">
+                        <div className="text-gray-500 finance-caption uppercase">Total For Close</div>
+                        <div className="text-indigo-700 font-bold finance-brand">₹{((renewCalculations?.principal || 0) + (renewCalculations?.interest || 0) + (renewCalculations?.penalty || 0)).toLocaleString('en-IN').replace(/\s/g, '')}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-gray-500 finance-caption uppercase">Penalty</div>
-                      <div className="text-red-600 font-semibold finance-input">₹{renewCalculations?.penalty?.toLocaleString('en-IN').replace(/\s/g, '') || 0}</div>
-                      {renewCalculations?.penaltyDays !== undefined && <div className="text-[10px] text-gray-400 mt-0.5">{renewCalculations.penaltyDays} Penalty Days</div>}
-                    </div>
-                    <div className="sm:col-span-1">
-                      <div className="text-gray-500 finance-caption uppercase">Total For Renewal</div>
-                      <div className="text-emerald-600 font-bold finance-brand">₹{((renewCalculations?.interest || 0) + (renewCalculations?.penalty || 0)).toLocaleString('en-IN').replace(/\s/g, '')}</div>
-                    </div>
-                    <div className="sm:col-span-1">
-                      <div className="text-gray-500 finance-caption uppercase">Total For Close</div>
-                      <div className="text-indigo-700 font-bold finance-brand">₹{((renewCalculations?.principal || 0) + (renewCalculations?.interest || 0) + (renewCalculations?.penalty || 0)).toLocaleString('en-IN').replace(/\s/g, '')}</div>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
@@ -834,7 +1207,7 @@ const CDLedger: React.FC = () => {
                       type="date"
                       value={paymentDate}
                       onChange={(e) => setPaymentDate(e.target.value)}
-                      className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none finance-input"
+                      className={`w-full bg-white border rounded-xl p-2.5 text-gray-800 focus:ring-2 focus:outline-none finance-input ${renewCalculations?.isDateInvalid ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-emerald-500'}`}
                     />
                   </div>
                   <Input 
@@ -857,7 +1230,7 @@ const CDLedger: React.FC = () => {
                 <div className="flex flex-wrap gap-3">
                   <Button
                     onClick={() => handleActionSubmit('Renew')}
-                    disabled={isRenewing || !totalAmountPaying || selectedLoan.status === 'Closed'}
+                    disabled={isRenewing || !totalAmountPaying || selectedLoan.status === 'Closed' || !!renewCalculations?.isDateInvalid}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
                     icon={CreditCard}
                   >
@@ -865,7 +1238,7 @@ const CDLedger: React.FC = () => {
                   </Button>
                   <Button
                     onClick={() => handleActionSubmit('Partial')}
-                    disabled={isRenewing || !totalAmountPaying || selectedLoan.status === 'Closed'}
+                    disabled={isRenewing || !totalAmountPaying || selectedLoan.status === 'Closed' || !!renewCalculations?.isDateInvalid}
                     className="bg-blue-600 hover:bg-blue-700 text-white"
                     icon={CreditCard}
                   >
@@ -873,7 +1246,7 @@ const CDLedger: React.FC = () => {
                   </Button>
                   <Button
                     onClick={() => handleActionSubmit('Close')}
-                    disabled={isRenewing || !totalAmountPaying || selectedLoan.status === 'Closed'}
+                    disabled={isRenewing || !totalAmountPaying || selectedLoan.status === 'Closed' || !!renewCalculations?.isDateInvalid}
                     className="bg-red-600 hover:bg-red-700 text-white"
                     icon={ShieldAlert}
                   >
@@ -881,7 +1254,7 @@ const CDLedger: React.FC = () => {
                   </Button>
                   <Button
                     onClick={() => setShowNpaModal(true)}
-                    disabled={selectedLoan.status === 'Closed'}
+                    disabled={selectedLoan.status === 'Closed' || !!renewCalculations?.isDateInvalid}
                     className="bg-orange-600 hover:bg-orange-700 text-white"
                     icon={ShieldAlert}
                   >
@@ -897,6 +1270,7 @@ const CDLedger: React.FC = () => {
                   </Button>
                 </div>
               </Card>
+
               
               {/* Card 1: Customer Details */}
               <Card 
@@ -1030,8 +1404,13 @@ const CDLedger: React.FC = () => {
                   </div>
 
                   <div>
-                    <div className="text-gray-400 finance-header-time">Total Days (Since Date)</div>
-                    <div className="text-gray-900 finance-input">{renewCalculations?.daysCount || 0} Days</div>
+                    <div className="text-gray-400 finance-header-time">Loan Date (Start Date)</div>
+                    <div className="text-gray-900 finance-input">{renewCalculations?.loanDate}</div>
+                  </div>
+
+                  <div>
+                    <div className="text-gray-400 finance-header-time">Due Date</div>
+                    <div className="text-gray-900 finance-input">{renewCalculations?.dueDate}</div>
                   </div>
 
                   <div>
@@ -1044,8 +1423,13 @@ const CDLedger: React.FC = () => {
                   <div>
                     <div className="text-gray-400 finance-header-time">Next Due Date</div>
                     <div className="text-gray-900 finance-input">
-                      {renewCalculations?.dueDate}
+                      {renewCalculations?.nextDueDate}
                     </div>
+                  </div>
+
+                  <div>
+                    <div className="text-gray-400 finance-header-time">Interest Days (Total Days)</div>
+                    <div className="text-gray-900 finance-input">{renewCalculations?.daysCount || 0} Days</div>
                   </div>
 
                   <div>
@@ -1095,14 +1479,14 @@ const CDLedger: React.FC = () => {
                         <Phone className="w-5 h-5 text-gray-400 shrink-0" />
                         <div>
                           <div className="text-gray-400 finance-header-time">Phone</div>
-                          <div className="text-gray-900 finance-input">{guarantor1.phone}</div>
+                          <div className="text-gray-900 finance-input">{guarantor1.phone_1 || guarantor1.phone || 'N/A'}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <FileText className="w-5 h-5 text-gray-400 shrink-0" />
                         <div>
                           <div className="text-gray-400 finance-header-time">Aadhaar No</div>
-                          <div className="text-gray-900 finance-input">{guarantor1.aadhaar}</div>
+                          <div className="text-gray-900 finance-input">{guarantor1.aadhaar || 'N/A'}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 sm:col-span-2">
@@ -1111,10 +1495,10 @@ const CDLedger: React.FC = () => {
                           <div className="text-gray-400 finance-header-time">Permanent Address</div>
                           <div className="text-gray-900 finance-input">
                             {[
-                              guarantor1.permanent_address || guarantor1.aadhaar_address || guarantor1.address,
-                              guarantor1.permanent_village || guarantor1.village,
-                              guarantor1.permanent_mandal || guarantor1.mandal,
-                              guarantor1.permanent_district || guarantor1.district
+                              guarantor1.aadhaar_address || guarantor1.permanent_address || guarantor1.address,
+                              guarantor1.aadhaar_village || guarantor1.permanent_village || guarantor1.village,
+                              guarantor1.aadhaar_mandal || guarantor1.permanent_mandal || guarantor1.mandal,
+                              guarantor1.aadhaar_district || guarantor1.permanent_district || guarantor1.district
                             ].filter(Boolean).join(', ') || 'N/A'}
                           </div>
                         </div>
@@ -1125,10 +1509,10 @@ const CDLedger: React.FC = () => {
                           <div className="text-gray-400 finance-header-time">Current Address</div>
                           <div className="text-gray-900 finance-input">
                             {[
-                              guarantor1.current_address || guarantor1.present_address,
-                              guarantor1.current_village,
-                              guarantor1.current_mandal,
-                              guarantor1.current_district
+                              guarantor1.present_address || guarantor1.current_address || guarantor1.address,
+                              guarantor1.present_village || guarantor1.current_village || guarantor1.village,
+                              guarantor1.present_mandal || guarantor1.current_mandal || guarantor1.mandal,
+                              guarantor1.present_district || guarantor1.current_district || guarantor1.district
                             ].filter(Boolean).join(', ') || 'N/A'}
                           </div>
                         </div>
@@ -1152,14 +1536,14 @@ const CDLedger: React.FC = () => {
                         <Phone className="w-5 h-5 text-gray-400 shrink-0" />
                         <div>
                           <div className="text-gray-400 finance-header-time">Phone</div>
-                          <div className="text-gray-900 finance-input">{guarantor2.phone}</div>
+                          <div className="text-gray-900 finance-input">{guarantor2.phone_1 || guarantor2.phone || 'N/A'}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <FileText className="w-5 h-5 text-gray-400 shrink-0" />
                         <div>
                           <div className="text-gray-400 finance-header-time">Aadhaar No</div>
-                          <div className="text-gray-900 finance-input">{guarantor2.aadhaar}</div>
+                          <div className="text-gray-900 finance-input">{guarantor2.aadhaar || 'N/A'}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 sm:col-span-2">
@@ -1168,10 +1552,10 @@ const CDLedger: React.FC = () => {
                           <div className="text-gray-400 finance-header-time">Permanent Address</div>
                           <div className="text-gray-900 finance-input">
                             {[
-                              guarantor2.permanent_address || guarantor2.aadhaar_address || guarantor2.address,
-                              guarantor2.permanent_village || guarantor2.village,
-                              guarantor2.permanent_mandal || guarantor2.mandal,
-                              guarantor2.permanent_district || guarantor2.district
+                              guarantor2.aadhaar_address || guarantor2.permanent_address || guarantor2.address,
+                              guarantor2.aadhaar_village || guarantor2.permanent_village || guarantor2.village,
+                              guarantor2.aadhaar_mandal || guarantor2.permanent_mandal || guarantor2.mandal,
+                              guarantor2.aadhaar_district || guarantor2.permanent_district || guarantor2.district
                             ].filter(Boolean).join(', ') || 'N/A'}
                           </div>
                         </div>
@@ -1182,10 +1566,10 @@ const CDLedger: React.FC = () => {
                           <div className="text-gray-400 finance-header-time">Current Address</div>
                           <div className="text-gray-900 finance-input">
                             {[
-                              guarantor2.current_address || guarantor2.present_address,
-                              guarantor2.current_village,
-                              guarantor2.current_mandal,
-                              guarantor2.current_district
+                              guarantor2.present_address || guarantor2.current_address || guarantor2.address,
+                              guarantor2.present_village || guarantor2.current_village || guarantor2.village,
+                              guarantor2.present_mandal || guarantor2.current_mandal || guarantor2.mandal,
+                              guarantor2.present_district || guarantor2.current_district || guarantor2.district
                             ].filter(Boolean).join(', ') || 'N/A'}
                           </div>
                         </div>
@@ -1318,36 +1702,72 @@ const CDLedger: React.FC = () => {
                   </div>
 
                   {/* Documents List */}
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {selectedLoan.documents && selectedLoan.documents.length > 0 ? (
-                      selectedLoan.documents.map(doc => (
-                        <div key={doc.id} className="p-2 border rounded-xl flex items-center justify-between bg-white hover:bg-gray-50/50 finance-caption">
-                          <div className="flex items-center gap-2 overflow-hidden">
-                            <FileIcon className="w-4 h-4 text-green-600 shrink-0" />
-                            <div className="truncate">
-                              <span className="text-gray-800 block truncate finance-input">{doc.document_type}</span>
-                              <a 
-                                href={doc.document_url} 
-                                target="_blank" 
-                                rel="noreferrer" 
-                                className="text-green-700 hover:underline block truncate finance-small-label"
-                              >
-                                View Attachment
-                              </a>
-                            </div>
-                          </div>
-                          
-                          <button
-                            onClick={() => handleDeleteDocument(doc.id)}
-                            className="p-1 hover:bg-red-50 text-red-500 rounded transition-colors shrink-0"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-6 text-gray-400 finance-caption">No documents uploaded for this loan</div>
-                    )}
+                  <div className="overflow-x-auto max-h-80">
+                    <table className="min-w-full divide-y divide-gray-100 finance-caption text-left">
+                      <thead>
+                        <tr className="bg-gray-50/50">
+                          <th className="finance-small-label uppercase p-2">Category</th>
+                          <th className="finance-small-label uppercase p-2">Document Name</th>
+                          <th className="finance-small-label uppercase p-2">Remarks/Ref No</th>
+                          <th className="finance-small-label uppercase p-2">Status</th>
+                          <th className="finance-small-label uppercase p-2 text-center">Attachment</th>
+                          <th className="finance-small-label uppercase p-2 text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 bg-white">
+                        {aggregatedDocs.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="p-4 text-center text-gray-400 italic">No documents or files found</td>
+                          </tr>
+                        ) : (
+                          aggregatedDocs.map((doc) => (
+                            <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="p-2 text-gray-700 finance-input">{doc.category}</td>
+                              <td className="p-2 text-gray-900 font-medium finance-input">{doc.name}</td>
+                              <td className="p-2 text-gray-500 finance-input max-w-[200px] truncate" title={doc.remarks}>{doc.remarks}</td>
+                              <td className="p-2 finance-input">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  doc.returnedStatus === 'Returned' 
+                                    ? 'bg-blue-50 text-blue-750' 
+                                    : doc.returnedStatus === 'Active' 
+                                      ? 'bg-gray-55 text-gray-600'
+                                      : 'bg-orange-50 text-orange-755'
+                                }`}>
+                                  {doc.returnedStatus}
+                                </span>
+                              </td>
+                              <td className="p-2 text-center">
+                                {doc.fileUrl ? (
+                                  <a 
+                                    href={doc.fileUrl} 
+                                    target="_blank" 
+                                    rel="noreferrer" 
+                                    className="inline-flex items-center gap-1 text-green-700 hover:underline font-medium text-xs"
+                                  >
+                                    <FileIcon className="w-3.5 h-3.5" />
+                                    View
+                                  </a>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                              </td>
+                              <td className="p-2 text-center">
+                                {doc.allowDelete ? (
+                                  <button
+                                    onClick={() => handleDeleteDocument(doc.id)}
+                                    className="p-1 hover:bg-red-50 text-red-500 rounded transition-colors"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                ) : (
+                                  <span className="text-gray-300">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </Card>
@@ -1360,47 +1780,46 @@ const CDLedger: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* Transaction Ledger Table */}
-            {/* Transaction Ledger Table */}
             <Card 
               title="Borrower Ledger Statement" 
               subtitle="All transactions and collection registry logs"
               className="shadow-sm border-gray-100 rounded-3xl"
             >
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-100 md:text-sm finance-caption">
+                <table className="min-w-[800px] w-full divide-y divide-gray-150 finance-caption text-left">
                   <thead>
                     <tr className="bg-gray-50/50">
-                      <th className="finance-small-label uppercase">Date</th>
-                      <th className="finance-small-label uppercase">A/C Name</th>
-                      <th className="finance-small-label uppercase text-right">Credit</th>
-                      <th className="finance-small-label uppercase text-right">Debit</th>
-                      <th className="finance-small-label uppercase">User</th>
-                      <th className="finance-small-label uppercase">Receipt No</th>
-                      <th className="finance-small-label uppercase">Particulars</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-left">Date</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-left">A/C Name</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-right">Credit</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-right">Debit</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-left">User</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-left">Receipt No</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-left">Particulars</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
                     {cdLedgerEntries.map((entry) => (
                       <tr key={entry.id} className="hover:bg-gray-50/30">
-                        <td className="px-3 py-3 text-gray-700 finance-input">
+                        <td className="px-4 py-3 text-gray-700 finance-input text-left whitespace-nowrap">
                           {new Date(entry.entry_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </td>
-                        <td className="px-3 py-3 text-gray-900 finance-input">
+                        <td className="px-4 py-3 text-gray-900 finance-input text-left whitespace-nowrap font-medium">
                           {entry.account_name || '-'}
                         </td>
-                        <td className="px-3 py-3 text-green-600 finance-input text-right">
+                        <td className="px-4 py-3 text-green-600 finance-input text-right font-medium whitespace-nowrap">
                           {entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN').replace(/\s/g, '')}` : '-'}
                         </td>
-                        <td className="px-3 py-3 text-red-600 finance-input text-right">
+                        <td className="px-4 py-3 text-red-650 finance-input text-right font-medium whitespace-nowrap">
                           {entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN').replace(/\s/g, '')}` : '-'}
                         </td>
-                        <td className="px-3 py-3 text-gray-500 finance-input">
+                        <td className="px-4 py-3 text-gray-650 finance-input text-left whitespace-nowrap">
                           {entry.user_name || 'Staff'}
                         </td>
-                        <td className="px-3 py-3 text-gray-500 finance-input">
+                        <td className="px-4 py-3 text-gray-650 finance-input text-left font-mono whitespace-nowrap">
                           {entry.receipt_no || '-'}
                         </td>
-                        <td className="px-3 py-3 text-gray-400 finance-header-time">
+                        <td className="px-4 py-3 text-gray-500 finance-header-time text-left min-w-[200px]">
                           {entry.particulars || '-'}
                         </td>
                       </tr>
@@ -1422,37 +1841,37 @@ const CDLedger: React.FC = () => {
               className="shadow-sm border-gray-100 rounded-3xl"
             >
               <div className="overflow-x-auto max-h-96 overflow-y-auto">
-                <table className="min-w-full divide-y divide-gray-100 md:text-sm finance-caption">
+                <table className="min-w-[800px] w-full divide-y divide-gray-150 finance-caption text-left">
                   <thead>
                     <tr className="bg-gray-50/50">
-                      <th className="finance-small-label uppercase">Date</th>
-                      <th className="text-right finance-small-label uppercase">Credit</th>
-                      <th className="finance-small-label uppercase">Receipt No</th>
-                      <th className="finance-small-label uppercase">Particulars</th>
-                      <th className="text-center finance-small-label uppercase">Days Renewed</th>
-                      <th className="finance-small-label uppercase">Renewed Till</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-left">Date</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-right">Credit</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-left">Receipt No</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-left">Particulars</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-center">Days Renewed</th>
+                      <th className="finance-small-label uppercase px-4 py-3 text-left">Renewed Till</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 bg-white">
-                    {cdInterestDetails.length > 0 ? (
-                      cdInterestDetails.map((detail) => (
+                    {displayedInterestDetails.length > 0 ? (
+                      displayedInterestDetails.map((detail) => (
                         <tr key={detail.id} className="hover:bg-gray-50/30">
-                          <td className="px-3 py-3 text-gray-700 finance-input">
+                          <td className="px-4 py-3 text-gray-700 finance-input text-left whitespace-nowrap">
                             {new Date(detail.entry_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                           </td>
-                          <td className="px-3 py-3 text-right text-green-600 finance-input">
+                          <td className="px-4 py-3 text-right font-medium text-green-600 finance-input whitespace-nowrap">
                             ₹{Number(detail.credit).toLocaleString('en-IN').replace(/\s/g, '')}
                           </td>
-                          <td className="px-3 py-3 text-gray-500 finance-input">
+                          <td className="px-4 py-3 text-gray-650 finance-input text-left font-mono whitespace-nowrap">
                             {detail.receipt_no || '-'}
                           </td>
-                          <td className="px-3 py-3 text-gray-500 finance-input">
+                          <td className="px-4 py-3 text-gray-500 finance-input text-left min-w-[200px]">
                             {detail.particulars || '-'}
                           </td>
-                          <td className="px-3 py-3 text-center finance-input text-gray-900">
+                          <td className="px-4 py-3 text-center finance-input text-gray-900 whitespace-nowrap">
                             {detail.renewed_days > 0 ? `${detail.renewed_days} Days` : '-'}
                           </td>
-                          <td className="px-3 py-3 text-gray-700 finance-input">
+                          <td className="px-4 py-3 text-gray-700 finance-input text-left whitespace-nowrap">
                             {detail.renewed_till_date ? new Date(detail.renewed_till_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}
                           </td>
                         </tr>
@@ -1473,32 +1892,32 @@ const CDLedger: React.FC = () => {
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm grid grid-cols-2 md:grid-cols-6 gap-6 text-center">
             <div>
               <div className="text-gray-400 finance-header-time uppercase">Total Credit (Col)</div>
-              <div className="text-green-600 mt-1 finance-brand">₹{cdLedgerEntries.reduce((sum, entry) => sum + Number(entry.credit), 0).toLocaleString('en-IN').replace(/\s/g, '')}</div>
+              <div className="text-green-600 mt-1 finance-brand">₹{bottomTotals.totalCredit.toLocaleString('en-IN').replace(/\s/g, '')}</div>
             </div>
 
             <div>
               <div className="text-gray-400 finance-header-time uppercase">Total Debit (Dis)</div>
-              <div className="text-red-600 mt-1 finance-brand">₹{cdLedgerEntries.reduce((sum, entry) => sum + Number(entry.debit), 0).toLocaleString('en-IN').replace(/\s/g, '')}</div>
+              <div className="text-red-600 mt-1 finance-brand">₹{bottomTotals.totalDebit.toLocaleString('en-IN').replace(/\s/g, '')}</div>
             </div>
 
             <div>
               <div className="text-gray-400 finance-header-time uppercase">Present Balance</div>
-              <div className="text-orange-700 mt-1 finance-brand">₹{selectedLoan.amount ? Number(selectedLoan.amount).toLocaleString('en-IN').replace(/\s/g, '') : '0'}</div>
+              <div className="text-orange-700 mt-1 finance-brand">₹{bottomTotals.presentBalance.toLocaleString('en-IN').replace(/\s/g, '')}</div>
             </div>
 
             <div>
               <div className="text-gray-400 finance-header-time uppercase">Total Dues</div>
-              <div className="text-gray-900 mt-1 finance-brand">₹{ledgerComputations?.totalDues.toLocaleString('en-IN').replace(/\s/g, '') || '0'}</div>
+              <div className="text-gray-900 mt-1 finance-brand">₹{bottomTotals.totalDues.toLocaleString('en-IN').replace(/\s/g, '')}</div>
             </div>
 
             <div>
               <div className="text-gray-400 finance-header-time uppercase">Paid Dues</div>
-              <div className="text-emerald-600 mt-1 finance-brand">₹{ledgerComputations?.paidDues.toLocaleString('en-IN').replace(/\s/g, '') || '0'}</div>
+              <div className="text-emerald-600 mt-1 finance-brand">₹{bottomTotals.paidDues.toLocaleString('en-IN').replace(/\s/g, '')}</div>
             </div>
 
             <div>
               <div className="text-gray-400 finance-header-time uppercase">Pending Dues</div>
-              <div className="text-red-700 mt-1 finance-brand">₹{ledgerComputations?.pendingDues.toLocaleString('en-IN').replace(/\s/g, '') || '0'}</div>
+              <div className="text-red-700 mt-1 finance-brand">₹{bottomTotals.pendingDues.toLocaleString('en-IN').replace(/\s/g, '')}</div>
             </div>
           </div>
         </>
@@ -1708,8 +2127,8 @@ const CDLedger: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white font-mono">
-                  {cdInterestDetails.length > 0 ? (
-                    cdInterestDetails.map((detail) => (
+                  {displayedInterestDetails.length > 0 ? (
+                    displayedInterestDetails.map((detail) => (
                       <tr key={detail.id}>
                         <td className="px-3 py-1.5 font-sans text-gray-700 finance-input">
                           {new Date(detail.entry_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
@@ -1813,20 +2232,17 @@ const CDLedger: React.FC = () => {
             </h2>
             
             <div className="space-y-4">
-              <div>
-                <Input 
-                  label={`Settlement Amount (₹)`} 
-                  type="number"
-                  value={npaSettlementAmount} 
-                  onChange={setNpaSettlementAmount} 
-                  placeholder="Enter final settled amount"
-                />
+              <div className="p-4 bg-orange-50 text-orange-800 border border-orange-200 rounded-2xl text-sm leading-relaxed">
+                <p className="font-semibold mb-1">Confirm NPA Close Action</p>
+                <p>Are you sure you want to close this account under NPA? This will mark the loan status as Closed with NPA designation and set the settlement amount to 0.</p>
               </div>
               <div>
                 <Input 
                   label="Reason / Remarks" 
                   value={npaReason} 
                   onChange={setNpaReason} 
+                  placeholder="Enter reason/remarks for NPA closure"
+                  required
                 />
               </div>
               
