@@ -538,6 +538,26 @@ const CDLedger: React.FC = () => {
     const grossInterest = dueDays <= 0 ? 0 : Number(((principalBalance * interestRate / 100 / 30) * dueDays).toFixed(2));
     const grossPenalty  = dueDays <= 5 ? 0 : Number(((principalBalance * penaltyRate / 100 / 30) * dueDays).toFixed(2));
 
+    // Calculate paid interest/penalty in the current cycle
+    const cycleStartMillis = startOfDay(selectedLoan.date);
+
+    const penaltyPaidInCycle = cdLedgerEntries
+      .filter(e => {
+        const entryDateMs = startOfDay(e.entry_date);
+        return entryDateMs >= cycleStartMillis && e.entry_type === 'penalty_payment';
+      })
+      .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
+    const interestPaidInCycle = cdLedgerEntries
+      .filter(e => {
+        const entryDateMs = startOfDay(e.entry_date);
+        return entryDateMs >= cycleStartMillis && e.entry_type === 'interest_payment';
+      })
+      .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
+    const pendingInterest = Math.max(0, Number((grossInterest - interestPaidInCycle).toFixed(2)));
+    const pendingPenalty  = Math.max(0, Number((grossPenalty - penaltyPaidInCycle).toFixed(2)));
+
     // Daily interest / renewal day value (Access VBA):
     // If DueDays <= 5: dailyInterest = principal * rate / 100 / 30, dailyPenalty = 0
     // If DueDays >  5: dailyInterest = principal * (rate + penaltyRate) / 100 / 30
@@ -552,9 +572,6 @@ const CDLedger: React.FC = () => {
       dailyPenalty = Number((principalBalance * penaltyRate / 100 / 30).toFixed(5));
     }
 
-    // totalForRenewal = interestDue + penaltyDue
-    // totalForClose   = principalBalance + interestDue + penaltyDue
-
     return {
       isDateInvalid: false,
       daysCount: dueDays,
@@ -564,15 +581,15 @@ const CDLedger: React.FC = () => {
       daysRemaining,
       nextDueDate: null, // Computed dynamically based on renewedDays
       penaltyDays: dueDays <= 5 ? 0 : dueDays,
-      interest: grossInterest,
-      penalty: grossPenalty,
+      interest: pendingInterest,
+      penalty: pendingPenalty,
       principal: principalBalance,
       grossInterest,
       grossPenalty,
       dailyInterest,
       dailyPenalty,
-      penaltyPaid: 0,
-      interestPaid: 0,
+      penaltyPaid: penaltyPaidInCycle,
+      interestPaid: interestPaidInCycle,
       principalPaid: 0
     };
   }, [selectedLoan, paymentDate, cdLedgerEntries]);
@@ -950,13 +967,8 @@ const CDLedger: React.FC = () => {
     const grossInterestDue = renewCalculations.grossInterest || 0;
     const grossPenaltyDue = renewCalculations.grossPenalty || 0;
 
-    const paidInterest = displayedInterestDetails
-      .filter(d => d.row_type === 'Interest Paid' || d.particulars?.toLowerCase().includes('interest paid'))
-      .reduce((sum, d) => sum + Number(d.credit || 0), 0);
-
-    const paidPenalty = displayedInterestDetails
-      .filter(d => d.row_type === 'Penalty Paid' || d.particulars?.toLowerCase().includes('penalty paid'))
-      .reduce((sum, d) => sum + Number(d.credit || 0), 0);
+    const paidInterest = renewCalculations.interestPaid || 0;
+    const paidPenalty = renewCalculations.penaltyPaid || 0;
 
     const pendingInterest = renewCalculations.interest || 0;
     const pendingPenalty = renewCalculations.penalty || 0;
@@ -1017,7 +1029,6 @@ const CDLedger: React.FC = () => {
     const principalBefore = ledgerMetrics.principalBalance;
     const dueDays = renewCalculations.daysPastDue || 0;
     const dailyInterest = renewCalculations.dailyInterest || 0;
-    const dailyPenalty = renewCalculations.dailyPenalty || 0;
     const interestRate = Number(selectedLoan?.interest_rate) || 3;
     const penaltyRate = selectedLoan?.penalty_percent !== undefined ? Number(selectedLoan.penalty_percent) : 0.75;
 
@@ -1027,7 +1038,15 @@ const CDLedger: React.FC = () => {
     let renewedDays = 0;
     let nextDueDate: Date | null = null;
 
-    if (dueDays === 0) {
+    const isClosingPayment = paymentAmount >= ledgerMetrics.totalClose;
+
+    if (isClosingPayment) {
+      interestPaid = renewCalculations.interest;
+      penaltyPaid = renewCalculations.penalty;
+      principalPaid = Number((paymentAmount - interestPaid - penaltyPaid).toFixed(2));
+      renewedDays = 0;
+      nextDueDate = null;
+    } else if (dueDays === 0) {
       // No dues — full amount reduces principal
       penaltyPaid = 0;
       interestPaid = 0;
@@ -1230,9 +1249,9 @@ const CDLedger: React.FC = () => {
       let renewedDays = 0;
 
       if (actionType === 'Close') {
-        // Close: pay exact interest + penalty + remaining goes to principal
-        interestPaid = renewCalculations.grossInterest;
-        penaltyPaid = renewCalculations.grossPenalty;
+        // Close: pay exact remaining interest + penalty + remaining goes to principal
+        interestPaid = renewCalculations.interest;
+        penaltyPaid = renewCalculations.penalty;
         principalPaid = Number(Math.max(0, paymentAmount - interestPaid - penaltyPaid).toFixed(2));
       } else if (dueDays === 0) {
         // No dues — full amount reduces principal
@@ -1288,7 +1307,7 @@ const CDLedger: React.FC = () => {
         throw new Error(res.error || 'Failed to post ledger entries');
       }
       
-      const totalForClose = principalBefore + renewCalculations.grossInterest + renewCalculations.grossPenalty;
+      const totalForClose = ledgerMetrics.totalClose;
 
       if (actionType === 'Close' || paymentAmount >= totalForClose) {
         const { error: closeError } = await supabase.from('finance_loans').update({ 

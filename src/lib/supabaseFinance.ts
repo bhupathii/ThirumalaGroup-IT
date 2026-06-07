@@ -587,11 +587,13 @@ class SupabaseFinance {
   }
 
   async addCDInterestDetail(payload: Partial<FinanceCDInterestDetail>): Promise<FinanceCDInterestDetail> {
-    const fullPayload = {
+    const fullPayload: any = {
       ...payload,
-      date: payload.entry_date || (payload as any).date,
       entry_date: payload.entry_date || (payload as any).date
     };
+    if ('date' in fullPayload) {
+      delete fullPayload.date;
+    }
     const { data, error } = await supabase.from('finance_cd_interest_details').insert(fullPayload).select().single();
     if (error) {
       console.error('Error adding CD interest detail:', error);
