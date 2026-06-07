@@ -520,112 +520,81 @@ const CDLedger: React.FC = () => {
     const dueDate = new Date(entryDateStart.getTime() + (periodDays - 1) * 24 * 60 * 60 * 1000);
     
     // Due Days = Payment Date - Due Date
-    const dueDays = Math.round((startOfDay(today) - startOfDay(dueDate)) / (1000 * 60 * 60 * 24));
-    
-    // Interest Days = Due Days (only when dueDays > 0)
-    const interestDays = dueDays <= 0 ? 0 : dueDays;
+    const rawDueDays = Math.round((startOfDay(today) - startOfDay(dueDate)) / (1000 * 60 * 60 * 24));
+    const dueDays = Math.max(0, rawDueDays);
+    const interestDays = dueDays;
+    const penaltyDays = dueDays <= 5 ? 0 : dueDays;
+    const daysRemaining = rawDueDays < 0 ? Math.abs(rawDueDays) : 0;
     
     const interestRate = Number(selectedLoan.interest_rate) || 3;
     const penaltyRate = selectedLoan.penalty_percent !== undefined ? Number(selectedLoan.penalty_percent) : 0.75;
-    
-    // Derive starting principal from db
-    const principalPaidTotalDb = cdLedgerEntries
-      .filter(e => {
-        const isPrincipalPaid = (e.particulars || '').toLowerCase().includes('principal paid') || 
-                                (e.particulars || '').toLowerCase().includes('principal adjusted') ||
-                                e.entry_type === 'principal_payment';
-        return (e.account_name || '').toLowerCase() === 'cd a/c' && isPrincipalPaid;
-      })
-      .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+    const principalBalance = Number(selectedLoan.amount);
 
-    const originalPrincipal = Number(selectedLoan.amount) + principalPaidTotalDb;
+    const grossInterest = dueDays <= 0 ? 0 : financeCalculationService.calculateInterest(principalBalance, interestRate, interestDays);
+    const grossPenalty = dueDays <= 5 ? 0 : financeCalculationService.calculatePenalty(principalBalance, penaltyRate, dueDays);
 
     const cycleStartMillis = startOfDay(entryDate);
-    const principalPaidBeforeCycle = cdLedgerEntries
-      .filter(e => {
-        const isPrincipalPaid = e.entry_type === 'principal_payment' || 
-          ((e.particulars || '').toLowerCase().includes('principal adjusted') && (e.account_name || '').toLowerCase() === 'cd a/c');
-        if (!isPrincipalPaid) return false;
 
-        const isStrictlyBefore = startOfDay(e.entry_date) < cycleStartMillis;
-        if (isStrictlyBefore) return true;
-
-        const isSameDay = startOfDay(e.entry_date) === cycleStartMillis;
-        const isRenewal = e.entry_type === 'Renewal' || 
-                          e.entry_type === 'Renew' || 
-                          (e.particulars || '').toLowerCase().includes('renewal') || 
-                          (e.particulars || '').toLowerCase().includes('renew');
-        return isSameDay && isRenewal;
-      })
-      .reduce((sum, e) => sum + Number(e.credit || 0), 0);
-
-    const principal = Number((originalPrincipal - principalPaidBeforeCycle).toFixed(2));
-
-    // If Due Days <= 0: Interest = 0, Penalty = 0
-    // If Due Days > 0: Interest = Principal * Rate% * Due Days / 30
-    const grossInterest = dueDays <= 0 ? 0 : financeCalculationService.calculateInterest(principal, interestRate, interestDays);
-    
-    // Penalty rule:
-    // If Due Days <= 5: Penalty = 0
-    // If Due Days > 5: Penalty = Principal * Penalty% * Due Days / 30
-    const grossPenalty = dueDays <= 5 ? 0 : financeCalculationService.calculatePenalty(principal, penaltyRate, dueDays);
-    const penaltyDays = dueDays <= 5 ? 0 : dueDays;
-    
-    // Next Due Date = Payment Date + Period Days - 1
-    const nextDueDate = new Date(startOfDay(today) + (periodDays - 1) * 24 * 60 * 60 * 1000);
-
-    // Sum all credit entries in the current cycle (excluding renewal completed entries)
-    const totalPaidInCycle = cdLedgerEntries
+    // Sum all interest payments in the current cycle (excluding renewals that started the cycle)
+    const interestPaidInCycle = cdLedgerEntries
       .filter(entry => {
         const entryDateVal = startOfDay(entry.entry_date);
-        const entryType = entry.entry_type;
-        
-        const isPayment = entry.credit > 0 && 
-                          entryType !== 'Commission' && 
-                          entryType !== 'opening_commission' &&
-                          entryType !== 'Document Charges' &&
-                          entryType !== 'document_charge' &&
-                          entryType !== 'Disbursement';
-        
-        const isRenewalCompletedEntry = 
-          entryType === 'Renewal' || 
-          entryType === 'Renew' || 
-          (entry.particulars || '').toLowerCase().includes('renewal') || 
-          (entry.particulars || '').toLowerCase().includes('renew');
-                                  
-        return isPayment && !isRenewalCompletedEntry && entryDateVal >= cycleStartMillis;
+        const isInterestPayment = entry.entry_type === 'interest_payment' || 
+                                  (entry.account_name || '').toLowerCase() === 'cd commission a/c';
+        const isRenewal = (entry.particulars || '').toLowerCase().includes('renewal') || 
+                          (entry.particulars || '').toLowerCase().includes('renew');
+        return entry.credit > 0 && isInterestPayment && !isRenewal && entryDateVal >= cycleStartMillis;
       })
       .reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
 
-    // Split total cycle paid against gross interest and penalty
-    const split = financeCalculationService.applyPaymentSplit(
-      totalPaidInCycle,
-      grossInterest,
-      grossPenalty,
-      principal
-    );
+    // Sum all penalty payments in the current cycle (excluding renewals that started the cycle)
+    const penaltyPaidInCycle = cdLedgerEntries
+      .filter(entry => {
+        const entryDateVal = startOfDay(entry.entry_date);
+        const isPenaltyPayment = entry.entry_type === 'penalty_payment' || 
+                                 (entry.account_name || '').toLowerCase() === 'penalty a/c';
+        const isRenewal = (entry.particulars || '').toLowerCase().includes('renewal') || 
+                          (entry.particulars || '').toLowerCase().includes('renew');
+        return entry.credit > 0 && isPenaltyPayment && !isRenewal && entryDateVal >= cycleStartMillis;
+      })
+      .reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
 
-    const remainingPenalty = Number(Math.max(0, grossPenalty - split.penaltyPaid).toFixed(2));
-    const remainingInterest = Number(Math.max(0, grossInterest - split.interestPaid).toFixed(2));
-    const remainingPrincipal = Number(Math.max(0, principal - split.principalPaid).toFixed(2));
+    // Sum all principal payments in the current cycle (excluding renewals that started the cycle)
+    const principalPaidInCycle = cdLedgerEntries
+      .filter(entry => {
+        const entryDateVal = startOfDay(entry.entry_date);
+        const isPrincipalPayment = entry.entry_type === 'principal_payment' || 
+                                  (entry.account_name || '').toLowerCase() === 'cd a/c';
+        const isRenewal = (entry.particulars || '').toLowerCase().includes('renewal') || 
+                          (entry.particulars || '').toLowerCase().includes('renew');
+        return entry.credit > 0 && isPrincipalPayment && !isRenewal && entryDateVal >= cycleStartMillis;
+      })
+      .reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
+
+    const pendingInterest = Number(Math.max(0, grossInterest - interestPaidInCycle).toFixed(2));
+    const pendingPenalty = Number(Math.max(0, grossPenalty - penaltyPaidInCycle).toFixed(2));
+    const remainingPrincipal = Number(Math.max(0, principalBalance - principalPaidInCycle).toFixed(2));
+
+    // Next Due Date = Payment Date + Period Days - 1
+    const nextDueDate = new Date(startOfDay(today) + (periodDays - 1) * 24 * 60 * 60 * 1000);
 
     return {
       isDateInvalid: false,
       daysCount: interestDays,
       loanDate: entryDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       dueDate: dueDate,
-      daysPastDue: dueDays < 0 ? 0 : dueDays,
-      daysRemaining: dueDays < 0 ? Math.abs(dueDays) : 0,
+      daysPastDue: dueDays,
+      daysRemaining,
       nextDueDate: nextDueDate,
       penaltyDays,
-      interest: remainingInterest,
-      penalty: remainingPenalty,
+      interest: pendingInterest,
+      penalty: pendingPenalty,
       principal: remainingPrincipal,
       grossInterest,
       grossPenalty,
-      penaltyPaid: split.penaltyPaid,
-      interestPaid: split.interestPaid,
-      principalPaid: split.principalPaid
+      penaltyPaid: penaltyPaidInCycle,
+      interestPaid: interestPaidInCycle,
+      principalPaid: principalPaidInCycle
     };
   }, [selectedLoan, paymentDate, cdLedgerEntries]);
 
