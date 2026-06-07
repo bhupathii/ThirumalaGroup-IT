@@ -799,7 +799,7 @@ class SupabaseFinance {
           if (!mainEntryId) mainEntryId = entry.id;
           if (isInterestOrPenaltyPaid) {
             const renewedTillDate = params.renewedDays > 0 
-              ? new Date(new Date(entryDate).getTime() + periodDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+              ? new Date(new Date(entryDate).getTime() + params.renewedDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
               : null;
 
             await this.addCDInterestDetail({
@@ -857,7 +857,7 @@ class SupabaseFinance {
       // 5. Post Note row to Interest Details (Credit = 0, contains full split detail description)
       if (mainEntryId && isInterestOrPenaltyPaid) {
         const renewedTillDate = params.renewedDays > 0 
-          ? new Date(new Date(entryDate).getTime() + periodDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+          ? new Date(new Date(entryDate).getTime() + params.renewedDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
           : null;
 
         const noteParticulars = params.actionType === 'Renew'

@@ -20,7 +20,9 @@ import {
   ShieldAlert,
   CreditCard,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ArrowLeft,
+  List
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { exportToExcel, exportToCSV } from '../../utils/excel';
@@ -50,6 +52,7 @@ const CDLedger: React.FC = () => {
   const [searchAcQuery, setSearchAcQuery] = useState('');
   const [showNameDropdown, setShowNameDropdown] = useState(false);
   const [showAcDropdown, setShowAcDropdown] = useState(false);
+  const [listSearchQuery, setListSearchQuery] = useState('');
 
   const [selectedLoan, setSelectedLoan] = useState<(FinanceLoan & { customer: FinanceCustomer; transactions: FinanceTransaction[]; photos: any[]; dues: FinanceDue[]; documents: FinanceDocument[] }) | null>(null);
   
@@ -145,10 +148,7 @@ const CDLedger: React.FC = () => {
       const cdLoans = allLoans.filter((l: any) => l.loan_category === 'CD');
       setLoansList(cdLoans);
 
-      // Auto-load first loan if none is selected yet
-      if (cdLoans.length > 0 && !selectedLoan) {
-        await loadLedgerDetails(cdLoans[0].id);
-      }
+      // Do NOT auto-load — show the index/list view on mount
     } catch (err) {
       console.error(err);
       toast.error('Failed to load ledger data');
@@ -500,6 +500,7 @@ const CDLedger: React.FC = () => {
         loanDate: entryDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
         dueDate: null,
         daysPastDue: 0,
+        daysRemaining: 0,
         nextDueDate: null,
         penaltyDays: 0,
         interest: 0,
@@ -507,6 +508,8 @@ const CDLedger: React.FC = () => {
         principal: Number(selectedLoan.amount),
         grossInterest: 0,
         grossPenalty: 0,
+        dailyInterest: 0,
+        dailyPenalty: 0,
         penaltyPaid: 0,
         interestPaid: 0,
         principalPaid: 0
@@ -515,86 +518,62 @@ const CDLedger: React.FC = () => {
 
     const periodDays = Number(selectedLoan.duration_months) || 30;
     
-    // Due Date = Loan Date + (Period Days - 1)
+    // Current Due Date = Loan Date + (Period Days - 1)
     const entryDateStart = new Date(startOfDay(entryDate));
     const dueDate = new Date(entryDateStart.getTime() + (periodDays - 1) * 24 * 60 * 60 * 1000);
     
-    // Due Days = Payment Date - Due Date
+    // Due Days = max(Payment Date - Due Date, 0)
+    // Old Access: dueDays = max(daysBetween(paymentDate, currentDueDate), 0)
     const rawDueDays = Math.round((startOfDay(today) - startOfDay(dueDate)) / (1000 * 60 * 60 * 24));
     const dueDays = Math.max(0, rawDueDays);
-    const interestDays = dueDays;
-    const penaltyDays = dueDays <= 5 ? 0 : dueDays;
     const daysRemaining = rawDueDays < 0 ? Math.abs(rawDueDays) : 0;
     
     const interestRate = Number(selectedLoan.interest_rate) || 3;
     const penaltyRate = selectedLoan.penalty_percent !== undefined ? Number(selectedLoan.penalty_percent) : 0.75;
     const principalBalance = Number(selectedLoan.amount);
 
-    const grossInterest = dueDays <= 0 ? 0 : financeCalculationService.calculateInterest(principalBalance, interestRate, interestDays);
-    const grossPenalty = dueDays <= 5 ? 0 : financeCalculationService.calculatePenalty(principalBalance, penaltyRate, dueDays);
+    // ===== OLD ACCESS VBA LOGIC =====
+    // Interest = principal * rate / 100 / 30 * dueDays (always, for all dueDays > 0)
+    // Penalty  = principal * penaltyRate / 100 / 30 * dueDays (only if dueDays > 5)
+    const grossInterest = dueDays <= 0 ? 0 : Number(((principalBalance * interestRate / 100 / 30) * dueDays).toFixed(2));
+    const grossPenalty  = dueDays <= 5 ? 0 : Number(((principalBalance * penaltyRate / 100 / 30) * dueDays).toFixed(2));
 
-    const cycleStartMillis = startOfDay(entryDate);
+    // Daily interest / renewal day value (Access VBA):
+    // If DueDays <= 5: dailyInterest = principal * rate / 100 / 30, dailyPenalty = 0
+    // If DueDays >  5: dailyInterest = principal * (rate + penaltyRate) / 100 / 30
+    //                  dailyPenalty   = principal * penaltyRate / 100 / 30
+    let dailyInterest = 0;
+    let dailyPenalty = 0;
+    if (dueDays > 0 && dueDays <= 5) {
+      dailyInterest = Number((principalBalance * interestRate / 100 / 30).toFixed(5));
+      dailyPenalty = 0;
+    } else if (dueDays > 5) {
+      dailyInterest = Number((principalBalance * (interestRate + penaltyRate) / 100 / 30).toFixed(5));
+      dailyPenalty = Number((principalBalance * penaltyRate / 100 / 30).toFixed(5));
+    }
 
-    // Sum all interest payments in the current cycle (excluding renewals that started the cycle)
-    const interestPaidInCycle = cdLedgerEntries
-      .filter(entry => {
-        const entryDateVal = startOfDay(entry.entry_date);
-        const isInterestPayment = entry.entry_type === 'interest_payment' || 
-                                  (entry.account_name || '').toLowerCase() === 'cd commission a/c';
-        const isRenewal = (entry.particulars || '').toLowerCase().includes('renewal') || 
-                          (entry.particulars || '').toLowerCase().includes('renew');
-        return entry.credit > 0 && isInterestPayment && !isRenewal && entryDateVal >= cycleStartMillis;
-      })
-      .reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
-
-    // Sum all penalty payments in the current cycle (excluding renewals that started the cycle)
-    const penaltyPaidInCycle = cdLedgerEntries
-      .filter(entry => {
-        const entryDateVal = startOfDay(entry.entry_date);
-        const isPenaltyPayment = entry.entry_type === 'penalty_payment' || 
-                                 (entry.account_name || '').toLowerCase() === 'penalty a/c';
-        const isRenewal = (entry.particulars || '').toLowerCase().includes('renewal') || 
-                          (entry.particulars || '').toLowerCase().includes('renew');
-        return entry.credit > 0 && isPenaltyPayment && !isRenewal && entryDateVal >= cycleStartMillis;
-      })
-      .reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
-
-    // Sum all principal payments in the current cycle (excluding renewals that started the cycle)
-    const principalPaidInCycle = cdLedgerEntries
-      .filter(entry => {
-        const entryDateVal = startOfDay(entry.entry_date);
-        const isPrincipalPayment = entry.entry_type === 'principal_payment' || 
-                                  (entry.account_name || '').toLowerCase() === 'cd a/c';
-        const isRenewal = (entry.particulars || '').toLowerCase().includes('renewal') || 
-                          (entry.particulars || '').toLowerCase().includes('renew');
-        return entry.credit > 0 && isPrincipalPayment && !isRenewal && entryDateVal >= cycleStartMillis;
-      })
-      .reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
-
-    const pendingInterest = Number(Math.max(0, grossInterest - interestPaidInCycle).toFixed(2));
-    const pendingPenalty = Number(Math.max(0, grossPenalty - penaltyPaidInCycle).toFixed(2));
-    const remainingPrincipal = Number(Math.max(0, principalBalance - principalPaidInCycle).toFixed(2));
-
-    // Next Due Date = Payment Date + Period Days - 1
-    const nextDueDate = new Date(startOfDay(today) + (periodDays - 1) * 24 * 60 * 60 * 1000);
+    // totalForRenewal = interestDue + penaltyDue
+    // totalForClose   = principalBalance + interestDue + penaltyDue
 
     return {
       isDateInvalid: false,
-      daysCount: interestDays,
+      daysCount: dueDays,
       loanDate: entryDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       dueDate: dueDate,
       daysPastDue: dueDays,
       daysRemaining,
-      nextDueDate: nextDueDate,
-      penaltyDays,
-      interest: pendingInterest,
-      penalty: pendingPenalty,
-      principal: remainingPrincipal,
+      nextDueDate: null, // Computed dynamically based on renewedDays
+      penaltyDays: dueDays <= 5 ? 0 : dueDays,
+      interest: grossInterest,
+      penalty: grossPenalty,
+      principal: principalBalance,
       grossInterest,
       grossPenalty,
-      penaltyPaid: penaltyPaidInCycle,
-      interestPaid: interestPaidInCycle,
-      principalPaid: principalPaidInCycle
+      dailyInterest,
+      dailyPenalty,
+      penaltyPaid: 0,
+      interestPaid: 0,
+      principalPaid: 0
     };
   }, [selectedLoan, paymentDate, cdLedgerEntries]);
 
@@ -1030,28 +1009,50 @@ const CDLedger: React.FC = () => {
     };
   }, [ledgerMetrics]);
 
-  // Payment preview calculation hook
+  // Payment preview calculation hook (Access VBA logic)
   const paymentPreview = useMemo(() => {
     const paymentAmount = Number(totalAmountPaying) || 0;
-    if (paymentAmount <= 0) return null;
+    if (paymentAmount <= 0 || !renewCalculations) return null;
 
     const principalBefore = ledgerMetrics.principalBalance;
-    const pendingPenaltyBefore = ledgerMetrics.pendingPenalty;
-    const pendingInterestBefore = ledgerMetrics.pendingInterest;
+    const dueDays = renewCalculations.daysPastDue || 0;
+    const dailyInterest = renewCalculations.dailyInterest || 0;
+    const dailyPenalty = renewCalculations.dailyPenalty || 0;
+    const interestRate = Number(selectedLoan?.interest_rate) || 3;
+    const penaltyRate = selectedLoan?.penalty_percent !== undefined ? Number(selectedLoan.penalty_percent) : 0.75;
 
     let penaltyPaid = 0;
     let interestPaid = 0;
     let principalPaid = 0;
+    let renewedDays = 0;
+    let nextDueDate: Date | null = null;
 
-    if (pendingPenaltyBefore === 0 && pendingInterestBefore === 0) {
+    if (dueDays === 0) {
+      // No dues — full amount reduces principal
       penaltyPaid = 0;
       interestPaid = 0;
       principalPaid = paymentAmount;
-    } else {
-      penaltyPaid = Number(Math.min(paymentAmount, pendingPenaltyBefore).toFixed(2));
-      const remaining1 = Number((paymentAmount - penaltyPaid).toFixed(2));
-      interestPaid = Number(Math.min(remaining1, pendingInterestBefore).toFixed(2));
-      principalPaid = Number((remaining1 - interestPaid).toFixed(2));
+    } else if (dailyInterest > 0) {
+      // Access VBA: renewedDays = Round(totalAmountPaying / dailyInterest, 0)
+      renewedDays = Math.round(paymentAmount / dailyInterest);
+
+      // interestPaid = principal * rate / 100 / 30 * renewedDays
+      interestPaid = Number((principalBefore * interestRate / 100 / 30 * renewedDays).toFixed(2));
+
+      // penaltyPaid = principal * penaltyRate / 100 / 30 * renewedDays (only if dueDays > 5)
+      if (dueDays > 5) {
+        penaltyPaid = Number((principalBefore * penaltyRate / 100 / 30 * renewedDays).toFixed(2));
+      } else {
+        penaltyPaid = 0;
+      }
+
+      // Do NOT reduce principal during normal renewal
+      principalPaid = 0;
+
+      // nextDueDate = currentDueDate + renewedDays
+      if (renewCalculations.dueDate && renewedDays > 0) {
+        nextDueDate = new Date(startOfDay(renewCalculations.dueDate) + renewedDays * 24 * 60 * 60 * 1000);
+      }
     }
 
     const principalAfter = Number(Math.max(0, principalBefore - principalPaid).toFixed(2));
@@ -1061,9 +1062,11 @@ const CDLedger: React.FC = () => {
       penaltyPaid,
       interestPaid,
       principalPaid,
-      principalAfter
+      principalAfter,
+      renewedDays,
+      nextDueDate
     };
-  }, [totalAmountPaying, ledgerMetrics]);
+  }, [totalAmountPaying, ledgerMetrics, renewCalculations, selectedLoan]);
 
   // Aggregated Loan Documents & Fingerprint display metadata
   const aggregatedDocs = useMemo(() => {
@@ -1192,7 +1195,7 @@ const CDLedger: React.FC = () => {
     return list;
   }, [loanDocuments, collateralLog, documentReturned, selectedLoan, guarantor1, guarantor2]);
 
-  // Handle payments renewals and closures
+  // Handle payments renewals and closures (Access VBA logic)
   const handleActionSubmit = async (actionType: 'Renew' | 'Partial' | 'Close') => {
     if (isRenewing) return;
     if (!selectedLoan || !renewCalculations) return;
@@ -1209,58 +1212,63 @@ const CDLedger: React.FC = () => {
       return;
     }
 
-    const totalAmountForRenewal = ledgerMetrics.pendingPenalty + ledgerMetrics.pendingInterest;
-
-    // Validation: Renewal requires clearing penalty + interest
-    if (actionType === 'Renew' && amount < totalAmountForRenewal) {
-      toast.error(`Amount must clear at least the interest and penalty (₹${totalAmountForRenewal}) for renewal.`);
-      return;
-    }
+    const dueDays = renewCalculations.daysPastDue || 0;
+    const dailyInterest = renewCalculations.dailyInterest || 0;
+    const interestRate = Number(selectedLoan.interest_rate) || 3;
+    const penaltyRate = selectedLoan.penalty_percent !== undefined ? Number(selectedLoan.penalty_percent) : 0.75;
     
     setIsRenewing(true);
     try {
       // Snapshot variables before saving
       const principalBefore = ledgerMetrics.principalBalance;
-      const interestDueBefore = ledgerMetrics.pendingInterest;
-      const penaltyDueBefore = ledgerMetrics.pendingPenalty;
       const paymentAmount = Number(amount.toFixed(2));
 
-      // Calculate split once using fixed snapshot
+      // ===== ACCESS VBA PAYMENT SPLIT =====
       let penaltyPaid = 0;
       let interestPaid = 0;
       let principalPaid = 0;
+      let renewedDays = 0;
 
-      if (penaltyDueBefore === 0 && interestDueBefore === 0) {
+      if (actionType === 'Close') {
+        // Close: pay exact interest + penalty + remaining goes to principal
+        interestPaid = renewCalculations.grossInterest;
+        penaltyPaid = renewCalculations.grossPenalty;
+        principalPaid = Number(Math.max(0, paymentAmount - interestPaid - penaltyPaid).toFixed(2));
+      } else if (dueDays === 0) {
+        // No dues — full amount reduces principal
         penaltyPaid = 0;
         interestPaid = 0;
         principalPaid = paymentAmount;
-      } else {
-        penaltyPaid = Number(Math.min(paymentAmount, penaltyDueBefore).toFixed(2));
-        const remaining1 = Number((paymentAmount - penaltyPaid).toFixed(2));
-        interestPaid = Number(Math.min(remaining1, interestDueBefore).toFixed(2));
-        principalPaid = Number((remaining1 - interestPaid).toFixed(2));
-      }
+      } else if (dailyInterest > 0) {
+        // Access VBA: renewedDays = Round(totalAmountPaying / dailyInterest, 0)
+        renewedDays = Math.round(paymentAmount / dailyInterest);
 
-      // Verify paymentAmount === penaltyPaid + interestPaid + principalPaid
-      const totalComputedSplit = Number((penaltyPaid + interestPaid + principalPaid).toFixed(2));
-      if (paymentAmount !== totalComputedSplit) {
-        toast.error("Payment split mismatch. Please retry.");
-        setIsRenewing(false);
-        return;
+        // interestPaid = principal * rate / 100 / 30 * renewedDays
+        interestPaid = Number((principalBefore * interestRate / 100 / 30 * renewedDays).toFixed(2));
+
+        // penaltyPaid = principal * penaltyRate / 100 / 30 * renewedDays (only if dueDays > 5)
+        if (dueDays > 5) {
+          penaltyPaid = Number((principalBefore * penaltyRate / 100 / 30 * renewedDays).toFixed(2));
+        } else {
+          penaltyPaid = 0;
+        }
+
+        // Do NOT reduce principal during normal renewal/partial
+        principalPaid = 0;
       }
 
       // Console logs for debugging
+      console.log('=== Access VBA Payment Split ===');
       console.log('receiptNo:', receiptNo);
       console.log('paymentAmount:', paymentAmount);
-      console.log('penaltyDueBefore:', penaltyDueBefore);
-      console.log('interestDueBefore:', interestDueBefore);
+      console.log('dueDays:', dueDays);
+      console.log('dailyInterest:', dailyInterest);
+      console.log('renewedDays:', renewedDays);
       console.log('penaltyPaid:', penaltyPaid);
       console.log('interestPaid:', interestPaid);
       console.log('principalPaid:', principalPaid);
       console.log('principalBefore:', principalBefore);
       console.log('principalAfter:', Number((principalBefore - principalPaid).toFixed(2)));
-
-      const isFullyRenewed = actionType === 'Renew' && paymentAmount >= totalAmountForRenewal && paymentAmount > 0;
       
       const res = await supabaseFinance.postCdLedgerPayment({
         loanId: selectedLoan.id,
@@ -1271,7 +1279,7 @@ const CDLedger: React.FC = () => {
         principalPaid,
         interestPaid,
         penaltyPaid,
-        renewedDays: isFullyRenewed ? renewCalculations.daysCount : 0,
+        renewedDays,
         paymentDate,
         receiptNo
       });
@@ -1280,7 +1288,7 @@ const CDLedger: React.FC = () => {
         throw new Error(res.error || 'Failed to post ledger entries');
       }
       
-      const totalForClose = principalBefore + interestDueBefore + penaltyDueBefore;
+      const totalForClose = principalBefore + renewCalculations.grossInterest + renewCalculations.grossPenalty;
 
       if (actionType === 'Close' || paymentAmount >= totalForClose) {
         const { error: closeError } = await supabase.from('finance_loans').update({ 
@@ -1291,8 +1299,11 @@ const CDLedger: React.FC = () => {
       } else {
         const updates: any = {};
         
-        if (isFullyRenewed) {
-          updates.date = new Date(paymentDate).toISOString().split('T')[0];
+        // For renewal/partial: set loan date based on currentDueDate + renewedDays
+        // This is the Access VBA pattern: nextDueDate = currentDueDate + renewedDays
+        if (renewedDays > 0 && renewCalculations.dueDate) {
+          const newCycleStart = new Date(startOfDay(renewCalculations.dueDate) + renewedDays * 24 * 60 * 60 * 1000);
+          updates.date = newCycleStart.toISOString().split('T')[0];
         }
         
         if (principalPaid > 0) {
@@ -1311,7 +1322,7 @@ const CDLedger: React.FC = () => {
       if (actionType === 'Close' || paymentAmount >= totalForClose) {
         toast.success('Account closed successfully');
       } else {
-        toast.success('Payment applied successfully');
+        toast.success(`Payment applied — ${renewedDays} days renewed`);
       }
     } catch(e: any) {
       console.error(e);
@@ -1588,8 +1599,105 @@ const CDLedger: React.FC = () => {
             <p className="text-gray-500 finance-section-heading">Compiling CD ledger registry...</p>
           </div>
         ) : !selectedLoan ? (
-          <div className="text-center py-20 bg-white rounded-3xl border border-gray-100 shadow-sm">
-            <p className="text-gray-500 finance-section-heading">No CD loans found in the system.</p>
+          /* ========== LOAN INDEX / LIST VIEW ========== */
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* Index Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-6 py-5 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <List className="w-5 h-5 text-green-600" />
+                  All CD Loans
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">{loansList.length} loan(s) in the system</p>
+              </div>
+              <div className="relative w-full sm:w-80">
+                <input
+                  type="text"
+                  value={listSearchQuery}
+                  onChange={(e) => setListSearchQuery(e.target.value)}
+                  placeholder="Search by name, A/C number, or phone..."
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-sm text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none focus:bg-white transition-colors"
+                />
+                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+              </div>
+            </div>
+
+            {/* Loan Table */}
+            {(() => {
+              const q = listSearchQuery.toLowerCase().trim();
+              const filtered = q
+                ? loansList.filter(loan =>
+                    loan.loan_id.toLowerCase().includes(q) ||
+                    (loan.customer?.name || '').toLowerCase().includes(q) ||
+                    (loan.customer?.phone || '').includes(q) ||
+                    (loan.customer?.aadhaar || '').includes(q)
+                  )
+                : loansList;
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="text-center py-16">
+                    <p className="text-gray-400 text-sm">
+                      {loansList.length === 0
+                        ? 'No CD loans found in the system.'
+                        : `No loans match "${listSearchQuery}"`}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 text-left">
+                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">#</th>
+                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">A/C Number</th>
+                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer Name</th>
+                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Loan Amount</th>
+                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Rate %</th>
+                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filtered.map((loan, idx) => (
+                        <tr
+                          key={loan.id}
+                          className="hover:bg-green-50/50 cursor-pointer transition-colors group"
+                          onClick={() => {
+                            loadLedgerDetails(loan.id);
+                            setListSearchQuery('');
+                          }}
+                        >
+                          <td className="px-6 py-3.5 text-gray-400 font-mono text-xs">{idx + 1}</td>
+                          <td className="px-6 py-3.5 font-bold text-green-700 font-mono">{loan.loan_id}</td>
+                          <td className="px-6 py-3.5 font-semibold text-gray-900">{loan.customer?.name || 'N/A'}</td>
+                          <td className="px-6 py-3.5 text-gray-600 font-mono">{loan.customer?.phone || '-'}</td>
+                          <td className="px-6 py-3.5 font-semibold text-gray-800">₹{Number(loan.amount || 0).toLocaleString('en-IN')}</td>
+                          <td className="px-6 py-3.5 text-gray-600">{loan.interest_rate}%</td>
+                          <td className="px-6 py-3.5 text-gray-500 text-xs">{loan.date ? new Date(loan.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '-'}</td>
+                          <td className="px-6 py-3.5">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                              loan.status === 'Active' ? 'bg-green-100 text-green-700'
+                              : loan.status === 'Closed' ? 'bg-gray-100 text-gray-500'
+                              : 'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {(loan.status || 'Active').toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3.5">
+                            <span className="text-green-600 text-xs font-semibold group-hover:underline">Open →</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <>
@@ -1675,6 +1783,13 @@ const CDLedger: React.FC = () => {
 
                   {/* Record selector/navigator at the bottom */}
                   <div className="border-t border-gray-150 pt-4 mt-6 flex items-center justify-between">
+                    <button
+                      onClick={() => { setSelectedLoan(null); setListSearchQuery(''); }}
+                      className="flex items-center gap-1.5 text-xs text-green-700 font-semibold hover:text-green-800 hover:underline transition-colors"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      Back to All Loans
+                    </button>
                     <span className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
                       Record: <span className="text-gray-700">{currentIndex + 1}</span> of <span className="text-gray-700">{loansList.length}</span>
                     </span>
@@ -1736,7 +1851,7 @@ const CDLedger: React.FC = () => {
                     
                     {/* Row 4: Current Due Date & Next Due Date */}
                     <Input label="Current Due Date" value={formatDateOld(renewCalculations?.dueDate)} readOnly className="bg-gray-50 text-gray-700" />
-                    <Input label="Next Due Date" value={formatDateOld(renewCalculations?.nextDueDate)} readOnly className="bg-gray-50 text-gray-700" />
+                    <Input label="Next Due Date" value={paymentPreview?.nextDueDate ? formatDateOld(paymentPreview.nextDueDate) : (renewCalculations?.dueDate ? formatDateOld(renewCalculations.dueDate) : '')} readOnly className="bg-gray-50 text-gray-700" />
                     
                     {/* Row 5: Due Days & Interest */}
                     <div>
@@ -1768,6 +1883,14 @@ const CDLedger: React.FC = () => {
                     <div className="bg-green-50/50 border border-green-100 rounded-2xl p-4 mb-6">
                       <h4 className="text-[10px] text-green-800 font-bold uppercase tracking-wider mb-2">Payment Split Preview</h4>
                       <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                        <div className="flex justify-between text-gray-500 border-b border-green-100/50 pb-1">
+                          <span>Renewed Days:</span>
+                          <span className="font-bold text-green-700">{paymentPreview.renewedDays}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-500 border-b border-green-100/50 pb-1">
+                          <span>Next Due Date:</span>
+                          <span className="font-bold text-green-700">{paymentPreview.nextDueDate ? formatDateOld(paymentPreview.nextDueDate) : '-'}</span>
+                        </div>
                         <div className="flex justify-between text-gray-500 border-b border-green-100/50 pb-1">
                           <span>Penalty Paid:</span>
                           <span className="font-bold text-red-650">₹{paymentPreview.penaltyPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
