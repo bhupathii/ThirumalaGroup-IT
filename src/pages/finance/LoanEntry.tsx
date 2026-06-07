@@ -538,6 +538,14 @@ const LoanEntry: React.FC = () => {
     setCollateralImage(null);
   };
 
+  // Helper to format currency properly as Indian Rupees
+  const formatRupee = (value: number) => {
+    return value.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
   // Live Calculations
   const liveCalculations = useMemo(() => {
     const P = Number(amount);
@@ -550,7 +558,7 @@ const LoanEntry: React.FC = () => {
     }
 
     let interestAmount = 0;
-    let penalty = 0;
+    const penalty = 0; // Explicitly 0 during new loan creation
     let duesCount = 0;
     let dueAmount = 0;
 
@@ -2210,55 +2218,55 @@ const LoanEntry: React.FC = () => {
             ) : loanCategory === 'CD' ? (
               <div className="space-y-4 text-slate-700 finance-caption">
                 <div className="grid grid-cols-2 gap-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <span className="text-slate-400 peek-small-10 uppercase">Principal:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.principal.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 peek-small-10 uppercase">Loan Amount (Principal):</span>
+                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.principal)}</span>
 
                   <span className="text-slate-400 peek-small-10 uppercase">Document Charges:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.docFees.toLocaleString('en-IN')}</span>
+                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.docFees)}</span>
 
                   <span className="text-slate-400 peek-small-10 uppercase">Net Disbursement:</span>
-                  <span className="text-right text-slate-900 text-blue-650 peek-button">₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</span>
+                  <span className="text-right text-slate-900 text-blue-650 peek-button">₹{formatRupee(liveCalculations.netDisbursed)}</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-y-2 border-t pt-2.5">
                   <span className="text-slate-400 peek-small-10 uppercase">Interest:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.interestAmount.toLocaleString('en-IN')}</span>
+                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.interestAmount)}</span>
 
-                  <span className="text-slate-400 peek-small-10 uppercase">Penalty:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.penalty.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 peek-small-10 uppercase">Penalty (New Loan):</span>
+                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.penalty)}</span>
 
                   <span className="text-slate-400 mt-1 border-t pt-1.5 peek-small-10 uppercase">Total for Renewal:</span>
-                  <span className="text-right text-slate-900 mt-1 border-t pt-1.5 peek-button">₹{liveCalculations.totalRenewal.toLocaleString('en-IN')}</span>
+                  <span className="text-right text-slate-900 mt-1 border-t pt-1.5 peek-button">₹{formatRupee(liveCalculations.totalRenewal)}</span>
 
                   <span className="text-slate-800 border-t pt-1.5 finance-sidebar-link uppercase">Total for Close:</span>
-                  <span className="text-right text-green-700 border-t pt-1.5 finance-sidebar-link">₹{liveCalculations.totalClose.toLocaleString('en-IN')}</span>
+                  <span className="text-right text-green-700 border-t pt-1.5 finance-sidebar-link">₹{formatRupee(liveCalculations.totalClose)}</span>
                 </div>
               </div>
             ) : (
               <div className="space-y-4 text-slate-700 finance-caption">
                 <div className="grid grid-cols-2 gap-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <span className="text-slate-400 peek-small-10 uppercase">Principal:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.principal.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 peek-small-10 uppercase">Loan Amount (Principal):</span>
+                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.principal)}</span>
 
-                  <span className="text-slate-400 peek-small-10 uppercase">Doc Fees:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.docFees.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 peek-small-10 uppercase">Document Charges:</span>
+                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.docFees)}</span>
 
-                  <span className="text-slate-400 peek-small-10 uppercase">Net Disbursed:</span>
-                  <span className="text-right text-slate-900 text-blue-650 peek-button">₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-400 peek-small-10 uppercase">Net Disbursement:</span>
+                  <span className="text-right text-slate-900 text-blue-650 peek-button">₹{formatRupee(liveCalculations.netDisbursed)}</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-y-2 border-t pt-2.5">
                   <span className="text-slate-400 peek-small-10 uppercase">Interest Component:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.interestAmount.toLocaleString('en-IN')}</span>
+                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.interestAmount)}</span>
 
                   <span className="text-slate-400 peek-small-10 uppercase">Total Repayment:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{liveCalculations.totalRepayment.toLocaleString('en-IN')}</span>
+                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.totalRepayment)}</span>
 
                   <span className="text-slate-400 peek-small-10 uppercase">Instalment Count:</span>
                   <span className="text-right text-slate-900 peek-button">{liveCalculations.duesCount} {dueType} Dues</span>
 
-                  <span className="text-slate-800 mt-1 border-t pt-1.5 finance-sidebar-link uppercase">Instalment:</span>
-                  <span className="text-right text-green-700 mt-1 border-t pt-1.5 finance-sidebar-link">₹{liveCalculations.dueAmount.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-800 mt-1 border-t pt-1.5 finance-sidebar-link uppercase">Instalment Amount:</span>
+                  <span className="text-right text-green-700 mt-1 border-t pt-1.5 finance-sidebar-link">₹{formatRupee(liveCalculations.dueAmount)}</span>
                 </div>
               </div>
             )}
@@ -2337,11 +2345,11 @@ const LoanEntry: React.FC = () => {
           <div>
             <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Loan Terms</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="text-gray-500 peek-caption-12">PRINCIPAL:</span> ₹{Number(amount).toLocaleString('en-IN')}</div>
+               <div><span className="text-gray-500 peek-caption-12">PRINCIPAL:</span> ₹{formatRupee(Number(amount) || 0)}</div>
                <div><span className="text-gray-500 peek-caption-12">INTEREST RATE:</span> {interestRate}% / MONTH</div>
                <div><span className="text-gray-500 peek-caption-12">DURATION:</span> {durationMonths} MONTHS</div>
                <div><span className="text-gray-500 peek-caption-12">DUE TYPE:</span> {dueType}</div>
-               <div><span className="text-gray-500 peek-caption-12">DOC CHARGES:</span> ₹{Number(docCharges).toLocaleString('en-IN')}</div>
+               <div><span className="text-gray-500 peek-caption-12">DOC CHARGES:</span> ₹{formatRupee(Number(docCharges) || 0)}</div>
                <div className="col-span-2"><span className="text-gray-500 peek-caption-12">PARTICULARS:</span> {particulars}</div>
             </div>
           </div>
@@ -2351,10 +2359,10 @@ const LoanEntry: React.FC = () => {
           <div>
             <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Calculations</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="text-gray-500 peek-caption-12">NET DISBURSED:</span> ₹{liveCalculations.netDisbursed.toLocaleString('en-IN')}</div>
-               <div><span className="text-gray-500 peek-caption-12">TOTAL REPAYMENT:</span> ₹{liveCalculations.totalRepayment.toLocaleString('en-IN')}</div>
+               <div><span className="text-gray-500 peek-caption-12">NET DISBURSED:</span> ₹{formatRupee(liveCalculations.netDisbursed)}</div>
+               <div><span className="text-gray-500 peek-caption-12">TOTAL REPAYMENT:</span> ₹{formatRupee(liveCalculations.totalRepayment)}</div>
                <div><span className="text-gray-500 peek-caption-12">INSTALMENT COUNT:</span> {liveCalculations.duesCount}</div>
-               <div><span className="text-gray-500 peek-caption-12">INSTALMENT AMOUNT:</span> ₹{liveCalculations.dueAmount.toLocaleString('en-IN')}</div>
+               <div><span className="text-gray-500 peek-caption-12">INSTALMENT AMOUNT:</span> ₹{formatRupee(liveCalculations.dueAmount)}</div>
             </div>
           </div>
           )}

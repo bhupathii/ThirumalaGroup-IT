@@ -129,21 +129,21 @@ export const financeCalculationService = {
    */
   calculateInterest(principal: number, rate: number, interestDays: number): number {
     if (interestDays <= 0) return 0;
-    return Math.round((principal * (rate / 100) * interestDays) / 30);
+    return Number(((principal * (rate / 100) * interestDays) / 30).toFixed(2));
   },
 
   calculatePenalty(principal: number, penaltyRate: number, dueDays: number): number {
     if (dueDays <= 5) return 0;
     // Penalty includes all dueDays once grace period is crossed
-    return Math.round((principal * (penaltyRate / 100) * dueDays) / 30);
+    return Number(((principal * (penaltyRate / 100) * dueDays) / 30).toFixed(2));
   },
 
   calculateRenewalTotal(interest: number, penalty: number): number {
-    return Math.round(interest + penalty);
+    return Number((interest + penalty).toFixed(2));
   },
 
   calculateCloseTotal(principal: number, interest: number, penalty: number): number {
-    return Math.round(principal + interest + penalty);
+    return Number((principal + interest + penalty).toFixed(2));
   },
 
   applyPaymentSplit(
@@ -172,16 +172,16 @@ export const financeCalculationService = {
     }
 
     return {
-      penaltyPaid: Math.round(penaltyPaid),
-      interestPaid: Math.round(interestPaid),
-      principalPaid: Math.round(principalPaid),
-      remaining: Math.round(remaining)
+      penaltyPaid: Number(penaltyPaid.toFixed(2)),
+      interestPaid: Number(interestPaid.toFixed(2)),
+      principalPaid: Number(principalPaid.toFixed(2)),
+      remaining: Number(remaining.toFixed(2))
     };
   },
 
-  calculateNextDueDate(paymentDate: string | Date): string {
+  calculateNextDueDate(paymentDate: string | Date, periodDays: number = 10): string {
     const dateObj = new Date(paymentDate);
-    const nextDueDate = new Date(dateObj.getTime() + 10 * 24 * 60 * 60 * 1000);
+    const nextDueDate = new Date(dateObj.getTime() + periodDays * 24 * 60 * 60 * 1000);
     return nextDueDate.toISOString().split('T')[0];
   },
 

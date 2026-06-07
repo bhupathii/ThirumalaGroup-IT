@@ -636,6 +636,17 @@ class SupabaseFinance {
         // Ignore if receipt_no column does not exist yet
       }
 
+      // Query finance_documents_returned
+      try {
+        const { data: docRetData } = await supabase
+          .from('finance_documents_returned')
+          .select('receipt_no')
+          .like('receipt_no', 'RC%');
+        extractMax(docRetData || []);
+      } catch (_) {
+        // Ignore if receipt_no column does not exist yet
+      }
+
       const nextNum = maxNum + 1;
       const padded = String(nextNum).padStart(3, '0');
       return `RC${padded}`;
@@ -667,6 +678,14 @@ class SupabaseFinance {
       const entryDate = params.paymentDate ? new Date(params.paymentDate).toISOString() : new Date().toISOString();
       const totalAmount = params.principalPaid + params.interestPaid + params.penaltyPaid;
 
+      // Fetch duration_months to get the period days dynamically
+      const { data: loanData } = await supabase
+        .from('finance_loans')
+        .select('duration_months')
+        .eq('id', params.loanId)
+        .single();
+      const periodDays = loanData ? (Number(loanData.duration_months) || 10) : 10;
+
       // 1. Post to finance_transactions (Daybook)
       await this.addTransaction({
         loan_id: params.loanId,
@@ -679,20 +698,27 @@ class SupabaseFinance {
       });
 
       let mainEntryId: string | null = null;
+      const actionText = params.actionType === 'Renew'
+        ? 'Renewal Completed'
+        : (params.actionType === 'Partial' ? 'Partial Payment' : 'Close');
 
       // 2. Post Penalty
       if (params.penaltyPaid > 0) {
+        const penaltyParticulars = params.actionType === 'Renew'
+          ? 'Penalty Paid - Renewal Completed'
+          : `Penalty Paid - ${actionText} - ${receiptNo}`;
+
         const entry = await this.addCDLedgerEntry({
           loan_id: params.loanId,
           customer_id: params.customerId,
-          account_name: params.accountName,
+          account_name: 'PENALTY A/C',
           entry_date: entryDate,
           credit: params.penaltyPaid,
           debit: 0,
           receipt_no: receiptNo,
-          particulars: `${params.actionType} - Penalty Paid`,
+          particulars: penaltyParticulars,
           user_name: params.userName,
-          entry_type: params.actionType === 'Renew' ? 'Renewal' : params.actionType === 'Partial' ? 'Partial Payment' : 'Settlement'
+          entry_type: 'penalty_payment'
         });
 
         if (entry) {
@@ -703,7 +729,7 @@ class SupabaseFinance {
             entry_date: entryDate,
             credit: params.penaltyPaid,
             receipt_no: receiptNo,
-            particulars: `${params.actionType} - Penalty Paid`,
+            particulars: penaltyParticulars,
             renewed_days: 0,
             renewed_till_date: null,
             row_type: entry.entry_type
@@ -713,23 +739,27 @@ class SupabaseFinance {
 
       // 3. Post Interest
       if (params.interestPaid > 0) {
+        const interestParticulars = params.actionType === 'Renew'
+          ? 'Interest Paid - Renewal Completed'
+          : `Interest Paid - ${actionText} - ${receiptNo}`;
+
         const entry = await this.addCDLedgerEntry({
           loan_id: params.loanId,
           customer_id: params.customerId,
-          account_name: params.accountName,
+          account_name: 'CD COMMISSION A/C',
           entry_date: entryDate,
           credit: params.interestPaid,
           debit: 0,
           receipt_no: receiptNo,
-          particulars: `${params.actionType} - Interest Paid`,
+          particulars: interestParticulars,
           user_name: params.userName,
-          entry_type: params.actionType === 'Renew' ? 'Renewal' : params.actionType === 'Partial' ? 'Partial Payment' : 'Settlement'
+          entry_type: 'interest_payment'
         });
 
         if (entry) {
           if (!mainEntryId) mainEntryId = entry.id;
           const renewedTillDate = params.renewedDays > 0 
-            ? new Date(new Date(entryDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            ? new Date(new Date(entryDate).getTime() + periodDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
             : null;
 
           await this.addCDInterestDetail({
@@ -738,7 +768,7 @@ class SupabaseFinance {
             entry_date: entryDate,
             credit: params.interestPaid,
             receipt_no: receiptNo,
-            particulars: `${params.actionType} - Interest Paid`,
+            particulars: interestParticulars,
             renewed_days: params.renewedDays,
             renewed_till_date: renewedTillDate,
             row_type: entry.entry_type
@@ -748,17 +778,21 @@ class SupabaseFinance {
 
       // 4. Post Principal
       if (params.principalPaid > 0) {
+        const principalParticulars = params.actionType === 'Renew'
+          ? 'Principal Adjusted - Renewal Completed'
+          : `Principal Adjusted - ${actionText} - ${receiptNo}`;
+
         const entry = await this.addCDLedgerEntry({
           loan_id: params.loanId,
           customer_id: params.customerId,
-          account_name: params.accountName,
+          account_name: 'CD A/C',
           entry_date: entryDate,
           credit: params.principalPaid,
           debit: 0,
           receipt_no: receiptNo,
-          particulars: `${params.actionType} - Principal Paid`,
+          particulars: principalParticulars,
           user_name: params.userName,
-          entry_type: params.actionType === 'Renew' ? 'Renewal' : params.actionType === 'Partial' ? 'Partial Payment' : 'Settlement'
+          entry_type: 'principal_payment'
         });
 
         if (entry) {
@@ -769,7 +803,7 @@ class SupabaseFinance {
             entry_date: entryDate,
             credit: params.principalPaid,
             receipt_no: receiptNo,
-            particulars: `${params.actionType} - Principal Paid`,
+            particulars: principalParticulars,
             renewed_days: 0,
             renewed_till_date: null,
             row_type: entry.entry_type
@@ -780,8 +814,12 @@ class SupabaseFinance {
       // 5. Post Note row to Interest Details (Credit = 0, contains full split detail description)
       if (mainEntryId) {
         const renewedTillDate = params.renewedDays > 0 
-          ? new Date(new Date(entryDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+          ? new Date(new Date(entryDate).getTime() + periodDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
           : null;
+
+        const noteParticulars = params.actionType === 'Renew'
+          ? `Renewal Completed Note: Total Paid ₹${totalAmount} (Penalty: ₹${params.penaltyPaid}, Interest: ₹${params.interestPaid}, Principal: ₹${params.principalPaid})`
+          : `${params.actionType} Note: Total Paid ₹${totalAmount} (Penalty: ₹${params.penaltyPaid}, Interest: ₹${params.interestPaid}, Principal: ₹${params.principalPaid})`;
 
         await this.addCDInterestDetail({
           loan_id: params.loanId,
@@ -789,7 +827,7 @@ class SupabaseFinance {
           entry_date: entryDate,
           credit: 0,
           receipt_no: receiptNo,
-          particulars: `${params.actionType} Note: Total Paid ₹${totalAmount} (Penalty: ₹${params.penaltyPaid}, Interest: ₹${params.interestPaid}, Principal: ₹${params.principalPaid})`,
+          particulars: noteParticulars,
           renewed_days: params.renewedDays,
           renewed_till_date: renewedTillDate,
           row_type: params.actionType === 'Renew' ? 'Renewal' : 'Partial Payment'
@@ -827,14 +865,14 @@ class SupabaseFinance {
             id: `legacy-loan-${loanData.id}`,
             loan_id: loanData.id,
             customer_id: loanData.customer_id,
-            account_name: null,
+            account_name: 'CD A/C',
             entry_date: loanData.date,
             credit: 0,
             debit: Number(loanData.amount),
             receipt_no: null,
             particulars: 'Original Loan Disbursement',
             user_name: 'System',
-            entry_type: 'Disbursement',
+            entry_type: 'original_loan',
             created_at: loanData.created_at || loanData.date
          });
       }
@@ -842,9 +880,10 @@ class SupabaseFinance {
       for (const tx of legacy) {
         const remarks = tx.remarks || '';
         const match = remarks.match(/(REC-\d+|RC\d+)/i);
-        const receiptNo = match ? match[0] : null;
+        const receiptNoFromRemarks = match ? match[0] : null;
+        const txReceiptNo = tx.receipt_no || receiptNoFromRemarks;
 
-        if (receiptNo && existingReceipts.has(receiptNo)) {
+        if (txReceiptNo && existingReceipts.has(txReceiptNo)) {
           continue;
         }
 
@@ -853,21 +892,27 @@ class SupabaseFinance {
             id: `legacy-${tx.id}`,
             loan_id: tx.loan_id,
             customer_id: '',
-            account_name: null,
+            account_name: 'CD A/C',
             entry_date: tx.date,
             credit: 0,
             debit: Number(tx.amount),
             receipt_no: null,
             particulars: 'Original Loan Disbursement',
             user_name: tx.collected_by || 'System',
-            entry_type: 'Disbursement',
+            entry_type: 'original_loan',
             created_at: tx.created_at || tx.date
           });
         } else if (tx.type === 'Collection') {
           // If a native entry already matched this amount on this date, assume it's the same and skip
           // Note: a single collection tx might be split into native Penalty + native Interest rows, so sum them per receipt
-          // But since legacy transactions don't have native rows, this is just a fallback.
-          const hasExactMatch = entries.some(e => e.entry_date === tx.date && e.credit === Number(tx.amount) && !e.receipt_no);
+          const txTime = new Date(tx.date).getTime();
+          const exactDateNativeSum = entries
+            .filter(e => new Date(e.entry_date).getTime() === txTime)
+            .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
+          const hasExactMatch = entries.some(e => new Date(e.entry_date).getTime() === txTime && Number(e.credit) === Number(tx.amount) && !e.receipt_no) ||
+                                (exactDateNativeSum > 0 && Math.abs(exactDateNativeSum - Number(tx.amount)) < 0.01);
+
           if (!hasExactMatch) {
             mappedEntries.push({
               id: `legacy-${tx.id}`,
@@ -877,7 +922,7 @@ class SupabaseFinance {
               entry_date: tx.date,
               credit: Number(tx.amount),
               debit: 0,
-              receipt_no: receiptNo,
+              receipt_no: txReceiptNo,
               particulars: tx.remarks || 'Legacy Payment',
               user_name: tx.collected_by || 'System',
               entry_type: 'Legacy Payment',
