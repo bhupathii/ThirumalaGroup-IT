@@ -545,7 +545,17 @@ const CDLedger: React.FC = () => {
       .filter(e => {
         const isPrincipalPaid = e.entry_type === 'principal_payment' || 
           ((e.particulars || '').toLowerCase().includes('principal adjusted') && (e.account_name || '').toLowerCase() === 'cd a/c');
-        return isPrincipalPaid && startOfDay(e.entry_date) <= cycleStartMillis;
+        if (!isPrincipalPaid) return false;
+
+        const isStrictlyBefore = startOfDay(e.entry_date) < cycleStartMillis;
+        if (isStrictlyBefore) return true;
+
+        const isSameDay = startOfDay(e.entry_date) === cycleStartMillis;
+        const isRenewal = e.entry_type === 'Renewal' || 
+                          e.entry_type === 'Renew' || 
+                          (e.particulars || '').toLowerCase().includes('renewal') || 
+                          (e.particulars || '').toLowerCase().includes('renew');
+        return isSameDay && isRenewal;
       })
       .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
@@ -578,9 +588,10 @@ const CDLedger: React.FC = () => {
                           entryType !== 'Disbursement';
         
         const isRenewalCompletedEntry = 
-          (entry.particulars || '').toLowerCase().includes('renewal completed') ||
           entryType === 'Renewal' || 
-          entryType === 'Renew';
+          entryType === 'Renew' || 
+          (entry.particulars || '').toLowerCase().includes('renewal') || 
+          (entry.particulars || '').toLowerCase().includes('renew');
                                   
         return isPayment && !isRenewalCompletedEntry && entryDateVal >= cycleStartMillis;
       })
@@ -642,7 +653,12 @@ const CDLedger: React.FC = () => {
     
     // Find all renewal dates
     const cycleEnds = sortedDbEntries
-      .filter(e => e.entry_type === 'Renewal' || e.entry_type === 'Renew' || (e.particulars || '').toLowerCase().includes('renewal completed'))
+      .filter(e => 
+        e.entry_type === 'Renewal' || 
+        e.entry_type === 'Renew' || 
+        (e.particulars || '').toLowerCase().includes('renewal') || 
+        (e.particulars || '').toLowerCase().includes('renew')
+      )
       .map(e => startOfDay(e.entry_date));
     
     const uniqueCycleEnds = Array.from(new Set(cycleEnds)).sort((a, b) => a - b);
@@ -757,7 +773,23 @@ const CDLedger: React.FC = () => {
         if (!isPayment) return false;
         
         const d = startOfDay(entry.entry_date);
-        return d > cycle.start && d <= cycle.end;
+        
+        const isRenewalCompleted = 
+          entry.entry_type === 'Renewal' || 
+          entry.entry_type === 'Renew' || 
+          (entry.particulars || '').toLowerCase().includes('renewal') || 
+          (entry.particulars || '').toLowerCase().includes('renew');
+
+        if (isRenewalCompleted) {
+          return d > cycle.start && d <= cycle.end;
+        } else {
+          const isFirstCycle = cycle.start === originalLoanStart;
+          if (isFirstCycle) {
+            return d >= cycle.start && d <= cycle.end;
+          } else {
+            return d > cycle.start && d <= cycle.end;
+          }
+        }
       });
 
       // Dues calculation for this cycle
@@ -827,7 +859,10 @@ const CDLedger: React.FC = () => {
         accumulatedPayments += creditAmt;
         runningPrincipal -= prPaid;
 
-        const actionText = entry.entry_type === 'Renewal' || entry.entry_type === 'Renew' || (entry.particulars || '').toLowerCase().includes('renewal completed')
+        const isRenewal = entry.entry_type === 'Renewal' || entry.entry_type === 'Renew' || 
+                          (entry.particulars || '').toLowerCase().includes('renewal') || 
+                          (entry.particulars || '').toLowerCase().includes('renew');
+        const actionText = isRenewal
           ? 'Renewal Completed'
           : (entry.entry_type === 'Close' || entry.entry_type === 'Settlement' ? 'Close' : 'Partial Payment');
         const rNum = entry.receipt_no ? ` - ${entry.receipt_no}` : '';
@@ -1273,22 +1308,22 @@ const CDLedger: React.FC = () => {
       });
       
       if (!res.success) {
-        throw new Error('Failed to post ledger entries');
+        throw new Error(res.error || 'Failed to post ledger entries');
       }
       
       const totalForClose = principalBefore + interestDueBefore + penaltyDueBefore;
 
       if (actionType === 'Close' || paymentAmount >= totalForClose) {
-        await supabase.from('finance_loans').update({ 
+        const { error: closeError } = await supabase.from('finance_loans').update({ 
           status: 'Closed',
           amount: Math.max(0, Number((principalBefore - principalPaid).toFixed(2)))
         }).eq('id', selectedLoan.id);
-        toast.success('Account closed successfully');
+        if (closeError) throw closeError;
       } else {
         const updates: any = {};
         
         if (isFullyRenewed) {
-          updates.date = new Date(paymentDate).toISOString();
+          updates.date = new Date(paymentDate).toISOString().split('T')[0];
         }
         
         if (principalPaid > 0) {
@@ -1296,17 +1331,22 @@ const CDLedger: React.FC = () => {
         }
 
         if (Object.keys(updates).length > 0) {
-          await supabase.from('finance_loans').update(updates).eq('id', selectedLoan.id);
+          const { error: updateError } = await supabase.from('finance_loans').update(updates).eq('id', selectedLoan.id);
+          if (updateError) throw updateError;
         }
-        
-        toast.success('Payment applied successfully');
       }
       
       setTotalAmountPaying('');
       await loadLedgerDetails(selectedLoan.id);
-    } catch(e) {
+
+      if (actionType === 'Close' || paymentAmount >= totalForClose) {
+        toast.success('Account closed successfully');
+      } else {
+        toast.success('Payment applied successfully');
+      }
+    } catch(e: any) {
       console.error(e);
-      toast.error('Error applying payment');
+      toast.error(e?.message || 'Error applying payment');
     } finally {
       setIsRenewing(false);
     }
@@ -1319,9 +1359,10 @@ const CDLedger: React.FC = () => {
       const amount = 0;
       const npaReceiptNo = await supabaseFinance.getNextReceiptNumber();
       
-      await supabase.from('finance_loans')
+      const { error: loanError } = await supabase.from('finance_loans')
         .update({ status: 'Closed', npa_closed: true, amount: 0 })
         .eq('id', selectedLoan.id);
+      if (loanError) throw loanError;
 
       await supabaseFinance.addNPARecord({
         loan_id: selectedLoan.id,
@@ -1346,9 +1387,9 @@ const CDLedger: React.FC = () => {
         entry_type: 'Settlement'
       });
 
+      await loadLedgerDetails(selectedLoan.id);
       toast.success('NPA Account closed and settlement recorded.');
       setShowNpaModal(false);
-      loadLedgerDetails(selectedLoan.id);
     } catch(e) {
       console.error(e);
       toast.error('Error settling NPA account');
@@ -1373,7 +1414,7 @@ const CDLedger: React.FC = () => {
 
       const docReceiptNo = await supabaseFinance.getNextReceiptNumber();
 
-      await supabase.from('finance_documents_returned').insert({
+      const { error: docError } = await supabase.from('finance_documents_returned').insert({
         loan_id: selectedLoan.id,
         returned_date: returnDate,
         returned_to: returnedTo,
@@ -1382,6 +1423,7 @@ const CDLedger: React.FC = () => {
         created_by: user?.username || 'Staff',
         receipt_no: docReceiptNo
       });
+      if (docError) throw docError;
 
       await supabaseFinance.addCDLedgerEntry({
         loan_id: selectedLoan.id,
@@ -1396,9 +1438,9 @@ const CDLedger: React.FC = () => {
         entry_type: 'Settlement'
       });
 
+      await loadLedgerDetails(selectedLoan.id);
       toast.success('Documents returned successfully.');
       setShowReturnDocModal(false);
-      loadLedgerDetails(selectedLoan.id);
     } catch(e) {
       console.error(e);
       toast.error('Error recording document return');

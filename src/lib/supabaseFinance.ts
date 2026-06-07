@@ -561,37 +561,43 @@ class SupabaseFinance {
     }
   }
 
-  async addTransaction(payload: Partial<FinanceTransaction>): Promise<FinanceTransaction | null> {
-    try {
-      const { data, error } = await supabase.from('finance_transactions').insert(payload).select().single();
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      console.error('Error adding finance transaction:', err);
-      return null;
+  async addTransaction(payload: Partial<FinanceTransaction>): Promise<FinanceTransaction> {
+    const { data, error } = await supabase.from('finance_transactions').insert(payload).select().single();
+    if (error) {
+      console.error('Error adding finance transaction:', error);
+      throw error;
     }
+    return data;
   }
 
-  async addCDLedgerEntry(payload: Partial<FinanceCDLedgerEntry>): Promise<FinanceCDLedgerEntry | null> {
-    try {
-      const { data, error } = await supabase.from('finance_cd_ledger_entries').insert(payload).select().single();
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      console.error('Error adding CD ledger entry:', err);
-      return null;
+  async addCDLedgerEntry(payload: Partial<FinanceCDLedgerEntry>): Promise<FinanceCDLedgerEntry> {
+    const totalPaidVal = Number(payload.credit || 0) + Number(payload.debit || 0);
+    const fullPayload = {
+      ...payload,
+      date: payload.entry_date || (payload as any).date,
+      entry_date: payload.entry_date || (payload as any).date,
+      total_paid: (payload as any).total_paid !== undefined ? (payload as any).total_paid : totalPaidVal
+    };
+    const { data, error } = await supabase.from('finance_cd_ledger_entries').insert(fullPayload).select().single();
+    if (error) {
+      console.error('Error adding CD ledger entry:', error);
+      throw error;
     }
+    return data;
   }
 
-  async addCDInterestDetail(payload: Partial<FinanceCDInterestDetail>): Promise<FinanceCDInterestDetail | null> {
-    try {
-      const { data, error } = await supabase.from('finance_cd_interest_details').insert(payload).select().single();
-      if (error) throw error;
-      return data;
-    } catch (err) {
-      console.error('Error adding CD interest detail:', err);
-      return null;
+  async addCDInterestDetail(payload: Partial<FinanceCDInterestDetail>): Promise<FinanceCDInterestDetail> {
+    const fullPayload = {
+      ...payload,
+      date: payload.entry_date || (payload as any).date,
+      entry_date: payload.entry_date || (payload as any).date
+    };
+    const { data, error } = await supabase.from('finance_cd_interest_details').insert(fullPayload).select().single();
+    if (error) {
+      console.error('Error adding CD interest detail:', error);
+      throw error;
     }
+    return data;
   }
 
   async getNextReceiptNumber(): Promise<string> {
@@ -672,7 +678,7 @@ class SupabaseFinance {
     renewedDays: number;
     paymentDate?: string;
     receiptNo?: string;
-  }): Promise<{ success: boolean; receiptNo?: string }> {
+  }): Promise<{ success: boolean; error?: string; receiptNo?: string }> {
     try {
       const receiptNo = params.receiptNo || await this.generateUniqueReceiptNo();
       const entryDate = params.paymentDate ? new Date(params.paymentDate).toISOString() : new Date().toISOString();
@@ -686,13 +692,42 @@ class SupabaseFinance {
         .single();
       const periodDays = loanData ? (Number(loanData.duration_months) || 10) : 10;
 
+      // Build remarks
+      let remarks = '';
+      if (params.actionType === 'Renew') {
+        if (params.interestPaid === 0 && params.penaltyPaid === 0) {
+          remarks = `Renewal Payment / Principal Adjusted - ${receiptNo}`;
+        } else {
+          let parts = ['Renewal Payment'];
+          let adjusted: string[] = [];
+          if (params.penaltyPaid > 0) adjusted.push('Penalty Paid');
+          if (params.interestPaid > 0) adjusted.push('Interest Paid');
+          if (params.principalPaid > 0) adjusted.push('Principal Adjusted');
+          parts.push(adjusted.join(' & '));
+          remarks = `${parts.join(' / ')} - ${receiptNo}`;
+        }
+      } else {
+        const actionText = params.actionType === 'Partial' ? 'Partial Payment' : 'Close Account';
+        let parts = [actionText];
+        let adjusted: string[] = [];
+        if (params.penaltyPaid > 0) adjusted.push('Penalty Paid');
+        if (params.interestPaid > 0) adjusted.push('Interest Paid');
+        if (params.principalPaid > 0) adjusted.push('Principal Paid');
+        if (adjusted.length > 0) {
+          parts.push(adjusted.join(' & '));
+        } else {
+          parts.push('Principal Adjusted');
+        }
+        remarks = `${parts.join(' / ')} - ${receiptNo}`;
+      }
+
       // 1. Post to finance_transactions (Daybook)
       await this.addTransaction({
         loan_id: params.loanId,
         type: 'Collection',
         amount: totalAmount,
         date: entryDate,
-        remarks: `${params.actionType} Payment - ${receiptNo}`,
+        remarks: remarks,
         collected_by: params.userName,
         receipt_no: receiptNo
       });
@@ -702,10 +737,12 @@ class SupabaseFinance {
         ? 'Renewal Completed'
         : (params.actionType === 'Partial' ? 'Partial Payment' : 'Close');
 
+      const isInterestOrPenaltyPaid = params.interestPaid > 0 || params.penaltyPaid > 0;
+
       // 2. Post Penalty
       if (params.penaltyPaid > 0) {
         const penaltyParticulars = params.actionType === 'Renew'
-          ? 'Penalty Paid - Renewal Completed'
+          ? 'Penalty Paid - Renewal Payment'
           : `Penalty Paid - ${actionText} - ${receiptNo}`;
 
         const entry = await this.addCDLedgerEntry({
@@ -723,24 +760,26 @@ class SupabaseFinance {
 
         if (entry) {
           mainEntryId = entry.id;
-          await this.addCDInterestDetail({
-            loan_id: params.loanId,
-            entry_id: entry.id,
-            entry_date: entryDate,
-            credit: params.penaltyPaid,
-            receipt_no: receiptNo,
-            particulars: penaltyParticulars,
-            renewed_days: 0,
-            renewed_till_date: null,
-            row_type: entry.entry_type
-          });
+          if (isInterestOrPenaltyPaid) {
+            await this.addCDInterestDetail({
+              loan_id: params.loanId,
+              entry_id: entry.id,
+              entry_date: entryDate,
+              credit: params.penaltyPaid,
+              receipt_no: receiptNo,
+              particulars: penaltyParticulars,
+              renewed_days: 0,
+              renewed_till_date: null,
+              row_type: entry.entry_type
+            });
+          }
         }
       }
 
       // 3. Post Interest
       if (params.interestPaid > 0) {
         const interestParticulars = params.actionType === 'Renew'
-          ? 'Interest Paid - Renewal Completed'
+          ? 'Interest Paid - Renewal Payment'
           : `Interest Paid - ${actionText} - ${receiptNo}`;
 
         const entry = await this.addCDLedgerEntry({
@@ -758,28 +797,30 @@ class SupabaseFinance {
 
         if (entry) {
           if (!mainEntryId) mainEntryId = entry.id;
-          const renewedTillDate = params.renewedDays > 0 
-            ? new Date(new Date(entryDate).getTime() + periodDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-            : null;
+          if (isInterestOrPenaltyPaid) {
+            const renewedTillDate = params.renewedDays > 0 
+              ? new Date(new Date(entryDate).getTime() + periodDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+              : null;
 
-          await this.addCDInterestDetail({
-            loan_id: params.loanId,
-            entry_id: entry.id,
-            entry_date: entryDate,
-            credit: params.interestPaid,
-            receipt_no: receiptNo,
-            particulars: interestParticulars,
-            renewed_days: params.renewedDays,
-            renewed_till_date: renewedTillDate,
-            row_type: entry.entry_type
-          });
+            await this.addCDInterestDetail({
+              loan_id: params.loanId,
+              entry_id: entry.id,
+              entry_date: entryDate,
+              credit: params.interestPaid,
+              receipt_no: receiptNo,
+              particulars: interestParticulars,
+              renewed_days: params.renewedDays,
+              renewed_till_date: renewedTillDate,
+              row_type: entry.entry_type
+            });
+          }
         }
       }
 
       // 4. Post Principal
       if (params.principalPaid > 0) {
         const principalParticulars = params.actionType === 'Renew'
-          ? 'Principal Adjusted - Renewal Completed'
+          ? 'Principal Adjusted - Renewal Payment'
           : `Principal Adjusted - ${actionText} - ${receiptNo}`;
 
         const entry = await this.addCDLedgerEntry({
@@ -797,22 +838,24 @@ class SupabaseFinance {
 
         if (entry) {
           if (!mainEntryId) mainEntryId = entry.id;
-          await this.addCDInterestDetail({
-            loan_id: params.loanId,
-            entry_id: entry.id,
-            entry_date: entryDate,
-            credit: params.principalPaid,
-            receipt_no: receiptNo,
-            particulars: principalParticulars,
-            renewed_days: 0,
-            renewed_till_date: null,
-            row_type: entry.entry_type
-          });
+          if (isInterestOrPenaltyPaid) {
+            await this.addCDInterestDetail({
+              loan_id: params.loanId,
+              entry_id: entry.id,
+              entry_date: entryDate,
+              credit: params.principalPaid,
+              receipt_no: receiptNo,
+              particulars: principalParticulars,
+              renewed_days: 0,
+              renewed_till_date: null,
+              row_type: entry.entry_type
+            });
+          }
         }
       }
 
       // 5. Post Note row to Interest Details (Credit = 0, contains full split detail description)
-      if (mainEntryId) {
+      if (mainEntryId && isInterestOrPenaltyPaid) {
         const renewedTillDate = params.renewedDays > 0 
           ? new Date(new Date(entryDate).getTime() + periodDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
           : null;
@@ -835,9 +878,9 @@ class SupabaseFinance {
       }
 
       return { success: true, receiptNo };
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error posting CD ledger payment:', e);
-      return { success: false };
+      return { success: false, error: e?.message || String(e) };
     }
   }
 
