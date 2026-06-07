@@ -184,44 +184,49 @@ const CDLedger: React.FC = () => {
         const entries = await supabaseFinance.getCDLedgerEntries(loanId);
         const interests = await supabaseFinance.getCDInterestDetails(loanId);
         
-        // Normalize legacy/native entries to prevent commission/charges from reducing dues
+        // Normalize legacy/native entries to prevent commission/charges from reducing dues.
+        // KEY RULE: Never reclassify a row whose entry_type is already interest_payment or penalty_payment.
+        // Only mark as opening_commission when: (a) DB type is opening_commission/Commission/document_charge,
+        // OR (b) receipt_no is '-' or null/missing (disbursement-time rows have no real receipt number).
         const normalizedEntries = entries.map((entry: any) => {
           let entryType = entry.entry_type;
           let particulars = entry.particulars || '';
           const accountNameLower = (entry.account_name || '').toLowerCase();
           const particularsLower = particulars.toLowerCase();
-          
+
           // If native CD entry, keep particulars unchanged except for opening charges normalization
           if (entry.account_name) {
             if (accountNameLower === 'cd commission a/c') {
-              if (particularsLower.includes('commission') || particularsLower.includes('charged') || entryType === 'Commission' || entryType === 'opening_commission' || entry.debit > 0) {
+              // Only treat as opening_commission if it was saved as such, or has no real receipt (disbursement row).
+              // Do NOT reclassify interest_payment rows - they have RC numbers and different entry_type.
+              const isOpeningRow = entryType === 'opening_commission' || entryType === 'Commission'
+                || (!entry.receipt_no || entry.receipt_no === '-');
+              if (isOpeningRow && entryType !== 'interest_payment' && entryType !== 'penalty_payment') {
                 entryType = 'opening_commission';
                 particulars = 'Opening CD Commission Charged';
               }
+              // If entry_type is interest_payment or penalty_payment, leave completely unchanged
             } else if (accountNameLower === 'cd document charges a/c') {
-              entryType = 'Document Charges';
-            } else if (particularsLower.includes('disbursement') || accountNameLower === 'disbursement' || entryType === 'original_loan' || (accountNameLower === 'cd a/c' && entry.debit > 0)) {
+              if (entryType !== 'document_charge') entryType = 'document_charge';
+            } else if (
+              particularsLower.includes('disbursement') ||
+              accountNameLower === 'disbursement' ||
+              entryType === 'original_loan' ||
+              (accountNameLower === 'cd a/c' && entry.debit > 0 && !entry.credit)
+            ) {
               entryType = 'original_loan';
               particulars = 'Original Loan Disbursement';
             }
-            return {
-              ...entry,
-              entry_type: entryType,
-              particulars: particulars
-            };
+            return { ...entry, entry_type: entryType, particulars };
           }
-          
+
           // Fallback normalization for legacy/unsplit entries where account_name is null
-          if (particularsLower.includes('disbursement') || (entry.debit > 0)) {
+          if (particularsLower.includes('disbursement') || (entry.debit > 0 && !entry.credit)) {
             entryType = 'original_loan';
             particulars = 'Original Loan Disbursement';
           }
-          
-          return {
-            ...entry,
-            entry_type: entryType,
-            particulars: particulars
-          };
+
+          return { ...entry, entry_type: entryType, particulars };
         });
         
         setCdLedgerEntries(normalizedEntries);
@@ -482,7 +487,7 @@ const CDLedger: React.FC = () => {
   // Dynamic calculations based on payment date and selected loan
   const renewCalculations = useMemo(() => {
     if (!selectedLoan) return null;
-    const principal = Number(selectedLoan.amount);
+
     const entryDate = new Date(selectedLoan.date);
     const today = new Date(paymentDate);
 
@@ -499,7 +504,7 @@ const CDLedger: React.FC = () => {
         penaltyDays: 0,
         interest: 0,
         penalty: 0,
-        principal,
+        principal: Number(selectedLoan.amount),
         grossInterest: 0,
         grossPenalty: 0,
         penaltyPaid: 0,
@@ -523,6 +528,29 @@ const CDLedger: React.FC = () => {
     const interestRate = Number(selectedLoan.interest_rate) || 3;
     const penaltyRate = selectedLoan.penalty_percent !== undefined ? Number(selectedLoan.penalty_percent) : 0.75;
     
+    // Derive starting principal from db
+    const principalPaidTotalDb = cdLedgerEntries
+      .filter(e => {
+        const isPrincipalPaid = (e.particulars || '').toLowerCase().includes('principal paid') || 
+                                (e.particulars || '').toLowerCase().includes('principal adjusted') ||
+                                e.entry_type === 'principal_payment';
+        return (e.account_name || '').toLowerCase() === 'cd a/c' && isPrincipalPaid;
+      })
+      .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
+    const originalPrincipal = Number(selectedLoan.amount) + principalPaidTotalDb;
+
+    const cycleStartMillis = startOfDay(entryDate);
+    const principalPaidBeforeCycle = cdLedgerEntries
+      .filter(e => {
+        const isPrincipalPaid = e.entry_type === 'principal_payment' || 
+          ((e.particulars || '').toLowerCase().includes('principal adjusted') && (e.account_name || '').toLowerCase() === 'cd a/c');
+        return isPrincipalPaid && startOfDay(e.entry_date) <= cycleStartMillis;
+      })
+      .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
+    const principal = Number((originalPrincipal - principalPaidBeforeCycle).toFixed(2));
+
     // If Due Days <= 0: Interest = 0, Penalty = 0
     // If Due Days > 0: Interest = Principal * Rate% * Due Days / 30
     const grossInterest = dueDays <= 0 ? 0 : financeCalculationService.calculateInterest(principal, interestRate, interestDays);
@@ -536,8 +564,7 @@ const CDLedger: React.FC = () => {
     // Next Due Date = Payment Date + Period Days - 1
     const nextDueDate = new Date(startOfDay(today) + (periodDays - 1) * 24 * 60 * 60 * 1000);
 
-    // Sum all credit entries in the current cycle
-    const startMillis = startOfDay(entryDate);
+    // Sum all credit entries in the current cycle (excluding renewal completed entries)
     const totalPaidInCycle = cdLedgerEntries
       .filter(entry => {
         const entryDateVal = startOfDay(entry.entry_date);
@@ -547,9 +574,15 @@ const CDLedger: React.FC = () => {
                           entryType !== 'Commission' && 
                           entryType !== 'opening_commission' &&
                           entryType !== 'Document Charges' &&
+                          entryType !== 'document_charge' &&
                           entryType !== 'Disbursement';
+        
+        const isRenewalCompletedEntry = 
+          (entry.particulars || '').toLowerCase().includes('renewal completed') ||
+          entryType === 'Renewal' || 
+          entryType === 'Renew';
                                   
-        return isPayment && entryDateVal > startMillis;
+        return isPayment && !isRenewalCompletedEntry && entryDateVal >= cycleStartMillis;
       })
       .reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
 
@@ -656,23 +689,25 @@ const CDLedger: React.FC = () => {
       });
     }
 
-    // Check if we have CD Commission (Interest) row at start
-    const hasCommission = sortedDbEntries.some(e => {
-      const nameLower = (e.account_name || '').toLowerCase();
-      return (nameLower === 'cd commission a/c' || nameLower === 'commission') && e.credit > 0;
-    });
+    // Check if we have CD Commission opening row in the DB.
+    // IMPORTANT: check by entry_type, not by account name — interest_payment rows also use CD COMMISSION A/C.
+    const hasCommission = sortedDbEntries.some(e =>
+      e.entry_type === 'opening_commission' || e.entry_type === 'Commission'
+    );
     if (!hasCommission) {
-      const P = originalAmount;
+      // Fallback: derive from disbursement debit (the true original principal, never changes)
+      const disbEntry = sortedDbEntries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
+      const P = disbEntry ? Number(disbEntry.debit) : originalAmount;
       const R = Number(selectedLoan.interest_rate) || 3;
-      const D = Number(selectedLoan.duration_months) || 30; // period days
+      const D = Number(selectedLoan.duration_months) || 10; // period days
       const commAmount = Number(((P * (R / 100) * D) / 30).toFixed(2));
-      
+
       list.push({
         id: `fallback-comm-${selectedLoan.id}`,
         loan_id: selectedLoan.id,
         customer_id: selectedLoan.customer_id,
         account_name: 'CD COMMISSION A/C',
-        entry_date: selectedLoan.date,
+        entry_date: disbEntry ? disbEntry.entry_date : selectedLoan.date,
         credit: commAmount,
         debit: 0,
         receipt_no: '-',
@@ -684,7 +719,10 @@ const CDLedger: React.FC = () => {
 
     // Check if we have CD Document Charges row
     const docChargesVal = Number(selectedLoan.document_charges) || 0;
-    const hasDocCharges = sortedDbEntries.some(e => (e.account_name || '').toLowerCase() === 'cd document charges a/c');
+    const hasDocCharges = sortedDbEntries.some(e =>
+      (e.account_name || '').toLowerCase() === 'cd document charges a/c' ||
+      e.entry_type === 'document_charge'
+    );
     if (!hasDocCharges && docChargesVal > 0) {
       list.push({
         id: `fallback-doc-${selectedLoan.id}`,
@@ -694,9 +732,9 @@ const CDLedger: React.FC = () => {
         credit: docChargesVal,
         debit: 0,
         receipt_no: '-',
-        particulars: 'CD Document Charges A/C',
+        particulars: 'Document Charges Collected',
         user_name: 'System',
-        entry_type: 'Document Charges',
+        entry_type: 'document_charge',
         entry_date: selectedLoan.date
       });
     }
@@ -705,15 +743,15 @@ const CDLedger: React.FC = () => {
     cycles.forEach((cycle) => {
       // Find all payments inside this cycle
       const cyclePayments = sortedDbEntries.filter(entry => {
-        if (entry.entry_type === 'original_loan' || entry.entry_type === 'Disbursement' || entry.entry_type === 'Document Charges' || entry.entry_type === 'Commission' || entry.entry_type === 'opening_commission') {
+        const isNonPaymentEntry =
+          entry.entry_type === 'original_loan' || entry.entry_type === 'Disbursement' ||
+          entry.entry_type === 'Document Charges' || entry.entry_type === 'document_charge' ||
+          entry.entry_type === 'Commission' || entry.entry_type === 'opening_commission';
+        if (isNonPaymentEntry) {
           return false;
         }
-        const isPayment = entry.credit > 0 && 
-                          entry.entry_type !== 'Commission' && 
-                          entry.entry_type !== 'opening_commission' &&
-                          entry.entry_type !== 'Document Charges' &&
-                          entry.entry_type !== 'original_loan' &&
-                          entry.entry_type !== 'Disbursement' &&
+        const isPayment = entry.credit > 0 &&
+                          !isNonPaymentEntry &&
                           !entry.id.toString().startsWith('fallback-comm-') &&
                           !entry.id.toString().startsWith('fallback-doc-');
         if (!isPayment) return false;
@@ -824,9 +862,13 @@ const CDLedger: React.FC = () => {
       });
     });
 
-    // Pushes non-payment database entries directly
+    // Pushes non-payment database entries directly (opening rows that are immutable)
     sortedDbEntries.forEach(entry => {
-      if (entry.entry_type === 'original_loan' || entry.entry_type === 'Disbursement' || entry.entry_type === 'Document Charges' || entry.entry_type === 'Commission' || entry.entry_type === 'opening_commission') {
+      const isNonPayment =
+        entry.entry_type === 'original_loan' || entry.entry_type === 'Disbursement' ||
+        entry.entry_type === 'Document Charges' || entry.entry_type === 'document_charge' ||
+        entry.entry_type === 'Commission' || entry.entry_type === 'opening_commission';
+      if (isNonPayment) {
         list.push({ ...entry, account_name: entry.account_name || 'CD A/C' });
       }
     });
@@ -942,8 +984,16 @@ const CDLedger: React.FC = () => {
 
     const totalClose = Number((principalBalance + currentPendingDues).toFixed(2));
 
-    const totalCredit = displayedStatementEntries.reduce((sum, entry) => sum + Number(entry.credit || 0), 0);
-    const totalDebit = displayedStatementEntries.reduce((sum, entry) => sum + Number(entry.debit || 0), 0);
+    // totalCredit = only real cash collected (interest, penalty, principal payments)
+    // Must NOT include opening_commission or document_charge rows (not real collections)
+    const NON_COLLECTION_TYPES = new Set(['original_loan', 'Disbursement', 'opening_commission', 'Commission', 'Document Charges', 'document_charge']);
+    const totalCredit = displayedStatementEntries
+      .filter(e => !NON_COLLECTION_TYPES.has(e.entry_type) && Number(e.credit) > 0)
+      .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
+    const totalDebit = displayedStatementEntries
+      .filter(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement')
+      .reduce((sum, e) => sum + Number(e.debit || 0), 0);
 
     return {
       originalPrincipal,
@@ -1270,7 +1320,7 @@ const CDLedger: React.FC = () => {
       const npaReceiptNo = await supabaseFinance.getNextReceiptNumber();
       
       await supabase.from('finance_loans')
-        .update({ status: 'Closed', npa_closed: true })
+        .update({ status: 'Closed', npa_closed: true, amount: 0 })
         .eq('id', selectedLoan.id);
 
       await supabaseFinance.addNPARecord({
@@ -1661,7 +1711,8 @@ const CDLedger: React.FC = () => {
                       onChange={setTotalAmountPaying} 
                       className="font-bold text-green-700" 
                       placeholder="Enter ₹" 
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                     />
                     
                     {/* Row 2: Loan Amount & Rate % */}

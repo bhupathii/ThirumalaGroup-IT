@@ -20,6 +20,7 @@ interface InputProps {
   uppercase?: boolean;
   style?: React.CSSProperties;
   error?: boolean;
+  inputMode?: 'none' | 'text' | 'decimal' | 'numeric' | 'tel' | 'search' | 'email' | 'url';
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -43,6 +44,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       uppercase = false,
       style,
       error = false,
+      inputMode,
     },
     ref
   ) => {
@@ -151,6 +153,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             min={min}
             max={max}
             step={step}
+            inputMode={inputMode}
             className={`w-full border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed ${
               error 
                 ? 'border-red-500 bg-red-50 focus:ring-red-500' 
@@ -169,6 +172,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             onBlur={() => {
               setTimeout(() => setShowSuggestions(false), 100);
             }}
+            onWheel={type === 'number' ? (e) => e.currentTarget.blur() : undefined}
           />
           {type === 'date' && (
             <>

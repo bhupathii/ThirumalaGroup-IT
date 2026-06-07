@@ -858,9 +858,11 @@ class SupabaseFinance {
       const existingReceipts = new Set(entries.map(e => e.receipt_no).filter(Boolean));
       const mappedEntries: FinanceCDLedgerEntry[] = [];
 
-      // Check if there's any disbursement transaction. If not, map from loan
+      // Check if there's any disbursement transaction. If not, map from loan.
+      // Also skip if a native original_loan entry already exists in finance_cd_ledger_entries (new loan flow).
+      const hasNativeOriginalLoan = entries.some(e => e.entry_type === 'original_loan');
       const hasDisbursement = legacy.some(tx => tx.type === 'Disbursement');
-      if (!hasDisbursement && loanData) {
+      if (!hasDisbursement && !hasNativeOriginalLoan && loanData) {
          mappedEntries.push({
             id: `legacy-loan-${loanData.id}`,
             loan_id: loanData.id,
@@ -888,6 +890,8 @@ class SupabaseFinance {
         }
 
         if (tx.type === 'Disbursement') {
+          // Skip if a native original_loan entry already exists — avoids duplicate disbursement rows
+          if (hasNativeOriginalLoan) continue;
           mappedEntries.push({
             id: `legacy-${tx.id}`,
             loan_id: tx.loan_id,
@@ -1375,6 +1379,60 @@ class SupabaseFinance {
         }]);
 
       if (txError) throw txError;
+
+      // --- Write immutable CD ledger opening rows ---
+      // These rows are fixed at disbursement time and must NEVER be updated or recalculated.
+
+      // 1. Original Loan Disbursement (debit row)
+      await supabase.from('finance_cd_ledger_entries').insert([{
+        loan_id: loan.id,
+        customer_id: customerId,
+        account_name: 'CD A/C',
+        entry_date: loan.date,
+        credit: 0,
+        debit: Number(loan.amount),
+        receipt_no: '-',
+        particulars: 'Original Loan Disbursement',
+        user_name: staffName,
+        entry_type: 'original_loan'
+      }]);
+
+      // 2. Opening CD Commission (fixed at disbursement; never recalculated)
+      const _commRate = Number(loan.interest_rate) || 3;
+      const _commPeriod = Number(loan.duration_months) || 10;
+      const _commAmount = Number(((Number(loan.amount) * (_commRate / 100) * _commPeriod) / 30).toFixed(2));
+      if (_commAmount > 0) {
+        await supabase.from('finance_cd_ledger_entries').insert([{
+          loan_id: loan.id,
+          customer_id: customerId,
+          account_name: 'CD COMMISSION A/C',
+          entry_date: loan.date,
+          credit: _commAmount,
+          debit: 0,
+          receipt_no: '-',
+          particulars: 'Opening CD Commission Charged',
+          user_name: staffName,
+          entry_type: 'opening_commission'
+        }]);
+      }
+
+      // 3. Document Charges (fixed at disbursement; never recalculated)
+      const _docCharges = Number(loan.document_charges) || 0;
+      if (_docCharges > 0) {
+        await supabase.from('finance_cd_ledger_entries').insert([{
+          loan_id: loan.id,
+          customer_id: customerId,
+          account_name: 'CD DOCUMENT CHARGES A/C',
+          entry_date: loan.date,
+          credit: _docCharges,
+          debit: 0,
+          receipt_no: '-',
+          particulars: 'Document Charges Collected',
+          user_name: staffName,
+          entry_type: 'document_charge'
+        }]);
+      }
+      // --- End of opening rows ---
 
       // Create dues schedule
       if (duesData && duesData.length > 0) {
