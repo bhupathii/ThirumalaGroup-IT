@@ -538,25 +538,73 @@ const CDLedger: React.FC = () => {
     const grossInterest = dueDays <= 0 ? 0 : Number(((principalBalance * interestRate / 100 / 30) * dueDays).toFixed(2));
     const grossPenalty  = dueDays <= 5 ? 0 : Number(((principalBalance * penaltyRate / 100 / 30) * dueDays).toFixed(2));
 
-    // Calculate paid interest/penalty in the current cycle
-    const cycleStartMillis = startOfDay(selectedLoan.date);
+    // ── BUGFIX: Determine the true current-cycle start from the ledger ──────────
+    // selectedLoan.date is updated to the *new* due date after a renewal, which is
+    // a future date relative to already-posted payment entries.  Using it directly
+    // as the cycle-start filter causes those entries to be excluded → paid = 0,
+    // which makes the top card reset interest/penalty to zero after partial payment.
+    //
+    // Instead we resolve the true cycle boundary from the cdLedgerEntries:
+    //   • Find the most recent renewal entry date  → payments AFTER that date
+    //     are in the current cycle.
+    //   • If no renewal exists, use the original disbursement date → payments
+    //     ON OR AFTER that date are in the first cycle.
+    const renewalEntries = cdLedgerEntries
+      .filter(e =>
+        e.entry_type === 'Renewal' || e.entry_type === 'Renew' ||
+        (e.particulars || '').toLowerCase().includes('renewal') ||
+        (e.particulars || '').toLowerCase().includes('renew')
+      )
+      .sort((a, b) => startOfDay(b.entry_date) - startOfDay(a.entry_date)); // newest first
 
+    const lastRenewalDateMs: number | null = renewalEntries.length > 0
+      ? startOfDay(renewalEntries[0].entry_date)
+      : null;
+
+    // Original disbursement date (earliest disbursal entry or loan creation date)
+    const disbEntry = [...cdLedgerEntries]
+      .filter(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement')
+      .sort((a, b) => startOfDay(a.entry_date) - startOfDay(b.entry_date))[0];
+    const originalLoanDateMs: number = disbEntry
+      ? startOfDay(disbEntry.entry_date)
+      : startOfDay(selectedLoan.date);
+
+    // Paid amounts for the current cycle:
+    //   • On or after the last renewal date (>=) when a prior renewal exists.
+    //     Using >= (not strict >) so that payments made on the SAME DAY as the
+    //     renewal are included (e.g. RC330 renewal + RC332 partial on 08-Jun-26).
+    //     Only 'interest_payment' and 'penalty_payment' entries are counted, so
+    //     the renewal entry itself is never accidentally double-counted.
+    //   • From the original loan date onward (>=) for the first cycle.
     const penaltyPaidInCycle = cdLedgerEntries
       .filter(e => {
-        const entryDateMs = startOfDay(e.entry_date);
-        return entryDateMs >= cycleStartMillis && e.entry_type === 'penalty_payment';
+        if (e.entry_type !== 'penalty_payment') return false;
+        const d = startOfDay(e.entry_date);
+        return lastRenewalDateMs !== null ? d >= lastRenewalDateMs : d >= originalLoanDateMs;
       })
       .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
     const interestPaidInCycle = cdLedgerEntries
       .filter(e => {
-        const entryDateMs = startOfDay(e.entry_date);
-        return entryDateMs >= cycleStartMillis && e.entry_type === 'interest_payment';
+        if (e.entry_type !== 'interest_payment') return false;
+        const d = startOfDay(e.entry_date);
+        return lastRenewalDateMs !== null ? d >= lastRenewalDateMs : d >= originalLoanDateMs;
       })
       .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
-    const pendingInterest = Math.max(0, Number((grossInterest - interestPaidInCycle).toFixed(2)));
-    const pendingPenalty  = Math.max(0, Number((grossPenalty - penaltyPaidInCycle).toFixed(2)));
+    // ── Bug fix: gross must never be less than what has already been paid ────────
+    // When dueDays = 0 (loan not yet due), the date-based formula gives gross = 0.
+    // But if the cycle already has paid interest/penalty (e.g. a partial payment
+    // was made when the loan WAS overdue in the same cycle), gross = 0 would make
+    // pendingInterest/pendingPenalty = 0 even though dues remain.
+    // Solution: raise the effective gross to at least the paid amount so the
+    // pending calculation is always: max(0, effectiveGross - paid).
+    const effectiveGrossInterest = Math.max(grossInterest, interestPaidInCycle);
+    const effectiveGrossPenalty  = Math.max(grossPenalty,  penaltyPaidInCycle);
+
+    // Remaining dues = effectiveGross - already paid (never goes negative)
+    const pendingInterest = Math.max(0, Number((effectiveGrossInterest - interestPaidInCycle).toFixed(2)));
+    const pendingPenalty  = Math.max(0, Number((effectiveGrossPenalty  - penaltyPaidInCycle).toFixed(2)));
 
     // Daily interest / renewal day value (Access VBA):
     // If DueDays <= 5: dailyInterest = principal * rate / 100 / 30, dailyPenalty = 0
@@ -584,8 +632,10 @@ const CDLedger: React.FC = () => {
       interest: pendingInterest,
       penalty: pendingPenalty,
       principal: principalBalance,
-      grossInterest,
-      grossPenalty,
+      grossInterest,             // raw date-based gross (may be 0 if not yet due)
+      grossPenalty,              // raw date-based gross (may be 0 if not yet due)
+      effectiveGrossInterest,    // max(dateBasedGross, paid) — always >= paid
+      effectiveGrossPenalty,     // max(dateBasedGross, paid) — always >= paid
       dailyInterest,
       dailyPenalty,
       penaltyPaid: penaltyPaidInCycle,
@@ -964,8 +1014,8 @@ const CDLedger: React.FC = () => {
     const principalPaid = principalPaidTotal;
     const principalBalance = Number((originalPrincipal - principalPaid).toFixed(2));
 
-    const grossInterestDue = renewCalculations.grossInterest || 0;
-    const grossPenaltyDue = renewCalculations.grossPenalty || 0;
+    const grossInterestDue = renewCalculations.effectiveGrossInterest || 0;
+    const grossPenaltyDue = renewCalculations.effectiveGrossPenalty || 0;
 
     const paidInterest = renewCalculations.interestPaid || 0;
     const paidPenalty = renewCalculations.penaltyPaid || 0;
@@ -1021,16 +1071,21 @@ const CDLedger: React.FC = () => {
     };
   }, [ledgerMetrics]);
 
-  // Payment preview calculation hook (Access VBA logic)
+  // Payment preview calculation — priority allocation: Penalty → Interest → Principal
   const paymentPreview = useMemo(() => {
     const paymentAmount = Number(totalAmountPaying) || 0;
     if (paymentAmount <= 0 || !renewCalculations) return null;
 
     const principalBefore = ledgerMetrics.principalBalance;
     const dueDays = renewCalculations.daysPastDue || 0;
-    const dailyInterest = renewCalculations.dailyInterest || 0;
     const interestRate = Number(selectedLoan?.interest_rate) || 3;
-    const penaltyRate = selectedLoan?.penalty_percent !== undefined ? Number(selectedLoan.penalty_percent) : 0.75;
+
+    // Outstanding dues from the already-correct renewCalculations
+    const outstandingPenalty = renewCalculations.penalty;
+    const outstandingInterest = renewCalculations.interest;
+
+    // Daily pure-interest rate (used only to compute renewedDays when dues are fully settled)
+    const dailyInterestRate = Number((principalBefore * interestRate / 100 / 30).toFixed(5));
 
     let penaltyPaid = 0;
     let interestPaid = 0;
@@ -1041,34 +1096,41 @@ const CDLedger: React.FC = () => {
     const isClosingPayment = paymentAmount >= ledgerMetrics.totalClose;
 
     if (isClosingPayment) {
-      interestPaid = renewCalculations.interest;
-      penaltyPaid = renewCalculations.penalty;
-      principalPaid = Number((paymentAmount - interestPaid - penaltyPaid).toFixed(2));
+      // Full close: clear all remaining dues, excess reduces principal
+      penaltyPaid  = outstandingPenalty;
+      interestPaid = outstandingInterest;
+      principalPaid = Number(Math.max(0, paymentAmount - penaltyPaid - interestPaid).toFixed(2));
       renewedDays = 0;
       nextDueDate = null;
     } else if (dueDays === 0) {
-      // No dues — full amount reduces principal
-      penaltyPaid = 0;
-      interestPaid = 0;
+      // No dues outstanding — entire payment reduces principal
+      penaltyPaid   = 0;
+      interestPaid  = 0;
       principalPaid = paymentAmount;
-    } else if (dailyInterest > 0) {
-      // Access VBA: renewedDays = Round(totalAmountPaying / dailyInterest, 0)
-      renewedDays = Math.round(paymentAmount / dailyInterest);
+    } else {
+      // Priority allocation: Penalty first → Interest second → Principal last
+      const split = financeCalculationService.applyPaymentSplit(
+        paymentAmount,
+        outstandingInterest,
+        outstandingPenalty,
+        principalBefore
+      );
+      penaltyPaid   = split.penaltyPaid;
+      interestPaid  = split.interestPaid;
+      principalPaid = split.principalPaid;
 
-      // interestPaid = principal * rate / 100 / 30 * renewedDays
-      interestPaid = Number((principalBefore * interestRate / 100 / 30 * renewedDays).toFixed(2));
+      // ── Rule 4: renewedDays > 0 only when ALL dues are fully cleared ──
+      const allDuesCleared =
+        interestPaid >= outstandingInterest &&
+        penaltyPaid  >= outstandingPenalty;
 
-      // penaltyPaid = principal * penaltyRate / 100 / 30 * renewedDays (only if dueDays > 5)
-      if (dueDays > 5) {
-        penaltyPaid = Number((principalBefore * penaltyRate / 100 / 30 * renewedDays).toFixed(2));
+      if (allDuesCleared && dailyInterestRate > 0) {
+        renewedDays = Math.round(interestPaid / dailyInterestRate);
       } else {
-        penaltyPaid = 0;
+        renewedDays = 0;
       }
 
-      // Do NOT reduce principal during normal renewal
-      principalPaid = 0;
-
-      // nextDueDate = currentDueDate + renewedDays
+      // nextDueDate only advances when dues are fully settled
       if (renewCalculations.dueDate && renewedDays > 0) {
         nextDueDate = new Date(startOfDay(renewCalculations.dueDate) + renewedDays * 24 * 60 * 60 * 1000);
       }
@@ -1232,9 +1294,7 @@ const CDLedger: React.FC = () => {
     }
 
     const dueDays = renewCalculations.daysPastDue || 0;
-    const dailyInterest = renewCalculations.dailyInterest || 0;
     const interestRate = Number(selectedLoan.interest_rate) || 3;
-    const penaltyRate = selectedLoan.penalty_percent !== undefined ? Number(selectedLoan.penalty_percent) : 0.75;
     
     setIsRenewing(true);
     try {
@@ -1242,46 +1302,63 @@ const CDLedger: React.FC = () => {
       const principalBefore = ledgerMetrics.principalBalance;
       const paymentAmount = Number(amount.toFixed(2));
 
-      // ===== ACCESS VBA PAYMENT SPLIT =====
+      // ===== PRIORITY ALLOCATION: Penalty → Interest → Principal =====
       let penaltyPaid = 0;
       let interestPaid = 0;
       let principalPaid = 0;
       let renewedDays = 0;
 
+      // Outstanding dues (correctly computed by renewCalculations using ledger-aware cycle boundaries)
+      const outstandingPenalty = renewCalculations.penalty;
+      const outstandingInterest = renewCalculations.interest;
+
+      // Daily pure-interest rate (used to derive renewedDays for date advance when dues are FULLY settled)
+      const dailyInterestRate = Number((principalBefore * interestRate / 100 / 30).toFixed(5));
+
       if (actionType === 'Close') {
-        // Close: pay exact remaining interest + penalty + remaining goes to principal
-        interestPaid = renewCalculations.interest;
-        penaltyPaid = renewCalculations.penalty;
-        principalPaid = Number(Math.max(0, paymentAmount - interestPaid - penaltyPaid).toFixed(2));
+        // Close: clear all remaining dues, excess reduces principal
+        penaltyPaid   = outstandingPenalty;
+        interestPaid  = outstandingInterest;
+        principalPaid = Number(Math.max(0, paymentAmount - penaltyPaid - interestPaid).toFixed(2));
       } else if (dueDays === 0) {
-        // No dues — full amount reduces principal
-        penaltyPaid = 0;
-        interestPaid = 0;
+        // No dues outstanding — full amount reduces principal
+        penaltyPaid   = 0;
+        interestPaid  = 0;
         principalPaid = paymentAmount;
-      } else if (dailyInterest > 0) {
-        // Access VBA: renewedDays = Round(totalAmountPaying / dailyInterest, 0)
-        renewedDays = Math.round(paymentAmount / dailyInterest);
+      } else {
+        // Partial / Renew — priority allocation: Penalty → Interest → Principal
+        const split = financeCalculationService.applyPaymentSplit(
+          paymentAmount,
+          outstandingInterest,
+          outstandingPenalty,
+          principalBefore
+        );
+        penaltyPaid   = split.penaltyPaid;
+        interestPaid  = split.interestPaid;
+        principalPaid = split.principalPaid;
 
-        // interestPaid = principal * rate / 100 / 30 * renewedDays
-        interestPaid = Number((principalBefore * interestRate / 100 / 30 * renewedDays).toFixed(2));
+        // ── Rule 4: Renewal date advances ONLY when ALL outstanding dues are fully settled ──
+        // If any interest or penalty remains after this payment, the loan stays at the
+        // same date so renewCalculations sees the correct dueDays on the next load.
+        const allDuesCleared =
+          interestPaid >= outstandingInterest &&
+          penaltyPaid  >= outstandingPenalty;
 
-        // penaltyPaid = principal * penaltyRate / 100 / 30 * renewedDays (only if dueDays > 5)
-        if (dueDays > 5) {
-          penaltyPaid = Number((principalBefore * penaltyRate / 100 / 30 * renewedDays).toFixed(2));
+        if (allDuesCleared && dailyInterestRate > 0) {
+          // Full settlement: advance date by the number of days that were paid
+          renewedDays = Math.round(interestPaid / dailyInterestRate);
         } else {
-          penaltyPaid = 0;
+          // Partial payment: no date advance — keep renewedDays = 0
+          renewedDays = 0;
         }
-
-        // Do NOT reduce principal during normal renewal/partial
-        principalPaid = 0;
       }
 
       // Console logs for debugging
-      console.log('=== Access VBA Payment Split ===');
+      console.log('=== Priority Payment Split ===');
       console.log('receiptNo:', receiptNo);
       console.log('paymentAmount:', paymentAmount);
       console.log('dueDays:', dueDays);
-      console.log('dailyInterest:', dailyInterest);
+      console.log('dailyInterestRate:', dailyInterestRate);
       console.log('renewedDays:', renewedDays);
       console.log('penaltyPaid:', penaltyPaid);
       console.log('interestPaid:', interestPaid);

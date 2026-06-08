@@ -167,4 +167,95 @@ describe('CD Ledger Calculation Rules', () => {
 
     expect(principalPaid1 + principalPaid2 + principalPaid3).toBe(5000);
   });
+
+  // ── Bug-report test cases: Penalty ₹155, Interest ₹620 ────────────────────
+
+  describe('Partial payment priority allocation (reported bug cases)', () => {
+    const bugInterest = 620;
+    const bugPenalty  = 155;
+    const bugPrincipal = 10000;
+
+    it('Case 1 — payment ₹500: clears penalty first, partial interest', () => {
+      // Penalty Due = 155, Interest Due = 620, Payment = 500
+      // Expected: Penalty Paid = 155, Interest Paid = 345
+      const split = financeCalculationService.applyPaymentSplit(500, bugInterest, bugPenalty, bugPrincipal);
+
+      expect(split.penaltyPaid).toBe(155);
+      expect(split.interestPaid).toBe(345);
+      expect(split.principalPaid).toBe(0);
+
+      const remainingInterest = bugInterest - split.interestPaid;
+      const remainingPenalty  = bugPenalty  - split.penaltyPaid;
+
+      expect(remainingPenalty).toBe(0);
+      expect(remainingInterest).toBe(275);
+
+      const pendingDues = remainingInterest + remainingPenalty;
+      expect(pendingDues).toBe(275);
+    });
+
+    it('Case 2 — payment ₹100: only partial penalty, no interest', () => {
+      // Penalty Due = 155, Interest Due = 620, Payment = 100
+      // Expected: Penalty Paid = 100, Interest Paid = 0
+      const split = financeCalculationService.applyPaymentSplit(100, bugInterest, bugPenalty, bugPrincipal);
+
+      expect(split.penaltyPaid).toBe(100);
+      expect(split.interestPaid).toBe(0);
+      expect(split.principalPaid).toBe(0);
+
+      const remainingInterest = bugInterest - split.interestPaid;
+      const remainingPenalty  = bugPenalty  - split.penaltyPaid;
+
+      expect(remainingPenalty).toBe(55);
+      expect(remainingInterest).toBe(620);
+    });
+
+    it('Case 3 — payment ₹800: clears penalty + interest, excess to principal', () => {
+      // Penalty Due = 155, Interest Due = 620, Payment = 800
+      // Expected: Penalty Paid = 155, Interest Paid = 620, Principal = 25
+      const split = financeCalculationService.applyPaymentSplit(800, bugInterest, bugPenalty, bugPrincipal);
+
+      expect(split.penaltyPaid).toBe(155);
+      expect(split.interestPaid).toBe(620);
+      expect(split.principalPaid).toBe(25);
+
+      const remainingInterest = bugInterest - split.interestPaid;
+      const remainingPenalty  = bugPenalty  - split.penaltyPaid;
+
+      expect(remainingPenalty).toBe(0);
+      expect(remainingInterest).toBe(0);
+
+      const pendingDues = remainingInterest + remainingPenalty;
+      expect(pendingDues).toBe(0);
+    });
+
+    it('Rule 4 — partial payment must not clear dues or advance loan date', () => {
+      // Total dues = 775 (Interest 620 + Penalty 155)
+      // Payment = 500
+      // Expected pending = 275 (Interest 275 remaining)
+      const totalDue = bugInterest + bugPenalty; // 775
+      const payment = 500;
+
+      const split = financeCalculationService.applyPaymentSplit(payment, bugInterest, bugPenalty, bugPrincipal);
+
+      expect(split.penaltyPaid).toBe(155);
+      expect(split.interestPaid).toBe(345);
+      expect(split.principalPaid).toBe(0);
+
+      const remainingInterest = bugInterest - split.interestPaid; // 275
+      const remainingPenalty  = bugPenalty  - split.penaltyPaid;  // 0
+      const pendingDues = remainingInterest + remainingPenalty;    // 275
+
+      expect(pendingDues).toBe(275);
+      expect(totalDue - payment).toBe(275);
+
+      // Rule 4: allDuesCleared must be false → loan date must NOT advance
+      const allDuesCleared =
+        split.interestPaid >= bugInterest &&
+        split.penaltyPaid  >= bugPenalty;
+
+      expect(allDuesCleared).toBe(false); // loan date must stay unchanged
+    });
+  });
 });
+
