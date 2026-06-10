@@ -855,21 +855,11 @@ const CDLedger: React.FC = () => {
         
         const d = startOfDay(entry.entry_date);
         
-        const isRenewalCompleted = 
-          entry.entry_type === 'Renewal' || 
-          entry.entry_type === 'Renew' || 
-          (entry.particulars || '').toLowerCase().includes('renewal') || 
-          (entry.particulars || '').toLowerCase().includes('renew');
-
-        if (isRenewalCompleted) {
-          return d > cycle.start && d <= cycle.end;
+        const isFirstCycle = cycle.start === originalLoanStart;
+        if (isFirstCycle) {
+          return d >= cycle.start && d <= cycle.end;
         } else {
-          const isFirstCycle = cycle.start === originalLoanStart;
-          if (isFirstCycle) {
-            return d >= cycle.start && d <= cycle.end;
-          } else {
-            return d > cycle.start && d <= cycle.end;
-          }
+          return d > cycle.start && d <= cycle.end;
         }
       });
 
@@ -1165,15 +1155,17 @@ const CDLedger: React.FC = () => {
 
   // Calculation bottom totals
   const bottomTotals = useMemo(() => {
+    const totalCredit = displayedStatementEntries.reduce((sum, e) => sum + Number(e.credit || 0), 0);
+    const totalDebit = displayedStatementEntries.reduce((sum, e) => sum + Number(e.debit || 0), 0);
     return {
-      totalCredit: ledgerMetrics.totalCredit,
-      totalDebit: ledgerMetrics.totalDebit,
+      totalCredit,
+      totalDebit,
       presentBalance: ledgerMetrics.principalBalance,
       totalDues: ledgerMetrics.currentTotalDues,
       paidDues: ledgerMetrics.currentPaidDues,
       pendingDues: ledgerMetrics.currentPendingDues
     };
-  }, [ledgerMetrics]);
+  }, [displayedStatementEntries, ledgerMetrics]);
 
   // Payment preview calculation — priority allocation: Penalty → Interest → Principal
   const paymentPreview = useMemo(() => {
@@ -1219,9 +1211,10 @@ const CDLedger: React.FC = () => {
         const renewalInterestPaid = Math.max(0, renewInterestPaid - outstandingInterest);
         renewRenewedDays = Math.max(0, Math.round((renewalInterestPaid / monthlyInterest) * 30));
       }
-      if (renewRenewedDays > 0) {
-        renewNextDueDate = new Date(baseDateMs + renewRenewedDays * 24 * 60 * 60 * 1000);
+      if (renewRenewedDays <= 0) {
+        renewRenewedDays = 30;
       }
+      renewNextDueDate = new Date(baseDateMs + renewRenewedDays * 24 * 60 * 60 * 1000);
     }
 
     // Calculate Partial Option (Option 2)
@@ -1482,6 +1475,9 @@ const CDLedger: React.FC = () => {
             const renewalInterestPaid = Math.max(0, interestPaid - outstandingInterest);
             renewedDays = Math.max(0, Math.round((renewalInterestPaid / monthlyInterest) * 30));
           }
+          if (renewedDays <= 0) {
+            renewedDays = 30;
+          }
         }
       }
 
@@ -1529,7 +1525,9 @@ const CDLedger: React.FC = () => {
         // For renewal/partial: set loan date based on next_due_date = base_date + renewed_days
         // Loan start date = next_due_date - (periodDays - 1)
         const periodDays = 30; // Strictly 30 days cycle length for CD
-        if (renewedDays > 0) {
+        if (actionType === 'Renew') {
+          updates.date = paymentDate;
+        } else if (renewedDays > 0) {
           const baseDateMs = Math.max(startOfDay(renewCalculations?.dueDate || paymentDate), startOfDay(paymentDate));
           const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
           

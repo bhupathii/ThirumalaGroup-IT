@@ -372,6 +372,9 @@ describe('CD Ledger Calculation Rules', () => {
           const renewalInterestPaid = Math.max(0, split.interestPaid - outstandingInterest);
           renewedDays = Math.max(0, Math.round((renewalInterestPaid / renewalDue) * 30));
         }
+        if (paymentAmount > 0 && renewedDays <= 0) {
+          renewedDays = 30;
+        }
       }
 
       let nextDueDate: string | null = null;
@@ -833,6 +836,26 @@ describe('CD Ledger Calculation Rules', () => {
         expect(resOverdue.interest).toBe(687.40); // 98200 * 0.03 * 7 / 30
         expect(resOverdue.penalty).toBe(49.10);   // 98200 * 0.0075 * (7 - 5) / 30
         expect(resOverdue.totalDue).toBe(687.40 + 49.10);
+      });
+
+      it('Test 6 - CD Ledger Renewal Bug scenario (131 days overdue, ₹5,000 renewal payment)', () => {
+        const res = calculateCDDuesAndSplit({
+          principal: 100000,
+          rate: 3,
+          currentDueDate: '2026-01-30',
+          paymentDate: '2026-06-10',
+          paymentAmount: 5000,
+          actionType: 'Renew'
+        });
+        expect(res.dueDays).toBe(131);
+        expect(res.interest).toBe(13100);
+        expect(res.penalty).toBe(3150);
+        expect(res.totalDue).toBe(16250);
+        expect(res.penaltyPaid).toBe(1000);
+        expect(res.interestPaid).toBe(4000);
+        expect(res.principalPaid).toBe(0);
+        expect(res.renewedDays).toBe(30);
+        expect(res.nextDueDate).toBe('2026-07-10');
       });
     });
   });
