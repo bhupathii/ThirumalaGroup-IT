@@ -577,6 +577,7 @@ const LoanEntry: React.FC = () => {
       dueAmount = duesCount > 0 ? ((P + interestAmount) / duesCount) : 0;
     }
 
+    const payableAmount = loanCategory === 'CD' ? P - interestAmount - docFees : P - docFees;
     const netDisbursed = P - docFees;
     const totalRenewal = interestAmount + penalty;
     const totalClose = P + interestAmount + penalty;
@@ -591,7 +592,8 @@ const LoanEntry: React.FC = () => {
       duesCount,
       dueAmount: parseFloat(dueAmount.toFixed(2)),
       docFees,
-      netDisbursed: parseFloat(netDisbursed.toFixed(2))
+      netDisbursed: parseFloat(netDisbursed.toFixed(2)),
+      payableAmount: parseFloat(payableAmount.toFixed(2))
     };
   }, [amount, interestRate, durationMonths, dueType, docCharges, loanCategory]);
 
@@ -976,7 +978,8 @@ const LoanEntry: React.FC = () => {
         guarantor_1_id: resolvedG1Id || null,
         guarantor_2_id: resolvedG2Id || null,
         penalty_percent: Number(penaltyPercent) || 0.75,
-        document_charges: Number(docCharges) || 0
+        document_charges: Number(docCharges) || 0,
+        period_days: loanCategory === 'CD' ? (Number(durationMonths) || 30) : null
       };
 
       const photosArray: any[] = [];
@@ -2224,22 +2227,13 @@ const LoanEntry: React.FC = () => {
                   <span className="text-slate-400 peek-small-10 uppercase">Document Charges:</span>
                   <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.docFees)}</span>
 
-                  <span className="text-slate-400 peek-small-10 uppercase">Net Disbursement:</span>
-                  <span className="text-right text-slate-900 text-blue-650 peek-button">₹{formatRupee(liveCalculations.netDisbursed)}</span>
+                  <span className="text-slate-400 peek-small-10 uppercase">Interest:</span>
+                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.interestAmount)}</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-y-2 border-t pt-2.5">
-                  <span className="text-slate-400 peek-small-10 uppercase">Interest:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.interestAmount)}</span>
-
-                  <span className="text-slate-400 peek-small-10 uppercase">Penalty (New Loan):</span>
-                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.penalty)}</span>
-
-                  <span className="text-slate-400 mt-1 border-t pt-1.5 peek-small-10 uppercase">Total for Renewal:</span>
-                  <span className="text-right text-slate-900 mt-1 border-t pt-1.5 peek-button">₹{formatRupee(liveCalculations.totalRenewal)}</span>
-
-                  <span className="text-slate-800 border-t pt-1.5 finance-sidebar-link uppercase">Total for Close:</span>
-                  <span className="text-right text-green-700 border-t pt-1.5 finance-sidebar-link">₹{formatRupee(liveCalculations.totalClose)}</span>
+                  <span className="text-slate-850 border-t pt-1.5 finance-sidebar-link uppercase font-bold">Payable Amount:</span>
+                  <span className="text-right text-green-700 border-t pt-1.5 finance-sidebar-link font-bold text-lg">₹{formatRupee(liveCalculations.payableAmount)}</span>
                 </div>
               </div>
             ) : (

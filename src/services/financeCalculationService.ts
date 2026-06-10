@@ -127,15 +127,17 @@ export const financeCalculationService = {
   /**
    * CD Ledger Specific Calculations
    */
-  calculateInterest(principal: number, rate: number, interestDays: number): number {
+  calculateInterest(principal: number, rate: number, interestDays: number, periodDays?: number): number {
     if (interestDays <= 0) return 0;
-    return Number(((principal * (rate / 100) * interestDays) / 30).toFixed(2));
+    const pDays = (periodDays && periodDays > 0) ? periodDays : 30;
+    return Number(((principal * (rate / 100) * interestDays) / pDays).toFixed(2));
   },
 
-  calculatePenalty(principal: number, penaltyRate: number, dueDays: number): number {
+  calculatePenalty(principal: number, penaltyRate: number, dueDays: number, periodDays?: number): number {
     const penaltyDays = dueDays <= 5 ? 0 : dueDays;
     if (penaltyDays <= 0) return 0;
-    return Number(((principal * (penaltyRate / 100) * penaltyDays) / 30).toFixed(2));
+    const pDays = (periodDays && periodDays > 0) ? periodDays : 30;
+    return Number(((principal * (penaltyRate / 100) * penaltyDays) / pDays).toFixed(2));
   },
 
   calculateRenewalTotal(interest: number, penalty: number): number {
@@ -176,7 +178,8 @@ export const financeCalculationService = {
     interestDue: number,
     monthlyRenewalInterest: number,
     principalBefore: number,
-    actionType: 'Renew' | 'Partial' | 'Close'
+    actionType: 'Renew' | 'Partial' | 'Close',
+    periodDays?: number
   ) {
     const totalDue = Number((penaltyDue + interestDue).toFixed(2));
     const totalForClose = Number((principalBefore + totalDue).toFixed(2));
@@ -239,7 +242,8 @@ export const financeCalculationService = {
 
       const totalInterestPaid = Number((overdueInterestPaid + renewalInterestPaid).toFixed(2));
 
-      const dailyInterestValue = Number((monthlyRenewalInterest / 30).toFixed(5));
+      const pDays = (periodDays && periodDays > 0) ? periodDays : 30;
+      const dailyInterestValue = Number((monthlyRenewalInterest / pDays).toFixed(5));
       const renewedDays = dailyInterestValue > 0 ? Math.round(renewalInterestPaid / dailyInterestValue) : 0;
 
       return {

@@ -449,7 +449,8 @@ const OldDataEntry: React.FC = () => {
           due_amount: parseFloat(dueAmount.toFixed(2)),
           remarks: particulars || 'OLD DATA MIGRATION',
           status: 'Active',
-          loan_category: ledgerType
+          loan_category: ledgerType,
+          period_days: ledgerType === 'CD' ? (billingDays || 30) : null
         }])
         .select()
         .single();

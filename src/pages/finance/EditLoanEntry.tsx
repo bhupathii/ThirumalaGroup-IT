@@ -226,7 +226,8 @@ const EditLoanEntry: React.FC = () => {
         surety_fingerprint_image_url: suretyFingerprintUrl,
         surety_fingerprint_added: suretyFingerprintAdded,
         father_husband_name: custFatherHusbandName || null,
-        loan_category: loanCategory
+        loan_category: loanCategory,
+        period_days: loanCategory === 'CD' ? (Number(durationMonths) || 30) : null
       }, staffName);
 
       if (updatedLoan) {

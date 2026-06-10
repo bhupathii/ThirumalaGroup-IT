@@ -136,6 +136,7 @@ export interface FinanceLoan {
   penalty_percent?: number;
   guarantor_1_id?: string | null;
   guarantor_2_id?: string | null;
+  period_days?: number | null;
 }
 
 export interface FinanceLoanDocument {
@@ -1444,7 +1445,8 @@ class SupabaseFinance {
       // 2. Opening CD Commission (fixed at disbursement; never recalculated)
       const _commRate = Number(loan.interest_rate) || 3;
       const _commPeriod = Number(loan.duration_months) || 10;
-      const _commAmount = Number(((Number(loan.amount) * (_commRate / 100) * _commPeriod) / 30).toFixed(2));
+      const pDays = (loan.period_days && Number(loan.period_days) > 0) ? Number(loan.period_days) : 30;
+      const _commAmount = Number(((Number(loan.amount) * (_commRate / 100) * _commPeriod) / pDays).toFixed(2));
       if (_commAmount > 0) {
         await supabase.from('finance_cd_ledger_entries').insert([{
           loan_id: loan.id,

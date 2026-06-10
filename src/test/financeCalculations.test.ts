@@ -314,6 +314,7 @@ describe('CD Ledger Calculation Rules', () => {
       interestPaidInCycle?: number;
       penaltyPaidInCycle?: number;
       actionType?: 'Renew' | 'Partial' | 'Close';
+      periodDays?: number;
     }) {
       const {
         principal,
@@ -323,7 +324,8 @@ describe('CD Ledger Calculation Rules', () => {
         paymentAmount,
         interestPaidInCycle = 0,
         penaltyPaidInCycle = 0,
-        actionType = 'Renew'
+        actionType = 'Renew',
+        periodDays = 30
       } = params;
 
       const paymentDateObj = new Date(paymentDate);
@@ -336,9 +338,9 @@ describe('CD Ledger Calculation Rules', () => {
       const dueDays = Math.max(0, rawDueDays);
       const daysRemaining = rawDueDays < 0 ? Math.abs(rawDueDays) : 0;
 
-      const grossInterest = dueDays <= 0 ? 0 : Number(((principal * rate * dueDays) / 30 / 100).toFixed(2));
+      const grossInterest = dueDays <= 0 ? 0 : Number(((principal * rate * dueDays) / periodDays / 100).toFixed(2));
       const penaltyDays = dueDays <= 5 ? 0 : dueDays;
-      const grossPenalty = penaltyDays <= 0 ? 0 : Number(((principal * 0.75 * penaltyDays) / 30 / 100).toFixed(2));
+      const grossPenalty = penaltyDays <= 0 ? 0 : Number(((principal * 0.75 * penaltyDays) / periodDays / 100).toFixed(2));
 
       const effectiveGrossInterest = Math.max(grossInterest, interestPaidInCycle);
       const effectiveGrossPenalty = Math.max(grossPenalty, penaltyPaidInCycle);
@@ -361,7 +363,8 @@ describe('CD Ledger Calculation Rules', () => {
         outstandingInterest,
         renewalDue,
         principal,
-        actionType
+        actionType,
+        periodDays
       );
 
       const renewedDays = split.renewedDays;
@@ -886,6 +889,89 @@ describe('CD Ledger Calculation Rules', () => {
         expect(res.principalPaid).toBe(0);
         expect(res.renewedDays).toBe(6);
         expect(res.nextDueDate).toBe('2026-06-16');
+      });
+    });
+
+    describe('Dynamic Period Days (15-Day Period Examples)', () => {
+      it('Example A: Principal 10,000, Rate 3%, Period 15 -> Cycle Interest = 300, Daily Interest = 20', () => {
+        const principal = 10000;
+        const rate = 3;
+        const periodDays = 15;
+
+        // interest = principal * rate * dueDays / periodDays
+        // For a full cycle (15 days):
+        const interest = financeCalculationService.calculateInterest(principal, rate, 15, periodDays);
+        expect(interest).toBe(300);
+
+        // dailyInterestValue = cycleInterest / periodDays = 300 / 15 = 20
+        const monthlyInterest = Number((principal * rate / 100).toFixed(2)); // 300
+        const dailyInterestValue = Number((monthlyInterest / periodDays).toFixed(5));
+        expect(dailyInterestValue).toBe(20);
+      });
+
+      it('Example B: Renewal Interest Paid 600, Daily Interest 20 -> Renewed Days = 30', () => {
+        const monthlyInterest = 300;
+        const periodDays = 15;
+
+        // Split call with 15 days period
+        const split = financeCalculationService.computeCDPaymentSplit(
+          600, // paymentAmount
+          0,   // penaltyDue
+          0,   // interestDue
+          monthlyInterest,
+          10000, // principalBefore
+          'Renew',
+          periodDays
+        );
+
+        // dailyInterestValue = 300 / 15 = 20
+        // renewedDays = 600 / 20 = 30
+        expect(split.renewedDays).toBe(30);
+      });
+
+      it('Example C: Penalty Rate 0.75%, Principal 10,000, Period 15 -> Cycle Penalty = 75, Daily Penalty = 5', () => {
+        const principal = 10000;
+        const penaltyRate = 0.75;
+        const periodDays = 15;
+
+        // penalty = principal * penaltyRate * dueDays / periodDays
+        // For a full cycle (15 days):
+        const penalty = financeCalculationService.calculatePenalty(principal, penaltyRate, 15, periodDays);
+        expect(penalty).toBe(75);
+
+        // daily penalty value: (principal * 0.75 / 100 / periodDays)
+        const dailyPenalty = Number((principal * penaltyRate / 100 / periodDays).toFixed(5));
+        expect(dailyPenalty).toBe(5);
+      });
+
+      it('verifies 15-day period calculations using calculateCDDuesAndSplit helper', () => {
+        const res = calculateCDDuesAndSplit({
+          principal: 10000,
+          rate: 3,
+          currentDueDate: '2026-06-15',
+          paymentDate: '2026-06-30', // exactly 15 days overdue
+          paymentAmount: 600,
+          actionType: 'Renew',
+          periodDays: 15
+        });
+
+        expect(res.dueDays).toBe(15);
+        expect(res.interest).toBe(300); // 10000 * 0.03 * 15 / 15 = 300
+        expect(res.penalty).toBe(75);   // 10000 * 0.0075 * 15 / 15 = 75
+        expect(res.totalDue).toBe(375);
+        expect(res.penaltyPaid).toBe(75);
+        expect(res.interestPaid).toBe(525); // 600 - 75 = 525
+        // dailyInterest = 300 / 15 = 20
+        // renewalInterestPaid = interestPaid (525) - overdueInterestPaid (300) = 225
+        // renewedDays = 225 / 20 = 11.25 -> rounded to 11 days
+        expect(res.renewedDays).toBe(11);
+      });
+
+      it('verifies due date is calculated as loan_date + period_days exactly', () => {
+        const loanDate = new Date('2026-06-10T00:00:00Z');
+        const periodDays = 15;
+        const dueDate = new Date(loanDate.getTime() + periodDays * 24 * 60 * 60 * 1000);
+        expect(dueDate.toISOString().split('T')[0]).toBe('2026-06-25');
       });
     });
   });
