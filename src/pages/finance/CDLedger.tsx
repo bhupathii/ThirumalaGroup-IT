@@ -561,7 +561,7 @@ const CDLedger: React.FC = () => {
       };
     }
 
-    const periodDays = Number(selectedLoan.duration_months) || 30;
+    const periodDays = 30;
     
     // Current Due Date = Loan Date + (Period Days - 1)
     const entryDateStart = new Date(startOfDay(entryDate));
@@ -769,7 +769,7 @@ const CDLedger: React.FC = () => {
       const disbEntry = sortedDbEntries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
       const P = disbEntry ? Number(disbEntry.debit) : originalAmount;
       const R = Number(selectedLoan.interest_rate) || 3;
-      const D = Number(selectedLoan.duration_months) || 10; // period days
+      const D = 30; // CD commission is always 1 month (30 days)
       const commAmount = Number(((P * (R / 100) * D) / 30).toFixed(2));
 
       list.push({
@@ -847,7 +847,7 @@ const CDLedger: React.FC = () => {
       });
 
       // Dues calculation for this cycle
-      const periodDays = Number(selectedLoan.duration_months) || 30;
+      const periodDays = 30;
       const cycleDueDate = new Date(cycle.start + (periodDays - 1) * 24 * 60 * 60 * 1000);
       const cycleDueDays = Math.max(0, Math.round((cycle.end - startOfDay(cycleDueDate)) / (1000 * 60 * 60 * 24)));
       
@@ -1016,10 +1016,10 @@ const CDLedger: React.FC = () => {
           credit: entry.credit,
           receipt_no: entry.receipt_no,
           particulars: entry.particulars,
-          renewed_days: isRenewalInterest ? Number(selectedLoan?.duration_months) || 30 : 0,
+          renewed_days: isRenewalInterest ? 30 : 0,
           renewed_till_date: isRenewalInterest 
             ? (() => {
-                const dateObj = new Date(new Date(entry.entry_date).getTime() + (Number(selectedLoan?.duration_months) || 30) * 24 * 60 * 60 * 1000);
+                const dateObj = new Date(new Date(entry.entry_date).getTime() + 30 * 24 * 60 * 60 * 1000);
                 const tzoffset = dateObj.getTimezoneOffset() * 60000;
                 return new Date(dateObj.getTime() - tzoffset).toISOString().split('T')[0];
               })()
@@ -1055,6 +1055,7 @@ const CDLedger: React.FC = () => {
         currentTotalDues: 0,
         currentPaidDues: 0,
         currentPendingDues: 0,
+        totalToRegularize: 0,
         totalClose: 0,
         totalCredit: 0,
         totalDebit: 0
@@ -1077,9 +1078,6 @@ const CDLedger: React.FC = () => {
 
 
     // Outstanding values for payment purposes (always >= 0)
-    const outstandingInterest = renewCalculations.outstandingInterest || 0;
-    const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
-
 
     const interestRate = Number(selectedLoan.interest_rate) || 3;
     const renewalDue = Number((principalBalance * interestRate / 100).toFixed(2));
@@ -1088,6 +1086,15 @@ const CDLedger: React.FC = () => {
     const currentTotalDues = renewalDue;
     const currentPaidDues = Number((renewCalculations.interestPaid || 0).toFixed(2));
     const currentPendingDues = Math.max(0, Number((renewalDue - currentPaidDues).toFixed(2)));
+
+    // Total To Regularize = total_due + total_for_renewal
+    // Where:
+    //   total_due = outstanding_interest + outstanding_penalty
+    //   total_for_renewal = currentTotalDues
+    const outstandingInterest = renewCalculations.outstandingInterest || 0;
+    const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
+    const totalDue = outstandingInterest + outstandingPenalty;
+    const totalToRegularize = Number((totalDue + currentTotalDues).toFixed(2));
 
     // Close Amount = Principal + Interest + Penalty (only when interest and penalty are non-negative)
     const totalClose = Number((principalBalance + Math.max(0, pendingInterest) + Math.max(0, pendingPenalty)).toFixed(2));
@@ -1116,6 +1123,7 @@ const CDLedger: React.FC = () => {
       currentTotalDues,
       currentPaidDues,
       currentPendingDues,
+      totalToRegularize,
       totalClose,
       totalCredit,
       totalDebit
@@ -1173,9 +1181,10 @@ const CDLedger: React.FC = () => {
       renewPenaltyPaid = split.penaltyPaid;
       renewInterestPaid = split.interestPaid;
       renewPrincipalPaid = split.principalPaid;
-      const baseDateMs = Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate));
+      const baseDateMs = Math.max(startOfDay(renewCalculations?.dueDate || paymentDate), startOfDay(paymentDate));
       if (monthlyInterest > 0) {
-        renewRenewedDays = Math.max(0, Math.round((renewInterestPaid / monthlyInterest) * 30));
+        const renewalInterestPaid = Math.max(0, renewInterestPaid - outstandingInterest);
+        renewRenewedDays = Math.max(0, Math.round((renewalInterestPaid / monthlyInterest) * 30));
       }
       if (renewRenewedDays > 0) {
         renewNextDueDate = new Date(baseDateMs + renewRenewedDays * 24 * 60 * 60 * 1000);
@@ -1207,9 +1216,10 @@ const CDLedger: React.FC = () => {
       partialPenaltyPaid = split.penaltyPaid;
       partialInterestPaid = split.interestPaid;
       partialPrincipalPaid = split.principalPaid;
-      const baseDateMs = Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate));
+      const baseDateMs = Math.max(startOfDay(renewCalculations?.dueDate || paymentDate), startOfDay(paymentDate));
       if (monthlyInterest > 0) {
-        partialRenewedDays = Math.max(0, Math.round((partialInterestPaid / monthlyInterest) * 30));
+        const renewalInterestPaid = Math.max(0, partialInterestPaid - outstandingInterest);
+        partialRenewedDays = Math.max(0, Math.round((renewalInterestPaid / monthlyInterest) * 30));
       }
       if (partialRenewedDays > 0) {
         partialNextDueDate = new Date(baseDateMs + partialRenewedDays * 24 * 60 * 60 * 1000);
@@ -1430,7 +1440,8 @@ const CDLedger: React.FC = () => {
         principalPaid = split.principalPaid;
         
         if (monthlyInterest > 0) {
-          renewedDays = Math.max(0, Math.round((interestPaid / monthlyInterest) * 30));
+          const renewalInterestPaid = Math.max(0, interestPaid - outstandingInterest);
+          renewedDays = Math.max(0, Math.round((renewalInterestPaid / monthlyInterest) * 30));
         }
       }
 
@@ -1477,12 +1488,25 @@ const CDLedger: React.FC = () => {
         
         // For renewal/partial: set loan date based on next_due_date = base_date + renewed_days
         // Loan start date = next_due_date - (periodDays - 1)
-        const periodDays = Number(selectedLoan.duration_months) || 30;
+        const periodDays = 30; // Strictly 30 days cycle length for CD
         if (renewedDays > 0) {
-          const baseDateMs = Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate));
+          const baseDateMs = Math.max(startOfDay(renewCalculations?.dueDate || paymentDate), startOfDay(paymentDate));
           const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
+          
+          console.log('=== RENEWAL DUE DATE ADVANCEMENT DEBUG ===');
+          console.log('old_current_due_date:', renewCalculations.dueDate);
+          console.log('payment_date:', paymentDate);
+          console.log('base_date:', new Date(baseDateMs));
+          console.log('interest_paid:', interestPaid);
+          console.log('monthly_interest:', monthlyInterest);
+          console.log('renewed_days:', renewedDays);
+          console.log('next_due_date:', nextDueDate);
+
           const newCycleStart = new Date(nextDueDate.getTime() - (periodDays - 1) * 24 * 60 * 60 * 1000);
-          updates.date = newCycleStart.toISOString().split('T')[0];
+          const tzoffset = newCycleStart.getTimezoneOffset() * 60000;
+          updates.date = new Date(newCycleStart.getTime() - tzoffset).toISOString().split('T')[0];
+          
+          console.log('new_loan_date (updates.date):', updates.date);
         }
         
         if (principalPaid > 0) {
@@ -2201,6 +2225,7 @@ const CDLedger: React.FC = () => {
                     </div>
                   )}
 
+
                   {/* Actions buttons */}
                   <div className="grid grid-cols-1 gap-2.5">
                     <Button
@@ -2225,7 +2250,7 @@ const CDLedger: React.FC = () => {
                         isRenewing || 
                         !totalAmountPaying || 
                         Number(totalAmountPaying) <= 0 ||
-                        Number(totalAmountPaying) <= (ledgerMetrics.currentTotalDues || 0) ||
+                        Number(totalAmountPaying) <= (ledgerMetrics.totalToRegularize || 0) ||
                         selectedLoan.status === 'Closed' || 
                         selectedLoan.status === 'NPA_CLOSED' || 
                         !!renewCalculations?.isDateInvalid
@@ -2244,7 +2269,7 @@ const CDLedger: React.FC = () => {
                         selectedLoan.status === 'NPA_CLOSED' || 
                         !(
                           ledgerMetrics.principalBalance <= 0 && 
-                          (renewCalculations.outstandingInterest + renewCalculations.outstandingPenalty) <= 0
+                          ((renewCalculations?.outstandingInterest || 0) + (renewCalculations?.outstandingPenalty || 0)) <= 0
                         ) ||
                         !!renewCalculations?.isDateInvalid
                       }
@@ -2285,8 +2310,15 @@ const CDLedger: React.FC = () => {
                   
                   <div className="border-t border-rose-100 pt-3 col-span-2 flex justify-between items-center">
                     <span className="text-rose-800 text-[10px] uppercase font-black tracking-wider">Total for Renewal</span>
-                    <span className={`text-xl font-black font-mono ${ledgerMetrics.currentPendingDues < 0 ? 'text-green-600' : 'text-rose-700'}`}>
-                      ₹{ledgerMetrics.currentPendingDues.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <span className="text-xl font-black font-mono text-rose-700">
+                      ₹{ledgerMetrics.currentTotalDues.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="border-t border-rose-100 pt-3 col-span-2 flex justify-between items-center">
+                    <span className="text-rose-800 text-[10px] uppercase font-black tracking-wider">Total to Regularize</span>
+                    <span className="text-xl font-black font-mono text-rose-700">
+                      ₹{ledgerMetrics.totalToRegularize.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                   

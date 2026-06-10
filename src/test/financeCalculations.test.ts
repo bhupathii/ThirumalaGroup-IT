@@ -350,6 +350,7 @@ describe('CD Ledger Calculation Rules', () => {
       const totalDue = displayInterest + displayPenalty;
 
       const renewalDue = Number((principal * rate / 100).toFixed(2));
+      const totalToRegularize = Number((totalDue + renewalDue).toFixed(2));
       const pendingDues = Math.max(0, Number((renewalDue - interestPaidInCycle).toFixed(2)));
       const totalClose = Number((principal + displayInterest + displayPenalty).toFixed(2));
 
@@ -364,7 +365,8 @@ describe('CD Ledger Calculation Rules', () => {
 
       let renewedDays = 0;
       if (paymentAmount > 0 && split.interestPaid > 0 && renewalDue > 0) {
-        renewedDays = Math.max(0, Math.round((split.interestPaid / renewalDue) * 30));
+        const renewalInterestPaid = Math.max(0, split.interestPaid - outstandingInterest);
+        renewedDays = Math.max(0, Math.round((renewalInterestPaid / renewalDue) * 30));
       }
 
       let nextDueDate: string | null = null;
@@ -376,7 +378,7 @@ describe('CD Ledger Calculation Rules', () => {
       }
 
       const enableRenewal = paymentAmount > 0;
-      const enablePartial = paymentAmount > renewalDue;
+      const enablePartial = paymentAmount > totalToRegularize;
       const enableClose = principal <= 0 && totalDue <= 0;
 
       return {
@@ -387,6 +389,7 @@ describe('CD Ledger Calculation Rules', () => {
         penalty: displayPenalty,
         totalDue,
         renewalDue,
+        totalToRegularize,
         pendingDues,
         totalClose,
         penaltyPaid: split.penaltyPaid,
@@ -414,6 +417,7 @@ describe('CD Ledger Calculation Rules', () => {
       expect(res.penalty).toBe(0);
       expect(res.totalDue).toBe(0);
       expect(res.renewalDue).toBe(3000);
+      expect(res.totalToRegularize).toBe(3000);
       expect(res.totalClose).toBe(100000);
       expect(res.nextDueDate).toBeNull();
       expect(res.renewedDays).toBe(0);
@@ -499,6 +503,7 @@ describe('CD Ledger Calculation Rules', () => {
       expect(res.interest).toBe(1000);
       expect(res.penalty).toBe(250);
       expect(res.totalDue).toBe(1250);
+      expect(res.totalToRegularize).toBe(4250);
       expect(res.totalClose).toBe(101250);
     });
 
@@ -658,6 +663,72 @@ describe('CD Ledger Calculation Rules', () => {
       expect(summaryTotalDue).toBe(res.totalDue);
       expect(footerTotalDue).toBe(res.totalDue);
       expect(borrowerLedgerTotalDue).toBe(res.totalDue);
+    });
+
+    it('Partial Payment & Renewal Validation Case 1 - Exact Regularize Payment', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-20',
+        paymentAmount: 3250,
+        actionType: 'Renew'
+      });
+      expect(res.dueDays).toBe(2);
+      expect(res.interest).toBe(200);
+      expect(res.penalty).toBe(50);
+      expect(res.totalDue).toBe(250);
+      expect(res.renewalDue).toBe(3000);
+      expect(res.totalToRegularize).toBe(3250);
+      expect(res.interestPaid).toBe(3200);
+      expect(res.penaltyPaid).toBe(50);
+      expect(res.principalPaid).toBe(0);
+      expect(res.renewedDays).toBe(30);
+      expect(res.nextDueDate).toBe('2026-07-20');
+    });
+
+    it('Partial Payment & Renewal Validation Case 2 - Excess Payment with Principal Reduction', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-20',
+        paymentAmount: 7000,
+        actionType: 'Partial'
+      });
+      expect(res.dueDays).toBe(2);
+      expect(res.interest).toBe(200);
+      expect(res.penalty).toBe(50);
+      expect(res.totalDue).toBe(250);
+      expect(res.renewalDue).toBe(3000);
+      expect(res.totalToRegularize).toBe(3250);
+      expect(res.interestPaid).toBe(3200);
+      expect(res.penaltyPaid).toBe(50);
+      expect(res.principalPaid).toBe(3750);
+      expect(res.renewedDays).toBe(30);
+      expect(res.nextDueDate).toBe('2026-07-20');
+    });
+
+    it('Partial Payment & Renewal Validation Case 3 - Heavy Excess Payment with Principal Reduction', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-20',
+        paymentAmount: 10000,
+        actionType: 'Partial'
+      });
+      expect(res.dueDays).toBe(2);
+      expect(res.interest).toBe(200);
+      expect(res.penalty).toBe(50);
+      expect(res.totalDue).toBe(250);
+      expect(res.renewalDue).toBe(3000);
+      expect(res.totalToRegularize).toBe(3250);
+      expect(res.interestPaid).toBe(3200);
+      expect(res.penaltyPaid).toBe(50);
+      expect(res.principalPaid).toBe(6750);
+      expect(res.renewedDays).toBe(30);
+      expect(res.nextDueDate).toBe('2026-07-20');
     });
   });
 });
