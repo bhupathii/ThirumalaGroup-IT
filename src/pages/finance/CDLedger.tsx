@@ -576,16 +576,17 @@ const CDLedger: React.FC = () => {
     const principalBalance = currentPrincipalBalance;
 
     // Interest = principal × rate × dueDays ÷ 30 ÷ 100 (0 if dueDays <= 0)
-    // Penalty  = principal × 0.75 × dueDays ÷ 30 ÷ 100 (0 if dueDays <= 0, no grace period)
+    // Penalty  = principal × 0.75% × penalty_days ÷ 30 (Starts only after 5 grace days, penalty_days = max(0, dueDays - 5))
     const grossInterest = dueDays <= 0 ? 0 : Number(((principalBalance * interestRate * dueDays) / 30 / 100).toFixed(2));
-    const grossPenalty  = dueDays <= 0 ? 0 : Number(((principalBalance * 0.75 * dueDays) / 30 / 100).toFixed(2));
+    const penaltyDays = Math.max(0, dueDays - 5);
+    const grossPenalty  = penaltyDays <= 0 ? 0 : Number(((principalBalance * 0.75 * penaltyDays) / 30 / 100).toFixed(2));
 
     // Daily interest / renewal day value:
     // Always compute base daily interest rate for renewedDays calculation.
     const baseDailyInterest = Number((principalBalance * interestRate / 100 / 30).toFixed(5));
     let dailyInterest = baseDailyInterest;
     let dailyPenalty = 0;
-    if (dueDays > 0) {
+    if (dueDays > 5) {
       dailyInterest = Number((principalBalance * (interestRate + 0.75) / 100 / 30).toFixed(5));
       dailyPenalty = Number((principalBalance * 0.75 / 100 / 30).toFixed(5));
     }
@@ -605,26 +606,46 @@ const CDLedger: React.FC = () => {
       .filter(e =>
         e.entry_type === 'Renewal' || e.entry_type === 'Renew' ||
         (e.particulars || '').toLowerCase().includes('renewal') ||
-        (e.particulars || '').toLowerCase().includes('renew')
+        (e.particulars || '').toLowerCase().includes('renew') ||
+        (e.particulars || '').toLowerCase().includes('partial payment')
       )
-      .sort((a, b) => startOfDay(b.entry_date) - startOfDay(a.entry_date)); // newest first
+      .sort((a, b) => {
+        const dateDiff = startOfDay(b.entry_date) - startOfDay(a.entry_date);
+        if (dateDiff !== 0) return dateDiff;
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (timeA !== timeB) return timeB - timeA;
+        return (b.id && a.id) ? b.id.localeCompare(a.id) : 0;
+      });
 
     const lastRenewalDateMs: number | null = renewalEntries.length > 0
       ? startOfDay(renewalEntries[0].entry_date)
+      : null;
+
+    const lastRenewalReceiptNo: string | null = renewalEntries.length > 0
+      ? renewalEntries[0].receipt_no
+      : null;
+
+    const lastRenewalCreatedAt: string | null = renewalEntries.length > 0
+      ? renewalEntries[0].created_at
       : null;
 
     // Reuses the originalLoanDateMs computed at the top of the memo block
 
     // Paid amounts for the current cycle:
     //   • On or after the last renewal date (>=) when a prior renewal exists.
-    //     Using >= (not strict >) so that payments made on the SAME DAY as the
-    //     renewal are included (e.g. RC330 renewal + RC332 partial on 08-Jun-26).
-    //     Only 'interest_payment' and 'penalty_payment' entries are counted, so
-    //     the renewal entry itself is never accidentally double-counted.
-    //   • From the original loan date onward (>=) for the first cycle.
+    //     Using >= so that payments made on the SAME DAY as the renewal are included,
+    //     BUT excluding the payment entries that were part of the renewal/partial transaction itself
+    //     to prevent carrying forward historical paid interest/penalty into the next cycle.
     const penaltyPaidInCycle = cdLedgerEntries
       .filter(e => {
         if (e.entry_type !== 'penalty_payment') return false;
+        if (lastRenewalReceiptNo && e.receipt_no === lastRenewalReceiptNo) {
+          return false;
+        }
+        if (lastRenewalCreatedAt && e.created_at) {
+          return e.created_at > lastRenewalCreatedAt;
+        }
         const d = startOfDay(e.entry_date);
         return lastRenewalDateMs !== null ? d >= lastRenewalDateMs : d >= originalLoanDateMs;
       })
@@ -633,6 +654,12 @@ const CDLedger: React.FC = () => {
     const interestPaidInCycle = cdLedgerEntries
       .filter(e => {
         if (e.entry_type !== 'interest_payment') return false;
+        if (lastRenewalReceiptNo && e.receipt_no === lastRenewalReceiptNo) {
+          return false;
+        }
+        if (lastRenewalCreatedAt && e.created_at) {
+          return e.created_at > lastRenewalCreatedAt;
+        }
         const d = startOfDay(e.entry_date);
         return lastRenewalDateMs !== null ? d >= lastRenewalDateMs : d >= originalLoanDateMs;
       })
@@ -1051,6 +1078,7 @@ const CDLedger: React.FC = () => {
         paidPenalty: 0,
         pendingInterest: 0,
         pendingPenalty: 0,
+        renewalDue: 0,
         currentTotalDues: 0,
         currentPaidDues: 0,
         currentPendingDues: 0,
@@ -1081,19 +1109,24 @@ const CDLedger: React.FC = () => {
     const interestRate = Number(selectedLoan.interest_rate) || 3;
     const renewalDue = Number((principalBalance * interestRate / 100).toFixed(2));
 
-    // Total for Renewal = next month's interest (independent of overdue days)
-    const currentTotalDues = renewalDue;
-    const currentPaidDues = Number((renewCalculations.interestPaid || 0).toFixed(2));
-    const currentPendingDues = Math.max(0, Number((renewalDue - currentPaidDues).toFixed(2)));
+    const outstandingInterest = renewCalculations.outstandingInterest || 0;
+    const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
+    const totalDue = outstandingInterest + outstandingPenalty;
 
     // Total To Regularize = total_due + total_for_renewal
     // Where:
     //   total_due = outstanding_interest + outstanding_penalty
-    //   total_for_renewal = currentTotalDues
-    const outstandingInterest = renewCalculations.outstandingInterest || 0;
-    const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
-    const totalDue = outstandingInterest + outstandingPenalty;
-    const totalToRegularize = Number((totalDue + currentTotalDues).toFixed(2));
+    //   total_for_renewal = renewalDue
+    const totalToRegularize = Number((totalDue + renewalDue).toFixed(2));
+
+    // Footer metrics synchronized with calculations and card values
+    const currentTotalDues = (renewCalculations.daysPastDue || 0) <= 0
+      ? 0
+      : Number((grossInterestDue + grossPenaltyDue).toFixed(2));
+    const currentPaidDues = (renewCalculations.daysPastDue || 0) <= 0
+      ? 0
+      : Number((paidInterest + paidPenalty).toFixed(2));
+    const currentPendingDues = Math.max(0, Number((currentTotalDues - currentPaidDues).toFixed(2)));
 
     // Close Amount = Principal + Interest + Penalty (only when interest and penalty are non-negative)
     const totalClose = Number((principalBalance + Math.max(0, pendingInterest) + Math.max(0, pendingPenalty)).toFixed(2));
@@ -1119,6 +1152,7 @@ const CDLedger: React.FC = () => {
       paidPenalty,
       pendingInterest,
       pendingPenalty,
+      renewalDue,
       currentTotalDues,
       currentPaidDues,
       currentPendingDues,
@@ -1216,9 +1250,11 @@ const CDLedger: React.FC = () => {
       partialInterestPaid = split.interestPaid;
       partialPrincipalPaid = split.principalPaid;
       const baseDateMs = Math.max(startOfDay(renewCalculations?.dueDate || paymentDate), startOfDay(paymentDate));
-      if (monthlyInterest > 0) {
-        const renewalInterestPaid = Math.max(0, partialInterestPaid - outstandingInterest);
-        partialRenewedDays = Math.max(0, Math.round((renewalInterestPaid / monthlyInterest) * 30));
+      const totalToRegularize = Number((outstandingPenalty + outstandingInterest + monthlyInterest).toFixed(2));
+      if (paymentAmount >= totalToRegularize) {
+        partialRenewedDays = 30;
+      } else {
+        partialRenewedDays = 0;
       }
       if (partialRenewedDays > 0) {
         partialNextDueDate = new Date(baseDateMs + partialRenewedDays * 24 * 60 * 60 * 1000);
@@ -1438,9 +1474,14 @@ const CDLedger: React.FC = () => {
         interestPaid  = split.interestPaid;
         principalPaid = split.principalPaid;
         
-        if (monthlyInterest > 0) {
-          const renewalInterestPaid = Math.max(0, interestPaid - outstandingInterest);
-          renewedDays = Math.max(0, Math.round((renewalInterestPaid / monthlyInterest) * 30));
+        if (actionType === 'Partial') {
+          const totalToRegularize = Number((outstandingPenalty + outstandingInterest + monthlyInterest).toFixed(2));
+          renewedDays = paymentAmount >= totalToRegularize ? 30 : 0;
+        } else {
+          if (monthlyInterest > 0) {
+            const renewalInterestPaid = Math.max(0, interestPaid - outstandingInterest);
+            renewedDays = Math.max(0, Math.round((renewalInterestPaid / monthlyInterest) * 30));
+          }
         }
       }
 
@@ -2310,7 +2351,7 @@ const CDLedger: React.FC = () => {
                   <div className="border-t border-rose-100 pt-3 col-span-2 flex justify-between items-center">
                     <span className="text-rose-800 text-[10px] uppercase font-black tracking-wider">Total for Renewal</span>
                     <span className="text-xl font-black font-mono text-rose-700">
-                      ₹{ledgerMetrics.currentTotalDues.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₹{ledgerMetrics.renewalDue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
 

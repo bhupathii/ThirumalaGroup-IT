@@ -105,3 +105,7 @@ temp/
 
 #docs
 .docx
+
+# Scratch files and temporary outputs
+scratch/
+tsc_output.txt

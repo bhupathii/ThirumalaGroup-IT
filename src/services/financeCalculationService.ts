@@ -133,9 +133,9 @@ export const financeCalculationService = {
   },
 
   calculatePenalty(principal: number, penaltyRate: number, dueDays: number): number {
-    if (dueDays <= 5) return 0;
-    // Penalty includes all dueDays once grace period is crossed
-    return Number(((principal * (penaltyRate / 100) * dueDays) / 30).toFixed(2));
+    const penaltyDays = Math.max(0, dueDays - 5);
+    if (penaltyDays <= 0) return 0;
+    return Number(((principal * (penaltyRate / 100) * penaltyDays) / 30).toFixed(2));
   },
 
   calculateRenewalTotal(interest: number, penalty: number): number {
@@ -178,7 +178,6 @@ export const financeCalculationService = {
     principalBefore: number,
     actionType: 'Renew' | 'Partial' | 'Close'
   ) {
-    const totalForRenewal = Number((Math.max(0, penaltyDue) + Math.max(0, interestDue) + Math.max(0, standardMonthlyInterest)).toFixed(2));
     const totalForClose = Number((principalBefore + Math.max(0, interestDue) + Math.max(0, penaltyDue)).toFixed(2));
     const isClosing = actionType === 'Close' || paymentAmount >= totalForClose;
 
@@ -203,22 +202,17 @@ export const financeCalculationService = {
     }
 
     // actionType === 'Partial'
-    if (paymentAmount > totalForRenewal) {
-      const split = this.computeRenewSplit(totalForRenewal, Math.max(0, penaltyDue));
-      const principalPaid = Number((paymentAmount - totalForRenewal).toFixed(2));
-      return {
-        penaltyPaid: split.penaltyPaid,
-        interestPaid: split.interestPaid,
-        principalPaid
-      };
-    } else {
-      const split = this.computeRenewSplit(paymentAmount, Math.max(0, penaltyDue));
-      return {
-        penaltyPaid: split.penaltyPaid,
-        interestPaid: split.interestPaid,
-        principalPaid: 0
-      };
-    }
+    let remaining = paymentAmount;
+    const penaltyPaid = Math.min(remaining, Math.max(0, penaltyDue));
+    remaining -= penaltyPaid;
+    const interestPaid = Math.min(remaining, Math.max(0, interestDue) + Math.max(0, standardMonthlyInterest));
+    remaining -= interestPaid;
+    const principalPaid = remaining;
+    return {
+      penaltyPaid: Number(penaltyPaid.toFixed(2)),
+      interestPaid: Number(interestPaid.toFixed(2)),
+      principalPaid: Number(principalPaid.toFixed(2))
+    };
   },
 
   applyPaymentSplit(
