@@ -115,7 +115,7 @@ export interface FinanceLoan {
   surety_present_address?: string | null;
   surety_relation?: string | null;
   remarks: string | null;
-  status: 'Active' | 'Closed';
+  status: 'Active' | 'Closed' | 'NPA_CLOSED';
   created_at: string;
   updated_at: string;
   customer_photo_url?: string | null;
@@ -685,14 +685,6 @@ class SupabaseFinance {
       const receiptNo = params.receiptNo || await this.generateUniqueReceiptNo();
       const entryDate = params.paymentDate ? new Date(params.paymentDate).toISOString() : new Date().toISOString();
       const totalAmount = params.principalPaid + params.interestPaid + params.penaltyPaid;
-
-      // Fetch duration_months to get the period days dynamically
-      const { data: loanData } = await supabase
-        .from('finance_loans')
-        .select('duration_months')
-        .eq('id', params.loanId)
-        .single();
-      const periodDays = loanData ? (Number(loanData.duration_months) || 10) : 10;
 
       // Build remarks
       let remarks = '';

@@ -900,19 +900,30 @@ const CDLedger: React.FC = () => {
           return;
         }
 
-        // Apply split
-        const creditAmt = Number(entry.credit);
-        const oldSplit = financeCalculationService.applyPaymentSplit(
+        const isRenewal = entry.entry_type === 'Renewal' || entry.entry_type === 'Renew' || 
+                          (entry.particulars || '').toLowerCase().includes('renewal') || 
+                          (entry.particulars || '').toLowerCase().includes('renew');
+        const isCloseAction = entry.entry_type === 'Close' || entry.entry_type === 'Settlement';
+        const actionType = isCloseAction ? 'Close' : (isRenewal ? 'Renew' : 'Partial');
+        const creditAmt = Number(entry.credit || 0);
+
+        const monthlyInterestVal = Number((runningPrincipal * interestRate / 100).toFixed(2));
+
+        const oldSplit = financeCalculationService.computeCDPaymentSplit(
           accumulatedPayments,
-          cycleGrossInterest,
           cycleGrossPenalty,
-          runningPrincipal
+          cycleGrossInterest,
+          monthlyInterestVal,
+          runningPrincipal,
+          actionType
         );
-        const newSplit = financeCalculationService.applyPaymentSplit(
+        const newSplit = financeCalculationService.computeCDPaymentSplit(
           accumulatedPayments + creditAmt,
-          cycleGrossInterest,
           cycleGrossPenalty,
-          runningPrincipal
+          cycleGrossInterest,
+          monthlyInterestVal,
+          runningPrincipal,
+          actionType
         );
 
         const pPaid = Number((newSplit.penaltyPaid - oldSplit.penaltyPaid).toFixed(2));
@@ -922,12 +933,9 @@ const CDLedger: React.FC = () => {
         accumulatedPayments += creditAmt;
         runningPrincipal -= prPaid;
 
-        const isRenewal = entry.entry_type === 'Renewal' || entry.entry_type === 'Renew' || 
-                          (entry.particulars || '').toLowerCase().includes('renewal') || 
-                          (entry.particulars || '').toLowerCase().includes('renew');
-        const actionText = isRenewal
+        const actionText = actionType === 'Renew'
           ? 'Renewal Completed'
-          : (entry.entry_type === 'Close' || entry.entry_type === 'Settlement' ? 'Close' : 'Partial Payment');
+          : (actionType === 'Close' ? 'Close' : 'Partial Payment');
         const rNum = entry.receipt_no ? ` - ${entry.receipt_no}` : '';
 
         if (pPaid > 0) {
@@ -1138,120 +1146,97 @@ const CDLedger: React.FC = () => {
     if (paymentAmount <= 0 || !renewCalculations) return null;
 
     const principalBefore = ledgerMetrics.principalBalance;
-    const dueDays = renewCalculations.daysPastDue || 0;
-
-    // Use OUTSTANDING (always >= 0) for payment allocation, not display values
     const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
     const outstandingInterest = renewCalculations.outstandingInterest || 0;
 
-    // Daily pure-interest rate (used only to compute renewedDays when dues are fully settled)
-    const dailyInterestRate = renewCalculations.baseDailyInterest || 0;
+    const interestRate = Number(selectedLoan?.interest_rate) || 3;
+    const monthlyInterest = Number((principalBefore * interestRate / 100).toFixed(2));
 
-    // OLD SOFTWARE: Total for Close = Principal + Interest + Penalty (interest can be negative)
     const isClosingPayment = paymentAmount >= Math.max(0, ledgerMetrics.totalClose);
 
-    // Helper to calculate nextDueDate and renewedDays based on allocation split and action type
-    const getSplitDetails = (pPaid: number, iPaid: number, prPaid: number, action: 'Renew' | 'Partial' | 'Close') => {
-      let renewedDays = 0;
-      let nextDueDate: Date | null = null;
-
-      if (action === 'Close') {
-        renewedDays = 0;
-        nextDueDate = null;
-      } else if (dueDays <= 0) {
-        // Prepaid or on-time
-        if (action === 'Renew') {
-          if (dailyInterestRate > 0) {
-            renewedDays = Math.round(iPaid / dailyInterestRate);
-          }
-          if (renewCalculations.dueDate && renewedDays > 0) {
-            nextDueDate = new Date(startOfDay(renewCalculations.dueDate) + renewedDays * 24 * 60 * 60 * 1000);
-          }
-        } else {
-          // Partial: does not advance due date when dueDays <= 0
-          renewedDays = 0;
-          nextDueDate = renewCalculations.dueDate ? new Date(renewCalculations.dueDate) : null;
-        }
-      } else {
-        // Overdue (dueDays > 0)
-        if (action === 'Renew') {
-          if (dailyInterestRate > 0) {
-            renewedDays = Math.round(iPaid / dailyInterestRate);
-          }
-          if (renewCalculations.dueDate && renewedDays > 0) {
-            nextDueDate = new Date(startOfDay(renewCalculations.dueDate) + renewedDays * 24 * 60 * 60 * 1000);
-          }
-        } else {
-          // Partial: only advances if all outstanding dues are fully cleared
-          const allDuesCleared = iPaid >= outstandingInterest && pPaid >= outstandingPenalty;
-          if (allDuesCleared && dailyInterestRate > 0) {
-            renewedDays = Math.round(iPaid / dailyInterestRate);
-          } else {
-            renewedDays = 0;
-          }
-          if (renewCalculations.dueDate && renewedDays > 0) {
-            nextDueDate = new Date(startOfDay(renewCalculations.dueDate) + renewedDays * 24 * 60 * 60 * 1000);
-          } else {
-            nextDueDate = renewCalculations.dueDate ? new Date(renewCalculations.dueDate) : null;
-          }
-        }
-      }
-
-      const principalAfter = Number(Math.max(0, principalBefore - prPaid).toFixed(2));
-
-      return {
-        penaltyPaid: pPaid,
-        interestPaid: iPaid,
-        principalPaid: prPaid,
-        principalAfter,
-        renewedDays,
-        nextDueDate
-      };
-    };
-
-    // Calculate Renew Option Split
+    // Calculate Renew Option (Option 1)
     let renewPenaltyPaid = 0;
     let renewInterestPaid = 0;
     let renewPrincipalPaid = 0;
+    let renewRenewedDays = 0;
+    let renewNextDueDate: Date | null = null;
 
     if (isClosingPayment) {
       renewPenaltyPaid = outstandingPenalty;
       renewInterestPaid = outstandingInterest;
       renewPrincipalPaid = Number(Math.max(0, paymentAmount - renewPenaltyPaid - renewInterestPaid).toFixed(2));
+      renewRenewedDays = 0;
+      renewNextDueDate = null;
     } else {
-      renewPenaltyPaid = Math.min(paymentAmount, outstandingPenalty);
-      renewInterestPaid = Number((paymentAmount - renewPenaltyPaid).toFixed(2));
-      renewPrincipalPaid = 0;
+      const split = financeCalculationService.computeCDPaymentSplit(
+        paymentAmount,
+        outstandingPenalty,
+        outstandingInterest,
+        monthlyInterest,
+        principalBefore,
+        'Renew'
+      );
+      renewPenaltyPaid = split.penaltyPaid;
+      renewInterestPaid = split.interestPaid;
+      renewPrincipalPaid = split.principalPaid;
+      if (monthlyInterest > 0) {
+        renewRenewedDays = Math.max(0, Math.round((renewInterestPaid / monthlyInterest) * 30));
+      }
+      if (renewRenewedDays > 0) {
+        renewNextDueDate = new Date(new Date(paymentDate).getTime() + renewRenewedDays * 24 * 60 * 60 * 1000);
+      }
     }
 
-    const renewDetails = getSplitDetails(renewPenaltyPaid, renewInterestPaid, renewPrincipalPaid, isClosingPayment ? 'Close' : 'Renew');
-
-    // Calculate Partial Option Split
+    // Calculate Partial Option (Option 2)
     let partialPenaltyPaid = 0;
     let partialInterestPaid = 0;
     let partialPrincipalPaid = 0;
+    let partialRenewedDays = 0;
+    let partialNextDueDate: Date | null = null;
 
     if (isClosingPayment) {
       partialPenaltyPaid = outstandingPenalty;
       partialInterestPaid = outstandingInterest;
       partialPrincipalPaid = Number(Math.max(0, paymentAmount - partialPenaltyPaid - partialInterestPaid).toFixed(2));
-    } else if (dueDays <= 0) {
-      partialPenaltyPaid = 0;
-      partialInterestPaid = 0;
-      partialPrincipalPaid = paymentAmount;
+      partialRenewedDays = 0;
+      partialNextDueDate = null;
     } else {
-      const split = financeCalculationService.applyPaymentSplit(
+      const split = financeCalculationService.computeCDPaymentSplit(
         paymentAmount,
-        outstandingInterest,
         outstandingPenalty,
-        principalBefore
+        outstandingInterest,
+        monthlyInterest,
+        principalBefore,
+        'Partial'
       );
       partialPenaltyPaid = split.penaltyPaid;
       partialInterestPaid = split.interestPaid;
       partialPrincipalPaid = split.principalPaid;
+      if (monthlyInterest > 0) {
+        partialRenewedDays = Math.max(0, Math.round((partialInterestPaid / monthlyInterest) * 30));
+      }
+      if (partialRenewedDays > 0) {
+        partialNextDueDate = new Date(new Date(paymentDate).getTime() + partialRenewedDays * 24 * 60 * 60 * 1000);
+      }
     }
 
-    const partialDetails = getSplitDetails(partialPenaltyPaid, partialInterestPaid, partialPrincipalPaid, isClosingPayment ? 'Close' : 'Partial');
+    const renewDetails = {
+      penaltyPaid: renewPenaltyPaid,
+      interestPaid: renewInterestPaid,
+      principalPaid: renewPrincipalPaid,
+      principalAfter: Number(Math.max(0, principalBefore - renewPrincipalPaid).toFixed(2)),
+      renewedDays: renewRenewedDays,
+      nextDueDate: renewNextDueDate
+    };
+
+    const partialDetails = {
+      penaltyPaid: partialPenaltyPaid,
+      interestPaid: partialInterestPaid,
+      principalPaid: partialPrincipalPaid,
+      principalAfter: Number(Math.max(0, principalBefore - partialPrincipalPaid).toFixed(2)),
+      renewedDays: partialRenewedDays,
+      nextDueDate: partialNextDueDate
+    };
 
     return {
       paymentAmount,
@@ -1259,7 +1244,7 @@ const CDLedger: React.FC = () => {
       renew: renewDetails,
       partial: partialDetails
     };
-  }, [totalAmountPaying, ledgerMetrics, renewCalculations, selectedLoan]);
+  }, [totalAmountPaying, ledgerMetrics, renewCalculations, selectedLoan, paymentDate]);
 
   // Aggregated Loan Documents & Fingerprint display metadata
   const aggregatedDocs = useMemo(() => {
@@ -1424,10 +1409,9 @@ const CDLedger: React.FC = () => {
       const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
       const outstandingInterest = renewCalculations.outstandingInterest || 0;
 
-      // Daily pure-interest rate (used to derive renewedDays for date advance when dues are FULLY settled)
-      const dailyInterestRate = renewCalculations.baseDailyInterest || 0;
+      const interestRate = Number(selectedLoan?.interest_rate) || 3;
+      const monthlyInterest = Number((principalBefore * interestRate / 100).toFixed(2));
 
-      // OLD SOFTWARE: Total for Close = Principal + Interest + Penalty (interest can be negative)
       const isClosingPayment = actionType === 'Close' || paymentAmount >= Math.max(0, ledgerMetrics.totalClose);
 
       if (isClosingPayment) {
@@ -1436,44 +1420,21 @@ const CDLedger: React.FC = () => {
         interestPaid  = outstandingInterest;
         principalPaid = Number(Math.max(0, paymentAmount - penaltyPaid - interestPaid).toFixed(2));
         renewedDays   = 0;
-      } else if (actionType === 'Renew') {
-        // Renew: excess goes to interest, principal is unchanged
-        penaltyPaid   = Math.min(paymentAmount, outstandingPenalty);
-        interestPaid  = Number((paymentAmount - penaltyPaid).toFixed(2));
-        principalPaid = 0;
+      } else {
+        const split = financeCalculationService.computeCDPaymentSplit(
+          paymentAmount,
+          outstandingPenalty,
+          outstandingInterest,
+          monthlyInterest,
+          principalBefore,
+          actionType
+        );
+        penaltyPaid   = split.penaltyPaid;
+        interestPaid  = split.interestPaid;
+        principalPaid = split.principalPaid;
         
-        if (dailyInterestRate > 0) {
-          renewedDays = Math.round(interestPaid / dailyInterestRate);
-        }
-      } else if (actionType === 'Partial') {
-        // Partial: excess goes to principal
-        if (dueDays <= 0) {
-          // If on time or prepaid, entire amount reduces principal
-          penaltyPaid   = 0;
-          interestPaid  = 0;
-          principalPaid = paymentAmount;
-          renewedDays   = 0;
-        } else {
-          const split = financeCalculationService.applyPaymentSplit(
-            paymentAmount,
-            outstandingInterest,
-            outstandingPenalty,
-            principalBefore
-          );
-          penaltyPaid   = split.penaltyPaid;
-          interestPaid  = split.interestPaid;
-          principalPaid = split.principalPaid;
-
-          // Advancing date ONLY if all outstanding dues are fully cleared
-          const allDuesCleared =
-            interestPaid >= outstandingInterest &&
-            penaltyPaid  >= outstandingPenalty;
-
-          if (allDuesCleared && dailyInterestRate > 0) {
-            renewedDays = Math.round(interestPaid / dailyInterestRate);
-          } else {
-            renewedDays = 0;
-          }
+        if (monthlyInterest > 0) {
+          renewedDays = Math.max(0, Math.round((interestPaid / monthlyInterest) * 30));
         }
       }
 
@@ -1482,7 +1443,6 @@ const CDLedger: React.FC = () => {
       console.log('receiptNo:', receiptNo);
       console.log('paymentAmount:', paymentAmount);
       console.log('dueDays:', dueDays);
-      console.log('dailyInterestRate:', dailyInterestRate);
       console.log('renewedDays:', renewedDays);
       console.log('penaltyPaid:', penaltyPaid);
       console.log('interestPaid:', interestPaid);
@@ -1519,10 +1479,12 @@ const CDLedger: React.FC = () => {
       } else {
         const updates: any = {};
         
-        // For renewal/partial: set loan date based on currentDueDate + renewedDays
-        // This is the Access VBA pattern: nextDueDate = currentDueDate + renewedDays
-        if (renewedDays > 0 && renewCalculations.dueDate) {
-          const newCycleStart = new Date(startOfDay(renewCalculations.dueDate) + renewedDays * 24 * 60 * 60 * 1000);
+        // For renewal/partial: set loan date based on next_due_date = payment_date + renewed_days
+        // Loan start date = next_due_date - (periodDays - 1)
+        const periodDays = Number(selectedLoan.duration_months) || 30;
+        if (renewedDays > 0) {
+          const nextDueDate = new Date(new Date(paymentDate).getTime() + renewedDays * 24 * 60 * 60 * 1000);
+          const newCycleStart = new Date(nextDueDate.getTime() - (periodDays - 1) * 24 * 60 * 60 * 1000);
           updates.date = newCycleStart.toISOString().split('T')[0];
         }
         
@@ -1560,7 +1522,7 @@ const CDLedger: React.FC = () => {
       const npaReceiptNo = await supabaseFinance.getNextReceiptNumber();
       
       const { error: loanError } = await supabase.from('finance_loans')
-        .update({ status: 'Closed', npa_closed: true, amount: 0 })
+        .update({ status: 'NPA_CLOSED', npa_closed: true, amount: selectedLoan.amount })
         .eq('id', selectedLoan.id);
       if (loanError) throw loanError;
 
@@ -1579,12 +1541,12 @@ const CDLedger: React.FC = () => {
         customer_id: selectedLoan.customer_id,
         account_name: 'CD A/C',
         entry_date: new Date(paymentDate).toISOString(),
-        credit: amount,
+        credit: 0,
         debit: 0,
         receipt_no: npaReceiptNo,
         particulars: `NPA Settlement Close - ${npaReason}`,
         user_name: user?.username || 'Staff',
-        entry_type: 'Settlement'
+        entry_type: 'NPA_CLOSE'
       });
 
       await loadLedgerDetails(selectedLoan.id);
@@ -1903,6 +1865,7 @@ const CDLedger: React.FC = () => {
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                               loan.status === 'Active' ? 'bg-green-100 text-green-700'
                               : loan.status === 'Closed' ? 'bg-gray-100 text-gray-500'
+                              : loan.status === 'NPA_CLOSED' ? 'bg-orange-100 text-orange-700'
                               : 'bg-yellow-100 text-yellow-700'
                             }`}>
                               {(loan.status || 'Active').toUpperCase()}
@@ -2059,6 +2022,7 @@ const CDLedger: React.FC = () => {
                       placeholder="Enter ₹" 
                       type="text"
                       inputMode="decimal"
+                      disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
                     />
                     
                     {/* Row 2: Loan Amount & Rate % */}
@@ -2109,25 +2073,25 @@ const CDLedger: React.FC = () => {
                     <div className="bg-green-50/50 border border-green-100 rounded-2xl p-4 mb-6 space-y-4">
                       {paymentPreview.isClosingPayment ? (
                         <div>
-                          <h4 className="text-[10px] text-green-800 font-bold uppercase tracking-wider mb-2">Account Closure Preview</h4>
-                          <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                            <div className="flex justify-between text-gray-500 border-b border-green-100/50 pb-1">
+                          <h4 className="text-xs text-green-800 font-bold uppercase tracking-wider mb-2">Account Closure Preview</h4>
+                          <div className="space-y-1.5 text-sm font-mono bg-white/50 p-3 rounded-xl border border-green-100">
+                            <div className="flex justify-between text-gray-655 border-b border-green-100/50 pb-1.5">
                               <span>Account Status:</span>
-                              <span className="font-bold text-red-600">Will Close</span>
+                              <span className="font-bold text-red-650">Will Close</span>
                             </div>
-                            <div className="flex justify-between text-gray-500 border-b border-green-100/50 pb-1">
+                            <div className="flex justify-between text-gray-655 border-b border-green-100/50 pb-1.5">
                               <span>Penalty Paid:</span>
                               <span className="font-bold text-red-650">₹{paymentPreview.renew.penaltyPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
-                            <div className="flex justify-between text-gray-500 border-b border-green-100/50 pb-1">
+                            <div className="flex justify-between text-gray-655 border-b border-green-100/50 pb-1.5">
                               <span>Interest Paid:</span>
                               <span className="font-bold text-orange-600">₹{paymentPreview.renew.interestPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
-                            <div className="flex justify-between text-gray-500 border-b border-green-100/50 pb-1">
+                            <div className="flex justify-between text-gray-655 border-b border-green-100/50 pb-1.5">
                               <span>Principal Paid:</span>
                               <span className="font-bold text-blue-650">₹{paymentPreview.renew.principalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
-                            <div className="flex justify-between text-gray-500 border-b border-green-100/50 pb-1 col-span-2">
+                            <div className="flex justify-between text-gray-700 pt-0.5">
                               <span>Remaining Bal:</span>
                               <span className="font-bold text-gray-900">₹{paymentPreview.renew.principalAfter.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
@@ -2135,26 +2099,30 @@ const CDLedger: React.FC = () => {
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          <h4 className="text-[10px] text-green-800 font-bold uppercase tracking-wider border-b border-green-200 pb-1">Payment Options Preview</h4>
+                          <h4 className="text-xs text-green-800 font-bold uppercase tracking-wider border-b border-green-200 pb-1">Payment Options Preview</h4>
                           
                           {/* Option 1: Renewal Account */}
                           <div>
-                            <span className="text-[10px] font-bold text-green-700 uppercase block mb-1">Option 1: Renewal Account</span>
-                            <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-white/50 p-2.5 rounded-xl border border-green-100">
-                              <div className="flex justify-between text-gray-500">
+                            <span className="text-xs font-bold text-green-700 uppercase block mb-1">Option 1: Renewal Account</span>
+                            <div className="space-y-1.5 text-sm font-mono bg-white/50 p-3 rounded-xl border border-green-100">
+                              <div className="flex justify-between text-gray-655">
+                                <span>Penalty Paid:</span>
+                                <span className="font-bold text-red-650">₹{paymentPreview.renew.penaltyPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              <div className="flex justify-between text-gray-655">
                                 <span>Interest Paid:</span>
                                 <span className="font-bold text-orange-600">₹{paymentPreview.renew.interestPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                               </div>
-                              <div className="flex justify-between text-gray-500">
+                              <div className="flex justify-between text-gray-655">
                                 <span>Principal Paid:</span>
                                 <span className="font-bold text-gray-400">₹0.00</span>
                               </div>
-                              <div className="flex justify-between text-gray-500 col-span-2 border-t border-green-100/50 pt-1 mt-1">
+                              <div className="flex justify-between text-gray-655 border-t border-green-100/50 pt-1.5 mt-1">
                                 <span>Renewed Days:</span>
                                 <span className="font-bold text-green-700">{paymentPreview.renew.renewedDays} days</span>
                               </div>
-                              <div className="flex justify-between text-gray-500 col-span-2">
-                                <span>Next DueDt:</span>
+                              <div className="flex justify-between text-gray-655">
+                                <span>Next Due Date:</span>
                                 <span className="font-bold text-green-700">{paymentPreview.renew.nextDueDate ? formatDateOld(paymentPreview.renew.nextDueDate) : '-'}</span>
                               </div>
                             </div>
@@ -2162,22 +2130,26 @@ const CDLedger: React.FC = () => {
 
                           {/* Option 2: Partial Payment */}
                           <div>
-                            <span className="text-[10px] font-bold text-blue-700 uppercase block mb-1">Option 2: Partial Payment and Renewal</span>
-                            <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-white/50 p-2.5 rounded-xl border border-blue-100">
-                              <div className="flex justify-between text-gray-500">
+                            <span className="text-xs font-bold text-blue-700 uppercase block mb-1">Option 2: Partial Payment and Renewal</span>
+                            <div className="space-y-1.5 text-sm font-mono bg-white/50 p-3 rounded-xl border border-blue-100">
+                              <div className="flex justify-between text-gray-655">
+                                <span>Penalty Paid:</span>
+                                <span className="font-bold text-red-650">₹{paymentPreview.partial.penaltyPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              <div className="flex justify-between text-gray-655">
                                 <span>Interest Paid:</span>
                                 <span className="font-bold text-orange-600">₹{paymentPreview.partial.interestPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                               </div>
-                              <div className="flex justify-between text-gray-500">
+                              <div className="flex justify-between text-gray-655">
                                 <span>Principal Paid:</span>
                                 <span className="font-bold text-blue-650">₹{paymentPreview.partial.principalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                               </div>
-                              <div className="flex justify-between text-gray-500 col-span-2 border-t border-blue-100/50 pt-1 mt-1">
+                              <div className="flex justify-between text-gray-655 border-t border-blue-100/50 pt-1.5 mt-1">
                                 <span>Renewed Days:</span>
                                 <span className="font-bold text-green-700">{paymentPreview.partial.renewedDays} days</span>
                               </div>
-                              <div className="flex justify-between text-gray-500 col-span-2">
-                                <span>Next DueDt:</span>
+                              <div className="flex justify-between text-gray-655">
+                                <span>Next Due Date:</span>
                                 <span className="font-bold text-green-700">{paymentPreview.partial.nextDueDate ? formatDateOld(paymentPreview.partial.nextDueDate) : '-'}</span>
                               </div>
                             </div>
@@ -2191,7 +2163,12 @@ const CDLedger: React.FC = () => {
                   <div className="grid grid-cols-1 gap-2.5">
                     <Button
                       onClick={() => handleActionSubmit('Renew')}
-                      disabled={isRenewing || !totalAmountPaying || selectedLoan.status === 'Closed' || !!renewCalculations?.isDateInvalid}
+                      disabled={
+                        isRenewing || 
+                        selectedLoan.status === 'Closed' || 
+                        selectedLoan.status === 'NPA_CLOSED' || 
+                        !!renewCalculations?.isDateInvalid
+                      }
                       className="w-full bg-green-600 hover:bg-green-700 text-white py-3 font-semibold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 border-0"
                     >
                       <CreditCard className="w-4 h-4" />
@@ -2200,7 +2177,15 @@ const CDLedger: React.FC = () => {
                     
                     <Button
                       onClick={() => handleActionSubmit('Partial')}
-                      disabled={isRenewing || !totalAmountPaying || selectedLoan.status === 'Closed' || !!renewCalculations?.isDateInvalid}
+                      disabled={
+                        isRenewing || 
+                        !totalAmountPaying || 
+                        Number(totalAmountPaying) <= 0 ||
+                        Number(totalAmountPaying) <= (ledgerMetrics.currentPendingDues || 0) ||
+                        selectedLoan.status === 'Closed' || 
+                        selectedLoan.status === 'NPA_CLOSED' || 
+                        !!renewCalculations?.isDateInvalid
+                      }
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 font-semibold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 border-0"
                     >
                       <CreditCard className="w-4 h-4" />
@@ -2209,7 +2194,16 @@ const CDLedger: React.FC = () => {
                     
                     <Button
                       onClick={() => handleActionSubmit('Close')}
-                      disabled={isRenewing || !totalAmountPaying || selectedLoan.status === 'Closed' || !!renewCalculations?.isDateInvalid}
+                      disabled={
+                        isRenewing || 
+                        selectedLoan.status === 'Closed' || 
+                        selectedLoan.status === 'NPA_CLOSED' || 
+                        !(
+                          ledgerMetrics.totalClose <= 0 || 
+                          (ledgerMetrics.principalBalance <= 0 && (ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty) <= 0)
+                        ) ||
+                        !!renewCalculations?.isDateInvalid
+                      }
                       className="w-full bg-red-600 hover:bg-red-700 text-white py-3 font-semibold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 border-0"
                     >
                       <ShieldAlert className="w-4 h-4" />
@@ -2261,7 +2255,7 @@ const CDLedger: React.FC = () => {
                   headerActions={
                     <Button
                       onClick={() => setShowReturnDocModal(true)}
-                      disabled={selectedLoan.status !== 'Closed' || !!renewCalculations?.isDateInvalid}
+                      disabled={(selectedLoan.status !== 'Closed' && selectedLoan.status !== 'NPA_CLOSED') || !!renewCalculations?.isDateInvalid}
                       variant="primary"
                       size="xs"
                       className="bg-green-600 hover:bg-green-700 border-0"
@@ -2527,7 +2521,7 @@ const CDLedger: React.FC = () => {
 
                 <Button
                   onClick={() => setShowNpaModal(true)}
-                  disabled={selectedLoan.status === 'Closed' || !!renewCalculations?.isDateInvalid}
+                  disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED' || !!renewCalculations?.isDateInvalid}
                   variant="danger"
                   size="sm"
                   icon={ShieldAlert}

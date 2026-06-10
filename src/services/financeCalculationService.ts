@@ -146,6 +146,81 @@ export const financeCalculationService = {
     return Number((principal + interest + penalty).toFixed(2));
   },
 
+  computeRenewSplit(paymentAmount: number, penaltyDue: number) {
+    if (penaltyDue > 0) {
+      let penaltyPaid = Number((paymentAmount * 0.20).toFixed(2));
+      let interestPaid = Number((paymentAmount * 0.80).toFixed(2));
+      
+      if (penaltyPaid > penaltyDue) {
+        penaltyPaid = penaltyDue;
+        interestPaid = Number((paymentAmount - penaltyPaid).toFixed(2));
+      }
+      
+      return {
+        penaltyPaid,
+        interestPaid,
+        principalPaid: 0
+      };
+    } else {
+      return {
+        penaltyPaid: 0,
+        interestPaid: Number(paymentAmount.toFixed(2)),
+        principalPaid: 0
+      };
+    }
+  },
+
+  computeCDPaymentSplit(
+    paymentAmount: number,
+    penaltyDue: number,
+    interestDue: number,
+    standardMonthlyInterest: number,
+    principalBefore: number,
+    actionType: 'Renew' | 'Partial' | 'Close'
+  ) {
+    const totalForRenewal = Number((penaltyDue + interestDue + standardMonthlyInterest).toFixed(2));
+    const totalForClose = Number((principalBefore + interestDue + penaltyDue).toFixed(2));
+    const isClosing = actionType === 'Close' || paymentAmount >= totalForClose;
+
+    if (isClosing) {
+      const penaltyPaid = penaltyDue;
+      const interestPaid = interestDue;
+      const principalPaid = Number(Math.max(0, paymentAmount - penaltyPaid - interestPaid).toFixed(2));
+      return {
+        penaltyPaid: Number(penaltyPaid.toFixed(2)),
+        interestPaid: Number(interestPaid.toFixed(2)),
+        principalPaid: Number(principalPaid.toFixed(2))
+      };
+    }
+
+    if (actionType === 'Renew') {
+      const split = this.computeRenewSplit(paymentAmount, penaltyDue);
+      return {
+        penaltyPaid: split.penaltyPaid,
+        interestPaid: split.interestPaid,
+        principalPaid: 0
+      };
+    }
+
+    // actionType === 'Partial'
+    if (paymentAmount > totalForRenewal) {
+      const split = this.computeRenewSplit(totalForRenewal, penaltyDue);
+      const principalPaid = Number((paymentAmount - totalForRenewal).toFixed(2));
+      return {
+        penaltyPaid: split.penaltyPaid,
+        interestPaid: split.interestPaid,
+        principalPaid
+      };
+    } else {
+      const split = this.computeRenewSplit(paymentAmount, penaltyDue);
+      return {
+        penaltyPaid: split.penaltyPaid,
+        interestPaid: split.interestPaid,
+        principalPaid: 0
+      };
+    }
+  },
+
   applyPaymentSplit(
     amountPaying: number,
     interestDue: number,

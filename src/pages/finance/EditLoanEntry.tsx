@@ -37,7 +37,7 @@ const EditLoanEntry: React.FC = () => {
   const [durationMonths, setDurationMonths] = useState('');
   const [dueType, setDueType] = useState<'Daily' | 'Weekly' | 'Monthly'>('Daily');
   const [dueAmount, setDueAmount] = useState('');
-  const [status, setStatus] = useState<'Active' | 'Closed'>('Active');
+  const [status, setStatus] = useState<'Active' | 'Closed' | 'NPA_CLOSED'>('Active');
   const [remarks, setRemarks] = useState('');
 
   const [suretyName, setSuretyName] = useState('');
@@ -403,6 +403,7 @@ const EditLoanEntry: React.FC = () => {
                     >
                       <option value="Active">Active Account</option>
                       <option value="Closed">Closed Account</option>
+                      <option value="NPA_CLOSED">NPA Closed Account</option>
                     </select>
                   </div>
                   <Input label="Remarks" value={remarks} onChange={setRemarks} />
@@ -486,7 +487,7 @@ const EditLoanEntry: React.FC = () => {
                           {loan.due_type} (₹{Number(loan.due_amount).toLocaleString('en-IN')})
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full ${ loan.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' } finance-header-time`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full ${ loan.status === 'Active' ? 'bg-green-100 text-green-800' : loan.status === 'NPA_CLOSED' ? 'bg-orange-100 text-orange-800 border border-orange-200' : 'bg-gray-100 text-gray-800' } finance-header-time`}>
                             {loan.status}
                           </span>
                         </td>

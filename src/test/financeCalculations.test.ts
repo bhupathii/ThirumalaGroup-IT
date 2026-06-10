@@ -126,8 +126,8 @@ describe('CD Ledger Calculation Rules', () => {
     let currentPrincipal = 10000;
 
     // Start with dues already cleared (penalty = 0, interest = 0)
-    let penaltyDue = 0;
-    let interestDue = 0;
+    const penaltyDue = 0;
+    const interestDue = 0;
 
     // Payment 1: ₹2,000
     const pay1 = 2000;
@@ -255,6 +255,52 @@ describe('CD Ledger Calculation Rules', () => {
         split.penaltyPaid  >= bugPenalty;
 
       expect(allDuesCleared).toBe(false); // loan date must stay unchanged
+    });
+  });
+
+  describe('New CD Ledger Business Rules', () => {
+    it('applies computeRenewSplit correctly when penaltyDue > 0', () => {
+      const split = financeCalculationService.computeRenewSplit(1000, 100);
+      expect(split.penaltyPaid).toBe(200);
+      expect(split.interestPaid).toBe(800);
+      expect(split.principalPaid).toBe(0);
+    });
+
+    it('applies computeRenewSplit correctly when penaltyDue <= 0', () => {
+      const split = financeCalculationService.computeRenewSplit(1000, 0);
+      expect(split.penaltyPaid).toBe(0);
+      expect(split.interestPaid).toBe(1000);
+      expect(split.principalPaid).toBe(0);
+    });
+
+    it('applies computeCDPaymentSplit correctly for Close action', () => {
+      // principalBefore = 100000, interestDue = 3000, penaltyDue = 500, paymentAmount = 103500
+      const split = financeCalculationService.computeCDPaymentSplit(
+        103500,
+        500,
+        3000,
+        3000,
+        100000,
+        'Close'
+      );
+      expect(split.penaltyPaid).toBe(500);
+      expect(split.interestPaid).toBe(3000);
+      expect(split.principalPaid).toBe(100000);
+    });
+
+    it('applies computeCDPaymentSplit correctly for Renew action', () => {
+      // principalBefore = 100000, interestDue = 3000, penaltyDue = 500, paymentAmount = 1000
+      const split = financeCalculationService.computeCDPaymentSplit(
+        1000,
+        500,
+        3000,
+        3000,
+        100000,
+        'Renew'
+      );
+      expect(split.penaltyPaid).toBe(200);
+      expect(split.interestPaid).toBe(800);
+      expect(split.principalPaid).toBe(0);
     });
   });
 });
