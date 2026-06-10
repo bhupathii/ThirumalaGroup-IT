@@ -567,22 +567,28 @@ const CDLedger: React.FC = () => {
     const entryDateStart = new Date(startOfDay(entryDate));
     const dueDate = new Date(entryDateStart.getTime() + (periodDays - 1) * 24 * 60 * 60 * 1000);
     
-    // Due Days = Payment Date - Due Date  (CAN BE NEGATIVE — old Access VBA behavior)
-    // Negative = loan not yet due (credit/prepaid days remaining)
-    // Positive = overdue by this many days
+    // Due Days = Payment Date - Due Date (Clamped to 0)
     const rawDueDays = Math.round((startOfDay(today) - startOfDay(dueDate)) / (1000 * 60 * 60 * 24));
-    const dueDays = rawDueDays; // OLD SOFTWARE: allow negative (do NOT clamp to 0)
+    const dueDays = Math.max(0, rawDueDays);
     const daysRemaining = rawDueDays < 0 ? Math.abs(rawDueDays) : 0;
     
     const interestRate = Number(selectedLoan.interest_rate) || 3;
-    const penaltyRate = selectedLoan.penalty_percent !== undefined ? Number(selectedLoan.penalty_percent) : 0.75;
     const principalBalance = currentPrincipalBalance;
 
-    // ===== OLD ACCESS VBA LOGIC (exact match) =====
-    // Interest = principal × rate% × dueDays ÷ 30  (ALWAYS — even when negative = credit)
-    // Penalty  = principal × penaltyRate% × dueDays ÷ 30  (ONLY if dueDays > 5, else 0)
-    const grossInterest = Number(((principalBalance * interestRate / 100 / 30) * dueDays).toFixed(2));
-    const grossPenalty  = dueDays <= 5 ? 0 : Number(((principalBalance * penaltyRate / 100 / 30) * dueDays).toFixed(2));
+    // Interest = principal × rate × dueDays ÷ 30 ÷ 100 (0 if dueDays <= 0)
+    // Penalty  = principal × 0.75 × dueDays ÷ 30 ÷ 100 (0 if dueDays <= 0, no grace period)
+    const grossInterest = dueDays <= 0 ? 0 : Number(((principalBalance * interestRate * dueDays) / 30 / 100).toFixed(2));
+    const grossPenalty  = dueDays <= 0 ? 0 : Number(((principalBalance * 0.75 * dueDays) / 30 / 100).toFixed(2));
+
+    // Daily interest / renewal day value:
+    // Always compute base daily interest rate for renewedDays calculation.
+    const baseDailyInterest = Number((principalBalance * interestRate / 100 / 30).toFixed(5));
+    let dailyInterest = baseDailyInterest;
+    let dailyPenalty = 0;
+    if (dueDays > 0) {
+      dailyInterest = Number((principalBalance * (interestRate + 0.75) / 100 / 30).toFixed(5));
+      dailyPenalty = Number((principalBalance * 0.75 / 100 / 30).toFixed(5));
+    }
 
     // ── BUGFIX: Determine the true current-cycle start from the ledger ──────────
     // selectedLoan.date is updated to the *new* due date after a renewal, which is
@@ -646,24 +652,9 @@ const CDLedger: React.FC = () => {
     const outstandingInterest = Math.max(0, Number((effectiveGrossInterest - interestPaidInCycle).toFixed(2)));
     const outstandingPenalty  = Math.max(0, Number((effectiveGrossPenalty  - penaltyPaidInCycle).toFixed(2)));
 
-    // Display interest/penalty: show the raw formula value (can be negative = credit)
-    // When dueDays <= 0, display the negative interest (credit) from grossInterest.
-    // When dueDays > 0 with payments, display the remaining outstanding.
-    const displayInterest = dueDays <= 0 ? grossInterest : outstandingInterest;
-    const displayPenalty  = dueDays <= 0 ? grossPenalty  : outstandingPenalty;
-
-    // Daily interest / renewal day value (Access VBA):
-    // Always compute base daily interest rate for renewedDays calculation.
-    // If DueDays <= 5: dailyInterest = principal * rate / 100 / 30, dailyPenalty = 0
-    // If DueDays >  5: dailyInterest = principal * (rate + penaltyRate) / 100 / 30
-    //                  dailyPenalty   = principal * penaltyRate / 100 / 30
-    const baseDailyInterest = Number((principalBalance * interestRate / 100 / 30).toFixed(5));
-    let dailyInterest = baseDailyInterest;
-    let dailyPenalty = 0;
-    if (dueDays > 5) {
-      dailyInterest = Number((principalBalance * (interestRate + penaltyRate) / 100 / 30).toFixed(5));
-      dailyPenalty = Number((principalBalance * penaltyRate / 100 / 30).toFixed(5));
-    }
+    // Display interest/penalty: show the raw formula value (never negative)
+    const displayInterest = dueDays <= 0 ? 0 : outstandingInterest;
+    const displayPenalty  = dueDays <= 0 ? 0 : outstandingPenalty;
 
     return {
       isDateInvalid: false,
@@ -858,13 +849,12 @@ const CDLedger: React.FC = () => {
       // Dues calculation for this cycle
       const periodDays = Number(selectedLoan.duration_months) || 30;
       const cycleDueDate = new Date(cycle.start + (periodDays - 1) * 24 * 60 * 60 * 1000);
-      const cycleDueDays = Math.round((cycle.end - startOfDay(cycleDueDate)) / (1000 * 60 * 60 * 24));
+      const cycleDueDays = Math.max(0, Math.round((cycle.end - startOfDay(cycleDueDate)) / (1000 * 60 * 60 * 24)));
       
       const interestRate = Number(selectedLoan.interest_rate) || 3;
-      const penaltyRate = selectedLoan.penalty_percent !== undefined ? Number(selectedLoan.penalty_percent) : 0.75;
       
-      const cycleGrossInterest = cycleDueDays <= 0 ? 0 : financeCalculationService.calculateInterest(runningPrincipal, interestRate, cycleDueDays);
-      const cycleGrossPenalty = cycleDueDays <= 5 ? 0 : financeCalculationService.calculatePenalty(runningPrincipal, penaltyRate, cycleDueDays);
+      const cycleGrossInterest = cycleDueDays <= 0 ? 0 : Number(((runningPrincipal * interestRate * cycleDueDays) / 30 / 100).toFixed(2));
+      const cycleGrossPenalty = cycleDueDays <= 0 ? 0 : Number(((runningPrincipal * 0.75 * cycleDueDays) / 30 / 100).toFixed(2));
 
       // Check if some payments inside this cycle are ALREADY split
       const alreadySplitSum = cyclePayments.filter(e => {
@@ -973,7 +963,8 @@ const CDLedger: React.FC = () => {
       const isNonPayment =
         entry.entry_type === 'original_loan' || entry.entry_type === 'Disbursement' ||
         entry.entry_type === 'Document Charges' || entry.entry_type === 'document_charge' ||
-        entry.entry_type === 'Commission' || entry.entry_type === 'opening_commission';
+        entry.entry_type === 'Commission' || entry.entry_type === 'opening_commission' ||
+        entry.entry_type === 'NPA_CLOSE' || entry.entry_type === 'NPA_CLOSED';
       if (isNonPayment) {
         list.push({ ...entry, account_name: entry.account_name || 'CD A/C' });
       }
@@ -1027,7 +1018,11 @@ const CDLedger: React.FC = () => {
           particulars: entry.particulars,
           renewed_days: isRenewalInterest ? Number(selectedLoan?.duration_months) || 30 : 0,
           renewed_till_date: isRenewalInterest 
-            ? new Date(new Date(entry.entry_date).getTime() + (Number(selectedLoan?.duration_months) || 30) * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            ? (() => {
+                const dateObj = new Date(new Date(entry.entry_date).getTime() + (Number(selectedLoan?.duration_months) || 30) * 24 * 60 * 60 * 1000);
+                const tzoffset = dateObj.getTimezoneOffset() * 60000;
+                return new Date(dateObj.getTime() - tzoffset).toISOString().split('T')[0];
+              })()
             : null,
           row_type: entry.account_name === 'PENALTY A/C' ? 'Penalty Paid' : 'Interest Paid',
           created_at: entry.created_at || entry.entry_date
@@ -1087,16 +1082,15 @@ const CDLedger: React.FC = () => {
 
 
     const interestRate = Number(selectedLoan.interest_rate) || 3;
-    const standardMonthlyInterest = Number((principalBalance * interestRate / 100).toFixed(2));
+    const renewalDue = Number((principalBalance * interestRate / 100).toFixed(2));
 
-    // Total for Renewal = Outstanding past-due interest & penalty + standard monthly renewal interest
-    const currentTotalDues = Number((pendingInterest + pendingPenalty).toFixed(2));
-    const currentPaidDues = Number(((renewCalculations.interestPaid || 0) + (renewCalculations.penaltyPaid || 0)).toFixed(2));
-    const currentPendingDues = Number((outstandingInterest + outstandingPenalty + standardMonthlyInterest).toFixed(2));
+    // Total for Renewal = next month's interest (independent of overdue days)
+    const currentTotalDues = renewalDue;
+    const currentPaidDues = Number((renewCalculations.interestPaid || 0).toFixed(2));
+    const currentPendingDues = Math.max(0, Number((renewalDue - currentPaidDues).toFixed(2)));
 
-    // OLD SOFTWARE: Total for Close = Principal + Interest + Penalty
-    // When interest is negative (credit), this gives a discount on close amount
-    const totalClose = Number((principalBalance + pendingInterest + pendingPenalty).toFixed(2));
+    // Close Amount = Principal + Interest + Penalty (only when interest and penalty are non-negative)
+    const totalClose = Number((principalBalance + Math.max(0, pendingInterest) + Math.max(0, pendingPenalty)).toFixed(2));
 
     // totalCredit = only real cash collected (interest, penalty, principal payments)
     // Must NOT include opening_commission or document_charge rows (not real collections)
@@ -1134,7 +1128,7 @@ const CDLedger: React.FC = () => {
       totalCredit: ledgerMetrics.totalCredit,
       totalDebit: ledgerMetrics.totalDebit,
       presentBalance: ledgerMetrics.principalBalance,
-      totalDues: ledgerMetrics.currentPendingDues,
+      totalDues: ledgerMetrics.currentTotalDues,
       paidDues: ledgerMetrics.currentPaidDues,
       pendingDues: ledgerMetrics.currentPendingDues
     };
@@ -1179,11 +1173,12 @@ const CDLedger: React.FC = () => {
       renewPenaltyPaid = split.penaltyPaid;
       renewInterestPaid = split.interestPaid;
       renewPrincipalPaid = split.principalPaid;
+      const baseDateMs = Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate));
       if (monthlyInterest > 0) {
         renewRenewedDays = Math.max(0, Math.round((renewInterestPaid / monthlyInterest) * 30));
       }
       if (renewRenewedDays > 0) {
-        renewNextDueDate = new Date(new Date(paymentDate).getTime() + renewRenewedDays * 24 * 60 * 60 * 1000);
+        renewNextDueDate = new Date(baseDateMs + renewRenewedDays * 24 * 60 * 60 * 1000);
       }
     }
 
@@ -1212,11 +1207,12 @@ const CDLedger: React.FC = () => {
       partialPenaltyPaid = split.penaltyPaid;
       partialInterestPaid = split.interestPaid;
       partialPrincipalPaid = split.principalPaid;
+      const baseDateMs = Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate));
       if (monthlyInterest > 0) {
         partialRenewedDays = Math.max(0, Math.round((partialInterestPaid / monthlyInterest) * 30));
       }
       if (partialRenewedDays > 0) {
-        partialNextDueDate = new Date(new Date(paymentDate).getTime() + partialRenewedDays * 24 * 60 * 60 * 1000);
+        partialNextDueDate = new Date(baseDateMs + partialRenewedDays * 24 * 60 * 60 * 1000);
       }
     }
 
@@ -1384,8 +1380,8 @@ const CDLedger: React.FC = () => {
       return;
     }
     
-    const amount = Number(totalAmountPaying);
-    if (amount <= 0 || isNaN(amount)) {
+    const amount = Number(totalAmountPaying) || 0;
+    if (actionType !== 'Close' && (amount <= 0 || isNaN(amount))) {
       toast.error('Enter a valid payment amount.');
       return;
     }
@@ -1479,11 +1475,12 @@ const CDLedger: React.FC = () => {
       } else {
         const updates: any = {};
         
-        // For renewal/partial: set loan date based on next_due_date = payment_date + renewed_days
+        // For renewal/partial: set loan date based on next_due_date = base_date + renewed_days
         // Loan start date = next_due_date - (periodDays - 1)
         const periodDays = Number(selectedLoan.duration_months) || 30;
         if (renewedDays > 0) {
-          const nextDueDate = new Date(new Date(paymentDate).getTime() + renewedDays * 24 * 60 * 60 * 1000);
+          const baseDateMs = Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate));
+          const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
           const newCycleStart = new Date(nextDueDate.getTime() - (periodDays - 1) * 24 * 60 * 60 * 1000);
           updates.date = newCycleStart.toISOString().split('T')[0];
         }
@@ -1519,34 +1516,65 @@ const CDLedger: React.FC = () => {
     if (!selectedLoan) return;
     setIsNpaClosing(true);
     try {
-      const amount = 0;
+      const npaClosedDate = new Date(paymentDate).toISOString();
+      const npaClosedAmount = 0;
+      const closedBy = user?.username || 'Staff';
       const npaReceiptNo = await supabaseFinance.getNextReceiptNumber();
       
+      const updatedRemarks = `${selectedLoan.remarks || ''}\n[NPA CLOSED at ${npaClosedDate} by ${closedBy} with settlement amount: ${npaClosedAmount}]`.trim();
+      
       const { error: loanError } = await supabase.from('finance_loans')
-        .update({ status: 'NPA_CLOSED', npa_closed: true, amount: selectedLoan.amount })
+        .update({ 
+          status: 'NPA_CLOSED', 
+          npa_closed: true, 
+          amount: selectedLoan.amount,
+          remarks: updatedRemarks
+        })
         .eq('id', selectedLoan.id);
       if (loanError) throw loanError;
+
+      const principal_balance = ledgerMetrics.principalBalance;
+      const interest_due = ledgerMetrics.pendingInterest;
+      const penalty_due = ledgerMetrics.pendingPenalty;
+      const total_outstanding = principal_balance + interest_due + penalty_due;
+      const principalPaidTotal = 0;
 
       await supabaseFinance.addNPARecord({
         loan_id: selectedLoan.id,
         customer_id: selectedLoan.customer_id,
+        customer_name: selectedLoan.customer?.name || '',
         aadhaar: selectedLoan.customer?.aadhaar || '',
+        phone: selectedLoan.customer?.phone || '',
+        loan_type: selectedLoan.loan_category || 'CD',
         loan_amount: Number(selectedLoan.amount),
-        settlement_amount: amount,
+        paid_amount: principalPaidTotal,
+        balance_amount: principal_balance,
+        interest_due: interest_due,
+        penalty_due: penalty_due,
+        settlement_amount: npaClosedAmount,
         reason: npaReason,
-        closed_at: new Date(paymentDate).toISOString()
+        closed_by: closedBy,
+        closed_at: npaClosedDate
       });
+
+      const npaParticulars = `NPA CLOSE\n` +
+        `Principal Outstanding: ₹${principal_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+        `Interest Outstanding: ₹${interest_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+        `Penalty Outstanding: ₹${penalty_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+        `Total Outstanding: ₹${total_outstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+        `Closed By: ${closedBy}\n` +
+        `Reason: ${npaReason}`;
 
       await supabaseFinance.addCDLedgerEntry({
         loan_id: selectedLoan.id,
         customer_id: selectedLoan.customer_id,
         account_name: 'CD A/C',
-        entry_date: new Date(paymentDate).toISOString(),
+        entry_date: npaClosedDate,
         credit: 0,
         debit: 0,
         receipt_no: npaReceiptNo,
-        particulars: `NPA Settlement Close - ${npaReason}`,
-        user_name: user?.username || 'Staff',
+        particulars: npaParticulars,
+        user_name: closedBy,
         entry_type: 'NPA_CLOSE'
       });
 
@@ -1669,7 +1697,8 @@ const CDLedger: React.FC = () => {
                 type="date"
                 value={paymentDate}
                 onChange={(e) => setPaymentDate(e.target.value)}
-                className={`bg-white border rounded-xl p-2 text-gray-800 focus:ring-2 focus:outline-none finance-input h-[42px] ${renewCalculations?.isDateInvalid ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-green-500'}`}
+                disabled={selectedLoan?.status === 'Closed' || selectedLoan?.status === 'NPA_CLOSED'}
+                className={`bg-white border rounded-xl p-2 text-gray-800 focus:ring-2 focus:outline-none finance-input h-[42px] ${renewCalculations?.isDateInvalid ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-green-500'} disabled:opacity-50 disabled:cursor-not-allowed`}
               />
             </div>
             
@@ -1901,7 +1930,7 @@ const CDLedger: React.FC = () => {
                       variant={isEditing ? "success" : "secondary"}
                       size="xs"
                       icon={isEditing ? Save : Edit2}
-                      disabled={savingDetails}
+                      disabled={savingDetails || selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
                     >
                       {isEditing ? 'Save' : 'Edit'}
                     </Button>
@@ -2180,7 +2209,9 @@ const CDLedger: React.FC = () => {
                         isRenewing || 
                         selectedLoan.status === 'Closed' || 
                         selectedLoan.status === 'NPA_CLOSED' || 
-                        !!renewCalculations?.isDateInvalid
+                        !!renewCalculations?.isDateInvalid ||
+                        !totalAmountPaying || 
+                        Number(totalAmountPaying) <= 0
                       }
                       className="w-full bg-green-600 hover:bg-green-700 text-white py-3 font-semibold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 border-0"
                     >
@@ -2194,7 +2225,7 @@ const CDLedger: React.FC = () => {
                         isRenewing || 
                         !totalAmountPaying || 
                         Number(totalAmountPaying) <= 0 ||
-                        Number(totalAmountPaying) <= (ledgerMetrics.currentPendingDues || 0) ||
+                        Number(totalAmountPaying) <= (ledgerMetrics.currentTotalDues || 0) ||
                         selectedLoan.status === 'Closed' || 
                         selectedLoan.status === 'NPA_CLOSED' || 
                         !!renewCalculations?.isDateInvalid
@@ -2212,8 +2243,8 @@ const CDLedger: React.FC = () => {
                         selectedLoan.status === 'Closed' || 
                         selectedLoan.status === 'NPA_CLOSED' || 
                         !(
-                          ledgerMetrics.totalClose <= 0 || 
-                          (ledgerMetrics.principalBalance <= 0 && (ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty) <= 0)
+                          ledgerMetrics.principalBalance <= 0 && 
+                          (renewCalculations.outstandingInterest + renewCalculations.outstandingPenalty) <= 0
                         ) ||
                         !!renewCalculations?.isDateInvalid
                       }
@@ -2356,6 +2387,7 @@ const CDLedger: React.FC = () => {
                       <select 
                         value={docType} 
                         onChange={(e) => setDocType(e.target.value)} 
+                        disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
                         className="flex-1 text-xs bg-white border border-gray-150 p-1.5 rounded-lg focus:outline-none"
                       >
                         <option value="Pledge Document">Pledge Document</option>
@@ -2364,9 +2396,16 @@ const CDLedger: React.FC = () => {
                         <option value="Land Registry Copy">Land Registry Copy</option>
                         <option value="Other Attachment">Other Attachment</option>
                       </select>
-                      <label className="bg-green-600 hover:bg-green-700 text-white px-2 py-1.5 rounded-lg text-xs font-semibold cursor-pointer select-none">
+                      <label className={`bg-green-600 hover:bg-green-700 text-white px-2 py-1.5 rounded-lg text-xs font-semibold cursor-pointer select-none ${
+                        (selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED') ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''
+                      }`}>
                         {uploadingDoc ? 'Uploading...' : 'Upload'}
-                        <input type="file" onChange={handleUploadDocument} disabled={uploadingDoc} className="hidden" />
+                        <input 
+                          type="file" 
+                          onChange={handleUploadDocument} 
+                          disabled={uploadingDoc || selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'} 
+                          className="hidden" 
+                        />
                       </label>
                     </div>
 
@@ -2389,7 +2428,11 @@ const CDLedger: React.FC = () => {
                               </a>
                             ) : null}
                             {doc.allowDelete ? (
-                              <button onClick={() => handleDeleteDocument(doc.id)} className="text-red-500 hover:text-red-700 font-bold ml-1">
+                              <button 
+                                onClick={() => handleDeleteDocument(doc.id)} 
+                                disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
+                                className="text-red-500 hover:text-red-700 font-bold ml-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
                                 <X className="w-3.5 h-3.5" />
                               </button>
                             ) : null}
@@ -2540,7 +2583,7 @@ const CDLedger: React.FC = () => {
 
                 <Button
                   onClick={() => setShowNpaModal(true)}
-                  disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED' || !!renewCalculations?.isDateInvalid}
+                  disabled={false}
                   variant="danger"
                   size="sm"
                   icon={ShieldAlert}

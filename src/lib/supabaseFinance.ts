@@ -792,8 +792,10 @@ class SupabaseFinance {
         if (entry) {
           if (!mainEntryId) mainEntryId = entry.id;
           if (isInterestOrPenaltyPaid) {
+            const dateObj = new Date(new Date(entryDate).getTime() + params.renewedDays * 24 * 60 * 60 * 1000);
+            const tzoffset = dateObj.getTimezoneOffset() * 60000;
             const renewedTillDate = params.renewedDays > 0 
-              ? new Date(new Date(entryDate).getTime() + params.renewedDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+              ? new Date(dateObj.getTime() - tzoffset).toISOString().split('T')[0]
               : null;
 
             await this.addCDInterestDetail({

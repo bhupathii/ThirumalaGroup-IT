@@ -178,13 +178,13 @@ export const financeCalculationService = {
     principalBefore: number,
     actionType: 'Renew' | 'Partial' | 'Close'
   ) {
-    const totalForRenewal = Number((penaltyDue + interestDue + standardMonthlyInterest).toFixed(2));
-    const totalForClose = Number((principalBefore + interestDue + penaltyDue).toFixed(2));
+    const totalForRenewal = Number((Math.max(0, penaltyDue) + Math.max(0, interestDue) + Math.max(0, standardMonthlyInterest)).toFixed(2));
+    const totalForClose = Number((principalBefore + Math.max(0, interestDue) + Math.max(0, penaltyDue)).toFixed(2));
     const isClosing = actionType === 'Close' || paymentAmount >= totalForClose;
 
     if (isClosing) {
-      const penaltyPaid = penaltyDue;
-      const interestPaid = interestDue;
+      const penaltyPaid = Math.max(0, penaltyDue);
+      const interestPaid = Math.max(0, interestDue);
       const principalPaid = Number(Math.max(0, paymentAmount - penaltyPaid - interestPaid).toFixed(2));
       return {
         penaltyPaid: Number(penaltyPaid.toFixed(2)),
@@ -194,7 +194,7 @@ export const financeCalculationService = {
     }
 
     if (actionType === 'Renew') {
-      const split = this.computeRenewSplit(paymentAmount, penaltyDue);
+      const split = this.computeRenewSplit(paymentAmount, Math.max(0, penaltyDue));
       return {
         penaltyPaid: split.penaltyPaid,
         interestPaid: split.interestPaid,
@@ -204,7 +204,7 @@ export const financeCalculationService = {
 
     // actionType === 'Partial'
     if (paymentAmount > totalForRenewal) {
-      const split = this.computeRenewSplit(totalForRenewal, penaltyDue);
+      const split = this.computeRenewSplit(totalForRenewal, Math.max(0, penaltyDue));
       const principalPaid = Number((paymentAmount - totalForRenewal).toFixed(2));
       return {
         penaltyPaid: split.penaltyPaid,
@@ -212,7 +212,7 @@ export const financeCalculationService = {
         principalPaid
       };
     } else {
-      const split = this.computeRenewSplit(paymentAmount, penaltyDue);
+      const split = this.computeRenewSplit(paymentAmount, Math.max(0, penaltyDue));
       return {
         penaltyPaid: split.penaltyPaid,
         interestPaid: split.interestPaid,

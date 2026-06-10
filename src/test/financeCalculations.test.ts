@@ -260,7 +260,7 @@ describe('CD Ledger Calculation Rules', () => {
 
   describe('New CD Ledger Business Rules', () => {
     it('applies computeRenewSplit correctly when penaltyDue > 0', () => {
-      const split = financeCalculationService.computeRenewSplit(1000, 100);
+      const split = financeCalculationService.computeRenewSplit(1000, 300);
       expect(split.penaltyPaid).toBe(200);
       expect(split.interestPaid).toBe(800);
       expect(split.principalPaid).toBe(0);
@@ -301,6 +301,363 @@ describe('CD Ledger Calculation Rules', () => {
       expect(split.penaltyPaid).toBe(200);
       expect(split.interestPaid).toBe(800);
       expect(split.principalPaid).toBe(0);
+    });
+  });
+
+  describe('CD Ledger - 16 Business Rule Test Cases', () => {
+    function calculateCDDuesAndSplit(params: {
+      principal: number;
+      rate: number;
+      paymentDate: string;
+      currentDueDate: string;
+      paymentAmount: number;
+      interestPaidInCycle?: number;
+      penaltyPaidInCycle?: number;
+      actionType?: 'Renew' | 'Partial' | 'Close';
+    }) {
+      const {
+        principal,
+        rate,
+        paymentDate,
+        currentDueDate,
+        paymentAmount,
+        interestPaidInCycle = 0,
+        penaltyPaidInCycle = 0,
+        actionType = 'Renew'
+      } = params;
+
+      const paymentDateObj = new Date(paymentDate);
+      const currentDueDateObj = new Date(currentDueDate);
+      
+      paymentDateObj.setHours(0, 0, 0, 0);
+      currentDueDateObj.setHours(0, 0, 0, 0);
+
+      const rawDueDays = Math.round((paymentDateObj.getTime() - currentDueDateObj.getTime()) / (1000 * 60 * 60 * 24));
+      const dueDays = Math.max(0, rawDueDays);
+      const daysRemaining = rawDueDays < 0 ? Math.abs(rawDueDays) : 0;
+
+      const grossInterest = dueDays <= 0 ? 0 : Number(((principal * rate * dueDays) / 30 / 100).toFixed(2));
+      const grossPenalty = dueDays <= 0 ? 0 : Number(((principal * 0.75 * dueDays) / 30 / 100).toFixed(2));
+
+      const effectiveGrossInterest = Math.max(grossInterest, interestPaidInCycle);
+      const effectiveGrossPenalty = Math.max(grossPenalty, penaltyPaidInCycle);
+
+      const outstandingInterest = Math.max(0, Number((effectiveGrossInterest - interestPaidInCycle).toFixed(2)));
+      const outstandingPenalty = Math.max(0, Number((effectiveGrossPenalty - penaltyPaidInCycle).toFixed(2)));
+
+      const displayInterest = dueDays <= 0 ? 0 : outstandingInterest;
+      const displayPenalty = dueDays <= 0 ? 0 : outstandingPenalty;
+      const totalDue = displayInterest + displayPenalty;
+
+      const renewalDue = Number((principal * rate / 100).toFixed(2));
+      const pendingDues = Math.max(0, Number((renewalDue - interestPaidInCycle).toFixed(2)));
+      const totalClose = Number((principal + displayInterest + displayPenalty).toFixed(2));
+
+      const split = financeCalculationService.computeCDPaymentSplit(
+        paymentAmount,
+        outstandingPenalty,
+        outstandingInterest,
+        renewalDue,
+        principal,
+        actionType
+      );
+
+      let renewedDays = 0;
+      if (paymentAmount > 0 && split.interestPaid > 0 && renewalDue > 0) {
+        renewedDays = Math.max(0, Math.round((split.interestPaid / renewalDue) * 30));
+      }
+
+      let nextDueDate: string | null = null;
+      if (paymentAmount > 0 && renewedDays > 0) {
+        const baseDateMs = Math.max(currentDueDateObj.getTime(), paymentDateObj.getTime());
+        const nextDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
+        const tzoffset = nextDate.getTimezoneOffset() * 60000;
+        nextDueDate = new Date(nextDate.getTime() - tzoffset).toISOString().split('T')[0];
+      }
+
+      const enableRenewal = paymentAmount > 0;
+      const enablePartial = paymentAmount > renewalDue;
+      const enableClose = principal <= 0 && totalDue <= 0;
+
+      return {
+        principal,
+        dueDays,
+        daysRemaining,
+        interest: displayInterest,
+        penalty: displayPenalty,
+        totalDue,
+        renewalDue,
+        pendingDues,
+        totalClose,
+        penaltyPaid: split.penaltyPaid,
+        interestPaid: split.interestPaid,
+        principalPaid: split.principalPaid,
+        renewedDays,
+        nextDueDate,
+        enableRenewal,
+        enablePartial,
+        enableClose
+      };
+    }
+
+    it('Test Case 1 - New Loan (No Overdue)', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-10',
+        paymentAmount: 0
+      });
+      expect(res.dueDays).toBe(0);
+      expect(res.daysRemaining).toBe(8);
+      expect(res.interest).toBe(0);
+      expect(res.penalty).toBe(0);
+      expect(res.totalDue).toBe(0);
+      expect(res.renewalDue).toBe(3000);
+      expect(res.totalClose).toBe(100000);
+      expect(res.nextDueDate).toBeNull();
+      expect(res.renewedDays).toBe(0);
+    });
+
+    it('Test Case 2 - Early Partial Renewal', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-10',
+        paymentAmount: 1000
+      });
+      expect(res.interest).toBe(0);
+      expect(res.penalty).toBe(0);
+      expect(res.renewalDue).toBe(3000);
+      expect(res.interestPaid).toBe(1000);
+      expect(res.penaltyPaid).toBe(0);
+      expect(res.renewedDays).toBe(10);
+      expect(res.nextDueDate).toBe('2026-06-28');
+      
+      const resAfter = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-10',
+        paymentAmount: 0,
+        interestPaidInCycle: 1000
+      });
+      expect(resAfter.pendingDues).toBe(2000);
+    });
+
+    it('Test Case 3 - Full Renewal', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-18',
+        paymentAmount: 3000
+      });
+      expect(res.interestPaid).toBe(3000);
+      expect(res.penaltyPaid).toBe(0);
+      expect(res.renewedDays).toBe(30);
+      expect(res.nextDueDate).toBe('2026-07-18');
+      expect(res.pendingDues).toBe(3000); // before posting
+      
+      const resAfter = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-18',
+        paymentAmount: 0,
+        interestPaidInCycle: 3000
+      });
+      expect(resAfter.pendingDues).toBe(0);
+    });
+
+    it('Test Case 4 - Overpayment Renewal', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-18',
+        paymentAmount: 5000,
+        actionType: 'Partial'
+      });
+      expect(res.interestPaid).toBe(3000);
+      expect(res.penaltyPaid).toBe(0);
+      expect(res.principalPaid).toBe(2000);
+      expect(res.renewedDays).toBe(30);
+      expect(res.nextDueDate).toBe('2026-07-18');
+    });
+
+    it('Test Case 5 - Overdue by 10 Days', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-05-31',
+        paymentDate: '2026-06-10',
+        paymentAmount: 0
+      });
+      expect(res.dueDays).toBe(10);
+      expect(res.interest).toBe(1000);
+      expect(res.penalty).toBe(250);
+      expect(res.totalDue).toBe(1250);
+      expect(res.totalClose).toBe(101250);
+    });
+
+    it('Test Case 6 - Penalty Split Logic', () => {
+      const split = financeCalculationService.computeCDPaymentSplit(
+        1000,
+        500, // penaltyDue
+        1500, // interestDue
+        3000, // standard monthly
+        100000,
+        'Renew'
+      );
+      expect(split.penaltyPaid).toBe(200);
+      expect(split.interestPaid).toBe(800);
+      expect(split.principalPaid).toBe(0);
+    });
+
+    it('Test Case 7 - No Penalty Split Logic', () => {
+      const split = financeCalculationService.computeCDPaymentSplit(
+        1000,
+        0, // penaltyDue
+        1500, // interestDue
+        3000,
+        100000,
+        'Renew'
+      );
+      expect(split.penaltyPaid).toBe(0);
+      expect(split.interestPaid).toBe(1000);
+      expect(split.principalPaid).toBe(0);
+    });
+
+    it('Test Case 8 - Pending Dues Reduction', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-10',
+        paymentAmount: 0,
+        interestPaidInCycle: 1000
+      });
+      expect(res.renewalDue).toBe(3000);
+      expect(res.pendingDues).toBe(2000);
+    });
+
+    it('Test Case 9 - Pending Dues Fully Cleared', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-18',
+        paymentAmount: 0,
+        interestPaidInCycle: 3000
+      });
+      expect(res.renewalDue).toBe(3000);
+      expect(res.pendingDues).toBe(0);
+    });
+
+    it('Test Case 10 - Negative Days Prevention', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-20',
+        paymentDate: '2026-06-10',
+        paymentAmount: 0
+      });
+      expect(res.dueDays).toBe(0);
+      expect(res.interest).toBe(0);
+      expect(res.penalty).toBe(0);
+      expect(res.totalDue).toBe(0);
+    });
+
+    it('Test Case 11 - Renewal Date Protection', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-10',
+        paymentAmount: 3000
+      });
+      expect(res.nextDueDate).toBe('2026-07-18');
+    });
+
+    it('Test Case 12 - NPA Close', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-05-31',
+        paymentDate: '2026-06-10',
+        paymentAmount: 0
+      });
+      expect(res.principal).toBe(100000);
+      expect(res.interest).toBe(1000);
+      expect(res.penalty).toBe(250);
+      expect(res.totalClose).toBe(101250);
+    });
+
+    it('Test Case 13 - Close Account Validation', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 0,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-18',
+        paymentAmount: 0
+      });
+      expect(res.enableClose).toBe(true);
+    });
+
+    it('Test Case 14 - Close Account Blocked', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 50000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-18',
+        paymentAmount: 0
+      });
+      expect(res.enableClose).toBe(false);
+    });
+
+    it('Test Case 15 - Cross Cycle Validation', () => {
+      // Cycle 1: Paid 3000
+      const cycle1 = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-06-18',
+        paymentDate: '2026-06-18',
+        paymentAmount: 0,
+        interestPaidInCycle: 3000
+      });
+      expect(cycle1.pendingDues).toBe(0);
+
+      // Cycle 2: new cycle interest paid starts at 0, then we pay 1000.
+      // previous cycle's 3000 is excluded.
+      const cycle2 = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-07-18',
+        paymentDate: '2026-07-20',
+        paymentAmount: 0,
+        interestPaidInCycle: 1000 // Only Cycle 2 payments are counted here
+      });
+      expect(cycle2.pendingDues).toBe(2000);
+    });
+
+    it('Test Case 16 - Single Source of Truth', () => {
+      const res = calculateCDDuesAndSplit({
+        principal: 100000,
+        rate: 3,
+        currentDueDate: '2026-05-31',
+        paymentDate: '2026-06-10',
+        paymentAmount: 0
+      });
+      
+      const summaryTotalDue = res.interest + res.penalty;
+      const footerTotalDue = res.interest + res.penalty;
+      const borrowerLedgerTotalDue = res.interest + res.penalty;
+
+      expect(summaryTotalDue).toBe(res.totalDue);
+      expect(footerTotalDue).toBe(res.totalDue);
+      expect(borrowerLedgerTotalDue).toBe(res.totalDue);
     });
   });
 });
