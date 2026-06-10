@@ -680,6 +680,7 @@ class SupabaseFinance {
     renewedDays: number;
     paymentDate?: string;
     receiptNo?: string;
+    renewedTillDate?: string | null;
   }): Promise<{ success: boolean; error?: string; receiptNo?: string }> {
     try {
       const receiptNo = params.receiptNo || await this.generateUniqueReceiptNo();
@@ -792,11 +793,15 @@ class SupabaseFinance {
         if (entry) {
           if (!mainEntryId) mainEntryId = entry.id;
           if (isInterestOrPenaltyPaid) {
-            const dateObj = new Date(new Date(entryDate).getTime() + params.renewedDays * 24 * 60 * 60 * 1000);
-            const tzoffset = dateObj.getTimezoneOffset() * 60000;
-            const renewedTillDate = params.renewedDays > 0 
-              ? new Date(dateObj.getTime() - tzoffset).toISOString().split('T')[0]
-              : null;
+            const renewedTillDate = params.renewedTillDate !== undefined
+              ? params.renewedTillDate
+              : (params.renewedDays > 0 
+                  ? (() => {
+                      const dateObj = new Date(new Date(entryDate).getTime() + params.renewedDays * 24 * 60 * 60 * 1000);
+                      const tzoffset = dateObj.getTimezoneOffset() * 60000;
+                      return new Date(dateObj.getTime() - tzoffset).toISOString().split('T')[0];
+                    })()
+                  : null);
 
             await this.addCDInterestDetail({
               loan_id: params.loanId,

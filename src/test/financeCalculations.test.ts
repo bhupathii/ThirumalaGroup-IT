@@ -364,18 +364,7 @@ describe('CD Ledger Calculation Rules', () => {
         actionType
       );
 
-      let renewedDays = 0;
-      if (actionType === 'Partial') {
-        renewedDays = paymentAmount >= totalToRegularize ? 30 : 0;
-      } else {
-        if (paymentAmount > 0 && split.interestPaid > 0 && renewalDue > 0) {
-          const renewalInterestPaid = Math.max(0, split.interestPaid - outstandingInterest);
-          renewedDays = Math.max(0, Math.round((renewalInterestPaid / renewalDue) * 30));
-        }
-        if (paymentAmount > 0 && renewedDays <= 0) {
-          renewedDays = 30;
-        }
-      }
+      const renewedDays = split.renewedDays;
 
       let nextDueDate: string | null = null;
       if (paymentAmount > 0 && renewedDays > 0) {
@@ -795,8 +784,9 @@ describe('CD Ledger Calculation Rules', () => {
           actionType: 'Renew'
         });
         expect(res.totalDue).toBe(0); // Outstanding Due
-        expect(res.principalPaid).toBe(0); // Principal Reduction
-        expect(res.renewedDays).toBe(100); // 10000 / 3000 * 30
+        expect(res.principalPaid).toBe(0); // Principal Reduction: 0
+        expect(res.renewedDays).toBe(100); // Uncapped renewal interest: 10000 / 3000 * 30
+        expect(res.nextDueDate).toBe('2026-09-26');
       });
 
       it('Test 5 - Cycle Reset Rule - After successful Partial Payment & Renewal', () => {
@@ -854,8 +844,48 @@ describe('CD Ledger Calculation Rules', () => {
         expect(res.penaltyPaid).toBe(1000);
         expect(res.interestPaid).toBe(4000);
         expect(res.principalPaid).toBe(0);
-        expect(res.renewedDays).toBe(30);
-        expect(res.nextDueDate).toBe('2026-07-10');
+        expect(res.renewedDays).toBe(0);
+        expect(res.nextDueDate).toBeNull();
+      });
+
+      it('Validation Test 15 - Penalty Due = ₹315, Overdue Interest Due = ₹1,310, Payment = ₹1,500', () => {
+        const res = calculateCDDuesAndSplit({
+          principal: 10000,
+          rate: 3,
+          currentDueDate: '2026-01-30',
+          paymentDate: '2026-06-10',
+          paymentAmount: 1500,
+          actionType: 'Renew'
+        });
+        expect(res.dueDays).toBe(131);
+        expect(res.interest).toBe(1310);
+        expect(res.penalty).toBe(315);
+        expect(res.totalDue).toBe(1625);
+        expect(res.penaltyPaid).toBe(315);
+        expect(res.interestPaid).toBe(1185);
+        expect(res.principalPaid).toBe(0);
+        expect(res.renewedDays).toBe(0);
+        expect(res.nextDueDate).toBeNull();
+      });
+
+      it('Validation Test 16 - Penalty Due = ₹315, Overdue Interest Due = ₹1,310, Payment = ₹1,700', () => {
+        const res = calculateCDDuesAndSplit({
+          principal: 10000,
+          rate: 3,
+          currentDueDate: '2026-01-30',
+          paymentDate: '2026-06-10',
+          paymentAmount: 1700,
+          actionType: 'Renew'
+        });
+        expect(res.dueDays).toBe(131);
+        expect(res.interest).toBe(1310);
+        expect(res.penalty).toBe(315);
+        expect(res.totalDue).toBe(1625);
+        expect(res.penaltyPaid).toBe(315);
+        expect(res.interestPaid).toBe(1385);
+        expect(res.principalPaid).toBe(0);
+        expect(res.renewedDays).toBe(8);
+        expect(res.nextDueDate).toBe('2026-06-18');
       });
     });
   });
