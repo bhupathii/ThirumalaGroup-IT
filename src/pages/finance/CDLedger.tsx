@@ -576,9 +576,9 @@ const CDLedger: React.FC = () => {
     const principalBalance = currentPrincipalBalance;
 
     // Interest = principal × rate × dueDays ÷ 30 ÷ 100 (0 if dueDays <= 0)
-    // Penalty  = principal × 0.75% × penalty_days ÷ 30 (Starts only after 5 grace days, penalty_days = max(0, dueDays - 5))
+    // Penalty  = principal × 0.75% × dueDays ÷ 30 (0 if dueDays <= 5, calculated on full dueDays count if > 5)
     const grossInterest = dueDays <= 0 ? 0 : Number(((principalBalance * interestRate * dueDays) / 30 / 100).toFixed(2));
-    const penaltyDays = Math.max(0, dueDays - 5);
+    const penaltyDays = dueDays <= 5 ? 0 : dueDays;
     const grossPenalty  = penaltyDays <= 0 ? 0 : Number(((principalBalance * 0.75 * penaltyDays) / 30 / 100).toFixed(2));
 
     // Daily interest / renewal day value:
@@ -631,7 +631,7 @@ const CDLedger: React.FC = () => {
       daysPastDue: dueDays,            // raw due days (can be negative)
       daysRemaining,                    // absolute days remaining (when not yet due)
       nextDueDate: null,                // Computed dynamically based on renewedDays
-      penaltyDays: dueDays <= 5 ? 0 : dueDays,
+      penaltyDays,
       interest: displayInterest,        // for display: negative when credit, pending when overdue
       penalty: displayPenalty,          // for display: 0 when not due, pending when overdue
       outstandingInterest,              // for payments: always >= 0

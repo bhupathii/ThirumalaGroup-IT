@@ -133,7 +133,7 @@ export const financeCalculationService = {
   },
 
   calculatePenalty(principal: number, penaltyRate: number, dueDays: number): number {
-    const penaltyDays = Math.max(0, dueDays - 5);
+    const penaltyDays = dueDays <= 5 ? 0 : dueDays;
     if (penaltyDays <= 0) return 0;
     return Number(((principal * (penaltyRate / 100) * penaltyDays) / 30).toFixed(2));
   },
