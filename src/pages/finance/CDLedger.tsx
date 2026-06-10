@@ -532,7 +532,7 @@ const CDLedger: React.FC = () => {
       .sort((a, b) => startOfDay(a.entry_date) - startOfDay(b.entry_date))[0];
     const originalLoanDateMs: number = disbEntry
       ? startOfDay(disbEntry.entry_date)
-      : startOfDay(selectedLoan.created_at || selectedLoan.date);
+      : startOfDay(selectedLoan.date);
 
     const originalLoanDate = new Date(originalLoanDateMs);
 
@@ -703,7 +703,7 @@ const CDLedger: React.FC = () => {
     
     // Find original loan start date
     const disb = sortedDbEntries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
-    const originalLoanStart = startOfDay(disb ? disb.entry_date : (selectedLoan.created_at || selectedLoan.date));
+    const originalLoanStart = startOfDay(disb ? disb.entry_date : selectedLoan.date);
     
     // Find all renewal dates
     const cycleEnds = sortedDbEntries
@@ -981,11 +981,10 @@ const CDLedger: React.FC = () => {
       .reduce((sum, e) => sum + Number(e.debit), 0) || Number(selectedLoan.amount);
   }, [selectedLoan, displayedStatementEntries]);
 
-  // Original Loan Date calculations
   const originalLoanDate = useMemo(() => {
     if (!selectedLoan) return null;
     const disb = displayedStatementEntries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
-    return disb ? disb.entry_date : (selectedLoan.created_at || selectedLoan.date);
+    return disb ? disb.entry_date : selectedLoan.date;
   }, [displayedStatementEntries, selectedLoan]);
 
   // Principal Paid calculations

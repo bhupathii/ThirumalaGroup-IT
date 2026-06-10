@@ -25,7 +25,7 @@ async function run() {
     .select('*')
     .eq('loan_id', loan.id);
 
-  console.log('Loan Date:', loan.date);
+  console.log('Loan full object:', loan);
   console.log('Duration Months:', loan.duration_months);
   console.log('Transactions:', transactions);
   console.log('CD Ledger Entries:', ledgerEntries);
