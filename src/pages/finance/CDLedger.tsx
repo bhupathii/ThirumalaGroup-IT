@@ -1499,6 +1499,7 @@ const CDLedger: React.FC = () => {
       }
       
       setTotalAmountPaying('');
+      await fetchLedgerData();
       await loadLedgerDetails(selectedLoan.id);
 
       if (actionType === 'Close' || paymentAmount >= totalForClose) {
@@ -1549,6 +1550,7 @@ const CDLedger: React.FC = () => {
         entry_type: 'NPA_CLOSE'
       });
 
+      await fetchLedgerData();
       await loadLedgerDetails(selectedLoan.id);
       toast.success('NPA Account closed and settlement recorded.');
       setShowNpaModal(false);
@@ -1960,6 +1962,17 @@ const CDLedger: React.FC = () => {
                           <span className="text-gray-400 font-medium block text-xs">Partner:</span>
                           <span className="font-medium text-gray-850">{selectedLoan.customer?.partner_name || 'N/A'}</span>
                         </div>
+                        <div className="col-span-1 border-b pb-1.5">
+                          <span className="text-gray-400 font-medium block text-xs">Account Status:</span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            selectedLoan.status === 'Active' ? 'bg-green-100 text-green-700'
+                            : selectedLoan.status === 'Closed' ? 'bg-gray-100 text-gray-500'
+                            : selectedLoan.status === 'NPA_CLOSED' ? 'bg-orange-100 text-orange-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {(selectedLoan.status || 'Active').toUpperCase()}
+                          </span>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2035,7 +2048,7 @@ const CDLedger: React.FC = () => {
                     
                     {/* Row 4: Current Due Date & Next Due Date */}
                     <Input label="Current Due Date" value={formatDateOld(renewCalculations?.dueDate)} readOnly className="bg-gray-50 text-gray-700" />
-                    <Input label="Next Due Date" value={paymentPreview?.renew?.nextDueDate ? formatDateOld(paymentPreview.renew.nextDueDate) : (renewCalculations?.dueDate ? formatDateOld(renewCalculations.dueDate) : '')} readOnly className="bg-gray-50 text-gray-700" />
+                    <Input label="Next Due Date" value={totalAmountPaying && Number(totalAmountPaying) > 0 && paymentPreview?.renew?.nextDueDate ? formatDateOld(paymentPreview.renew.nextDueDate) : ''} readOnly className="bg-gray-50 text-gray-700" />
                     
                     {/* Row 5: Due Days & Interest */}
                     <div>
@@ -2231,6 +2244,12 @@ const CDLedger: React.FC = () => {
                   <div>
                     <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider block mb-0.5">Penalty</span>
                     <span className="text-lg font-bold text-red-650 font-mono">₹{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider block mb-0.5">Total Due</span>
+                    <span className={`text-lg font-bold font-mono ${(ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty) < 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                      ₹{(ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
                   </div>
                   
                   <div className="border-t border-rose-100 pt-3 col-span-2 flex justify-between items-center">
