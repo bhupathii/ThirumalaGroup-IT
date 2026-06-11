@@ -254,8 +254,25 @@ const AppContent: React.FC = () => {
   );
 };
 
-// Root App Component with Error Boundary
 const App: React.FC = () => {
+  React.useEffect(() => {
+    const handleWheel = () => {
+      const activeElement = document.activeElement;
+      if (
+        activeElement &&
+        activeElement.tagName === 'INPUT' &&
+        (activeElement as HTMLInputElement).type === 'number'
+      ) {
+        (activeElement as HTMLInputElement).blur();
+      }
+    };
+
+    document.addEventListener('wheel', handleWheel, { passive: true });
+    return () => {
+      document.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

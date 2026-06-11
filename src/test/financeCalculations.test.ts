@@ -1030,6 +1030,32 @@ describe('CD Ledger Calculation Rules', () => {
         expect(res.totalDue).toBe(0); // Today Due
         expect(res.totalToRegularize).toBe(0);
       });
+
+      it('TEST 5 - Edit Loan Principal from 10,000 to 100,000 with 3% rate and 15 period days -> Renewal = 1500, Total For Close = 100000', () => {
+        // Original State
+        const resOriginal = calculateCDDuesAndSplit({
+          principal: 10000,
+          rate: 3,
+          currentDueDate: '2026-06-26',
+          paymentDate: '2026-06-11',
+          paymentAmount: 0,
+          periodDays: 15
+        });
+        expect(resOriginal.renewalDue).toBe(150);
+        expect(resOriginal.totalClose).toBe(10000);
+
+        // Edited State
+        const resEdited = calculateCDDuesAndSplit({
+          principal: 100000,
+          rate: 3,
+          currentDueDate: '2026-06-26',
+          paymentDate: '2026-06-11',
+          paymentAmount: 0,
+          periodDays: 15
+        });
+        expect(resEdited.renewalDue).toBe(1500); // 100000 * 3% * 15 / 30 = 1500
+        expect(resEdited.totalClose).toBe(100000);
+      });
     });
   });
 });

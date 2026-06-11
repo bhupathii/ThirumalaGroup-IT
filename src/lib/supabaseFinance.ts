@@ -1109,7 +1109,7 @@ class SupabaseFinance {
     }
   }
 
-  async updateCustomer(id: string, customer: Partial<FinanceCustomer>, editedBy: string): Promise<FinanceCustomer | null> {
+  async updateCustomer(id: string, customer: Partial<FinanceCustomer>, editedBy: string, skipLogging?: boolean): Promise<FinanceCustomer | null> {
     try {
       const { data: oldData } = await supabase
         .from('finance_customers')
@@ -1161,7 +1161,7 @@ class SupabaseFinance {
         }
       }
 
-      if (oldData) {
+      if (oldData && !skipLogging) {
         await this.logEdit('finance_customers', id, oldData, data, editedBy);
       }
       return data;
@@ -1444,9 +1444,8 @@ class SupabaseFinance {
 
       // 2. Opening CD Commission (fixed at disbursement; never recalculated)
       const _commRate = Number(loan.interest_rate) || 3;
-      const _commPeriod = Number(loan.duration_months) || 10;
       const pDays = (loan.period_days && Number(loan.period_days) > 0) ? Number(loan.period_days) : 30;
-      const _commAmount = Number(((Number(loan.amount) * (_commRate / 100) * _commPeriod) / pDays).toFixed(2));
+      const _commAmount = Number(((Number(loan.amount) * (_commRate / 100) * pDays) / 30).toFixed(2));
       if (_commAmount > 0) {
         await supabase.from('finance_cd_ledger_entries').insert([{
           loan_id: loan.id,
@@ -1557,7 +1556,7 @@ class SupabaseFinance {
     }
   }
 
-  async updateLoan(id: string, loan: Partial<FinanceLoan>, editedBy: string): Promise<FinanceLoan | null> {
+  async updateLoan(id: string, loan: Partial<FinanceLoan>, editedBy: string, skipLogging?: boolean): Promise<FinanceLoan | null> {
     try {
       const { data: oldData } = await supabase
         .from('finance_loans')
@@ -1619,7 +1618,197 @@ class SupabaseFinance {
         }
       }
 
-      if (oldData) {
+      // Determine if there has been any financial activity on this loan.
+      const [{ data: dbEntries }, { data: dbTransactions }, { data: dbInterests }] = await Promise.all([
+        supabase.from('finance_cd_ledger_entries').select('id, entry_type').eq('loan_id', id),
+        supabase.from('finance_transactions').select('id, type').eq('loan_id', id),
+        supabase.from('finance_cd_interest_details').select('id').eq('loan_id', id)
+      ]);
+
+      const hasActivity =
+        (dbTransactions || []).some((t: any) => t.type !== 'Disbursement') ||
+        (dbInterests || []).length > 0 ||
+        (dbEntries || []).some((e: any) =>
+          e.entry_type !== 'original_loan' &&
+          e.entry_type !== 'opening_commission' &&
+          e.entry_type !== 'document_charge'
+        );
+
+      if (!hasActivity) {
+        // 1. Sync Disbursement transaction in finance_transactions
+        await supabase
+          .from('finance_transactions')
+          .update({
+            amount: Number(data.amount),
+            date: data.date
+          })
+          .eq('loan_id', id)
+          .eq('type', 'Disbursement');
+
+        // 2. Sync native finance_cd_ledger_entries (for CD loans)
+        if (data.loan_category === 'CD') {
+          const commRate = Number(data.interest_rate) || 3;
+          const pDays = (data.period_days && Number(data.period_days) > 0) ? Number(data.period_days) : 30;
+          const commAmount = Number(((Number(data.amount) * (commRate / 100) * pDays) / 30).toFixed(2));
+          const docCharges = Number(data.document_charges) || 0;
+
+          const existingEntries = dbEntries || [];
+
+          // original_loan entry
+          const origEntry = existingEntries.find((e: any) => e.entry_type === 'original_loan');
+          if (origEntry) {
+            await supabase
+              .from('finance_cd_ledger_entries')
+              .update({
+                debit: Number(data.amount),
+                date: data.date,
+                entry_date: data.date
+              })
+              .eq('id', origEntry.id);
+          } else {
+            await supabase.from('finance_cd_ledger_entries').insert([{
+              loan_id: id,
+              customer_id: data.customer_id,
+              account_name: 'CD A/C',
+              date: data.date,
+              entry_date: data.date,
+              credit: 0,
+              debit: Number(data.amount),
+              receipt_no: '-',
+              particulars: 'Original Loan Disbursement',
+              user_name: editedBy,
+              entry_type: 'original_loan',
+              total_paid: 0
+            }]);
+          }
+
+          // opening_commission entry
+          const commEntry = existingEntries.find((e: any) => e.entry_type === 'opening_commission');
+          if (commEntry) {
+            if (commAmount > 0) {
+              await supabase
+                .from('finance_cd_ledger_entries')
+                .update({
+                  credit: commAmount,
+                  date: data.date,
+                  entry_date: data.date
+                })
+                .eq('id', commEntry.id);
+            } else {
+              await supabase
+                .from('finance_cd_ledger_entries')
+                .delete()
+                .eq('id', commEntry.id);
+            }
+          } else if (commAmount > 0) {
+            await supabase.from('finance_cd_ledger_entries').insert([{
+              loan_id: id,
+              customer_id: data.customer_id,
+              account_name: 'CD COMMISSION A/C',
+              date: data.date,
+              entry_date: data.date,
+              credit: commAmount,
+              debit: 0,
+              receipt_no: '-',
+              particulars: 'Opening CD Commission Charged',
+              user_name: editedBy,
+              entry_type: 'opening_commission',
+              total_paid: 0
+            }]);
+          }
+
+          // document_charge entry
+          const docEntry = existingEntries.find((e: any) => e.entry_type === 'document_charge');
+          if (docEntry) {
+            if (docCharges > 0) {
+              await supabase
+                .from('finance_cd_ledger_entries')
+                .update({
+                  credit: docCharges,
+                  date: data.date,
+                  entry_date: data.date
+                })
+                .eq('id', docEntry.id);
+            } else {
+              await supabase
+                .from('finance_cd_ledger_entries')
+                .delete()
+                .eq('id', docEntry.id);
+            }
+          } else if (docCharges > 0) {
+            await supabase.from('finance_cd_ledger_entries').insert([{
+              loan_id: id,
+              customer_id: data.customer_id,
+              account_name: 'CD DOCUMENT CHARGES A/C',
+              date: data.date,
+              entry_date: data.date,
+              credit: docCharges,
+              debit: 0,
+              receipt_no: '-',
+              particulars: 'Document Charges Collected',
+              user_name: editedBy,
+              entry_type: 'document_charge',
+              total_paid: 0
+            }]);
+          }
+        }
+
+        // 3. Delete and regenerate dues schedule in finance_dues
+        await supabase
+          .from('finance_dues')
+          .delete()
+          .eq('loan_id', id);
+
+        let duesCount = 0;
+        let dueAmount = 0;
+
+        if (data.loan_category === 'CD') {
+          duesCount = data.period_days || data.duration_months || 30;
+          dueAmount = 0;
+        } else {
+          if (data.due_type === 'Daily') {
+            duesCount = data.duration_months * 30;
+          } else if (data.due_type === 'Weekly') {
+            duesCount = Math.round(data.duration_months * 4.33);
+          } else {
+            duesCount = data.duration_months;
+          }
+          dueAmount = data.due_amount;
+        }
+
+        const duesList = [];
+        const startDate = new Date(data.date);
+        for (let i = 1; i <= duesCount; i++) {
+          const dDate = new Date(startDate);
+          if (data.loan_category === 'CD') {
+            dDate.setDate(startDate.getDate() + i);
+          } else {
+            if (data.due_type === 'Daily') {
+              dDate.setDate(startDate.getDate() + i);
+            } else if (data.due_type === 'Weekly') {
+              dDate.setDate(startDate.getDate() + i * 7);
+            } else {
+              dDate.setMonth(startDate.getMonth() + i);
+            }
+          }
+          duesList.push({
+            loan_id: id,
+            due_date: dDate.toISOString().split('T')[0],
+            amount: dueAmount,
+            paid_amount: 0,
+            status: 'Pending'
+          });
+        }
+
+        if (duesList.length > 0) {
+          const { error: insertDuesError } = await supabase
+            .from('finance_dues')
+            .insert(duesList);
+          if (insertDuesError) throw insertDuesError;
+        }
+      }
+
+      if (oldData && !skipLogging) {
         await this.logEdit('finance_loans', id, oldData, data, editedBy);
       }
       return data;
