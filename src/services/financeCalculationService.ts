@@ -127,17 +127,17 @@ export const financeCalculationService = {
   /**
    * CD Ledger Specific Calculations
    */
-  calculateInterest(principal: number, rate: number, interestDays: number, periodDays?: number): number {
+  calculateInterest(principal: number, rate: number, interestDays: number, _periodDays?: number): number {
     if (interestDays <= 0) return 0;
-    const pDays = (periodDays && periodDays > 0) ? periodDays : 30;
-    return Number(((principal * (rate / 100) * interestDays) / pDays).toFixed(2));
+    // Overdue interest uses a constant 30-day divisor as it is a daily accrual.
+    return Number(((principal * (rate / 100) * interestDays) / 30).toFixed(2));
   },
 
-  calculatePenalty(principal: number, penaltyRate: number, dueDays: number, periodDays?: number): number {
+  calculatePenalty(principal: number, penaltyRate: number, dueDays: number, _periodDays?: number): number {
     const penaltyDays = dueDays <= 5 ? 0 : dueDays;
     if (penaltyDays <= 0) return 0;
-    const pDays = (periodDays && periodDays > 0) ? periodDays : 30;
-    return Number(((principal * (penaltyRate / 100) * penaltyDays) / pDays).toFixed(2));
+    // Overdue penalty uses a constant 30-day divisor as it is a daily accrual.
+    return Number(((principal * (penaltyRate / 100) * penaltyDays) / 30).toFixed(2));
   },
 
   calculateRenewalTotal(interest: number, penalty: number): number {

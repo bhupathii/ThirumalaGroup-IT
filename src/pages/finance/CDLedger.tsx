@@ -585,20 +585,25 @@ const CDLedger: React.FC = () => {
     const interestRate = Number(selectedLoan.interest_rate) || 3;
     const principalBalance = currentPrincipalBalance;
 
-    // Interest = principal × rate × dueDays ÷ periodDays ÷ 100 (0 if dueDays <= 0)
-    // Penalty  = principal × penaltyRate% × dueDays ÷ periodDays (0 if dueDays <= 5, calculated on full dueDays count if > 5)
-    const grossInterest = dueDays <= 0 ? 0 : Number(((principalBalance * interestRate * dueDays) / periodDays / 100).toFixed(2));
+    // Interest = principal × rate × dueDays ÷ 30 ÷ 100 (0 if dueDays <= 0)
+    // Penalty  = principal × penaltyRate% × dueDays ÷ 30 (0 if dueDays <= 5, calculated on full dueDays count if > 5)
+    const grossInterest = dueDays <= 0 ? 0 : Number(((principalBalance * interestRate * dueDays) / 30 / 100).toFixed(2));
     const penaltyDays = dueDays <= 5 ? 0 : dueDays;
-    const grossPenalty  = penaltyDays <= 0 ? 0 : Number(((principalBalance * penaltyRate * penaltyDays) / periodDays / 100).toFixed(2));
+    const grossPenalty  = penaltyDays <= 0 ? 0 : Number(((principalBalance * penaltyRate * penaltyDays) / 30 / 100).toFixed(2));
 
     // Daily interest / renewal day value:
-    // Always compute base daily interest rate for renewedDays calculation.
-    const baseDailyInterest = Number((principalBalance * interestRate / 100 / periodDays).toFixed(5));
+    // Derived from the Renewal Due divided by Period Days (cancels out to principal * rate / 100 / 30)
+    const renewalInterest = (principalBalance * (interestRate / 100) * periodDays) / 30;
+    const baseDailyInterest = Number((renewalInterest / periodDays).toFixed(5));
+
+    const renewalPenalty = (principalBalance * (penaltyRate / 100) * periodDays) / 30;
+    const baseDailyPenalty = Number((renewalPenalty / periodDays).toFixed(5));
+
     let dailyInterest = baseDailyInterest;
     let dailyPenalty = 0;
     if (dueDays > 5) {
-      dailyInterest = Number((principalBalance * (interestRate + penaltyRate) / 100 / periodDays).toFixed(5));
-      dailyPenalty = Number((principalBalance * penaltyRate / 100 / periodDays).toFixed(5));
+      dailyInterest = Number((baseDailyInterest + baseDailyPenalty).toFixed(5));
+      dailyPenalty = baseDailyPenalty;
     }
 
     // ── BUGFIX: Determine the true current-cycle start from the ledger ──────────
@@ -747,8 +752,7 @@ const CDLedger: React.FC = () => {
       const P = disbEntry ? Number(disbEntry.debit) : originalAmount;
       const R = Number(selectedLoan.interest_rate) || 3;
       const pDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
-      const D = pDays; 
-      const commAmount = Number(((P * (R / 100) * D) / pDays).toFixed(2));
+      const commAmount = Number(((P * (R / 100) * pDays) / 30).toFixed(2));
 
       list.push({
         id: `fallback-comm-${selectedLoan.id}`,
@@ -822,8 +826,8 @@ const CDLedger: React.FC = () => {
       const interestRate = Number(selectedLoan.interest_rate) || 3;
       const penaltyRate = selectedLoan.penalty_percent !== undefined && selectedLoan.penalty_percent !== null ? Number(selectedLoan.penalty_percent) : 0.75;
       
-      const cycleGrossInterest = cycleDueDays <= 0 ? 0 : Number(((runningPrincipal * interestRate * cycleDueDays) / periodDays / 100).toFixed(2));
-      const cycleGrossPenalty = cycleDueDays <= 0 ? 0 : Number(((runningPrincipal * penaltyRate * cycleDueDays) / periodDays / 100).toFixed(2));
+      const cycleGrossInterest = cycleDueDays <= 0 ? 0 : Number(((runningPrincipal * interestRate * cycleDueDays) / 30 / 100).toFixed(2));
+      const cycleGrossPenalty = cycleDueDays <= 0 ? 0 : Number(((runningPrincipal * penaltyRate * cycleDueDays) / 30 / 100).toFixed(2));
 
       // Check if some payments inside this cycle are ALREADY split
       const alreadySplitSum = cyclePayments.filter(e => {
@@ -969,11 +973,12 @@ const CDLedger: React.FC = () => {
       .reduce((sum, e) => sum + Number(e.credit), 0);
   }, [displayedStatementEntries]);
 
-  // Interest Details builder
   const displayedInterestDetails = useMemo(() => {
     const list: any[] = [];
     if (!selectedLoan) return list;
     
+    const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
+
     displayedStatementEntries.forEach(entry => {
       const isInterestOrPenalty = ['penalty a/c', 'cd commission a/c'].includes((entry.account_name || '').toLowerCase());
       if (isInterestOrPenalty && entry.credit > 0 && entry.entry_type !== 'opening_commission' && entry.entry_type !== 'Commission' && !entry.id.toString().startsWith('fallback-comm-')) {
@@ -986,10 +991,10 @@ const CDLedger: React.FC = () => {
           credit: entry.credit,
           receipt_no: entry.receipt_no,
           particulars: entry.particulars,
-          renewed_days: isRenewalInterest ? 30 : 0,
+          renewed_days: isRenewalInterest ? periodDays : 0,
           renewed_till_date: isRenewalInterest 
             ? (() => {
-                const dateObj = new Date(new Date(entry.entry_date).getTime() + 30 * 24 * 60 * 60 * 1000);
+                const dateObj = new Date(new Date(entry.entry_date).getTime() + periodDays * 24 * 60 * 60 * 1000);
                 const tzoffset = dateObj.getTimezoneOffset() * 60000;
                 return new Date(dateObj.getTime() - tzoffset).toISOString().split('T')[0];
               })()
@@ -1051,17 +1056,17 @@ const CDLedger: React.FC = () => {
     // Outstanding values for payment purposes (always >= 0)
 
     const interestRate = Number(selectedLoan.interest_rate) || 3;
-    const renewalDue = Number((principalBalance * interestRate / 100).toFixed(2));
+    const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
+    const renewalDue = Number(((principalBalance * (interestRate / 100) * periodDays) / 30).toFixed(2));
 
     const outstandingInterest = renewCalculations.outstandingInterest || 0;
     const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
     const totalDue = outstandingInterest + outstandingPenalty;
 
-    // Total To Regularize = total_due + total_for_renewal
-    // Where:
-    //   total_due = outstanding_interest + outstanding_penalty
-    //   total_for_renewal = renewalDue
-    const totalToRegularize = Number((totalDue + renewalDue).toFixed(2));
+    // Total To Regularize = total_due + total_for_renewal (if there are active dues)
+    const totalToRegularize = (outstandingInterest === 0 && outstandingPenalty === 0)
+      ? 0
+      : Number((totalDue + renewalDue).toFixed(2));
 
     // Footer metrics synchronized with calculations and card values
     const currentTotalDues = (renewCalculations.daysPastDue || 0) <= 0
@@ -1132,7 +1137,7 @@ const CDLedger: React.FC = () => {
 
     const periodDays = (selectedLoan?.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
     const interestRate = Number(selectedLoan?.interest_rate) || 3;
-    const monthlyInterest = Number((principalBefore * interestRate / 100).toFixed(2));
+    const monthlyInterest = Number(((principalBefore * (interestRate / 100) * periodDays) / 30).toFixed(2));
     const dailyInterestValue = Number((monthlyInterest / periodDays).toFixed(5));
 
     const isClosingPayment = paymentAmount >= Math.max(0, ledgerMetrics.totalClose);
@@ -1391,7 +1396,7 @@ const CDLedger: React.FC = () => {
 
       const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
       const interestRate = Number(selectedLoan?.interest_rate) || 3;
-      const monthlyInterest = Number((principalBefore * interestRate / 100).toFixed(2));
+      const monthlyInterest = Number(((principalBefore * (interestRate / 100) * periodDays) / 30).toFixed(2));
 
       const isClosingPayment = actionType === 'Close' || paymentAmount >= Math.max(0, ledgerMetrics.totalClose);
 
