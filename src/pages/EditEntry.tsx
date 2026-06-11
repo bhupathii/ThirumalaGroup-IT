@@ -139,7 +139,6 @@ const EditEntry: React.FC = () => {
   
   // Calendar state
   const [showCalendar, setShowCalendar] = useState(false);
-  const [] = useState(new Date());
   const [entriesForSelectedDate, setEntriesForSelectedDate] = useState<any[]>([]);
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');

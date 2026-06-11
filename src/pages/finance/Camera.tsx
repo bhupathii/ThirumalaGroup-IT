@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import { supabaseFinance, FinanceLoan, FinanceCustomer, FinancePhoto } from '../../lib/supabaseFinance';
+import { supabase } from '../../lib/supabase';
 import { Camera as CameraIcon, Trash2, Check, Video, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -132,7 +133,7 @@ const Camera: React.FC = () => {
     if (!window.confirm('Delete this photo record?')) return;
     try {
       // In migrations we enabled cascade, we can delete the photo
-      const { error } = await require('../../lib/supabase').supabase
+      const { error } = await supabase
         .from('finance_photos')
         .delete()
         .eq('id', photoId);

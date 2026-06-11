@@ -4,7 +4,7 @@ import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { supabaseFinance, FinanceLoan, FinanceCustomer } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
-import { Save, X, Edit, Trash2, AlertCircle, Calendar, Info } from 'lucide-react';
+import { Save, X, Edit, Trash2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { CameraCapture } from '../../components/finance/CameraCapture';
@@ -109,12 +109,6 @@ const EditLoanEntry: React.FC = () => {
   const [suretyFingerprintUrl, setSuretyFingerprintUrl] = useState<string | null>(null);
   const [suretyFingerprintTemplate, setSuretyFingerprintTemplate] = useState<string | null>(null);
   const [suretyFingerprintAdded, setSuretyFingerprintAdded] = useState(false);
-  const [suretyPermanentVillage, setSuretyPermanentVillage] = useState('');
-  const [suretyPermanentMandal, setSuretyPermanentMandal] = useState('');
-  const [suretyPermanentDistrict, setSuretyPermanentDistrict] = useState('');
-  const [suretyCurrentVillage, setSuretyCurrentVillage] = useState('');
-  const [suretyCurrentMandal, setSuretyCurrentMandal] = useState('');
-  const [suretyCurrentDistrict, setSuretyCurrentDistrict] = useState('');
 
   // Activity Status
   const [hasLedgerActivity, setHasLedgerActivity] = useState(false);
@@ -216,22 +210,9 @@ const EditLoanEntry: React.FC = () => {
       if (fullLoan.guarantor_1_id) {
         const g = await supabaseFinance.getCustomerById(fullLoan.guarantor_1_id);
         if (g) {
-          setSuretyAadhaarAddress(g.aadhaar_address || g.permanent_address || fullLoan.surety_aadhaar_address || '');
-          setSuretyPresentAddress(g.present_address || g.current_address || g.address || fullLoan.surety_present_address || '');
-          setSuretyPermanentVillage(g.aadhaar_village || g.permanent_village || g.village || '');
-          setSuretyPermanentMandal(g.aadhaar_mandal || g.permanent_mandal || g.mandal || '');
-          setSuretyPermanentDistrict(g.aadhaar_district || g.permanent_district || g.district || '');
-          setSuretyCurrentVillage(g.present_village || g.current_village || '');
-          setSuretyCurrentMandal(g.present_mandal || g.current_mandal || '');
-          setSuretyCurrentDistrict(g.present_district || g.current_district || '');
+          setSuretyAadhaarAddress(g.aadhaar_address || fullLoan.surety_aadhaar_address || '');
+          setSuretyPresentAddress(g.present_address || g.address || fullLoan.surety_present_address || '');
         }
-      } else {
-        setSuretyPermanentVillage('');
-        setSuretyPermanentMandal('');
-        setSuretyPermanentDistrict('');
-        setSuretyCurrentVillage('');
-        setSuretyCurrentMandal('');
-        setSuretyCurrentDistrict('');
       }
 
       // Check ledger/transaction activity
