@@ -11,14 +11,14 @@ import { FinanceEditedLog } from '../lib/supabaseFinance';
 describe('EditedDeletedLogs UI Helper Functions', () => {
   describe('mapFieldLabel', () => {
     it('maps known database fields to human-friendly labels', () => {
-      expect(mapFieldLabel('amount')).toBe('Loan Amount');
-      expect(mapFieldLabel('interest_rate')).toBe('Interest Rate (%)');
-      expect(mapFieldLabel('due_type')).toBe('Due Type');
+      expect(mapFieldLabel('amount')).toBe('LOAN AMOUNT');
+      expect(mapFieldLabel('interest_rate')).toBe('INTEREST RATE (%)');
+      expect(mapFieldLabel('due_type')).toBe('DUE TYPE');
     });
 
     it('gracefully converts unknown snake_case fields to Title Case', () => {
-      expect(mapFieldLabel('custom_field_name')).toBe('Custom Field Name');
-      expect(mapFieldLabel('anotherField')).toBe('Another Field');
+      expect(mapFieldLabel('custom_field_name')).toBe('CUSTOM FIELD NAME');
+      expect(mapFieldLabel('anotherField')).toBe('ANOTHER FIELD');
     });
   });
 
@@ -42,8 +42,8 @@ describe('EditedDeletedLogs UI Helper Functions', () => {
     });
 
     it('formats boolean values as Yes/No', () => {
-      expect(formatLogValue('npa_closed', true)).toBe('Yes');
-      expect(formatLogValue('npa_closed', false)).toBe('No');
+      expect(formatLogValue('npa_closed', true)).toBe('YES');
+      expect(formatLogValue('npa_closed', false)).toBe('NO');
     });
 
     it('formats interest/penalty/rate fields as percentages', () => {
@@ -65,11 +65,11 @@ describe('EditedDeletedLogs UI Helper Functions', () => {
 
   describe('mapTableName', () => {
     it('maps database tables to friendly names', () => {
-      expect(mapTableName('finance_loans')).toBe('Loans');
-      expect(mapTableName('finance_customers')).toBe('Customers');
-      expect(mapTableName('finance_loans_collateral')).toBe('Collateral');
-      expect(mapTableName('finance_guarantors')).toBe('Guarantors');
-      expect(mapTableName('unknown_table')).toBe('unknown_table');
+      expect(mapTableName('finance_loans')).toBe('LOANS');
+      expect(mapTableName('finance_customers')).toBe('CUSTOMERS');
+      expect(mapTableName('finance_loans_collateral')).toBe('COLLATERAL');
+      expect(mapTableName('finance_guarantors')).toBe('GUARANTORS');
+      expect(mapTableName('unknown_table')).toBe('UNKNOWN_TABLE');
     });
   });
 

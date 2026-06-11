@@ -259,6 +259,8 @@ export interface FinanceNPARecord {
   interest_due: number;
   penalty_due: number;
   settlement_amount: number;
+  total_liability?: number;
+  waived_amount?: number;
   reason: string | null;
   full_history_json: any;
   closed_by: string | null;
@@ -309,6 +311,8 @@ export interface FinanceNPARecord {
   interest_due: number;
   penalty_due: number;
   settlement_amount: number;
+  total_liability?: number;
+  waived_amount?: number;
   reason: string | null;
   full_history_json: any | null;
   closed_by: string | null;
@@ -1808,6 +1812,26 @@ class SupabaseFinance {
         }
       }
 
+      // 4. Sync finance_npa_records if exists
+      const { data: npaRecord } = await supabase
+        .from('finance_npa_records')
+        .select('*')
+        .eq('loan_id', id)
+        .maybeSingle();
+
+      if (npaRecord) {
+        const newLiability = Number(data.amount) + Number(npaRecord.interest_due || 0) + Number(npaRecord.penalty_due || 0);
+        await supabase
+          .from('finance_npa_records')
+          .update({
+            loan_amount: Number(data.amount),
+            balance_amount: Number(data.amount),
+            total_liability: newLiability,
+            waived_amount: Math.max(0, newLiability - Number(npaRecord.settlement_amount || 0))
+          })
+          .eq('id', npaRecord.id);
+      }
+
       if (oldData && !skipLogging) {
         await this.logEdit('finance_loans', id, oldData, data, editedBy);
       }
@@ -2104,6 +2128,21 @@ class SupabaseFinance {
   }
 
   // --- Documents ---
+  async getLoanDocuments(loanId: string): Promise<FinanceLoanDocument[]> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_loan_documents')
+        .select('*')
+        .eq('loan_id', loanId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching finance loan documents:', error);
+      return [];
+    }
+  }
+
   async getDocuments(loanId: string): Promise<FinanceDocument[]> {
     try {
       const { data, error } = await supabase

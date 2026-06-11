@@ -53,6 +53,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     const [showCalendar, setShowCalendar] = useState(false);
     const [internalDateInput, setInternalDateInput] = useState('');
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const isFinance = typeof window !== 'undefined' && window.location.pathname.startsWith('/finance');
 
     useEffect(() => {
       if (type === 'date' && value) {
@@ -92,8 +93,9 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         return;
       }
 
-      // Apply uppercase transformation for text inputs when uppercase prop is true
-      if (uppercase && type !== 'number' && type !== 'date') {
+      // Apply uppercase transformation for text inputs when uppercase prop is true or we are in finance flow
+      const forceUpper = uppercase || isFinance;
+      if (forceUpper && type !== 'number' && type !== 'date' && type !== 'password') {
         val = val.toUpperCase();
       }
 
@@ -117,8 +119,6 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       )
       .slice(0, 5);
 
-      const isFinance = typeof window !== 'undefined' && window.location.pathname.startsWith('/finance');
-
     return (
       <div className={className} style={{ position: 'relative' }} ref={wrapperRef}>
         {label && (
@@ -140,7 +140,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
                   ? ''
                   : value === null || value === undefined
                     ? ''
-                    : uppercase && type !== 'number' 
+                    : (uppercase || isFinance) && type !== 'number' && type !== 'date' && type !== 'password'
                       ? String(value).toUpperCase()
                       : value
             }

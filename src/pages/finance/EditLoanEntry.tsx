@@ -4,11 +4,23 @@ import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { supabaseFinance, FinanceLoan, FinanceCustomer } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
-import { Save, X, Edit, Trash2, AlertCircle } from 'lucide-react';
+import { Save, X, Edit, Trash2, AlertCircle, Upload, CheckCircle, FileText, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { CameraCapture } from '../../components/finance/CameraCapture';
 import { BiometricScanner } from '../../components/finance/BiometricScanner';
+
+interface DocumentItem {
+  key: string;
+  label: string;
+  category: 'Financial' | 'Original' | 'Registration';
+  checked: boolean;
+  refNo: string;
+  fileUrl: string | null;
+  uploading: boolean;
+  isCustom?: boolean;
+  dbId?: string;
+}
 
 // Helper to format currency properly as Indian Rupees
 const formatRupee = (value: number) => {
@@ -109,6 +121,23 @@ const EditLoanEntry: React.FC = () => {
   const [suretyFingerprintUrl, setSuretyFingerprintUrl] = useState<string | null>(null);
   const [suretyFingerprintTemplate, setSuretyFingerprintTemplate] = useState<string | null>(null);
   const [suretyFingerprintAdded, setSuretyFingerprintAdded] = useState(false);
+
+  // Edit states - Documents Checklist (matches New Loan Entry 1:1)
+
+  const [documents, setDocuments] = useState<DocumentItem[]>([
+    { key: 'bank_statements', label: 'BANK STATEMENTS', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
+    { key: 'income_proof', label: 'INCOME PROOF / SAL', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
+    { key: 'it_returns_gst', label: 'IT RETURNS / GST', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
+    
+    { key: 'land_title_patta', label: 'LAND TITLE / PATTA', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
+    { key: 'property_deed', label: 'PROPERTY DEED', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
+    { key: 'vehicle_asset_paper', label: 'VEHICLE / ASSET PAP', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
+    
+    { key: 'joint_registration', label: 'JOINT REGISTRATION', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
+    { key: 'agreement_bond', label: 'AGREEMENT / BOND', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
+    { key: 'photograph', label: 'PHOTOGRAPH', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
+  ]);
+
 
   // Activity Status
   const [hasLedgerActivity, setHasLedgerActivity] = useState(false);
@@ -214,6 +243,56 @@ const EditLoanEntry: React.FC = () => {
           setSuretyPresentAddress(g.present_address || g.address || fullLoan.surety_present_address || '');
         }
       }
+
+      // Fetch documents for the loan and populate the categorized checklist
+      const docs = await supabaseFinance.getLoanDocuments(loan.id);
+
+
+      // Reset documents checklist to defaults first
+      const defaultDocs: DocumentItem[] = [
+        { key: 'bank_statements', label: 'BANK STATEMENTS', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
+        { key: 'income_proof', label: 'INCOME PROOF / SAL', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
+        { key: 'it_returns_gst', label: 'IT RETURNS / GST', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
+        { key: 'land_title_patta', label: 'LAND TITLE / PATTA', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
+        { key: 'property_deed', label: 'PROPERTY DEED', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
+        { key: 'vehicle_asset_paper', label: 'VEHICLE / ASSET PAP', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
+        { key: 'joint_registration', label: 'JOINT REGISTRATION', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
+        { key: 'agreement_bond', label: 'AGREEMENT / BOND', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
+        { key: 'photograph', label: 'PHOTOGRAPH', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
+      ];
+
+      // Match DB docs to default checklist items
+      const matchedDbIds = new Set<string>();
+      const updatedDocs = defaultDocs.map(d => {
+        const matched = docs.find((x: any) => x.document_name.toUpperCase().includes(d.label.toUpperCase()));
+        if (matched) {
+          matchedDbIds.add(matched.id);
+          return { ...d, checked: true, refNo: matched.remarks || '', fileUrl: matched.file_url || null, dbId: matched.id };
+        }
+        return d;
+      });
+
+      // Add any extra DB docs that didn't match defaults as custom entries
+      docs.forEach((dbDoc: any) => {
+        if (!matchedDbIds.has(dbDoc.id)) {
+          const cat = dbDoc.category === 'Financial' ? 'Financial' : dbDoc.category === 'Registration' ? 'Registration' : 'Original';
+          updatedDocs.push({
+            key: `db_${dbDoc.id}`,
+            label: dbDoc.document_name,
+            category: cat as 'Financial' | 'Original' | 'Registration',
+            checked: true,
+            refNo: dbDoc.remarks || '',
+            fileUrl: dbDoc.file_url || null,
+            uploading: false,
+            isCustom: true,
+            dbId: dbDoc.id,
+          });
+        }
+      });
+
+      setDocuments(updatedDocs);
+
+
 
       // Check ledger/transaction activity
       const entries = await supabaseFinance.getCDLedgerEntries(loan.id);
@@ -389,12 +468,12 @@ const EditLoanEntry: React.FC = () => {
       // 1. Update customer record
       if (selectedLoan.customer?.id && customerChanged) {
         await supabaseFinance.updateCustomer(selectedLoan.customer.id, {
-          name: custName,
+          name: custName.toUpperCase(),
           phone: custPhone || null,
           phone_1: custPhone || null,
           phone_2: custPhone2 || null,
           phone2: custPhone2 || null,
-          address: custPresentAddress || custAddress || null,
+          address: (custPresentAddress || custAddress || null)?.toUpperCase(),
           aadhaar: custAadhaar || null,
           customer_photo_url: custPhoto,
           fingerprint_url: custFingerprintUrl,
@@ -403,13 +482,13 @@ const EditLoanEntry: React.FC = () => {
           customer_fingerprint_template: custFingerprintTemplate,
           customer_fingerprint_image_url: custFingerprintUrl,
           customer_fingerprint_added: custFingerprintAdded,
-          father_husband_name: custFatherHusbandName || null,
-          father_name: custFatherHusbandName || null,
-          village: custVillage || null,
-          mandal: custMandal || null,
-          district: custDistrict || null,
-          aadhaar_address: custAadhaarAddress || null,
-          present_address: custPresentAddress || null
+          father_husband_name: (custFatherHusbandName || null)?.toUpperCase(),
+          father_name: (custFatherHusbandName || null)?.toUpperCase(),
+          village: (custVillage || null)?.toUpperCase(),
+          mandal: (custMandal || null)?.toUpperCase(),
+          district: (custDistrict || null)?.toUpperCase(),
+          aadhaar_address: (custAadhaarAddress || null)?.toUpperCase(),
+          present_address: (custPresentAddress || null)?.toUpperCase()
         }, staffName, true); // skip generic logging
       }
 
@@ -423,12 +502,12 @@ const EditLoanEntry: React.FC = () => {
           due_type: dueType,
           due_amount: Number(dueAmount),
           status,
-          remarks: serializeNewRemarks,
-          surety_name: suretyName || null,
+          remarks: serializeNewRemarks.toUpperCase(),
+          surety_name: (suretyName || null)?.toUpperCase(),
           surety_phone: suretyPhone || null,
           surety_aadhaar: suretyAadhaar || null,
-          surety_aadhaar_address: suretyAadhaarAddress || null,
-          surety_present_address: suretyPresentAddress || null,
+          surety_aadhaar_address: (suretyAadhaarAddress || null)?.toUpperCase(),
+          surety_present_address: (suretyPresentAddress || null)?.toUpperCase(),
           customer_photo_url: custPhoto,
           surety_photo_url: suretyPhoto,
           fingerprint_url: custFingerprintUrl,
@@ -440,7 +519,7 @@ const EditLoanEntry: React.FC = () => {
           surety_fingerprint_template: suretyFingerprintTemplate,
           surety_fingerprint_image_url: suretyFingerprintUrl,
           surety_fingerprint_added: suretyFingerprintAdded,
-          father_husband_name: custFatherHusbandName || null,
+          father_husband_name: (custFatherHusbandName || null)?.toUpperCase(),
           loan_category: loanCategory,
           penalty_percent: Number(penaltyPercent),
           document_charges: Number(docCharges),
@@ -473,6 +552,60 @@ const EditLoanEntry: React.FC = () => {
         if ((reloaded.customer.phone || '') !== (custPhone || '')) mismatches.push('Borrower Phone');
         if ((reloaded.customer.address || '') !== (custAddress || '')) mismatches.push('Borrower Address');
         if ((reloaded.customer.aadhaar || '') !== (custAadhaar || '')) mismatches.push('Borrower Aadhaar');
+      }
+
+      // Verify sync in DB (Correction 6)
+      const [{ data: verTxs }, { data: verEntries }, { data: verDues }] = await Promise.all([
+        supabase.from('finance_transactions').select('*').eq('loan_id', selectedLoan.id).eq('type', 'Disbursement'),
+        supabase.from('finance_cd_ledger_entries').select('*').eq('loan_id', selectedLoan.id),
+        supabase.from('finance_dues').select('*').eq('loan_id', selectedLoan.id)
+      ]);
+
+      if (verTxs && verTxs.length > 0) {
+        if (Number(verTxs[0].amount) !== Number(amount)) {
+          mismatches.push('Transaction Sync (Disbursement Amount)');
+        }
+      }
+      if (loanCategory === 'CD' && verEntries) {
+        const origEntry = verEntries.find((e: any) => e.entry_type === 'original_loan');
+        if (origEntry && Number(origEntry.debit) !== Number(amount)) {
+          mismatches.push('CD Ledger Sync (Original Loan Debit)');
+        }
+
+        const commRate = Number(interestRate);
+        const pDays = Number(periodDays) || 30;
+        const expectedComm = Number(((Number(amount) * (commRate / 100) * pDays) / 30).toFixed(2));
+        const expectedDoc = Number(docCharges);
+
+        const commEntry = verEntries.find((e: any) => e.entry_type === 'opening_commission');
+        const docEntry = verEntries.find((e: any) => e.entry_type === 'document_charge');
+
+        if (expectedComm > 0 && (!commEntry || Number(commEntry.credit) !== expectedComm)) {
+          mismatches.push('CD Ledger Sync (Opening Commission)');
+        }
+        if (expectedDoc > 0 && (!docEntry || Number(docEntry.credit) !== expectedDoc)) {
+          mismatches.push('CD Ledger Sync (Document Charges)');
+        }
+      }
+      if (loanCategory !== 'CD' && verDues && verDues.length > 0) {
+        const expectedDue = Number(dueAmount);
+        const incorrectDues = verDues.filter(d => Number(d.amount) !== expectedDue);
+        if (incorrectDues.length > 0) {
+          mismatches.push(`Dues Sync (${incorrectDues.length} dues have incorrect amount)`);
+        }
+      }
+      const { data: verNpa } = await supabase.from('finance_npa_records').select('*').eq('loan_id', selectedLoan.id).maybeSingle();
+      if (verNpa) {
+        if (Number(verNpa.loan_amount) !== Number(amount)) {
+          mismatches.push('NPA Record Sync (Loan Amount)');
+        }
+        const expectedLiability = Number(amount) + Number(verNpa.interest_due || 0) + Number(verNpa.penalty_due || 0);
+        const actualLiability = Number(verNpa.total_liability) > 0 
+          ? Number(verNpa.total_liability) 
+          : (Number(verNpa.balance_amount || 0) + Number(verNpa.interest_due || 0) + Number(verNpa.penalty_due || 0));
+        if (actualLiability !== expectedLiability) {
+          mismatches.push('NPA Record Sync (Total Liability)');
+        }
       }
 
       if (mismatches.length > 0) {
@@ -578,6 +711,9 @@ const EditLoanEntry: React.FC = () => {
         if (auditError) throw auditError;
       }
 
+      // Save documents checklist to DB
+      await handleEditDocSave(selectedLoan.id);
+
       toast.success(`Loan details for Account ${selectedLoan.loan_id} updated and individual logs recorded!`, { id: savingToastId });
       setSelectedLoan(null);
       fetchLoans();
@@ -603,6 +739,59 @@ const EditLoanEntry: React.FC = () => {
       }
     } catch (err) {
       console.error(err);
+      toast.error('Failed to delete loan');
+    }
+  };
+
+  // Upload checklist document to storage (matches New Loan Entry 1:1)
+  const handleChecklistUpload = async (key: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setDocuments(prev => prev.map(doc => doc.key === key ? { ...doc, uploading: true } : doc));
+
+    try {
+      const fileObj = new File([file], `doc-${selectedLoan?.loan_id || 'edit'}-${key}-${Date.now()}-${file.name}`, { type: file.type });
+
+      const { data, error } = await supabase.storage
+        .from('finance-photos')
+        .upload(`documents/${fileObj.name}`, fileObj);
+
+      if (error) throw error;
+
+      const publicUrl = supabase.storage
+        .from('finance-photos')
+        .getPublicUrl(data.path).data.publicUrl;
+
+      setDocuments(prev => prev.map(doc => doc.key === key ? { ...doc, checked: true, fileUrl: publicUrl, uploading: false } : doc));
+      toast.success('DOCUMENT UPLOADED AND ATTACHED SUCCESSFULLY!');
+    } catch (err) {
+      console.error(err);
+      toast.error('DOCUMENT UPLOAD FAILED');
+      setDocuments(prev => prev.map(doc => doc.key === key ? { ...doc, uploading: false } : doc));
+    }
+  };
+
+  const removeChecklistUpload = (key: string) => {
+    setDocuments(prev => prev.map(doc => doc.key === key ? { ...doc, fileUrl: null } : doc));
+    toast.success('ATTACHMENT DETACHED');
+  };
+
+  // Save all documents to the DB when the main form is saved
+  const handleEditDocSave = async (loanId: string) => {
+    const linkedDocs = documents.filter(doc => doc.checked || doc.fileUrl).map(doc => ({
+      loan_id: loanId,
+      document_name: doc.label,
+      category: doc.category,
+      ref_no: doc.refNo || '',
+      file_url: doc.fileUrl || '',
+      is_submitted: doc.checked,
+    }));
+
+    // Delete existing docs and re-insert
+    await supabase.from('finance_loan_documents').delete().eq('loan_id', loanId);
+    if (linkedDocs.length > 0) {
+      await supabase.from('finance_loan_documents').insert(linkedDocs);
     }
   };
 
@@ -617,12 +806,13 @@ const EditLoanEntry: React.FC = () => {
       </div>
 
       {selectedLoan ? (
-        // Editing View Form
-        <Card
-          title={`Edit Loan Account: ${selectedLoan.loan_id}`}
-          subtitle={`Editing profile for ${selectedLoan.customer?.name}`}
-          className="border-green-200"
-        >
+        <>
+          {/* Editing View Form */}
+          <Card
+            title={`Edit Loan Account: ${selectedLoan.loan_id}`}
+            subtitle={`Editing profile for ${selectedLoan.customer?.name}`}
+            className="border-green-200"
+          >
           {hasLedgerActivity && (
             <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-6 rounded-r-lg flex gap-3 items-start shadow-sm">
               <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
@@ -904,6 +1094,238 @@ const EditLoanEntry: React.FC = () => {
             </div>
           </form>
         </Card>
+
+        {/* DOCUMENTS SECTION - Edit Loan Style */}
+        <Card
+          title="LOAN DOCUMENTS"
+          subtitle={`REVIEW, UPDATE AND MANAGE DOCUMENTS FOR ${selectedLoan.loan_id}`}
+          className="mt-6 border-blue-200"
+        >
+          {/* Completion Summary */}
+          {(() => {
+            const total = documents.length;
+            const submitted = documents.filter(d => d.checked || d.fileUrl).length;
+            const withFile = documents.filter(d => d.fileUrl).length;
+            const checkedNoFile = documents.filter(d => d.checked && !d.fileUrl).length;
+            const pct = total > 0 ? Math.round((submitted / total) * 100) : 0;
+            return (
+              <div className={`p-4 rounded-lg mb-5 border-l-4 flex items-center justify-between ${pct === 100 ? 'bg-green-50 border-green-500' : pct > 0 ? 'bg-blue-50 border-blue-500' : 'bg-slate-50 border-slate-300'}`}>
+                <div className="flex items-center gap-3">
+                  {pct === 100 ? (
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <FileText className="w-5 h-5 text-blue-600" />
+                  )}
+                  <div>
+                    <p className={`text-sm font-bold uppercase ${pct === 100 ? 'text-green-800' : 'text-slate-800'}`}>
+                      {submitted} OF {total} DOCUMENTS SUBMITTED ({pct}%)
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5 uppercase">
+                      {withFile > 0 && `${withFile} WITH DIGITAL FILE`}
+                      {withFile > 0 && checkedNoFile > 0 && ' · '}
+                      {checkedNoFile > 0 && `${checkedNoFile} PHYSICAL ONLY`}
+                      {(withFile > 0 || checkedNoFile > 0) && (total - submitted) > 0 && ' · '}
+                      {(total - submitted) > 0 && `${total - submitted} PENDING`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-full uppercase">
+                    FIN {documents.filter(d => d.category === 'Financial' && (d.checked || d.fileUrl)).length}/{documents.filter(d => d.category === 'Financial').length}
+                  </span>
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-full uppercase">
+                    ORIG {documents.filter(d => d.category === 'Original' && (d.checked || d.fileUrl)).length}/{documents.filter(d => d.category === 'Original').length}
+                  </span>
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-full uppercase">
+                    REG {documents.filter(d => d.category === 'Registration' && (d.checked || d.fileUrl)).length}/{documents.filter(d => d.category === 'Registration').length}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Document Tables by Category */}
+          {(['Financial', 'Original', 'Registration'] as const).map((cat, catIdx) => {
+            const catDocs = documents.filter(d => d.category === cat);
+            const catSubmitted = catDocs.filter(d => d.checked || d.fileUrl).length;
+
+            let catLabel = '';
+            if (cat === 'Financial') catLabel = 'FINANCIAL DOCUMENTS';
+            if (cat === 'Original') catLabel = 'ORIGINAL DOCUMENTS (LAND, ASSETS)';
+            if (cat === 'Registration') catLabel = 'REGISTRATION DOCUMENTS (BONDS, STAMPS)';
+
+            return (
+              <div key={catIdx} className="mb-6 last:mb-0">
+                {/* Category Header */}
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="text-gray-800 border-b pb-1 finance-section-heading flex items-center gap-2">
+                    {catIdx + 1}. {catLabel}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ml-1 ${
+                      catSubmitted === catDocs.length && catDocs.length > 0
+                        ? 'bg-green-100 text-green-700 border border-green-200'
+                        : catSubmitted > 0
+                          ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                          : 'bg-slate-100 text-slate-500 border border-slate-200'
+                    }`}>
+                      {catSubmitted}/{catDocs.length}
+                    </span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newDoc: DocumentItem = {
+                        key: `custom_${Date.now()}_${Math.random()}`,
+                        label: '',
+                        category: cat,
+                        checked: true,
+                        refNo: '',
+                        fileUrl: null,
+                        uploading: false,
+                        isCustom: true
+                      };
+                      setDocuments(prev => [...prev, newDoc]);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 rounded-md transition-colors text-xs font-bold uppercase"
+                  >
+                    + ADD DOCUMENT
+                  </button>
+                </div>
+
+                {/* Table */}
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-xs">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2.5 text-left font-bold text-slate-900 uppercase tracking-wider w-10"></th>
+                        <th className="px-3 py-2.5 text-left font-bold text-slate-900 uppercase tracking-wider w-[100px]">STATUS</th>
+                        <th className="px-3 py-2.5 text-left font-bold text-slate-900 uppercase tracking-wider">DOCUMENT NAME</th>
+                        <th className="px-3 py-2.5 text-left font-bold text-slate-900 uppercase tracking-wider">REF NO. / REMARKS</th>
+                        <th className="px-3 py-2.5 text-right font-bold text-slate-900 uppercase tracking-wider w-[260px]">ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {catDocs.map((doc) => {
+                        const hasFile = !!doc.fileUrl;
+                        const isChecked = doc.checked;
+                        const rowClass = hasFile
+                          ? 'bg-green-50/50'
+                          : isChecked
+                            ? 'bg-amber-50/40'
+                            : '';
+
+                        return (
+                          <tr key={doc.key} className={`hover:bg-gray-50 transition-colors ${rowClass}`}>
+                            {/* Checkbox */}
+                            <td className="px-3 py-3">
+                              <input
+                                type="checkbox"
+                                checked={doc.checked}
+                                onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, checked: e.target.checked } : d))}
+                                className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-600"
+                              />
+                            </td>
+
+                            {/* Status Badge */}
+                            <td className="px-3 py-3">
+                              {hasFile ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 uppercase border border-green-200">
+                                  <CheckCircle className="w-3 h-3" /> UPLOADED
+                                </span>
+                              ) : isChecked ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 uppercase border border-amber-200">
+                                  <AlertCircle className="w-3 h-3" /> NO FILE
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 uppercase border border-slate-200">
+                                  PENDING
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Document Name */}
+                            <td className="px-3 py-3">
+                              {doc.isCustom ? (
+                                <input
+                                  type="text"
+                                  value={doc.label}
+                                  onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, label: e.target.value } : d))}
+                                  placeholder="ENTER DOCUMENT NAME"
+                                  className="w-full bg-white border border-slate-200 rounded-md px-3 py-1.5 text-sm text-slate-800 font-bold focus:outline-none focus:border-blue-300 uppercase"
+                                />
+                              ) : (
+                                <span className="font-bold text-slate-900 uppercase text-sm">{doc.label}</span>
+                              )}
+                            </td>
+
+                            {/* Ref No */}
+                            <td className="px-3 py-3">
+                              <input
+                                type="text"
+                                value={doc.refNo}
+                                onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, refNo: e.target.value } : d))}
+                                placeholder="REF NO., AUTHORITY..."
+                                className="w-full bg-white border border-slate-200 rounded-md px-3 py-1.5 text-sm text-slate-600 uppercase focus:outline-none focus:border-blue-300 placeholder:text-slate-300"
+                              />
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-3 py-3 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                {hasFile && (
+                                  <a
+                                    href={doc.fileUrl!}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 bg-green-50 border border-green-200 text-green-700 px-2.5 py-1.5 rounded hover:bg-green-100 text-[10px] font-bold uppercase transition-all"
+                                  >
+                                    <Eye className="w-3 h-3" /> VIEW
+                                  </a>
+                                )}
+
+                                <label className="cursor-pointer inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 px-2.5 py-1.5 rounded hover:bg-blue-100 text-[10px] font-bold uppercase transition-all">
+                                  <Upload className="w-3 h-3" />
+                                  {doc.uploading ? 'UPLOADING...' : hasFile ? 'REPLACE' : 'UPLOAD'}
+                                  <input
+                                    type="file"
+                                    accept="image/*,.pdf"
+                                    onChange={(e) => handleChecklistUpload(doc.key, e)}
+                                    className="hidden"
+                                    disabled={doc.uploading}
+                                  />
+                                </label>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (doc.isCustom) {
+                                      setDocuments(prev => prev.filter(d => d.key !== doc.key));
+                                    } else {
+                                      if (doc.fileUrl) {
+                                        removeChecklistUpload(doc.key);
+                                      }
+                                      setDocuments(prev => prev.map(d =>
+                                        d.key === doc.key ? { ...d, checked: false, refNo: '', fileUrl: null } : d
+                                      ));
+                                    }
+                                  }}
+                                  className="bg-red-50 border border-red-200 text-red-700 px-2 py-1.5 rounded hover:bg-red-100 text-[10px] font-bold uppercase transition-all"
+                                  title={doc.isCustom ? 'Remove Document' : 'Reset Document'}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+        </>
       ) : (
         // Searching & Listing View
         <div className="space-y-4">

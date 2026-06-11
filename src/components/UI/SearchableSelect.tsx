@@ -36,6 +36,7 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
     },
     ref
   ) => {
+    const isFinance = typeof window !== 'undefined' && window.location.pathname.startsWith('/finance');
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -192,7 +193,7 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newSearchTerm = e.target.value;
+      const newSearchTerm = isFinance ? e.target.value.toUpperCase() : e.target.value;
       setSearchTerm(newSearchTerm);
       
       // If user is typing and dropdown is closed, open it
@@ -223,8 +224,6 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
       }
     };
 
-    const isFinance = typeof window !== 'undefined' && window.location.pathname.startsWith('/finance');
-
     return (
       <div className={`relative ${className}`} ref={dropdownRef}>
         {label && (
@@ -243,7 +242,7 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
           <input
             ref={inputRef}
             type='text'
-            value={isOpen ? searchTerm : (className.includes('staff-field') ? displayValue.toUpperCase() : displayValue)}
+            value={isOpen ? searchTerm : ((className.includes('staff-field') || isFinance) ? displayValue.toUpperCase() : displayValue)}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onClick={handleInputClick}
@@ -258,12 +257,12 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
             aria-controls={isOpen && label ? `${label.replace(/\s+/g, '-').toLowerCase()}-listbox` : undefined}
             className={`w-full pr-20 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed font-bold ${
               size === 'sm' ? 'px-2 py-1 text-sm' : size === 'lg' ? 'px-4 py-3 text-lg' : 'px-3 py-2 text-base'
-            } ${className.includes('staff-field') ? 'uppercase' : ''}`}
-            style={isFinance ? { ...(className.includes('staff-field') ? { textTransform: 'uppercase' } : {}) } : { 
+            } ${(className.includes('staff-field') || isFinance) ? 'uppercase' : ''}`}
+            style={isFinance ? { textTransform: 'uppercase' } : { 
               fontFamily: 'Times New Roman', 
               fontSize: '14px',
               fontWeight: 'bold',
-              ...(className.includes('staff-field') ? { textTransform: 'uppercase' } : {})
+              ...((className.includes('staff-field') || isFinance) ? { textTransform: 'uppercase' } : {})
             }}
           />
           
@@ -326,7 +325,7 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
                   onClick={() => handleSelect(option.value)}
                   onMouseEnter={() => setHighlightedIndex(index)}
                 >
-                  {className.includes('staff-field') ? option.label.toUpperCase() : option.label}
+                  {(className.includes('staff-field') || isFinance) ? option.label.toUpperCase() : option.label}
                 </div>
               ))
             ) : (

@@ -30,64 +30,64 @@ export const ignoredKeys = new Set([
 
 export const keyLabelMap: Record<string, string> = {
   id: 'ID',
-  created_at: 'Created At',
-  updated_at: 'Updated At',
-  deleted_at: 'Deleted At',
-  notes: 'Notes',
-  remarks: 'Remarks',
-  status: 'Status',
-  name: 'Name',
-  phone: 'Phone',
-  phone_1: 'Phone 1',
-  phone_2: 'Phone 2',
-  phone2: 'Phone 2',
-  address: 'Address',
-  aadhaar: 'Aadhaar Number',
-  father_name: 'Father/Husband Name',
-  father_husband_name: 'Father/Husband Name',
-  village: 'Village',
-  mandal: 'Mandal',
-  district: 'District',
-  state: 'State',
-  pincode: 'Pincode',
-  landmark: 'Landmark',
+  created_at: 'CREATED AT',
+  updated_at: 'UPDATED AT',
+  deleted_at: 'DELETED AT',
+  notes: 'NOTES',
+  remarks: 'REMARKS',
+  status: 'STATUS',
+  name: 'NAME',
+  phone: 'PHONE',
+  phone_1: 'PHONE 1',
+  phone_2: 'PHONE 2',
+  phone2: 'PHONE 2',
+  address: 'ADDRESS',
+  aadhaar: 'AADHAAR NUMBER',
+  father_name: 'FATHER/HUSBAND NAME',
+  father_husband_name: 'FATHER/HUSBAND NAME',
+  village: 'VILLAGE',
+  mandal: 'MANDAL',
+  district: 'DISTRICT',
+  state: 'STATE',
+  pincode: 'PINCODE',
+  landmark: 'LANDMARK',
 
-  loan_id: 'Loan Number',
-  customer_id: 'Customer ID',
-  date: 'Loan Date',
-  amount: 'Loan Amount',
-  interest_rate: 'Interest Rate (%)',
-  duration_months: 'Period (Months)',
-  period_days: 'Period (Days)',
-  due_type: 'Due Type',
-  due_amount: 'Due Amount',
-  surety_name: 'Surety Name',
-  surety_phone: 'Surety Phone',
-  surety_aadhaar: 'Surety Aadhaar',
-  surety_relation: 'Surety Relation',
-  surety_aadhaar_address: 'Surety Aadhaar Address',
-  surety_present_address: 'Surety Present Address',
-  loan_category: 'Loan Category',
-  npa_closed: 'NPA Closed',
-  document_charges: 'Document Charges',
-  penalty_percent: 'Penalty Rate (%)',
-  guarantor_1_id: 'Guarantor 1 ID',
-  guarantor_2_id: 'Guarantor 2 ID',
+  loan_id: 'LOAN NUMBER',
+  customer_id: 'CUSTOMER ID',
+  date: 'LOAN DATE',
+  amount: 'LOAN AMOUNT',
+  interest_rate: 'INTEREST RATE (%)',
+  duration_months: 'PERIOD (MONTHS)',
+  period_days: 'PERIOD (DAYS)',
+  due_type: 'DUE TYPE',
+  due_amount: 'DUE AMOUNT',
+  surety_name: 'SURETY NAME',
+  surety_phone: 'SURETY PHONE',
+  surety_aadhaar: 'SURETY AADHAAR',
+  surety_relation: 'SURETY RELATION',
+  surety_aadhaar_address: 'SURETY AADHAAR ADDRESS',
+  surety_present_address: 'SURETY PRESENT ADDRESS',
+  loan_category: 'LOAN CATEGORY',
+  npa_closed: 'NPA CLOSED',
+  document_charges: 'DOCUMENT CHARGES',
+  penalty_percent: 'PENALTY RATE (%)',
+  guarantor_1_id: 'GUARANTOR 1 ID',
+  guarantor_2_id: 'GUARANTOR 2 ID',
 
-  gps_latitude: 'GPS Latitude',
-  gps_longitude: 'GPS Longitude',
-  google_maps_link: 'Google Maps Link',
-  collateral_image: 'Collateral Image',
-  collateral_address: 'Collateral Address',
-  particulars: 'Item Details / Particulars',
-  extraDetails: 'Extra Details',
+  gps_latitude: 'GPS LATITUDE',
+  gps_longitude: 'GPS LONGITUDE',
+  google_maps_link: 'GOOGLE MAPS LINK',
+  collateral_image: 'COLLATERAL IMAGE',
+  collateral_address: 'COLLATERAL ADDRESS',
+  particulars: 'ITEM DETAILS / PARTICULARS',
+  extraDetails: 'EXTRA DETAILS',
 
-  guarantor_id: 'Guarantor ID',
-  permanent_address: 'Permanent Address',
-  current_address: 'Current Address',
-  fingerprint_id: 'Fingerprint ID',
-  fingerprint_added: 'Fingerprint Added',
-  fingerprint_status: 'Fingerprint Status',
+  guarantor_id: 'GUARANTOR ID',
+  permanent_address: 'PERMANENT ADDRESS',
+  current_address: 'CURRENT ADDRESS',
+  fingerprint_id: 'FINGERPRINT ID',
+  fingerprint_added: 'FINGERPRINT ADDED',
+  fingerprint_status: 'FINGERPRINT STATUS',
 };
 
 export const mapFieldLabel = (field: string): string => {
@@ -97,7 +97,7 @@ export const mapFieldLabel = (field: string): string => {
     .replace(/([A-Z])/g, ' $1')
     .trim()
     .split(/\s+/)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .map(word => word.toUpperCase())
     .join(' ');
 };
 
@@ -107,7 +107,7 @@ export const formatDateHuman = (dateStr: string): string => {
   if (isNaN(date.getTime())) return '-';
   
   const day = String(date.getDate()).padStart(2, '0');
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   const month = months[date.getMonth()];
   const year = date.getFullYear();
   
@@ -123,16 +123,16 @@ export const formatDateHuman = (dateStr: string): string => {
 
 export const formatLogValue = (field: string, val: any): string => {
   if (val === null || val === undefined) return '-';
-  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  if (typeof val === 'boolean') return val ? 'YES' : 'NO';
 
   const fieldLower = field.toLowerCase();
-  
   const numVal = Number(val);
+  
   if (!isNaN(numVal) && typeof val !== 'string') {
     if (fieldLower.includes('rate') || fieldLower.includes('percent') || fieldLower.includes('interest')) {
       return `${numVal}%`;
     }
-    if (fieldLower.includes('amount') || fieldLower.includes('charge') || fieldLower.includes('fee') || fieldLower.includes('balance') || fieldLower === 'debit' || fieldLower === 'credit') {
+    if (fieldLower.includes('amount') || fieldLower.includes('charge') || fieldLower.includes('fee') || fieldLower.includes('balance') || fieldLower === 'debit' || fieldLower === 'credit' || fieldLower.includes('liability')) {
       return new Intl.NumberFormat('en-IN', {
         style: 'currency',
         currency: 'INR',
@@ -142,7 +142,7 @@ export const formatLogValue = (field: string, val: any): string => {
   } else if (typeof val === 'string') {
     const parsedNum = Number(val);
     if (!isNaN(parsedNum) && val.trim() !== '') {
-      if (fieldLower.includes('amount') || fieldLower.includes('charge') || fieldLower.includes('fee') || fieldLower.includes('balance')) {
+      if (fieldLower.includes('amount') || fieldLower.includes('charge') || fieldLower.includes('fee') || fieldLower.includes('balance') || fieldLower.includes('liability')) {
         return new Intl.NumberFormat('en-IN', {
           style: 'currency',
           currency: 'INR',
@@ -161,21 +161,21 @@ export const formatLogValue = (field: string, val: any): string => {
 export const mapTableName = (table: string): string => {
   switch (table) {
     case 'finance_loans':
-      return 'Loans';
+      return 'LOANS';
     case 'finance_customers':
-      return 'Customers';
+      return 'CUSTOMERS';
     case 'finance_loans_collateral':
-      return 'Collateral';
+      return 'COLLATERAL';
     case 'finance_guarantors':
-      return 'Guarantors';
+      return 'GUARANTORS';
     case 'finance_partners':
-      return 'Partners';
+      return 'PARTNERS';
     case 'finance_capital_entries':
-      return 'Capital Entries';
+      return 'CAPITAL ENTRIES';
     case 'finance_cashbook_entries':
-      return 'Cashbook Entries';
+      return 'CASHBOOK ENTRIES';
     default:
-      return table;
+      return table.toUpperCase();
   }
 };
 
@@ -204,7 +204,7 @@ export const flattenLog = (log: FinanceEditedLog): FlattenedLog[] => {
     const field = newVals.field_name;
     const oldValue = 'value' in oldVals ? oldVals.value : (oldVals[field] !== undefined ? oldVals[field] : null);
     const newValue = newVals.value !== undefined ? newVals.value : (newVals[field] !== undefined ? newVals[field] : null);
-    const source = newVals.source || 'Edit Loan';
+    const source = newVals.source || 'EDIT LOAN';
     const loanNo = newVals.loan_number || oldVals.loan_number || '';
     const customer = newVals.customer_name || oldVals.customer_name || '';
 
@@ -261,7 +261,7 @@ export const flattenLog = (log: FinanceEditedLog): FlattenedLog[] => {
         field: key,
         oldValue: oldV,
         newValue: newV,
-        source: 'System',
+        source: 'SYSTEM',
         loanNo,
         customer,
         rawLog: log,
@@ -313,27 +313,27 @@ const EditedDeletedLogs: React.FC = () => {
       setCustomers(c);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load logs registry');
+      toast.error('FAILED TO LOAD LOGS REGISTRY');
     } finally {
       setLoading(false);
     }
   };
 
   const handleRestore = async (log: FinanceDeletedLog) => {
-    if (!window.confirm(`Are you sure you want to restore this deleted record back to ${log.table_name}?`)) return;
+    if (!window.confirm(`ARE YOU SURE YOU WANT TO RESTORE THIS DELETED RECORD BACK TO ${log.table_name.toUpperCase()}?`)) return;
     setRestoring(log.id);
     try {
-      const staffName = user?.username || 'Staff';
+      const staffName = user?.username || 'STAFF';
       const success = await supabaseFinance.restoreDeletedRecord(log.id, log.table_name, log.old_values, staffName);
       if (success) {
-        toast.success('Record successfully restored!');
+        toast.success('RECORD SUCCESSFULLY RESTORED!');
         fetchLogs();
       } else {
-        toast.error('Failed to restore record');
+        toast.error('FAILED TO RESTORE RECORD');
       }
     } catch (err) {
       console.error(err);
-      toast.error('Restoration error');
+      toast.error('RESTORATION ERROR');
     } finally {
       setRestoring(null);
     }
@@ -491,16 +491,16 @@ const EditedDeletedLogs: React.FC = () => {
     switch (log.table_name) {
       case 'finance_loans': {
         const custName = customerMap[vals.customer_id] || '';
-        return `Loan Number: ${vals.loan_id || '-'} ${custName ? `(${custName})` : ''}`;
+        return `LOAN NUMBER: ${vals.loan_id || '-'} ${custName ? `(${custName})` : ''}`;
       }
       case 'finance_customers':
-        return `Customer: ${vals.name || '-'}`;
+        return `CUSTOMER: ${vals.name || '-'}`;
       case 'finance_guarantors':
-        return `Guarantor: ${vals.name || '-'}`;
+        return `GUARANTOR: ${vals.name || '-'}`;
       case 'finance_loans_collateral':
-        return `Collateral for Loan UUID: ${vals.loan_id || '-'}`;
+        return `COLLATERAL FOR LOAN UUID: ${vals.loan_id || '-'}`;
       default:
-        return `Record ID: ${log.record_id}`;
+        return `RECORD ID: ${log.record_id}`;
     }
   };
 
@@ -532,7 +532,7 @@ const EditedDeletedLogs: React.FC = () => {
         if (itemDate < start) return false;
       }
       if (filterEndDate) {
-        const end = new Date(filterEndDate);
+        const end = new Date(log.deleted_at);
         end.setHours(23, 59, 59, 999);
         const itemDate = new Date(log.deleted_at);
         if (itemDate > end) return false;
@@ -564,13 +564,78 @@ const EditedDeletedLogs: React.FC = () => {
     );
   };
 
+  // Render a clean readable card from a log change
+  const renderReadableCard = (field: string, oldVal: any, newVal: any, changedBy: string, changedOn: string) => {
+    return (
+      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm max-w-sm space-y-3 font-sans">
+        <div>
+          <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">FIELD:</div>
+          <div className="text-sm font-bold text-slate-950 uppercase">{mapFieldLabel(field)}</div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">OLD VALUE:</div>
+            <div className="text-sm font-semibold text-rose-700">{formatLogValue(field, oldVal)}</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">NEW VALUE:</div>
+            <div className="text-sm font-semibold text-emerald-700">{formatLogValue(field, newVal)}</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2">
+          <div>
+            <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">CHANGED BY:</div>
+            <div className="text-xs font-semibold text-slate-950 uppercase">{changedBy}</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">CHANGED ON:</div>
+            <div className="text-[11px] font-semibold text-slate-600">{formatDateHuman(changedOn)}</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render a grid of cards for a deleted record
+  const renderDeletedRecordCards = (log: FinanceDeletedLog) => {
+    const vals = log.old_values || {};
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {Object.entries(vals)
+          .filter(([key]) => !ignoredKeys.has(key))
+          .map(([key, val]) => (
+            <div key={key} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm space-y-2 font-sans">
+              <div>
+                <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">FIELD:</div>
+                <div className="text-xs font-bold text-slate-950 uppercase">{mapFieldLabel(key)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">DELETED VALUE:</div>
+                <div className="text-xs font-semibold text-rose-700">{formatLogValue(key, val)}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">DELETED BY:</div>
+                  <div className="text-[11px] font-semibold text-slate-955 uppercase">{log.deleted_by}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">DELETED ON:</div>
+                  <div className="text-[11px] font-semibold text-slate-600">{formatDateHuman(log.deleted_at)}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex justify-between items-center border-b border-green-100 pb-4">
         <div>
-          <h1 className="finance-h1">Audit Logs Registry</h1>
-          <p className="finance-small-label uppercase">Review full audit histories of edited or deleted finance entries</p>
+          <h1 className="finance-h1 font-bold uppercase text-slate-900">AUDIT LOGS REGISTRY</h1>
+          <p className="finance-small-label uppercase text-slate-900 font-bold">REVIEW FULL AUDIT HISTORIES OF EDITED OR DELETED FINANCE ENTRIES</p>
         </div>
       </div>
 
@@ -581,14 +646,14 @@ const EditedDeletedLogs: React.FC = () => {
           className={`flex-1 py-2 px-4 rounded-lg border transition-all flex justify-center items-center gap-2 ${ logType === 'edited' ? 'bg-green-100 text-green-700 border-green-300 shadow-sm font-semibold' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' }`}
         >
           <Edit2 className="w-4 h-4" />
-          Edited Logs
+          EDITED LOGS
         </button>
         <button
           onClick={() => setLogType('deleted')}
           className={`flex-1 py-2 px-4 rounded-lg border transition-all flex justify-center items-center gap-2 ${ logType === 'deleted' ? 'bg-red-100 text-red-700 border-red-300 shadow-sm font-semibold' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' }`}
         >
           <Trash2 className="w-4 h-4" />
-          Deleted Logs
+          DELETED LOGS
         </button>
       </div>
 
@@ -601,10 +666,10 @@ const EditedDeletedLogs: React.FC = () => {
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by Loan No, Customer, Operator, or Field..."
+                placeholder="SEARCH BY LOAN NO, CUSTOMER, OPERATOR, OR FIELD..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all uppercase"
               />
             </div>
 
@@ -613,13 +678,13 @@ const EditedDeletedLogs: React.FC = () => {
               <select
                 value={filterTableType}
                 onChange={(e) => setFilterTableType(e.target.value)}
-                className="w-full py-2 px-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                className="w-full py-2 px-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all uppercase"
               >
-                <option value="all">All Tables</option>
-                <option value="finance_loans">Loans</option>
-                <option value="finance_customers">Customers</option>
-                <option value="finance_loans_collateral">Collateral</option>
-                <option value="finance_guarantors">Guarantors</option>
+                <option value="all">ALL TABLES</option>
+                <option value="finance_loans">LOANS</option>
+                <option value="finance_customers">CUSTOMERS</option>
+                <option value="finance_loans_collateral">COLLATERAL</option>
+                <option value="finance_guarantors">GUARANTORS</option>
               </select>
             </div>
 
@@ -628,11 +693,11 @@ const EditedDeletedLogs: React.FC = () => {
               <select
                 value={filterOperator}
                 onChange={(e) => setFilterOperator(e.target.value)}
-                className="w-full py-2 px-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                className="w-full py-2 px-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all uppercase"
               >
-                <option value="all">All Operators</option>
+                <option value="all">ALL OPERATORS</option>
                 {uniqueOperators.map(op => (
-                  <option key={op} value={op}>{op}</option>
+                  <option key={op} value={op}>{op.toUpperCase()}</option>
                 ))}
               </select>
             </div>
@@ -642,7 +707,7 @@ const EditedDeletedLogs: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-2 border-t border-slate-50">
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-gray-400" />
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Date Range:</span>
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">DATE RANGE:</span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <input
@@ -651,7 +716,7 @@ const EditedDeletedLogs: React.FC = () => {
                 onChange={(e) => setFilterStartDate(e.target.value)}
                 className="py-1 px-2 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
               />
-              <span className="text-gray-400 text-xs">to</span>
+              <span className="text-gray-400 text-xs uppercase">TO</span>
               <input
                 type="date"
                 value={filterEndDate}
@@ -669,9 +734,9 @@ const EditedDeletedLogs: React.FC = () => {
                   setFilterStartDate('');
                   setFilterEndDate('');
                 }}
-                className="text-xs font-semibold text-red-500 hover:text-red-600 transition-colors sm:ml-auto"
+                className="text-xs font-bold text-red-500 hover:text-red-600 transition-colors sm:ml-auto uppercase"
               >
-                Clear Filters
+                CLEAR FILTERS
               </button>
             )}
           </div>
@@ -684,24 +749,24 @@ const EditedDeletedLogs: React.FC = () => {
         </div>
       ) : logType === 'edited' ? (
         /* Edited Logs View */
-        <Card title="Edited Records Logs" subtitle="Tracking updates to partner, loan and customer cards" className="shadow-md">
+        <Card title="EDITED RECORDS LOGS" subtitle="TRACKING UPDATES TO PARTNER, LOAN AND CUSTOMER CARDS" className="shadow-md">
           {filteredLogs.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">No edit logs match the filters</div>
+            <div className="text-center py-8 text-gray-400 uppercase font-bold text-sm">NO EDIT LOGS MATCH THE FILTERS</div>
           ) : (
             <div className="overflow-x-auto border border-slate-100 rounded-xl">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Date/Time</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Operator</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Table</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Loan No</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Customer</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Field Changed</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Old Value</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">New Value</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Source</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">TIMESTAMP</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">OPERATOR</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">TABLE</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">LOAN NO</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">CUSTOMER</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">FIELD CHANGED</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">OLD VALUE</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">NEW VALUE</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">SOURCE</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
@@ -714,7 +779,7 @@ const EditedDeletedLogs: React.FC = () => {
                             {formatDateHuman(item.edited_at)}
                           </td>
                           <td className="px-4 py-3.5 text-xs text-slate-900 font-medium">
-                            {item.edited_by}
+                            {item.edited_by.toUpperCase()}
                           </td>
                           <td className="px-4 py-3.5 text-xs text-slate-600 font-mono">
                             {mapTableName(item.table_name)}
@@ -725,7 +790,7 @@ const EditedDeletedLogs: React.FC = () => {
                           <td className="px-4 py-3.5 text-xs text-slate-900 font-semibold">
                             {item.displayCustomer}
                           </td>
-                          <td className="px-4 py-3.5 text-xs text-slate-700 font-medium">
+                          <td className="px-4 py-3.5 text-xs text-slate-700 font-medium uppercase">
                             {mapFieldLabel(item.field)}
                           </td>
                           <td className="px-4 py-3.5">
@@ -742,29 +807,18 @@ const EditedDeletedLogs: React.FC = () => {
                           <td className="px-4 py-3.5 whitespace-nowrap">
                             <button
                               onClick={() => toggleExpand(item.id)}
-                              className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 transition-colors"
+                              className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors uppercase"
                             >
                               <Database className="w-3.5 h-3.5" />
-                              {isExpanded ? 'Hide JSON' : 'View JSON'}
+                              {isExpanded ? 'HIDE CARD' : 'VIEW CARD'}
                             </button>
                           </td>
                         </tr>
                         {isExpanded && (
                           <tr>
                             <td colSpan={10} className="px-6 py-4 bg-slate-50 border-t border-slate-100">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Raw Old Values JSON</span>
-                                  <pre className="bg-slate-100 p-3 rounded-lg text-xs font-mono overflow-auto max-h-48 text-slate-700 border border-slate-200">
-                                    {JSON.stringify(item.rawLog.old_values, null, 2)}
-                                  </pre>
-                                </div>
-                                <div>
-                                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Raw New Values JSON</span>
-                                  <pre className="bg-slate-100 p-3 rounded-lg text-xs font-mono overflow-auto max-h-48 text-slate-700 border border-slate-200">
-                                    {JSON.stringify(item.rawLog.new_values, null, 2)}
-                                  </pre>
-                                </div>
+                              <div className="flex justify-start">
+                                {renderReadableCard(item.field, item.oldValue, item.newValue, item.edited_by, item.edited_at)}
                               </div>
                             </td>
                           </tr>
@@ -779,19 +833,19 @@ const EditedDeletedLogs: React.FC = () => {
         </Card>
       ) : (
         /* Deleted Logs View */
-        <Card title="Deleted Records Logs" subtitle="Tracking removed entries from the finance tables" className="shadow-md">
+        <Card title="DELETED RECORDS LOGS" subtitle="TRACKING REMOVED ENTRIES FROM THE FINANCE TABLES" className="shadow-md">
           {filteredDeletedLogs.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">No deletion logs match the filters</div>
+            <div className="text-center py-8 text-gray-400 uppercase font-bold text-sm">NO DELETION LOGS MATCH THE FILTERS</div>
           ) : (
             <div className="overflow-x-auto border border-slate-100 rounded-xl">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Date/Time</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Operator</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Table</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Details</th>
-                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">TIMESTAMP</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">OPERATOR</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">TABLE</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">DETAILS</th>
+                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-900 uppercase tracking-wider">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
@@ -804,7 +858,7 @@ const EditedDeletedLogs: React.FC = () => {
                             {formatDateHuman(log.deleted_at)}
                           </td>
                           <td className="px-4 py-3.5 text-xs text-slate-900 font-medium">
-                            {log.deleted_by}
+                            {log.deleted_by.toUpperCase()}
                           </td>
                           <td className="px-4 py-3.5 text-xs text-slate-600 font-mono">
                             {mapTableName(log.table_name)}
@@ -815,30 +869,26 @@ const EditedDeletedLogs: React.FC = () => {
                           <td className="px-4 py-3.5 whitespace-nowrap text-right flex items-center justify-end gap-3">
                             <button
                               onClick={() => toggleExpandDeleted(log.id)}
-                              className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 transition-colors"
+                              className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors uppercase"
                             >
                               <Database className="w-3.5 h-3.5" />
-                              {isExpanded ? 'Hide JSON' : 'View JSON'}
+                              {isExpanded ? 'HIDE CARDS' : 'VIEW CARDS'}
                             </button>
                             <Button
                               onClick={() => handleRestore(log)}
                               variant="success"
                               size="sm"
                               disabled={restoring === log.id}
+                              className="font-bold uppercase"
                             >
-                              {restoring === log.id ? 'Restoring...' : 'Restore'}
+                              {restoring === log.id ? 'RESTORING...' : 'RESTORE'}
                             </Button>
                           </td>
                         </tr>
                         {isExpanded && (
                           <tr>
                             <td colSpan={5} className="px-6 py-4 bg-slate-50 border-t border-slate-100">
-                              <div>
-                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Raw Old Values JSON</span>
-                                <pre className="bg-slate-100 p-3 rounded-lg text-xs font-mono overflow-auto max-h-64 text-slate-700 border border-slate-200">
-                                  {JSON.stringify(log.old_values, null, 2)}
-                                </pre>
-                              </div>
+                              {renderDeletedRecordCards(log)}
                             </td>
                           </tr>
                         )}
@@ -856,4 +906,3 @@ const EditedDeletedLogs: React.FC = () => {
 };
 
 export default EditedDeletedLogs;
-

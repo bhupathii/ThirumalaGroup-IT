@@ -156,6 +156,13 @@ const LoanEntry: React.FC = () => {
   const g1DropdownRef = useRef<HTMLDivElement>(null);
   const g2DropdownRef = useRef<HTMLDivElement>(null);
 
+  // Lookup states
+  const [existingCdSearch, setExistingCdSearch] = useState('');
+  const [isLookupMode, setIsLookupMode] = useState(false);
+  const [cdSuggestions, setCdSuggestions] = useState<string[]>([]);
+  const [showCdSuggestions, setShowCdSuggestions] = useState(false);
+  const cdSearchDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -166,6 +173,9 @@ const LoanEntry: React.FC = () => {
       }
       if (g2DropdownRef.current && !g2DropdownRef.current.contains(e.target as Node)) {
         setG2DropdownOpen(false);
+      }
+      if (cdSearchDropdownRef.current && !cdSearchDropdownRef.current.contains(e.target as Node)) {
+        setShowCdSuggestions(false);
       }
     };
     document.addEventListener('mousedown', handleOutsideClick);
@@ -294,6 +304,196 @@ const LoanEntry: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleExistingCdLookup = async (cdAcNo: string) => {
+    if (!cdAcNo.trim()) return;
+    try {
+      const { data: loanData, error: loanErr } = await supabase
+        .from('finance_loans')
+        .select('*, customer:finance_customers!customer_id(*)')
+        .eq('loan_id', cdAcNo.trim())
+        .maybeSingle();
+
+      if (loanErr) throw loanErr;
+
+      if (!loanData) {
+        toast.error('NO EXISTING ACCOUNT FOUND WITH THIS CD NUMBER');
+        return;
+      }
+
+      setIsLookupMode(true);
+      
+      const cust = loanData.customer;
+      if (cust) {
+        setCustName(cust.name || '');
+        setCustPhone(cust.phone_1 || cust.phone || '');
+        setCustPresentAddress(cust.address || cust.present_address || '');
+        setCustAadhaar(cust.aadhaar || '');
+        setCustPhoto(cust.customer_photo_url || null);
+        setCustFatherName(cust.father_name || cust.father_husband_name || '');
+        setCustVillage(cust.village || '');
+        setCustMandal(cust.mandal || '');
+        setCustDistrict(cust.district || '');
+        setCustAadhaarAddress(cust.aadhaar_address || '');
+        setCustPresentAddress(cust.present_address || '');
+      }
+
+      setLoanId(loanData.loan_id);
+      setLoanCategory(loanData.loan_category || 'CD');
+      setAmount(String(loanData.amount));
+      setInterestRate(String(loanData.interest_rate));
+      setDurationMonths(String(loanData.duration_months));
+      setDueType(loanData.due_type);
+      setDocCharges(String(loanData.document_charges || 0));
+      setPenaltyPercent(String(loanData.penalty_percent || 0.75));
+
+      setG1Name(loanData.surety_name || '');
+      setG1Phone(loanData.surety_phone || '');
+      setG1Aadhaar(loanData.surety_aadhaar || '');
+      setG1AadhaarAddress(loanData.surety_aadhaar_address || '');
+      setG1PresentAddress(loanData.surety_present_address || '');
+      setG1Photo(loanData.surety_photo_url || null);
+      setG1FingerprintTemplate(loanData.surety_fingerprint_template || null);
+      setG1FingerprintUrl(loanData.surety_fingerprint_image_url || null);
+      setG1FingerprintAdded(!!loanData.surety_fingerprint_added);
+
+      const { data: colLogs } = await supabase
+        .from('finance_edited_logs')
+        .select('*')
+        .eq('table_name', 'finance_loans_collateral')
+        .eq('record_id', loanData.id)
+        .order('edited_at', { ascending: false })
+        .limit(1);
+      if (colLogs && colLogs.length > 0) {
+        const cLog = colLogs[0].new_values;
+        setCollateralImage(cLog.collateral_image || null);
+        setLocAddress(cLog.collateral_address || '');
+        setLocVillage(cLog.village || '');
+        setLocMandal(cLog.mandal || '');
+        setLocDistrict(cLog.district || '');
+        setLocState(cLog.state || '');
+        setLocPincode(cLog.pincode || '');
+        setLocLandmark(cLog.landmark || '');
+        setLocLatitude(cLog.gps_latitude || '');
+        setLocLongitude(cLog.gps_longitude || '');
+        setLocMapsLink(cLog.google_maps_link || '');
+        setParticulars(cLog.particulars || '');
+        setExtraDetails(cLog.extraDetails || '');
+      }
+
+      const { data: dbDocs } = await supabase
+        .from('finance_loan_documents')
+        .select('*')
+        .eq('loan_id', loanData.id);
+
+      if (dbDocs) {
+        setDocuments(prev => prev.map(d => {
+          const matched = dbDocs.find(x => x.document_name.toUpperCase().includes(d.label.toUpperCase()));
+          if (matched) {
+            return {
+              ...d,
+              checked: matched.is_submitted,
+              refNo: matched.remarks || '',
+              fileUrl: matched.file_url
+            };
+          }
+          return d;
+        }));
+      }
+
+      toast.success('EXISTING ACCOUNT LOADED IN VIEW MODE');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('FAILED TO LOOKUP EXISTING CD ACCOUNT');
+    }
+  };
+
+  const handleClearLookup = () => {
+    setExistingCdSearch('');
+    setIsLookupMode(false);
+    setCustName('');
+    setCustPhone('');
+    setCustPresentAddress('');
+    setCustAadhaar('');
+    setCustPhoto(null);
+    setCustFatherName('');
+    setCustVillage('');
+    setCustMandal('');
+    setCustDistrict('');
+    setCustAadhaarAddress('');
+    setCustPresentAddress('');
+    setAmount('');
+    setInterestRate('3');
+    setDurationMonths('');
+    setDueType('Daily');
+    setDocCharges('');
+    setPenaltyPercent('0.75');
+    setG1Name('');
+    setG1Phone('');
+    setG1Aadhaar('');
+    setG1AadhaarAddress('');
+    setG1PresentAddress('');
+    setG1Photo(null);
+    setG1FingerprintUrl(null);
+    setG1FingerprintTemplate(null);
+    setG1FingerprintAdded(false);
+    
+    setG2Name('');
+    setG2Phone('');
+    setG2Aadhaar('');
+    setG2AadhaarAddress('');
+    setG2PresentAddress('');
+    setG2Photo(null);
+    setG2FingerprintUrl(null);
+    setG2FingerprintTemplate(null);
+    setG2FingerprintAdded(false);
+    setCollateralImage(null);
+    setLocAddress('');
+    setLocVillage('');
+    setLocMandal('');
+    setLocDistrict('');
+    setLocState('');
+    setLocPincode('');
+    setLocLandmark('');
+    setLocLatitude('');
+    setLocLongitude('');
+    setLocMapsLink('');
+    setParticulars('');
+    setExtraDetails('');
+    setDocuments(prev => prev.map(d => ({ ...d, checked: false, refNo: '', fileUrl: null })));
+    generateSequentialId(activeLoans, loanCategory);
+  };
+
+  const handleSearchChange = async (val: string) => {
+    const upperVal = val.toUpperCase();
+    setExistingCdSearch(upperVal);
+    if (!upperVal.trim()) {
+      handleClearLookup();
+      setCdSuggestions([]);
+      setShowCdSuggestions(false);
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('finance_loans')
+        .select('loan_id')
+        .ilike('loan_id', `${upperVal}%`)
+        .limit(10);
+      if (!error && data) {
+        setCdSuggestions(data.map(l => l.loan_id));
+        setShowCdSuggestions(true);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSelectCdSuggestion = (val: string) => {
+    setExistingCdSearch(val);
+    setShowCdSuggestions(false);
+    handleExistingCdLookup(val);
   };
 
   // Generate Auto sequential Loan ID
@@ -776,19 +976,19 @@ const LoanEntry: React.FC = () => {
         } else {
           // Create new customer
           const newCust = await supabaseFinance.createCustomer({
-            name: custName.trim(),
+            name: custName.trim().toUpperCase(),
             phone: custPhone || null,
             phone2: custPhone2 || null,
-            address: custPresentAddress || null,
+            address: custPresentAddress ? custPresentAddress.trim().toUpperCase() : null,
             aadhaar: custAadhaar || null,
             customer_photo_url: custPhoto,
-            father_husband_name: custFatherName || null,
-            father_name: custFatherName || null,
-            village: custVillage || null,
-            mandal: custMandal || null,
-            district: custDistrict || null,
-            aadhaar_address: custAadhaarAddress || null,
-            present_address: custPresentAddress || null,
+            father_husband_name: custFatherName ? custFatherName.trim().toUpperCase() : null,
+            father_name: custFatherName ? custFatherName.trim().toUpperCase() : null,
+            village: custVillage ? custVillage.trim().toUpperCase() : null,
+            mandal: custMandal ? custMandal.trim().toUpperCase() : null,
+            district: custDistrict ? custDistrict.trim().toUpperCase() : null,
+            aadhaar_address: custAadhaarAddress ? custAadhaarAddress.trim().toUpperCase() : null,
+            present_address: custPresentAddress ? custPresentAddress.trim().toUpperCase() : null,
             phone_1: custPhone || null,
             phone_2: custPhone2 || null,
             fingerprint_url: custFingerprintUrl || null,
@@ -1111,7 +1311,7 @@ const LoanEntry: React.FC = () => {
             PREVIEW & PRINT
           </button>
           <button
-            onClick={handleClearForm}
+            onClick={isLookupMode ? handleClearLookup : handleClearForm}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors shadow-sm peek-button uppercase"
           >
             <X className="w-3.5 h-3.5" />
@@ -1119,7 +1319,7 @@ const LoanEntry: React.FC = () => {
           </button>
           <button
             onClick={handleSaveLoan}
-            disabled={saving}
+            disabled={saving || isLookupMode}
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 peek-button uppercase"
           >
             <Check className="w-3.5 h-3.5" />
@@ -1127,6 +1327,22 @@ const LoanEntry: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {isLookupMode && (
+        <div className="bg-blue-50 border-2 border-blue-500 text-blue-900 p-4 rounded-xl flex items-center justify-between shadow-md print:hidden animate-pulse">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-blue-600 shrink-0" />
+            <span className="font-bold text-sm tracking-wider uppercase">VIEW MODE - EXISTING ACCOUNT LOADED</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleClearLookup}
+            className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-lg font-bold uppercase transition-colors"
+          >
+            EXIT VIEW MODE
+          </button>
+        </div>
+      )}
 
       {/* Main Workspace Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1139,7 +1355,7 @@ const LoanEntry: React.FC = () => {
             <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
               BASICS
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div>
                 <label className="peek-label uppercase">
                   DATE <span className="text-red-500 ml-1">*</span>
@@ -1148,6 +1364,7 @@ const LoanEntry: React.FC = () => {
                   type="date"
                   ref={dateRef}
                   value={date}
+                  disabled={isLookupMode}
                   onChange={(e) => { setDate(e.target.value); setErrors(p => ({...p, date: false})) }}
                   className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-caption-12 ${errors.date ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                   required
@@ -1160,6 +1377,7 @@ const LoanEntry: React.FC = () => {
                 </label>
                 <select
                   value={loanCategory}
+                  disabled={isLookupMode}
                   onChange={(e) => setLoanCategory(e.target.value as any)}
                   className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
                   required
@@ -1182,6 +1400,7 @@ const LoanEntry: React.FC = () => {
                   type="text"
                   ref={loanIdRef}
                   value={loanId}
+                  disabled={isLookupMode}
                   onChange={(e) => { setLoanId(e.target.value); setErrors(p => ({...p, loanId: false})) }}
                   placeholder="e.g. CD001"
                   className={`w-full bg-slate-50 border rounded-lg p-2 text-slate-700 focus:outline-none font-mono peek-caption-12 ${errors.loanId ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200'}`}
@@ -1191,8 +1410,52 @@ const LoanEntry: React.FC = () => {
                   AUTO-GENERATED
                 </span>
               </div>
+
+              <div>
+                <label className="peek-label uppercase">
+                  SEARCH
+                </label>
+                <div ref={cdSearchDropdownRef} className="relative flex gap-2">
+                  <div className="relative flex-grow">
+                    <input
+                      type="text"
+                      value={existingCdSearch}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      onFocus={() => {
+                        if (existingCdSearch.trim()) {
+                          setShowCdSuggestions(true);
+                        }
+                      }}
+                      placeholder="E.G. CD001"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none font-mono peek-caption-12 uppercase"
+                    />
+                    {showCdSuggestions && cdSuggestions.length > 0 && (
+                      <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {cdSuggestions.map((suggestion) => (
+                          <div
+                            key={suggestion}
+                            onClick={() => handleSelectCdSuggestion(suggestion)}
+                            className="px-3 py-2 hover:bg-slate-50 cursor-pointer text-slate-800 font-mono text-xs border-b border-slate-50 last:border-0 uppercase"
+                          >
+                            {suggestion}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleExistingCdLookup(existingCdSearch)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-bold text-xs uppercase shadow-sm flex-shrink-0"
+                  >
+                    SEARCH
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
+
+          <fieldset disabled={isLookupMode} className="space-y-6">
 
           {/* NPA Warning Banner */}
           {npaWarning && (
@@ -1205,11 +1468,33 @@ const LoanEntry: React.FC = () => {
                   <h3 className="text-sm font-medium text-red-800 uppercase">
                     NPA Record Found
                   </h3>
-                  <div className="mt-2 text-sm text-red-700">
+                  <div className="mt-2 text-sm text-red-700 space-y-1">
                     <p>
                       This customer had a previous Non-Performing Asset (NPA) closed on <strong>{new Date(npaWarning.closed_at).toLocaleDateString('en-IN')}</strong>. 
-                      Reason: {npaWarning.reason || 'N/A'}. 
-                      Settlement Amount: ₹{npaWarning.settlement_amount?.toLocaleString('en-IN') || 0}.
+                      Reason: {npaWarning.reason || 'N/A'}.
+                    </p>
+                    <p className="font-bold flex flex-wrap gap-x-6 gap-y-1 mt-1">
+                      <span>TOTAL LIABILITY: ₹{
+                        (
+                          npaWarning.total_liability !== undefined && npaWarning.total_liability !== null && Number(npaWarning.total_liability) > 0
+                            ? Number(npaWarning.total_liability) 
+                            : (Number(npaWarning.balance_amount || 0) + Number(npaWarning.interest_due || 0) + Number(npaWarning.penalty_due || 0))
+                        ).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                      }</span>
+                      <span>SETTLEMENT AMOUNT: ₹{(npaWarning.settlement_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      <span>WAIVED AMOUNT: ₹{
+                        (
+                          npaWarning.waived_amount !== undefined && npaWarning.waived_amount !== null && Number(npaWarning.waived_amount) > 0
+                            ? Number(npaWarning.waived_amount)
+                            : Math.max(0, 
+                                (
+                                  npaWarning.total_liability !== undefined && npaWarning.total_liability !== null && Number(npaWarning.total_liability) > 0
+                                    ? Number(npaWarning.total_liability) 
+                                    : (Number(npaWarning.balance_amount || 0) + Number(npaWarning.interest_due || 0) + Number(npaWarning.penalty_due || 0))
+                                ) - Number(npaWarning.settlement_amount || 0)
+                              )
+                        ).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                      }</span>
                     </p>
                   </div>
                 </div>
@@ -1420,14 +1705,16 @@ const LoanEntry: React.FC = () => {
                       {custPhoto ? (
                         <>
                           <img src={custPhoto} alt="Customer" className="w-full h-full object-cover" />
-                          <button
-                            type="button"
-                            onClick={() => setCustPhoto(null)}
-                            className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash2 className="w-5 h-5 mb-1" />
-                            <span className="peek-small-10 uppercase">REMOVE</span>
-                          </button>
+                          {!isLookupMode && (
+                            <button
+                              type="button"
+                              onClick={() => setCustPhoto(null)}
+                              className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash2 className="w-5 h-5 mb-1" />
+                              <span className="peek-small-10 uppercase">REMOVE</span>
+                            </button>
+                          )}
                         </>
                       ) : (
                         <div className="flex flex-col items-center text-slate-400 gap-1">
@@ -1436,31 +1723,34 @@ const LoanEntry: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm peek-button uppercase inline-flex items-center gap-1.5 transition-colors">
-                      <Camera className="w-3.5 h-3.5" />
-                      {custPhoto ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setCustPhoto(reader.result as string);
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                        className="hidden"
-                      />
-                    </label>
+                    {!isLookupMode && (
+                      <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm peek-button uppercase inline-flex items-center gap-1.5 transition-colors">
+                        <Camera className="w-3.5 h-3.5" />
+                        {custPhoto ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setCustPhoto(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
                   </div>
 
                   <BiometricScanner
                     label="Customer Fingerprint Capture"
                     existingTemplate={custFingerprintTemplate}
                     existingImageUrl={custFingerprintUrl}
+                    disabled={isLookupMode}
                     onFingerprintSaved={(url, template, added) => {
                       setCustFingerprintUrl(url);
                       setCustFingerprintTemplate(template);
@@ -1595,14 +1885,16 @@ const LoanEntry: React.FC = () => {
                       {g1Photo ? (
                         <>
                           <img src={g1Photo} alt="Guarantor 1" className="w-full h-full object-cover" />
-                          <button
-                            type="button"
-                            onClick={() => setG1Photo(null)}
-                            className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash2 className="w-5 h-5 mb-1" />
-                            <span className="peek-small-10 uppercase">REMOVE</span>
-                          </button>
+                          {!isLookupMode && (
+                            <button
+                              type="button"
+                              onClick={() => setG1Photo(null)}
+                              className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash2 className="w-5 h-5 mb-1" />
+                              <span className="peek-small-10 uppercase">REMOVE</span>
+                            </button>
+                          )}
                         </>
                       ) : (
                         <div className="flex flex-col items-center text-slate-400 gap-1">
@@ -1611,31 +1903,34 @@ const LoanEntry: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm peek-button uppercase inline-flex items-center gap-1.5 transition-colors">
-                      <Camera className="w-3.5 h-3.5" />
-                      {g1Photo ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setG1Photo(reader.result as string);
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                        className="hidden"
-                      />
-                    </label>
+                    {!isLookupMode && (
+                      <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm peek-button uppercase inline-flex items-center gap-1.5 transition-colors">
+                        <Camera className="w-3.5 h-3.5" />
+                        {g1Photo ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setG1Photo(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
                   </div>
 
                   <BiometricScanner
                     label="Guarantor 1 Fingerprint Capture"
                     existingTemplate={g1FingerprintTemplate}
                     existingImageUrl={g1FingerprintUrl}
+                    disabled={isLookupMode}
                     onFingerprintSaved={(url, template, added) => {
                       setG1FingerprintUrl(url);
                       setG1FingerprintTemplate(template);
@@ -1763,14 +2058,16 @@ const LoanEntry: React.FC = () => {
                       {g2Photo ? (
                         <>
                           <img src={g2Photo} alt="Guarantor 2" className="w-full h-full object-cover" />
-                          <button
-                            type="button"
-                            onClick={() => setG2Photo(null)}
-                            className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash2 className="w-5 h-5 mb-1" />
-                            <span className="peek-small-10 uppercase">REMOVE</span>
-                          </button>
+                          {!isLookupMode && (
+                            <button
+                              type="button"
+                              onClick={() => setG2Photo(null)}
+                              className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash2 className="w-5 h-5 mb-1" />
+                              <span className="peek-small-10 uppercase">REMOVE</span>
+                            </button>
+                          )}
                         </>
                       ) : (
                         <div className="flex flex-col items-center text-slate-400 gap-1">
@@ -1779,31 +2076,34 @@ const LoanEntry: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm peek-button uppercase inline-flex items-center gap-1.5 transition-colors">
-                      <Camera className="w-3.5 h-3.5" />
-                      {g2Photo ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setG2Photo(reader.result as string);
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                        className="hidden"
-                      />
-                    </label>
+                    {!isLookupMode && (
+                      <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm peek-button uppercase inline-flex items-center gap-1.5 transition-colors">
+                        <Camera className="w-3.5 h-3.5" />
+                        {g2Photo ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setG2Photo(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
                   </div>
 
                   <BiometricScanner
                     label="Guarantor 2 Fingerprint Capture"
                     existingTemplate={g2FingerprintTemplate}
                     existingImageUrl={g2FingerprintUrl}
+                    disabled={isLookupMode}
                     onFingerprintSaved={(url, template, added) => {
                       setG2FingerprintUrl(url);
                       setG2FingerprintTemplate(template);
@@ -1973,25 +2273,27 @@ const LoanEntry: React.FC = () => {
                         {subtitle}
                       </p>
                     </div>
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        const newDoc: DocumentItem = {
-                          key: `custom_${Date.now()}_${Math.random()}`,
-                          label: '',
-                          category: cat,
-                          checked: true,
-                          refNo: '',
-                          fileUrl: null,
-                          uploading: false,
-                          isCustom: true
-                        };
-                        setDocuments(prev => [...prev, newDoc]);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 rounded-md transition-colors text-xs font-bold uppercase"
-                    >
-                      + ADD
-                    </button>
+                    {!isLookupMode && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newDoc: DocumentItem = {
+                            key: `custom_${Date.now()}_${Math.random()}`,
+                            label: '',
+                            category: cat,
+                            checked: true,
+                            refNo: '',
+                            fileUrl: null,
+                            uploading: false,
+                            isCustom: true
+                          };
+                          setDocuments(prev => [...prev, newDoc]);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 rounded-md transition-colors text-xs font-bold uppercase"
+                      >
+                        + ADD
+                      </button>
+                    )}
                   </div>
                   
                   <div className="space-y-2">
@@ -2000,17 +2302,19 @@ const LoanEntry: React.FC = () => {
                         <input
                           type="checkbox"
                           checked={doc.checked}
+                          disabled={isLookupMode}
                           onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, checked: e.target.checked } : d))}
-                          className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-600 shrink-0 ml-4"
+                          className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-600 shrink-0 ml-4 disabled:opacity-50"
                         />
                         <div className="w-[240px] shrink-0">
                           {doc.isCustom ? (
                             <input
                               type="text"
                               value={doc.label}
+                              disabled={isLookupMode}
                               onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, label: e.target.value } : d))}
                               placeholder="DOCUMENT NAME"
-                              className="w-full bg-white border border-slate-200 rounded-md px-4 py-2 text-sm text-slate-800 font-bold focus:outline-none focus:border-slate-300 uppercase h-[42px]"
+                              className="w-full bg-white border border-slate-200 rounded-md px-4 py-2 text-sm text-slate-800 font-bold focus:outline-none focus:border-slate-300 uppercase h-[42px] disabled:bg-slate-50"
                             />
                           ) : (
                             <div className="w-full bg-white border border-slate-200 rounded-md px-4 py-2 text-sm text-slate-800 font-bold uppercase truncate select-none flex items-center h-[42px]">
@@ -2023,9 +2327,10 @@ const LoanEntry: React.FC = () => {
                           <input
                             type="text"
                             value={doc.refNo}
+                            disabled={isLookupMode}
                             onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, refNo: e.target.value } : d))}
                             placeholder="REF NO., AUTHORITY, REMARKS..."
-                            className="w-full bg-white border border-slate-200 rounded-md px-4 py-2 text-sm text-slate-600 uppercase focus:outline-none focus:border-slate-300 placeholder:text-slate-300 h-[42px]"
+                            className="w-full bg-white border border-slate-200 rounded-md px-4 py-2 text-sm text-slate-600 uppercase focus:outline-none focus:border-slate-300 placeholder:text-slate-300 h-[42px] disabled:bg-slate-50"
                           />
                         </div>
                         
@@ -2039,7 +2344,7 @@ const LoanEntry: React.FC = () => {
                             >
                               VIEW
                             </a>
-                          ) : (
+                          ) : !isLookupMode ? (
                             <label className="px-4 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 cursor-pointer rounded-md transition-colors select-none flex items-center justify-center gap-2 uppercase h-[42px] min-w-[100px]">
                               <Upload className="w-3.5 h-3.5 text-slate-500" />
                               {doc.uploading ? 'UPLOADING...' : 'UPLOAD'}
@@ -2051,29 +2356,31 @@ const LoanEntry: React.FC = () => {
                                 disabled={doc.uploading}
                               />
                             </label>
-                          )}
+                          ) : null}
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (doc.isCustom) {
-                                // For custom rows, remove the row completely
-                                setDocuments(prev => prev.filter(d => d.key !== doc.key));
-                              } else {
-                                // For default rows, reset them
-                                if (doc.fileUrl) {
-                                  removeChecklistUpload(doc.key);
+                          {!isLookupMode && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (doc.isCustom) {
+                                  // For custom rows, remove the row completely
+                                  setDocuments(prev => prev.filter(d => d.key !== doc.key));
+                                } else {
+                                  // For default rows, reset them
+                                  if (doc.fileUrl) {
+                                    removeChecklistUpload(doc.key);
+                                  }
+                                  setDocuments(prev => prev.map(d => 
+                                    d.key === doc.key ? { ...d, checked: false, refNo: '', fileUrl: null } : d
+                                  ));
                                 }
-                                setDocuments(prev => prev.map(d => 
-                                  d.key === doc.key ? { ...d, checked: false, refNo: '', fileUrl: null } : d
-                                ));
-                              }
-                            }}
-                            className="w-[42px] h-[42px] text-red-400 hover:text-red-500 hover:bg-red-50 border border-red-100 rounded-md transition-colors shrink-0 flex items-center justify-center"
-                            title="Remove or Reset Document"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                              }}
+                              className="w-[42px] h-[42px] text-red-400 hover:text-red-500 hover:bg-red-50 border border-red-100 rounded-md transition-colors shrink-0 flex items-center justify-center"
+                              title="Remove or Reset Document"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -2136,16 +2443,18 @@ const LoanEntry: React.FC = () => {
                         alt="Collateral"
                         className="w-full h-full object-cover"
                       />
-                      <button
-                        type="button"
-                        onClick={removeCollateralImage}
-                        className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <Trash2 className="w-5 h-5 mb-1" />
-                        <span className="peek-small-10 uppercase">REMOVE</span>
-                      </button>
+                      {!isLookupMode && (
+                        <button
+                          type="button"
+                          onClick={removeCollateralImage}
+                          className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Trash2 className="w-5 h-5 mb-1" />
+                          <span className="peek-small-10 uppercase">REMOVE</span>
+                        </button>
+                      )}
                     </div>
-                  ) : (
+                  ) : !isLookupMode ? (
                     <label className="w-32 h-32 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-xl hover:border-slate-400 hover:bg-slate-50 transition-colors cursor-pointer bg-slate-50/50">
                       <Camera className="w-6 h-6 text-slate-400 mb-2" />
                       <span className="peek-small-10 uppercase text-slate-500 text-center px-2">
@@ -2158,6 +2467,10 @@ const LoanEntry: React.FC = () => {
                         className="hidden"
                       />
                     </label>
+                  ) : (
+                    <div className="w-32 h-32 flex flex-col items-center justify-center border border-dashed border-slate-200 rounded-xl bg-slate-50/20 text-slate-400 peek-small-10 uppercase">
+                      NO PHOTO
+                    </div>
                   )}
                 </div>
               </div>
@@ -2197,6 +2510,7 @@ const LoanEntry: React.FC = () => {
               </div>
             </div>
           </div>
+          </fieldset>
 
         </div>
 

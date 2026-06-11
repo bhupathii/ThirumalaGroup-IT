@@ -46,6 +46,16 @@ const CDLedger: React.FC = () => {
   // UI / State
   const [loading, setLoading] = useState(true);
   const [loansList, setLoansList] = useState<(FinanceLoan & { customer: FinanceCustomer; guarantor_1?: FinanceCustomer; guarantor_2?: FinanceCustomer })[]>([]);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'CLOSED' | 'NPA CLOSED'>('ACTIVE');
+
+  const filteredLoansList = useMemo(() => {
+    return loansList.filter(loan => {
+      if (statusFilter === 'ACTIVE') return loan.status === 'Active';
+      if (statusFilter === 'CLOSED') return loan.status === 'Closed';
+      if (statusFilter === 'NPA CLOSED') return loan.status === 'NPA_CLOSED';
+      return true;
+    });
+  }, [loansList, statusFilter]);
   
   // Custom Autocomplete Search State
   const [searchNameQuery, setSearchNameQuery] = useState('');
@@ -106,6 +116,7 @@ const CDLedger: React.FC = () => {
   // NPA Modal State
   const [showNpaModal, setShowNpaModal] = useState(false);
   const [npaReason, setNpaReason] = useState('');
+  const [npaSettlementAmount, setNpaSettlementAmount] = useState('');
   const [isNpaClosing, setIsNpaClosing] = useState(false);
 
   // Guarantor Full Objects for Display
@@ -428,7 +439,7 @@ const CDLedger: React.FC = () => {
   const nameSuggestions = useMemo(() => {
     const q = searchNameQuery.toLowerCase().trim();
     if (!q) return [];
-    return loansList.filter(loan => {
+    return filteredLoansList.filter(loan => {
       const cust = loan.customer;
       const g1 = loan.guarantor_1;
       const g2 = loan.guarantor_2;
@@ -458,29 +469,29 @@ const CDLedger: React.FC = () => {
         (cust?.present_district && cust.present_district.toLowerCase().includes(q))
       );
     });
-  }, [loansList, searchNameQuery]);
+  }, [filteredLoansList, searchNameQuery]);
 
   const acSuggestions = useMemo(() => {
     const q = searchAcQuery.toLowerCase().trim();
     if (!q) return [];
-    return loansList.filter(loan => loan.loan_id.toLowerCase().includes(q));
-  }, [loansList, searchAcQuery]);
+    return filteredLoansList.filter(loan => loan.loan_id.toLowerCase().includes(q));
+  }, [filteredLoansList, searchAcQuery]);
 
   // Record Index Navigator Memo
   const currentIndex = useMemo(() => {
-    if (!selectedLoan || loansList.length === 0) return -1;
-    return loansList.findIndex(l => l.id === selectedLoan.id);
-  }, [selectedLoan, loansList]);
+    if (!selectedLoan || filteredLoansList.length === 0) return -1;
+    return filteredLoansList.findIndex(l => l.id === selectedLoan.id);
+  }, [selectedLoan, filteredLoansList]);
 
   const handlePrevRecord = () => {
     if (currentIndex > 0) {
-      loadLedgerDetails(loansList[currentIndex - 1].id);
+      loadLedgerDetails(filteredLoansList[currentIndex - 1].id);
     }
   };
 
   const handleNextRecord = () => {
-    if (currentIndex < loansList.length - 1) {
-      loadLedgerDetails(loansList[currentIndex + 1].id);
+    if (currentIndex < filteredLoansList.length - 1) {
+      loadLedgerDetails(filteredLoansList[currentIndex + 1].id);
     }
   };
 
@@ -1536,11 +1547,12 @@ const CDLedger: React.FC = () => {
     setIsNpaClosing(true);
     try {
       const npaClosedDate = new Date(paymentDate).toISOString();
-      const npaClosedAmount = 0;
-      const closedBy = user?.username || 'Staff';
+      const npaClosedAmount = Number(npaSettlementAmount) || 0;
+      const closedBy = (user?.username || 'Staff').toUpperCase();
       const npaReceiptNo = await supabaseFinance.getNextReceiptNumber();
+      const cleanNpaReason = npaReason.trim().toUpperCase();
       
-      const updatedRemarks = `${selectedLoan.remarks || ''}\n[NPA CLOSED at ${npaClosedDate} by ${closedBy} with settlement amount: ${npaClosedAmount}]`.trim();
+      const updatedRemarks = `${selectedLoan.remarks || ''}\n[NPA CLOSED AT ${npaClosedDate} BY ${closedBy} WITH SETTLEMENT AMOUNT: ${npaClosedAmount}]`.trim().toUpperCase();
       
       const { error: loanError } = await supabase.from('finance_loans')
         .update({ 
@@ -1561,7 +1573,7 @@ const CDLedger: React.FC = () => {
       await supabaseFinance.addNPARecord({
         loan_id: selectedLoan.id,
         customer_id: selectedLoan.customer_id,
-        customer_name: selectedLoan.customer?.name || '',
+        customer_name: (selectedLoan.customer?.name || '').toUpperCase(),
         aadhaar: selectedLoan.customer?.aadhaar || '',
         phone: selectedLoan.customer?.phone || '',
         loan_type: selectedLoan.loan_category || 'CD',
@@ -1571,7 +1583,9 @@ const CDLedger: React.FC = () => {
         interest_due: interest_due,
         penalty_due: penalty_due,
         settlement_amount: npaClosedAmount,
-        reason: npaReason,
+        total_liability: total_outstanding,
+        waived_amount: total_outstanding - npaClosedAmount,
+        reason: cleanNpaReason,
         closed_by: closedBy,
         closed_at: npaClosedDate
       });
@@ -1582,7 +1596,7 @@ const CDLedger: React.FC = () => {
         `Penalty Outstanding: ₹${penalty_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
         `Total Outstanding: ₹${total_outstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
         `Closed By: ${closedBy}\n` +
-        `Reason: ${npaReason}`;
+        `Reason: ${cleanNpaReason}`;
 
       await supabaseFinance.addCDLedgerEntry({
         loan_id: selectedLoan.id,
@@ -1592,7 +1606,7 @@ const CDLedger: React.FC = () => {
         credit: 0,
         debit: 0,
         receipt_no: npaReceiptNo,
-        particulars: npaParticulars,
+        particulars: npaParticulars.toUpperCase(),
         user_name: closedBy,
         entry_type: 'NPA_CLOSE'
       });
@@ -1721,12 +1735,22 @@ const CDLedger: React.FC = () => {
               />
             </div>
             
-            <button
-              onClick={() => navigate('/finance/stbd-ledger')}
-              className="px-4 h-[42px] text-green-700 bg-green-50 border border-green-200 rounded-xl hover:bg-green-100 transition-colors font-semibold text-sm flex items-center self-end"
-            >
-              Goto STBD Ledger
-            </button>
+            <div>
+              <label className="finance-caption uppercase block mb-1">Status Filter</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value as any);
+                  setSelectedLoan(null);
+                }}
+                className="bg-white border border-gray-200 rounded-xl p-2 text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none finance-input h-[42px] font-bold text-xs uppercase"
+              >
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="ALL">ALL</option>
+                <option value="CLOSED">CLOSED</option>
+                <option value="NPA CLOSED">NPA CLOSED</option>
+              </select>
+            </div>
           </div>
 
           {/* Top Middle: Dynamic user name & real-time clock */}
@@ -1840,7 +1864,7 @@ const CDLedger: React.FC = () => {
                   <List className="w-5 h-5 text-green-600" />
                   All CD Loans
                 </h2>
-                <p className="text-xs text-gray-400 mt-0.5">{loansList.length} loan(s) in the system</p>
+                <p className="text-xs text-gray-400 mt-0.5">{filteredLoansList.length} loan(s) in the system</p>
               </div>
               <div className="relative w-full sm:w-80">
                 <input
@@ -1858,19 +1882,19 @@ const CDLedger: React.FC = () => {
             {(() => {
               const q = listSearchQuery.toLowerCase().trim();
               const filtered = q
-                ? loansList.filter(loan =>
+                ? filteredLoansList.filter(loan =>
                     loan.loan_id.toLowerCase().includes(q) ||
                     (loan.customer?.name || '').toLowerCase().includes(q) ||
                     (loan.customer?.phone || '').includes(q) ||
                     (loan.customer?.aadhaar || '').includes(q)
                   )
-                : loansList;
+                : filteredLoansList;
 
               if (filtered.length === 0) {
                 return (
                   <div className="text-center py-16">
                     <p className="text-gray-400 text-sm">
-                      {loansList.length === 0
+                      {filteredLoansList.length === 0
                         ? 'No CD loans found in the system.'
                         : `No loans match "${listSearchQuery}"`}
                     </p>
@@ -2035,7 +2059,7 @@ const CDLedger: React.FC = () => {
                       Back to All Loans
                     </button>
                     <span className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
-                      Record: <span className="text-gray-700">{currentIndex + 1}</span> of <span className="text-gray-700">{loansList.length}</span>
+                      Record: <span className="text-gray-700">{currentIndex + 1}</span> of <span className="text-gray-700">{filteredLoansList.length}</span>
                     </span>
                     <div className="flex gap-2">
                       <button
@@ -2047,7 +2071,7 @@ const CDLedger: React.FC = () => {
                       </button>
                       <button
                         onClick={handleNextRecord}
-                        disabled={currentIndex >= loansList.length - 1}
+                        disabled={currentIndex >= filteredLoansList.length - 1}
                         className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
                       >
                         <ChevronRight className="w-4 h-4 text-gray-600" />
@@ -2907,13 +2931,23 @@ const CDLedger: React.FC = () => {
             <div className="space-y-4">
               <div className="p-4 bg-orange-50 text-orange-850 border border-orange-200 rounded-2xl text-xs leading-relaxed leading-normal">
                 <p className="font-semibold mb-1">Confirm NPA Close Action</p>
-                <p>Are you sure you want to close this account under NPA? This will mark the loan status as Closed with NPA designation and set the settlement amount to 0.</p>
+                <p>Are you sure you want to close this account under NPA? This will mark the loan status as Closed with NPA designation and permanently record the settlement and waived amounts.</p>
+              </div>
+              <div>
+                <Input 
+                  label="Settlement Amount Collected" 
+                  type="number"
+                  value={npaSettlementAmount} 
+                  onChange={setNpaSettlementAmount} 
+                  placeholder="Enter settlement amount collected"
+                  required
+                />
               </div>
               <div>
                 <Input 
                   label="Reason / Remarks" 
                   value={npaReason} 
-                  onChange={setNpaReason} 
+                  onChange={v => setNpaReason(v.toUpperCase())} 
                   placeholder="Enter reason/remarks for NPA closure"
                   required
                 />

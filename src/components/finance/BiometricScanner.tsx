@@ -9,13 +9,15 @@ interface BiometricScannerProps {
   existingTemplate?: string | null;
   existingImageUrl?: string | null;
   onFingerprintSaved: (imageUrl: string | null, template: string | null, added: boolean) => void;
+  disabled?: boolean;
 }
 
 export const BiometricScanner: React.FC<BiometricScannerProps> = ({
   label,
   existingTemplate = null,
   existingImageUrl = null,
-  onFingerprintSaved
+  onFingerprintSaved,
+  disabled = false
 }) => {
   const { user } = useAuth();
   
@@ -156,7 +158,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
           {label}
         </label>
         
-        {status === 'saved' && isAuthorized && (
+        {status === 'saved' && isAuthorized && !disabled && (
           <button
             type="button"
             onClick={handleClear}
@@ -237,7 +239,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
               <button
                 type="button"
                 onClick={handleConnect}
-                disabled={connecting}
+                disabled={connecting || disabled}
                 className="col-span-2 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 transition-all disabled:opacity-50 finance-header-time"
               >
                 Connect Scanner
@@ -248,7 +250,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
               <button
                 type="button"
                 onClick={handleCapture}
-                disabled={capturing}
+                disabled={capturing || disabled}
                 className="col-span-2 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-all disabled:opacity-50 finance-header-time"
               >
                 Capture Fingerprint
@@ -260,7 +262,8 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
                 <button
                   type="button"
                   onClick={handleRetake}
-                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-all finance-header-time"
+                  disabled={disabled}
+                  className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-all disabled:opacity-50 finance-header-time"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   Retake
@@ -268,7 +271,7 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
                 <button
                   type="button"
                   onClick={handleSave}
-                  disabled={saving}
+                  disabled={saving || disabled}
                   className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg border border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-700 transition-all disabled:opacity-50 finance-header-time"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
@@ -281,7 +284,8 @@ export const BiometricScanner: React.FC<BiometricScannerProps> = ({
               <button
                 type="button"
                 onClick={() => setStatus('connected')}
-                className="col-span-2 flex items-center justify-center gap-1 py-1.5 px-3 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-all finance-header-time"
+                disabled={disabled}
+                className="col-span-2 flex items-center justify-center gap-1 py-1.5 px-3 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-all disabled:opacity-50 finance-header-time"
               >
                 Change Fingerprint
               </button>
