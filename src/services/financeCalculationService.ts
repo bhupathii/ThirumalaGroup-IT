@@ -176,83 +176,95 @@ export const financeCalculationService = {
     paymentAmount: number,
     penaltyDue: number,
     interestDue: number,
-    monthlyRenewalInterest: number,
-    principalBefore: number,
-    actionType: 'Renew' | 'Partial' | 'Close',
-    periodDays?: number
+    renewalInterestDue: number,
+    principal: number,
+    actionType: string,
+    periodDays: number = 10
   ) {
-    const totalDue = Number((penaltyDue + interestDue).toFixed(2));
-    const totalForClose = Number((principalBefore + totalDue).toFixed(2));
-    const isClosing = actionType === 'Close' || paymentAmount >= totalForClose;
+    const pAmt = Number(paymentAmount) || 0;
+    const penDue = Number(penaltyDue) || 0;
+    const intDue = Number(interestDue) || 0;
+    const renDue = Number(renewalInterestDue) || 0;
+    const prin = Number(principal) || 0;
+    const days = Number(periodDays) || 10;
 
-    if (isClosing) {
-      const penaltyPaid = Math.max(0, penaltyDue);
-      const interestPaid = Math.max(0, interestDue);
-      const principalPaid = Number(Math.max(0, paymentAmount - penaltyPaid - interestPaid).toFixed(2));
+    if (actionType === 'Partial') {
       return {
-        penaltyPaid: Number(penaltyPaid.toFixed(2)),
-        overdueInterestPaid: Number(interestPaid.toFixed(2)),
+        penaltyPaid: 0,
+        overdueInterestPaid: 0,
         renewalInterestPaid: 0,
-        interestPaid: Number(interestPaid.toFixed(2)),
-        principalPaid: Number(principalPaid.toFixed(2)),
-        renewedDays: 0
+        interestPaid: 0,
+        principalPaid: pAmt,
+        renewedDays: 0,
+        remaining: 0
       };
     }
 
-    const useSequential = paymentAmount >= (totalDue - 200);
+    if (actionType === 'Close') {
+      let remaining = pAmt;
+      const penaltyPaid = Math.min(remaining, penDue);
+      remaining = Number((remaining - penaltyPaid).toFixed(2));
+      const overdueInterestPaid = Math.min(remaining, intDue);
+      remaining = Number((remaining - overdueInterestPaid).toFixed(2));
+      const principalPaid = Math.min(remaining, prin);
+      remaining = Number((remaining - principalPaid).toFixed(2));
 
-    if (!useSequential && paymentAmount <= totalDue) {
-      // Scenario B: Partial Payment ONLY (No renewal allowed)
-      const targetPenalty = Number((paymentAmount * 0.20).toFixed(2));
-      const penaltyPaid = Math.max(0, Math.min(targetPenalty, penaltyDue));
-      const interestPaid = Number((paymentAmount - penaltyPaid).toFixed(2));
+      return {
+        penaltyPaid: Number(penaltyPaid.toFixed(2)),
+        overdueInterestPaid: Number(overdueInterestPaid.toFixed(2)),
+        renewalInterestPaid: 0,
+        interestPaid: Number(overdueInterestPaid.toFixed(2)),
+        principalPaid: Number(principalPaid.toFixed(2)),
+        renewedDays: 0,
+        remaining: Number(remaining.toFixed(2))
+      };
+    }
+
+    // Default or 'Renew'
+    const totalDue = Number((penDue + intDue).toFixed(2));
+    const useSequential = pAmt >= (totalDue - 200);
+
+    if (!useSequential && pAmt <= totalDue) {
+      // Proportional split (Scenario B)
+      const targetPenalty = Number((pAmt * 0.20).toFixed(2));
+      const penaltyPaid = Math.max(0, Math.min(targetPenalty, penDue));
+      const interestPaid = Number((pAmt - penaltyPaid).toFixed(2));
       return {
         penaltyPaid: Number(penaltyPaid.toFixed(2)),
         overdueInterestPaid: Number(interestPaid.toFixed(2)),
         renewalInterestPaid: 0,
         interestPaid: Number(interestPaid.toFixed(2)),
         principalPaid: 0,
-        renewedDays: 0
+        renewedDays: 0,
+        remaining: 0
       };
     } else {
-      // Scenario C: Payment with renewal (allocation depends on actionType)
-      const penaltyPaid = Math.max(0, Math.min(paymentAmount, penaltyDue));
-      let remaining = Number((paymentAmount - penaltyPaid).toFixed(2));
+      // Sequential split with renewal (Scenario C)
+      const penaltyPaid = Math.max(0, Math.min(pAmt, penDue));
+      let remaining = Number((pAmt - penaltyPaid).toFixed(2));
 
-      const overdueInterestPaid = Math.max(0, Math.min(remaining, interestDue));
+      const overdueInterestPaid = Math.max(0, Math.min(remaining, intDue));
       remaining = Number((remaining - overdueInterestPaid).toFixed(2));
 
-      const penaltyOutstanding = Number((penaltyDue - penaltyPaid).toFixed(2));
-      const overdueInterestOutstanding = Number((interestDue - overdueInterestPaid).toFixed(2));
+      const penaltyOutstanding = Number((penDue - penaltyPaid).toFixed(2));
+      const overdueInterestOutstanding = Number((intDue - overdueInterestPaid).toFixed(2));
 
       const isDuesCleared = penaltyOutstanding === 0 && overdueInterestOutstanding === 0;
 
-      let renewalInterestPaid = 0;
-      let principalPaid = 0;
-
-      if (actionType === 'Renew') {
-        // Renewal Account: uncapped renewal interest, principalPaid is always 0
-        renewalInterestPaid = isDuesCleared ? remaining : 0;
-        principalPaid = 0;
-      } else {
-        // Partial Payment + Renewal: capped at 1 monthly cycle, remaining reduces principal
-        renewalInterestPaid = isDuesCleared ? Math.max(0, Math.min(remaining, monthlyRenewalInterest)) : 0;
-        principalPaid = isDuesCleared ? Number((remaining - renewalInterestPaid).toFixed(2)) : 0;
-      }
-
+      const renewalInterestPaid = isDuesCleared ? remaining : 0;
       const totalInterestPaid = Number((overdueInterestPaid + renewalInterestPaid).toFixed(2));
 
-      const pDays = (periodDays && periodDays > 0) ? periodDays : 30;
-      const dailyInterestValue = Number((monthlyRenewalInterest / pDays).toFixed(5));
-      const renewedDays = dailyInterestValue > 0 ? Math.round(renewalInterestPaid / dailyInterestValue) : 0;
+      const dailyInterestValue = days > 0 ? (renDue / days) : (renDue / 10);
+      const renewedDays = dailyInterestValue > 0 ? Math.floor(renewalInterestPaid / dailyInterestValue) : 0;
 
       return {
         penaltyPaid: Number(penaltyPaid.toFixed(2)),
         overdueInterestPaid: Number(overdueInterestPaid.toFixed(2)),
         renewalInterestPaid: Number(renewalInterestPaid.toFixed(2)),
         interestPaid: totalInterestPaid,
-        principalPaid: Number(principalPaid.toFixed(2)),
-        renewedDays
+        principalPaid: 0,
+        renewedDays,
+        remaining: 0
       };
     }
   },

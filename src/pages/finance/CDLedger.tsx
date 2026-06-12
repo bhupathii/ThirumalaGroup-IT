@@ -680,6 +680,15 @@ const CDLedger: React.FC = () => {
   // Date Formatter helper (returns format e.g. 07-Mar-26)
   const formatDateOld = (dateStr: string | Date | number | null | undefined) => {
     if (!dateStr) return '';
+    if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const parts = dateStr.split('-');
+      const year = parseInt(parts[0], 10);
+      const monthIndex = parseInt(parts[1], 10) - 1;
+      const day = parts[2];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const yy = String(year).slice(-2);
+      return `${day}-${months[monthIndex]}-${yy}`;
+    }
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return '';
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -988,13 +997,26 @@ const CDLedger: React.FC = () => {
   const displayedInterestDetails = useMemo(() => {
     const list: any[] = [];
     if (!selectedLoan) return list;
-    
-    const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
 
     displayedStatementEntries.forEach(entry => {
       const isInterestOrPenalty = ['penalty a/c', 'cd commission a/c'].includes((entry.account_name || '').toLowerCase());
       if (isInterestOrPenalty && entry.credit > 0 && entry.entry_type !== 'opening_commission' && entry.entry_type !== 'Commission' && !entry.id.toString().startsWith('fallback-comm-')) {
-        const isRenewalInterest = entry.particulars?.toLowerCase().includes('renew') && entry.account_name === 'CD COMMISSION A/C';
+        
+        // Find matching interest detail row from Supabase table
+        const matchingDetail = cdInterestDetails.find(d => 
+          d.entry_id === entry.id || 
+          d.ledger_entry_id === entry.id ||
+          (d.receipt_no === entry.receipt_no && d.row_type === (entry.account_name === 'PENALTY A/C' ? 'penalty_payment' : 'interest_payment'))
+        );
+
+        let renewed_days = 0;
+        let renewed_till_date = null;
+
+        if (matchingDetail) {
+          renewed_days = Number(matchingDetail.renewed_days) || 0;
+          renewed_till_date = matchingDetail.renewed_till_date;
+        }
+
         list.push({
           id: `int-detail-${entry.id}`,
           loan_id: entry.loan_id,
@@ -1003,14 +1025,8 @@ const CDLedger: React.FC = () => {
           credit: entry.credit,
           receipt_no: entry.receipt_no,
           particulars: entry.particulars,
-          renewed_days: isRenewalInterest ? periodDays : 0,
-          renewed_till_date: isRenewalInterest 
-            ? (() => {
-                const dateObj = new Date(new Date(entry.entry_date).getTime() + periodDays * 24 * 60 * 60 * 1000);
-                const tzoffset = dateObj.getTimezoneOffset() * 60000;
-                return new Date(dateObj.getTime() - tzoffset).toISOString().split('T')[0];
-              })()
-            : null,
+          renewed_days,
+          renewed_till_date,
           row_type: entry.account_name === 'PENALTY A/C' ? 'Penalty Paid' : 'Interest Paid',
           created_at: entry.created_at || entry.entry_date
         });
@@ -1019,7 +1035,14 @@ const CDLedger: React.FC = () => {
 
     cdInterestDetails.forEach(detail => {
       if ((detail.particulars || '').toLowerCase().includes('note:')) {
-        list.push(detail);
+        let renewed_days = Number(detail.renewed_days) || 0;
+        let renewed_till_date = detail.renewed_till_date;
+
+        list.push({
+          ...detail,
+          renewed_days,
+          renewed_till_date
+        });
       }
     });
 
@@ -1387,9 +1410,28 @@ const CDLedger: React.FC = () => {
       return;
     }
 
+    // Validation for Partial Payment principal bounds
+    if (actionType === 'Partial') {
+      const principal = ledgerMetrics.principalBalance || 0;
+      if (amount >= principal) {
+        toast.error(`Partial Payment amount (₹${amount.toFixed(2)}) must be strictly less than the outstanding principal balance (₹${principal.toFixed(2)}). To close the loan, please use Close Account.`);
+        return;
+      }
+    }
+
+    // Operator Warning/Confirmation when outstanding dues exist during Partial Payment
+    const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
+    const outstandingInterest = renewCalculations.outstandingInterest || 0;
+    if (actionType === 'Partial' && (outstandingPenalty > 0 || outstandingInterest > 0)) {
+      const totalOutstanding = outstandingPenalty + outstandingInterest;
+      const confirmMsg = `WARNING: There are outstanding dues of ₹${totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Interest: ₹${outstandingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Penalty: ₹${outstandingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}).\n\nMaking a Partial Payment will reduce the Principal Balance ONLY.\nIt will NOT pay off outstanding interest/penalty, NOT extend the due date, and NOT reset the accrual cycle.\n\nAre you sure you want to proceed with this Principal Reduction Only payment?`;
+      if (!window.confirm(confirmMsg)) {
+        return;
+      }
+    }
+
     const dueDays = renewCalculations.daysPastDue || 0;
 
-    
     setIsRenewing(true);
     try {
       // Snapshot variables before saving
@@ -2332,9 +2374,9 @@ const CDLedger: React.FC = () => {
                           </div>
 
                           {/* Option 2 Bar */}
-                          {paymentPreview.paymentAmount > ledgerMetrics.totalToRegularize && paymentPreview.partial.principalPaid > 0 && (
+                          {paymentPreview.partial.principalPaid > 0 && (
                             <div className="space-y-2 border-t border-slate-200/50 pt-3">
-                              <span className="text-[11px] font-bold text-indigo-800 uppercase block">Option 2: Partial Payment & Renewal Allocation</span>
+                              <span className="text-[11px] font-bold text-indigo-800 uppercase block">Option 2: Partial Payment Allocation (Principal Only)</span>
                               {(() => {
                                 const total = paymentPreview.paymentAmount;
                                 const pPaid = paymentPreview.partial.penaltyPaid;
@@ -2436,7 +2478,7 @@ const CDLedger: React.FC = () => {
                         isRenewing || 
                         !totalAmountPaying || 
                         Number(totalAmountPaying) <= 0 ||
-                        Number(totalAmountPaying) <= (ledgerMetrics.totalToRegularize || 0) ||
+                        Number(totalAmountPaying) >= ledgerMetrics.principalBalance ||
                         selectedLoan.status === 'Closed' || 
                         selectedLoan.status === 'NPA_CLOSED' || 
                         !!renewCalculations?.isDateInvalid
@@ -2444,7 +2486,7 @@ const CDLedger: React.FC = () => {
                       className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0"
                     >
                       <CreditCard className="w-3.5 h-3.5" />
-                      Partial & Renew
+                      Partial Payment
                     </Button>
                     
                     <Button
@@ -2453,10 +2495,8 @@ const CDLedger: React.FC = () => {
                         isRenewing || 
                         selectedLoan.status === 'Closed' || 
                         selectedLoan.status === 'NPA_CLOSED' || 
-                        !(
-                          ledgerMetrics.principalBalance <= 0 && 
-                          ((renewCalculations?.outstandingInterest || 0) + (renewCalculations?.outstandingPenalty || 0)) <= 0
-                        ) ||
+                        !totalAmountPaying ||
+                        Number(totalAmountPaying) < ledgerMetrics.totalClose ||
                         !!renewCalculations?.isDateInvalid
                       }
                       className="bg-rose-600 hover:bg-rose-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0"
