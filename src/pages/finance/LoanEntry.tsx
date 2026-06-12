@@ -1380,6 +1380,7 @@ const LoanEntry: React.FC = () => {
                   disabled={isLookupMode}
                   onChange={(e) => setLoanCategory(e.target.value as any)}
                   className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
+                  style={{ fontFamily: 'Times New Roman', fontSize: '15px', fontWeight: 'bold' }}
                   required
                 >
                   <option value="CD">CHIT FUND (CD)</option>
@@ -2121,14 +2122,14 @@ const LoanEntry: React.FC = () => {
               <h3 className="text-slate-800 font-bold text-base tracking-wide uppercase">
                 LOAN TERMS
               </h3>
-              <p className="text-slate-500 text-xs uppercase font-bold mt-1 tracking-wider">
+              <p className="text-slate-800 text-xs uppercase font-extrabold mt-1 tracking-wider">
                 CASH DEPOSIT (CD) — DEFAULT RATE 3% / MONTH
               </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
               {/* Row 1 */}
               <div>
-                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">LOAN AMOUNT (₹) <span className="text-red-500 ml-0.5">*</span></label>
+                <label className="text-xs font-extrabold text-slate-800 tracking-wider uppercase mb-2 block">LOAN AMOUNT (₹) <span className="text-red-500 ml-0.5">*</span></label>
                 <input
                   type="number"
                   ref={amountRef}
@@ -2139,7 +2140,7 @@ const LoanEntry: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">RATE OF INTEREST (% / MONTH)</label>
+                <label className="text-xs font-extrabold text-slate-800 tracking-wider uppercase mb-2 block">RATE OF INTEREST (% / MONTH)</label>
                 <input
                   type="number"
                   ref={interestRateRef}
@@ -2147,12 +2148,12 @@ const LoanEntry: React.FC = () => {
                   onChange={(e) => { setInterestRate(e.target.value); setErrors(p => ({...p, interestRate: false})) }}
                   className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[42px] ${errors.interestRate ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                 />
-                <span className="text-[10px] font-bold tracking-wider text-slate-400 mt-2 block uppercase">DEFAULT: 3%</span>
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-800 mt-2 block uppercase">DEFAULT: 3%</span>
               </div>
 
               {/* Row 2 */}
               <div>
-                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">PERIOD (DAYS)</label>
+                <label className="text-xs font-extrabold text-slate-800 tracking-wider uppercase mb-2 block">PERIOD (DAYS)</label>
                 <input
                   type="number"
                   ref={durationMonthsRef}
@@ -2160,10 +2161,10 @@ const LoanEntry: React.FC = () => {
                   onChange={(e) => { setDurationMonths(e.target.value); setErrors(p => ({...p, durationMonths: false})) }}
                   className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[42px] ${errors.durationMonths ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                 />
-                <span className="text-[10px] font-bold tracking-wider text-slate-400 mt-2 block uppercase leading-relaxed">DAYS FOR CD/OD</span>
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-800 mt-2 block uppercase leading-relaxed">DAYS FOR CD/OD</span>
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">DOCUMENT CHARGES (₹)</label>
+                <label className="text-xs font-extrabold text-slate-800 tracking-wider uppercase mb-2 block">DOCUMENT CHARGES (₹)</label>
                 <input
                   type="number"
                   value={docCharges}
@@ -2174,7 +2175,7 @@ const LoanEntry: React.FC = () => {
 
               {/* Row 3 */}
               <div>
-                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">PENALTY PERCENT (0.75% DEFAULT)</label>
+                <label className="text-xs font-extrabold text-slate-800 tracking-wider uppercase mb-2 block">PENALTY PERCENT (0.75% DEFAULT)</label>
                 <input
                   type="number"
                   value={penaltyPercent}
@@ -2186,7 +2187,7 @@ const LoanEntry: React.FC = () => {
 
               {/* Row 4 */}
               <div className="sm:col-span-2">
-                <label className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 block">PARTICULARS</label>
+                <label className="text-xs font-extrabold text-slate-800 tracking-wider uppercase mb-2 block">PARTICULARS</label>
                 <textarea
                   ref={particularsRef}
                   value={particulars}
@@ -2212,6 +2213,7 @@ const LoanEntry: React.FC = () => {
                   value={selectedPartnerId}
                   onChange={(e) => setSelectedPartnerId(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
+                  style={{ fontFamily: 'Times New Roman', fontSize: '15px', fontWeight: 'bold' }}
                 >
                   <option value="">-- SELECT PARTNER --</option>
                   {partners.map(p => (
@@ -2529,52 +2531,52 @@ const LoanEntry: React.FC = () => {
             </div>
 
             {!liveCalculations ? (
-              <div className="py-8 text-center text-slate-400 peek-h3 uppercase">
+              <div className="py-8 text-center text-slate-800 font-extrabold peek-h3 uppercase" style={{ fontFamily: 'Times New Roman' }}>
                 FILL IN THE LOAN AMOUNT TO SEE THE CALCULATION PREVIEW.
               </div>
             ) : loanCategory === 'CD' ? (
               <div className="space-y-4 text-slate-700 finance-caption">
                 <div className="grid grid-cols-2 gap-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <span className="text-slate-400 peek-small-10 uppercase">Loan Amount (Principal):</span>
-                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.principal)}</span>
+                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Loan Amount (Principal):</span>
+                  <span className="text-right text-slate-950 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.principal)}</span>
 
-                  <span className="text-slate-400 peek-small-10 uppercase">Document Charges:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.docFees)}</span>
+                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Document Charges:</span>
+                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.docFees)}</span>
 
-                  <span className="text-slate-400 peek-small-10 uppercase">Interest:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.interestAmount)}</span>
+                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Interest:</span>
+                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.interestAmount)}</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-y-2 border-t pt-2.5">
-                  <span className="text-slate-850 border-t pt-1.5 finance-sidebar-link uppercase font-bold">Payable Amount:</span>
-                  <span className="text-right text-green-700 border-t pt-1.5 finance-sidebar-link font-bold text-lg">₹{formatRupee(liveCalculations.payableAmount)}</span>
+                <div className="grid grid-cols-2 gap-y-2 border-t pt-2.5 items-center">
+                  <span className="text-slate-900 text-[14px] uppercase font-black tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Payable Amount:</span>
+                  <span className="text-right text-emerald-800 text-[22px] font-black" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.payableAmount)}</span>
                 </div>
               </div>
             ) : (
               <div className="space-y-4 text-slate-700 finance-caption">
                 <div className="grid grid-cols-2 gap-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <span className="text-slate-400 peek-small-10 uppercase">Loan Amount (Principal):</span>
-                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.principal)}</span>
+                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Loan Amount (Principal):</span>
+                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.principal)}</span>
 
-                  <span className="text-slate-400 peek-small-10 uppercase">Document Charges:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.docFees)}</span>
+                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Document Charges:</span>
+                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.docFees)}</span>
 
-                  <span className="text-slate-400 peek-small-10 uppercase">Net Disbursement:</span>
-                  <span className="text-right text-slate-900 text-blue-650 peek-button">₹{formatRupee(liveCalculations.netDisbursed)}</span>
+                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Net Disbursement:</span>
+                  <span className="text-right text-blue-700 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.netDisbursed)}</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-y-2 border-t pt-2.5">
-                  <span className="text-slate-400 peek-small-10 uppercase">Interest Component:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.interestAmount)}</span>
+                <div className="grid grid-cols-2 gap-y-2 border-t pt-2.5 items-center">
+                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Interest Component:</span>
+                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.interestAmount)}</span>
 
-                  <span className="text-slate-400 peek-small-10 uppercase">Total Repayment:</span>
-                  <span className="text-right text-slate-900 peek-button">₹{formatRupee(liveCalculations.totalRepayment)}</span>
+                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Total Repayment:</span>
+                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.totalRepayment)}</span>
 
-                  <span className="text-slate-400 peek-small-10 uppercase">Instalment Count:</span>
-                  <span className="text-right text-slate-900 peek-button">{liveCalculations.duesCount} {dueType} Dues</span>
+                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Instalment Count:</span>
+                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>{liveCalculations.duesCount} {dueType} Dues</span>
 
-                  <span className="text-slate-800 mt-1 border-t pt-1.5 finance-sidebar-link uppercase">Instalment Amount:</span>
-                  <span className="text-right text-green-700 mt-1 border-t pt-1.5 finance-sidebar-link">₹{formatRupee(liveCalculations.dueAmount)}</span>
+                  <span className="text-slate-900 text-[14px] uppercase font-black tracking-wider mt-1" style={{ fontFamily: 'Times New Roman' }}>Instalment Amount:</span>
+                  <span className="text-right text-emerald-800 text-[22px] font-black" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.dueAmount)}</span>
                 </div>
               </div>
             )}

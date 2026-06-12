@@ -122,9 +122,16 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className={className} style={{ position: 'relative' }} ref={wrapperRef}>
         {label && (
-          <label className={isFinance ? `peek-label uppercase ${size === 'lg' ? 'text-[12px]' : ''}` : `block font-bold text-gray-700 mb-1 ${
-            size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-base' : 'text-sm'
-          }`} style={isFinance ? {} : { fontFamily: style?.fontFamily || 'Times New Roman', fontSize: '14px', fontWeight: 'bold' }}>
+          <label 
+            className={isFinance ? `peek-label uppercase ${size === 'lg' ? 'text-[14px]' : ''}` : `block font-bold text-gray-700 mb-1 ${
+              size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-base' : 'text-sm'
+            }`} 
+            style={{ 
+              fontFamily: style?.fontFamily || 'Times New Roman', 
+              fontSize: '15px', 
+              fontWeight: 'bold' 
+            }}
+          >
             {label}
             {required && <span className='text-red-500 ml-1'>*</span>}
           </label>
@@ -159,13 +166,18 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
                 ? 'border-red-500 bg-red-50 focus:ring-red-500' 
                 : 'border-gray-300 focus:ring-blue-500'
             } ${
-              isFinance ? 'peek-button text-slate-800' : 'font-bold'
+              isFinance ? 'peek-button text-slate-800 font-bold' : 'font-bold'
             } ${
               size === 'sm' ? `px-2 py-1 ${!isFinance ? 'text-sm' : ''}` : 
               size === 'lg' ? `px-4 py-3 ${!isFinance ? 'text-lg' : ''}` : 
               `px-3 py-2 ${!isFinance ? 'text-base' : ''}`
             } ${type === 'date' ? 'cursor-pointer' : ''}`}
-            style={isFinance ? { ...style } : { fontFamily: 'Times New Roman', fontSize: '14px', fontWeight: 'bold', ...style }}
+            style={{ 
+              fontFamily: style?.fontFamily || 'Times New Roman', 
+              fontSize: '15px', 
+              fontWeight: 'bold', 
+              ...style 
+            }}
             onFocus={() => {
               setShowSuggestions(true);
             }}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
@@ -36,7 +36,7 @@ const startOfDay = (d: Date | string | number) => {
 
 const CDLedger: React.FC = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
+
 
   // Permission Check
   const hasAccess = useMemo(() => {
@@ -112,6 +112,7 @@ const CDLedger: React.FC = () => {
   // Action Panel State
   const [totalAmountPaying, setTotalAmountPaying] = useState('');
   const [receiptNo, setReceiptNo] = useState('');
+  const [activeLogTab, setActiveLogTab] = useState<'statement' | 'interest'>('statement');
 
   // NPA Modal State
   const [showNpaModal, setShowNpaModal] = useState(false);
@@ -1958,131 +1959,278 @@ const CDLedger: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* Unified Operator Workspace */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
-              {/* Left Column: Customer Details & Record Navigator */}
-              <div className="space-y-6">
-                <Card 
-                  title="Customer Details" 
-                  subtitle="Primary borrower card information"
-                  className="shadow-sm border-gray-100 rounded-3xl"
-                  headerActions={
+            {/* Workspace Header Hub */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm print:hidden">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => { setSelectedLoan(null); setListSearchQuery(''); }}
+                  className="inline-flex items-center gap-2 text-xs font-bold text-gray-655 hover:text-slate-900 bg-gray-50 hover:bg-gray-100 border border-gray-200/60 px-3 py-2 rounded-xl transition-all shadow-sm font-sans"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Back to All
+                </button>
+                <div className="h-6 w-px bg-gray-200 hidden sm:block"></div>
+                <div>
+                  <h2 className="text-lg font-extrabold text-slate-950 flex items-center gap-2">
+                    {selectedLoan.customer?.name}
+                    <span className="text-sm font-mono text-slate-900 font-black bg-slate-100 px-2.5 py-0.5 rounded-lg">A/C: {selectedLoan.loan_id}</span>
+                  </h2>
+                </div>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  selectedLoan.status === 'Active' ? 'bg-green-100 text-green-700'
+                  : selectedLoan.status === 'Closed' ? 'bg-gray-100 text-gray-500'
+                  : selectedLoan.status === 'NPA_CLOSED' ? 'bg-orange-100 text-orange-700'
+                  : 'bg-yellow-100 text-yellow-700'
+                }`}>
+                  {(selectedLoan.status || 'Active').toUpperCase()}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 self-end sm:self-auto font-sans">
+                <span className="text-xs text-slate-800 uppercase tracking-wider font-extrabold">
+                  Record: <span className="text-gray-750 font-black">{currentIndex + 1}</span> of <span className="text-gray-750 font-black">{filteredLoansList.length}</span>
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={handlePrevRecord}
+                    disabled={currentIndex <= 0}
+                    className="p-2 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                    title="Previous Record"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-gray-650" />
+                  </button>
+                  <button
+                    onClick={handleNextRecord}
+                    disabled={currentIndex >= filteredLoansList.length - 1}
+                    className="p-2 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                    title="Next Record"
+                  >
+                    <ChevronRight className="w-4 h-4 text-gray-655" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Workspace Profile Cards Layout (Row 1: Borrower & Guarantors, Row 2: Photos & Documents) */}
+            <div className="space-y-6 print:hidden">
+              {/* Row 1: Borrower and Guarantor Details (3 Columns) */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Card 1: Customer Details */}
+                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 relative flex flex-col justify-between min-h-[220px]">
+                  <div className="flex justify-between items-center border-b pb-2 mb-3">
+                    <div>
+                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Customer Details</span>
+                      <span className="text-[10px] text-slate-500 font-bold block">Borrower Info</span>
+                    </div>
                     <Button 
                       onClick={isEditing ? handleSaveDetails : handleToggleEdit} 
                       variant={isEditing ? "success" : "secondary"}
                       size="xs"
                       icon={isEditing ? Save : Edit2}
                       disabled={savingDetails || selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
+                      className="scale-90 border-0"
                     >
                       {isEditing ? 'Save' : 'Edit'}
                     </Button>
-                  }
-                >
+                  </div>
                   <div className="flex-1">
                     {isEditing ? (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="col-span-2 sm:col-span-1">
-                          <Input label="Borrower Name" value={editCustName} onChange={setEditCustName} />
-                        </div>
-                        <div className="col-span-2 sm:col-span-1">
-                          <Input label="S/o W/o" value={editCustFatherName} onChange={setEditCustFatherName} />
-                        </div>
-                        <div className="col-span-2">
-                          <Input label="Borrower Address" value={editCustAddress} onChange={setEditCustAddress} />
-                        </div>
-                        <div className="col-span-2 sm:col-span-1">
-                          <Input label="Phone No 1" value={editCustPhone} onChange={setEditCustPhone} />
-                        </div>
-                        <div className="col-span-2 sm:col-span-1">
-                          <Input label="Phone No 2" value={editCustPhone2} onChange={setEditCustPhone2} />
-                        </div>
-                        <div className="col-span-2 sm:col-span-1">
-                          <Input label="Aadhaar" value={editCustAadhaar} onChange={setEditCustAadhaar} />
-                        </div>
-                        <div className="col-span-2 sm:col-span-1">
-                          <Input label="Partner" value={editCustPartnerName} onChange={setEditCustPartnerName} />
-                        </div>
+                      <div className="space-y-2 text-xs">
+                        <Input label="Name" value={editCustName} onChange={setEditCustName} className="scale-90 origin-top-left" />
+                        <Input label="S/o W/o" value={editCustFatherName} onChange={setEditCustFatherName} className="scale-90 origin-top-left" />
+                        <Input label="Address" value={editCustAddress} onChange={setEditCustAddress} className="scale-90 origin-top-left" />
+                        <Input label="Phone 1" value={editCustPhone} onChange={setEditCustPhone} className="scale-90 origin-top-left" />
+                        <Input label="Phone 2" value={editCustPhone2} onChange={setEditCustPhone2} className="scale-90 origin-top-left" />
+                        <Input label="Aadhaar" value={editCustAadhaar} onChange={setEditCustAadhaar} className="scale-90 origin-top-left" />
+                        <Input label="Partner" value={editCustPartnerName} onChange={setEditCustPartnerName} className="scale-90 origin-top-left" />
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-gray-700">
-                        <div className="col-span-1 border-b pb-1.5">
-                          <span className="text-gray-400 font-medium block text-xs">Name:</span>
-                          <span className="font-semibold text-gray-900">{selectedLoan.customer?.name}</span>
+                      <div className="space-y-2 text-xs text-gray-700">
+                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Name:</span>
+                          <span className="text-xs font-black text-black">{selectedLoan.customer?.name}</span>
                         </div>
-                        <div className="col-span-1 border-b pb-1.5">
-                          <span className="text-gray-400 font-medium block text-xs">S/o / W/o:</span>
-                          <span className="font-medium text-gray-800">{selectedLoan.customer?.father_husband_name || 'N/A'}</span>
+                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">S/o W/o:</span>
+                          <span className="text-xs font-black text-black">{selectedLoan.customer?.father_husband_name || 'N/A'}</span>
                         </div>
-                        <div className="col-span-2 border-b pb-1.5">
-                          <span className="text-gray-400 font-medium block text-xs">Address:</span>
-                          <span className="font-medium text-gray-800 text-xs leading-relaxed">{selectedLoan.customer?.address || 'N/A'}</span>
+                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Phone 1:</span>
+                          <span className="text-xs font-black text-black">{selectedLoan.customer?.phone || 'N/A'}</span>
                         </div>
-                        <div className="col-span-1 border-b pb-1.5">
-                          <span className="text-gray-400 font-medium block text-xs">Phone No 1:</span>
-                          <span className="font-semibold text-gray-800">{selectedLoan.customer?.phone || 'N/A'}</span>
+                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Phone 2:</span>
+                          <span className="text-xs font-black text-black">{selectedLoan.customer?.phone2 || 'N/A'}</span>
                         </div>
-                        <div className="col-span-1 border-b pb-1.5">
-                          <span className="text-gray-400 font-medium block text-xs">Phone No 2:</span>
-                          <span className="font-medium text-gray-800">{selectedLoan.customer?.phone2 || 'N/A'}</span>
+                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Aadhaar:</span>
+                          <span className="text-xs font-black text-black font-mono">{selectedLoan.customer?.aadhaar || 'N/A'}</span>
                         </div>
-                        <div className="col-span-1 border-b pb-1.5">
-                          <span className="text-gray-400 font-medium block text-xs">Aadhaar:</span>
-                          <span className="font-medium text-gray-850 font-mono">{selectedLoan.customer?.aadhaar || 'N/A'}</span>
+                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Partner:</span>
+                          <span className="text-xs font-black text-black">{selectedLoan.customer?.partner_name || 'N/A'}</span>
                         </div>
-                        <div className="col-span-1 border-b pb-1.5">
-                          <span className="text-gray-400 font-medium block text-xs">Partner:</span>
-                          <span className="font-medium text-gray-850">{selectedLoan.customer?.partner_name || 'N/A'}</span>
-                        </div>
-                        <div className="col-span-1 border-b pb-1.5">
-                          <span className="text-gray-400 font-medium block text-xs">Account Status:</span>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            selectedLoan.status === 'Active' ? 'bg-green-100 text-green-700'
-                            : selectedLoan.status === 'Closed' ? 'bg-gray-100 text-gray-500'
-                            : selectedLoan.status === 'NPA_CLOSED' ? 'bg-orange-100 text-orange-700'
-                            : 'bg-yellow-100 text-yellow-700'
-                          }`}>
-                            {(selectedLoan.status || 'Active').toUpperCase()}
-                          </span>
+                        <div className="flex flex-col border-b border-gray-50 pb-1.5">
+                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Address:</span>
+                          <span className="text-xs font-black text-black leading-tight mt-1">{selectedLoan.customer?.address || 'N/A'}</span>
                         </div>
                       </div>
                     )}
                   </div>
+                </div>
 
-                  {/* Record selector/navigator at the bottom */}
-                  <div className="border-t border-gray-150 pt-4 mt-6 flex items-center justify-between">
-                    <button
-                      onClick={() => { setSelectedLoan(null); setListSearchQuery(''); }}
-                      className="flex items-center gap-1.5 text-xs text-green-700 font-semibold hover:text-green-800 hover:underline transition-colors"
-                    >
-                      <ArrowLeft className="w-3.5 h-3.5" />
-                      Back to All Loans
-                    </button>
-                    <span className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
-                      Record: <span className="text-gray-700">{currentIndex + 1}</span> of <span className="text-gray-700">{filteredLoansList.length}</span>
-                    </span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handlePrevRecord}
-                        disabled={currentIndex <= 0}
-                        className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
-                      >
-                        <ChevronLeft className="w-4 h-4 text-gray-600" />
-                      </button>
-                      <button
-                        onClick={handleNextRecord}
-                        disabled={currentIndex >= filteredLoansList.length - 1}
-                        className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
-                      >
-                        <ChevronRight className="w-4 h-4 text-gray-600" />
-                      </button>
+                {/* Card 2: Guarantor 1 */}
+                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 relative flex flex-col justify-between min-h-[220px]">
+                  <div className="flex justify-between items-center border-b pb-2 mb-3">
+                    <div>
+                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Guarantor 1</span>
+                      <span className="text-[10px] text-slate-500 font-bold block">Surety Profile</span>
                     </div>
                   </div>
-                </Card>
+                  <div className="flex-1 space-y-2 text-xs text-gray-700">
+                    <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                      <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Name:</span>
+                      <span className="text-xs font-black text-black">{guarantor1?.name || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                      <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Phone No:</span>
+                      <span className="text-xs font-black text-black">{guarantor1?.phone || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                      <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Aadhaar:</span>
+                      <span className="text-xs font-black text-black font-mono">{guarantor1?.aadhaar || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 3: Guarantor 2 */}
+                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 relative flex flex-col justify-between min-h-[220px]">
+                  <div className="flex justify-between items-center border-b pb-2 mb-3">
+                    <div>
+                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Guarantor 2</span>
+                      <span className="text-[10px] text-slate-500 font-bold block">Secondary Surety</span>
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-2 text-xs text-gray-700">
+                    <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                      <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Name:</span>
+                      <span className="text-xs font-black text-black">{guarantor2?.name || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                      <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Phone No:</span>
+                      <span className="text-xs font-black text-black">{guarantor2?.phone || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                      <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Aadhaar:</span>
+                      <span className="text-xs font-black text-black font-mono">{guarantor2?.aadhaar || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Middle Column: Calculation / Action Panel */}
-              <div className="space-y-6">
+              {/* Row 2: Profile Photos and Document Status (2 Columns) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Card 4: Profile Photos */}
+                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 relative flex flex-col justify-between min-h-[220px]">
+                  <div className="flex justify-between items-center border-b pb-2 mb-3">
+                    <div>
+                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Profile Photos</span>
+                      <span className="text-[10px] text-slate-500 font-bold block">Biometric Images</span>
+                    </div>
+                  </div>
+                  <div className="flex-1 grid grid-cols-3 gap-4 mt-1">
+                    {/* Borrower Photo */}
+                    <div className="text-center">
+                      <div className="w-full aspect-[4/3] rounded-xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center relative group">
+                        {selectedLoan.customer?.customer_photo_url ? (
+                          <img src={selectedLoan.customer.customer_photo_url} alt="Borrower Person" className="w-full h-full object-cover" />
+                        ) : selectedLoan.customer_photo_url ? (
+                          <img src={selectedLoan.customer_photo_url} alt="Borrower Person" className="w-full h-full object-cover" />
+                        ) : (
+                          <User className="w-8 h-8 text-gray-300" />
+                        )}
+                        <span className="absolute bottom-0 left-0 right-0 bg-slate-900/60 text-white text-[10px] py-1 text-center font-bold tracking-wider opacity-90">BORROWER</span>
+                      </div>
+                    </div>
+
+                    {/* Surety 1 Photo */}
+                    <div className="text-center">
+                      <div className="w-full aspect-[4/3] rounded-xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center relative group">
+                        {guarantor1?.photo_url ? (
+                          <img src={guarantor1.photo_url} alt="Surety 1 Person" className="w-full h-full object-cover" />
+                        ) : guarantor1?.customer_photo_url ? (
+                          <img src={guarantor1.customer_photo_url} alt="Surety 1 Person" className="w-full h-full object-cover" />
+                        ) : selectedLoan.surety_photo_url ? (
+                          <img src={selectedLoan.surety_photo_url} alt="Surety 1 Person" className="w-full h-full object-cover" />
+                        ) : (
+                          <User className="w-8 h-8 text-gray-300" />
+                        )}
+                        <span className="absolute bottom-0 left-0 right-0 bg-slate-900/60 text-white text-[10px] py-1 text-center font-bold tracking-wider opacity-90">SURETY 1</span>
+                      </div>
+                    </div>
+
+                    {/* Surety 2 Photo */}
+                    <div className="text-center">
+                      <div className="w-full aspect-[4/3] rounded-xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center relative group">
+                        {guarantor2?.photo_url ? (
+                          <img src={guarantor2.photo_url} alt="Surety 2 Person" className="w-full h-full object-cover" />
+                        ) : guarantor2?.customer_photo_url ? (
+                          <img src={guarantor2.customer_photo_url} alt="Surety 2 Person" className="w-full h-full object-cover" />
+                        ) : (
+                          <User className="w-8 h-8 text-gray-300" />
+                        )}
+                        <span className="absolute bottom-0 left-0 right-0 bg-slate-900/60 text-white text-[10px] py-1 text-center font-bold tracking-wider opacity-90">SURETY 2</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 5: Documents & Status */}
+                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 relative flex flex-col justify-between min-h-[220px]">
+                  <div className="flex justify-between items-center border-b pb-2 mb-3">
+                    <div>
+                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Document Status</span>
+                      <span className="text-[10px] text-slate-500 font-bold block">Pledged Files</span>
+                    </div>
+                  </div>
+                  <div className="flex-1 flex flex-col justify-between gap-3 text-xs">
+                    <div className="space-y-2 text-gray-700">
+                      <div className="flex justify-between border-b border-gray-50 pb-1.5">
+                        <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Doc Type:</span>
+                        <span className="text-xs font-black text-black text-right" title={loanDocuments.map(d => d.document_name).join(', ')}>
+                          {loanDocuments.map(d => d.document_name).join(', ') || 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-gray-50 pb-1.5">
+                        <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Returned Status:</span>
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black ${
+                          documentReturned ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {documentReturned ? 'Yes (Returned)' : 'No (Submitted)'}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => setShowReturnDocModal(true)}
+                      disabled={(selectedLoan.status !== 'Closed' && selectedLoan.status !== 'NPA_CLOSED') || !!renewCalculations?.isDateInvalid}
+                      variant="primary"
+                      size="sm"
+                      className="w-full bg-green-600 hover:bg-green-700 border-0 text-xs py-2 uppercase font-bold tracking-wider mt-1 font-sans"
+                    >
+                      Document Returned
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Unified Operator Workspace - 2 Column Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* LEFT COLUMN (2/3 Width): Action Hub & Statements */}
+              <div className="lg:col-span-2 space-y-6">
+                
+                {/* Operator calculations panel */}
                 <Card 
                   title="Operator Action & Calculations" 
                   subtitle="Configure transactions and calculations details"
@@ -2095,178 +2243,127 @@ const CDLedger: React.FC = () => {
                     </div>
                   ) : null}
 
-                  {/* Calculation variables display */}
-                  <div className="grid grid-cols-2 gap-3 mb-6">
-                    {/* Row 1: Receipt No & Total Amount Paying */}
+                  {/* Active Interactive Fields */}
+                  <div className="grid grid-cols-2 gap-4 mb-6">
                     <Input label="Receipt No" value={receiptNo} readOnly className="bg-gray-50 text-gray-700 font-mono" />
                     <Input 
                       label="Total Amount Paying" 
                       value={totalAmountPaying} 
                       onChange={setTotalAmountPaying} 
-                      className="font-bold text-green-700" 
+                      className="font-bold text-green-700 text-lg" 
                       placeholder="Enter ₹" 
                       type="text"
                       inputMode="decimal"
                       disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
                     />
-                    
-                    {/* Row 2: Loan Amount & Rate % */}
-                    <Input label="Loan Amount" value={originalLoanAmount.toLocaleString('en-IN')} readOnly className="bg-gray-50 text-gray-700 font-mono" />
-                    <Input label="Rate %" value={Number(selectedLoan.interest_rate).toFixed(2)} readOnly className="bg-gray-50 text-gray-700" />
-                    
-                    {/* Row 3: Original Loan Date & Last Payment Date */}
-                    <Input label="Original Loan Date" value={formatDateOld(originalLoanDate)} readOnly className="bg-gray-50 text-gray-700" />
-                    <Input label="Last Payment Date" value={formatDateOld(selectedLoan.date)} readOnly className="bg-gray-50 text-gray-700" />
-                    
-                    {/* Row 4: Current Due Date & Next Due Date */}
-                    <Input label="Current Due Date" value={formatDateOld(renewCalculations?.dueDate)} readOnly className="bg-gray-50 text-gray-700" />
-                    <Input label="Next Due Date" value={totalAmountPaying && Number(totalAmountPaying) > 0 && paymentPreview?.renew?.nextDueDate ? formatDateOld(paymentPreview.renew.nextDueDate) : ''} readOnly className="bg-gray-50 text-gray-700" />
-                    
-                    {/* Row 5: Due Days & Interest */}
-                    <div>
-                      <Input 
-                        label="Due Days" 
-                        value={renewCalculations?.daysPastDue !== undefined ? renewCalculations.daysPastDue : 0} 
-                        readOnly 
-                        className="bg-gray-50 text-gray-700" 
-                      />
-                      {renewCalculations && renewCalculations.daysRemaining !== undefined && renewCalculations.daysRemaining > 0 && (
-                        <div className="text-[10px] text-green-650 font-bold uppercase mt-1 px-1">
-                          Days Remaining = {renewCalculations.daysRemaining}
-                        </div>
-                      )}
-                    </div>
-                    <Input 
-                      label="Interest" 
-                      value={ledgerMetrics.pendingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-                      readOnly 
-                      className="bg-gray-50 text-gray-700 font-mono" 
-                      style={ledgerMetrics.pendingInterest < 0 ? { color: '#059669', fontWeight: 'bold' } : undefined}
-                    />
-
-                    {/* Row 6: Penalty & Total Balance / Principal */}
-                    <Input label="Penalty" value={ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="bg-gray-50 text-gray-700 font-mono" />
-                    <Input label="Total Balance / Principal" value={ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="bg-gray-50 text-gray-700 font-mono" />
-
-                    {/* Row 7: Amount Paid & Document Status */}
-                    <Input label="Amount Paid" value={principalPaidTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} readOnly className="bg-gray-50 text-gray-700 font-mono" />
-                    <Input label="Document Status" value={documentReturned ? 'Documents Returned' : 'Submitted'} readOnly className="bg-gray-50 text-gray-700 font-medium" />
                   </div>
 
-                  {/* Payment Split Preview Panel */}
+                  {/* Signature Element: Interactive Payment Allocation Visualizer */}
                   {paymentPreview && (
-                    <div className="bg-green-50/50 border border-green-100 rounded-2xl p-4 mb-6 space-y-4">
+                    <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 mb-6 space-y-4 shadow-sm">
+                      <h4 className="text-xs text-slate-800 font-bold uppercase tracking-wider border-b border-slate-200/60 pb-1.5 flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-slate-500" />
+                        Real-Time Payment Allocation Visualizer
+                      </h4>
+
                       {paymentPreview.isClosingPayment ? (
-                        <div>
-                          <h4 className="text-xs text-green-800 font-bold uppercase tracking-wider mb-2">Account Closure Preview</h4>
-                          <div className="space-y-1.5 text-sm font-mono bg-white/50 p-3 rounded-xl border border-green-100">
-                            <div className="flex justify-between text-gray-655 border-b border-green-100/50 pb-1.5">
-                              <span>Account Status:</span>
-                              <span className="font-bold text-red-650">Will Close</span>
-                            </div>
-                            <div className="flex justify-between text-gray-655 border-b border-green-100/50 pb-1.5">
-                              <span>Penalty Paid:</span>
-                              <span className="font-bold text-red-650">₹{paymentPreview.renew.penaltyPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div className="flex justify-between text-gray-655 border-b border-green-100/50 pb-1.5">
-                              <span>Overdue Interest Paid:</span>
-                              <span className="font-bold text-orange-600">₹{paymentPreview.renew.overdueInterestPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div className="flex justify-between text-gray-655 border-b border-green-100/50 pb-1.5">
-                              <span>Renewal Interest Paid:</span>
-                              <span className="font-bold text-green-600">₹{paymentPreview.renew.renewalInterestPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div className="flex justify-between text-gray-655 border-b border-green-100/50 pb-1.5">
-                              <span>Principal Paid:</span>
-                              <span className="font-bold text-blue-650">₹{paymentPreview.renew.principalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div className="flex justify-between text-gray-700 pt-0.5">
-                              <span>Remaining Bal:</span>
-                              <span className="font-bold text-gray-900">₹{paymentPreview.renew.principalAfter.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                          </div>
+                        <div className="space-y-3">
+                          <span className="text-xs font-bold text-slate-600 uppercase block">Closing Allocation Preview</span>
+                          {(() => {
+                            const total = paymentPreview.paymentAmount;
+                            const pPaid = paymentPreview.renew.penaltyPaid;
+                            const oPaid = paymentPreview.renew.overdueInterestPaid;
+                            const prPaid = paymentPreview.renew.principalPaid;
+
+                            const pctP = total > 0 ? (pPaid / total) * 100 : 0;
+                            const pctO = total > 0 ? (oPaid / total) * 100 : 0;
+                            const pctPr = total > 0 ? (prPaid / total) * 100 : 0;
+
+                            return (
+                              <div className="space-y-2.5">
+                                <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+                                  {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
+                                  {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
+                                  {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
+                                </div>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-600 font-sans">
+                                  {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
+                                  {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
+                                  {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-indigo-650"></span>Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          <h4 className="text-xs text-green-800 font-bold uppercase tracking-wider border-b border-green-200 pb-1">Payment Options Preview</h4>
-                          
-                          {/* Option 1: Renewal Account */}
-                          <div>
-                            <span className="text-xs font-bold text-green-700 uppercase block mb-1">Option 1: Renewal Account</span>
-                            <div className="space-y-1.5 text-sm font-mono bg-white/50 p-3 rounded-xl border border-green-100">
-                              <div className="flex justify-between text-gray-655">
-                                <span>Penalty Paid:</span>
-                                <span className="font-bold text-red-650">₹{paymentPreview.renew.penaltyPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                              </div>
-                              <div className="flex justify-between text-gray-655">
-                                <span>Overdue Interest Paid:</span>
-                                <span className="font-bold text-orange-600">₹{paymentPreview.renew.overdueInterestPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                              </div>
-                              <div className="flex justify-between text-gray-655">
-                                <span>Renewal Interest Paid:</span>
-                                <span className="font-bold text-green-600">₹{paymentPreview.renew.renewalInterestPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                              </div>
-                              <div className="flex justify-between text-gray-655">
-                                <span>Principal Paid:</span>
-                                <span className="font-bold text-blue-650">₹{paymentPreview.renew.principalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                              </div>
-                              <div className="flex justify-between text-gray-655">
-                                <span>Daily Interest Value:</span>
-                                <span className="font-bold text-gray-700 font-mono">₹{paymentPreview.renew.dailyInterestValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</span>
-                              </div>
-                              <div className="flex justify-between text-gray-655 border-t border-green-100/50 pt-1.5 mt-1">
-                                <span>Renewed Days:</span>
-                                <span className="font-bold text-green-700">{paymentPreview.renew.renewedDays} days</span>
-                              </div>
-                              <div className="flex justify-between text-gray-655">
-                                <span>New Due Date:</span>
-                                <span className="font-bold text-green-700">{paymentPreview.renew.nextDueDate ? formatDateOld(paymentPreview.renew.nextDueDate) : '-'}</span>
-                              </div>
-                              <div className="flex justify-between text-gray-655">
-                                <span>New Principal:</span>
-                                <span className="font-bold text-gray-900">₹{paymentPreview.renew.principalAfter.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                              </div>
-                            </div>
+                          {/* Option 1 Bar */}
+                          <div className="space-y-2">
+                            <span className="text-[11px] font-bold text-emerald-800 uppercase block">Option 1: Renewal Account Allocation</span>
+                            {(() => {
+                              const total = paymentPreview.paymentAmount;
+                              const pPaid = paymentPreview.renew.penaltyPaid;
+                              const oPaid = paymentPreview.renew.overdueInterestPaid;
+                              const rPaid = paymentPreview.renew.renewalInterestPaid;
+                              const prPaid = paymentPreview.renew.principalPaid;
+
+                              const pctP = total > 0 ? (pPaid / total) * 100 : 0;
+                              const pctO = total > 0 ? (oPaid / total) * 100 : 0;
+                              const pctR = total > 0 ? (rPaid / total) * 100 : 0;
+                              const pctPr = total > 0 ? (prPaid / total) * 100 : 0;
+
+                              return (
+                                <div className="space-y-2">
+                                  <div className="h-3.5 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/40">
+                                    {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
+                                    {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
+                                    {pctR > 0 && <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pctR}%` }} title={`Renewal Interest: ₹${rPaid}`} />}
+                                    {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
+                                  </div>
+                                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-600 font-sans">
+                                    {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500"></span>Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
+                                    {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span>Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
+                                    {rPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span>Renewal Int: ₹{rPaid.toLocaleString('en-IN')}</span>}
+                                    {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650"></span>Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
 
-                          {/* Option 2: Partial Payment */}
+                          {/* Option 2 Bar */}
                           {paymentPreview.paymentAmount > ledgerMetrics.totalToRegularize && paymentPreview.partial.principalPaid > 0 && (
-                            <div>
-                              <span className="text-xs font-bold text-blue-700 uppercase block mb-1">Option 2: Partial Payment and Renewal</span>
-                              <div className="space-y-1.5 text-sm font-mono bg-white/50 p-3 rounded-xl border border-blue-100">
-                                <div className="flex justify-between text-gray-655">
-                                  <span>Penalty Paid:</span>
-                                  <span className="font-bold text-red-650">₹{paymentPreview.partial.penaltyPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                                </div>
-                                <div className="flex justify-between text-gray-655">
-                                  <span>Overdue Interest Paid:</span>
-                                  <span className="font-bold text-orange-600">₹{paymentPreview.partial.overdueInterestPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                                </div>
-                                <div className="flex justify-between text-gray-655">
-                                  <span>Renewal Interest Paid:</span>
-                                  <span className="font-bold text-green-600">₹{paymentPreview.partial.renewalInterestPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                                </div>
-                                <div className="flex justify-between text-gray-655">
-                                  <span>Principal Paid:</span>
-                                  <span className="font-bold text-blue-650">₹{paymentPreview.partial.principalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                                </div>
-                                <div className="flex justify-between text-gray-655">
-                                  <span>Daily Interest Value:</span>
-                                  <span className="font-bold text-gray-700 font-mono">₹{paymentPreview.partial.dailyInterestValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</span>
-                                </div>
-                                <div className="flex justify-between text-gray-655 border-t border-blue-100/50 pt-1.5 mt-1">
-                                  <span>Renewed Days:</span>
-                                  <span className="font-bold text-green-700">{paymentPreview.partial.renewedDays} days</span>
-                                </div>
-                                <div className="flex justify-between text-gray-655">
-                                  <span>New Due Date:</span>
-                                  <span className="font-bold text-green-700">{paymentPreview.partial.nextDueDate ? formatDateOld(paymentPreview.partial.nextDueDate) : '-'}</span>
-                                </div>
-                                <div className="flex justify-between text-gray-655">
-                                  <span>New Principal:</span>
-                                  <span className="font-bold text-gray-900">₹{paymentPreview.partial.principalAfter.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                                </div>
-                              </div>
+                            <div className="space-y-2 border-t border-slate-200/50 pt-3">
+                              <span className="text-[11px] font-bold text-indigo-800 uppercase block">Option 2: Partial Payment & Renewal Allocation</span>
+                              {(() => {
+                                const total = paymentPreview.paymentAmount;
+                                const pPaid = paymentPreview.partial.penaltyPaid;
+                                const oPaid = paymentPreview.partial.overdueInterestPaid;
+                                const rPaid = paymentPreview.partial.renewalInterestPaid;
+                                const prPaid = paymentPreview.partial.principalPaid;
+
+                                const pctP = total > 0 ? (pPaid / total) * 100 : 0;
+                                const pctO = total > 0 ? (oPaid / total) * 100 : 0;
+                                const pctR = total > 0 ? (rPaid / total) * 100 : 0;
+                                const pctPr = total > 0 ? (prPaid / total) * 100 : 0;
+
+                                return (
+                                  <div className="space-y-2">
+                                    <div className="h-3.5 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/40">
+                                      {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
+                                      {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
+                                      {pctR > 0 && <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pctR}%` }} title={`Renewal Interest: ₹${rPaid}`} />}
+                                      {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
+                                    </div>
+                                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-600 font-sans">
+                                      {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500"></span>Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
+                                      {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span>Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
+                                      {rPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span>Renewal Int: ₹{rPaid.toLocaleString('en-IN')}</span>}
+                                      {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650"></span>Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           )}
                         </div>
@@ -2274,9 +2371,49 @@ const CDLedger: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Form variables display */}
+                  <div className="grid grid-cols-2 gap-3 mb-6 font-sans">
+                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
+                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Loan Amount:</span>
+                      <span className="text-base font-black text-black">₹{originalLoanAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
+                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Rate / Penalty:</span>
+                      <span className="text-base font-black text-black">{Number(selectedLoan.interest_rate).toFixed(2)}% / {Number(selectedLoan.penalty_percent || 0.75).toFixed(2)}%</span>
+                    </div>
+                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
+                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Loan Date:</span>
+                      <span className="text-base font-black text-black">{formatDateOld(originalLoanDate)}</span>
+                    </div>
+                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
+                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Last Payment:</span>
+                      <span className="text-base font-black text-black">{formatDateOld(selectedLoan.date)}</span>
+                    </div>
+                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
+                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Current Due Date:</span>
+                      <span className="text-base font-black text-black">{formatDateOld(renewCalculations?.dueDate)}</span>
+                    </div>
+                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
+                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Next Due Date:</span>
+                      <span className="text-base font-black text-black">{totalAmountPaying && Number(totalAmountPaying) > 0 && paymentPreview?.renew?.nextDueDate ? formatDateOld(paymentPreview.renew.nextDueDate) : '—'}</span>
+                    </div>
+                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
+                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Due Days:</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base font-black text-black">{renewCalculations?.daysPastDue !== undefined ? renewCalculations.daysPastDue : 0}</span>
+                        {renewCalculations && renewCalculations.daysRemaining !== undefined && renewCalculations.daysRemaining > 0 && (
+                          <span className="inline-flex px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-black text-[10px] uppercase tracking-wider">{renewCalculations.daysRemaining} Left</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
+                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Doc Status:</span>
+                      <span className="text-base font-black text-black">{documentReturned ? 'Returned' : 'Submitted'}</span>
+                    </div>
+                  </div>
 
                   {/* Actions buttons */}
-                  <div className="grid grid-cols-1 gap-2.5">
+                  <div className="grid grid-cols-3 gap-3">
                     <Button
                       onClick={() => handleActionSubmit('Renew')}
                       disabled={
@@ -2287,10 +2424,10 @@ const CDLedger: React.FC = () => {
                         !totalAmountPaying || 
                         Number(totalAmountPaying) <= 0
                       }
-                      className="w-full bg-green-600 hover:bg-green-700 text-white py-3 font-semibold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 border-0"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0"
                     >
-                      <CreditCard className="w-4 h-4" />
-                      Renewal Account
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Renewal
                     </Button>
                     
                     <Button
@@ -2304,10 +2441,10 @@ const CDLedger: React.FC = () => {
                         selectedLoan.status === 'NPA_CLOSED' || 
                         !!renewCalculations?.isDateInvalid
                       }
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 font-semibold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 border-0"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0"
                     >
-                      <CreditCard className="w-4 h-4" />
-                      Partial Payment and Renewal
+                      <CreditCard className="w-3.5 h-3.5" />
+                      Partial & Renew
                     </Button>
                     
                     <Button
@@ -2322,154 +2459,199 @@ const CDLedger: React.FC = () => {
                         ) ||
                         !!renewCalculations?.isDateInvalid
                       }
-                      className="w-full bg-red-600 hover:bg-red-700 text-white py-3 font-semibold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 border-0"
+                      className="bg-rose-600 hover:bg-rose-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0"
                     >
-                      <ShieldAlert className="w-4 h-4" />
+                      <ShieldAlert className="w-3.5 h-3.5" />
                       Close Account
                     </Button>
                   </div>
                 </Card>
-              </div>
 
-              {/* Right Column: Amount summaries, Guarantors, Photos */}
-              <div className="space-y-6">
-                
-                {/* Visual Highlight Amount Summary (Matches Screenshot Colors in Modern Theme) */}
-                <div className="bg-rose-50/40 border border-rose-100 rounded-3xl p-5 grid grid-cols-2 gap-4 shadow-sm">
-                  <div>
-                    <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider block mb-0.5">Amount</span>
-                    <span className="text-lg font-bold text-gray-900 font-mono">₹{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider block mb-0.5">Interest</span>
-                    <span className={`text-lg font-bold font-mono ${ledgerMetrics.pendingInterest < 0 ? 'text-green-600' : 'text-orange-600'}`}>
-                      ₹{ledgerMetrics.pendingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider block mb-0.5">Penalty</span>
-                    <span className="text-lg font-bold text-red-650 font-mono">₹{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider block mb-0.5">Today Due</span>
-                    <span className={`text-lg font-bold font-mono ${(ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty) < 0 ? 'text-green-600' : 'text-amber-600'}`}>
-                      ₹{(ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  
-                  <div className="border-t border-rose-100 pt-3 col-span-2 flex justify-between items-center">
-                    <span className="text-rose-800 text-[10px] uppercase font-black tracking-wider">Total for Renewal</span>
-                    <span className="text-xl font-black font-mono text-rose-700">
-                      ₹{ledgerMetrics.renewalDue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-
-                  <div className="border-t border-rose-100 pt-3 col-span-2 flex justify-between items-center">
-                    <span className="text-rose-800 text-[10px] uppercase font-black tracking-wider">Total to Regularize</span>
-                    <span className="text-xl font-black font-mono text-rose-700">
-                      ₹{ledgerMetrics.totalToRegularize.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  
-                  <div className="bg-rose-100/60 border border-rose-200 rounded-2xl p-3 col-span-2 flex justify-between items-center">
-                    <span className="text-rose-900 text-xs uppercase font-black tracking-wider">Total for Close</span>
-                    <span className="text-2xl font-black text-rose-950 font-mono">
-                      ₹{ledgerMetrics.totalClose.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Guarantor Profile Info */}
+                {/* Statements & Logs unified tabbed card */}
                 <Card 
-                  title="Guarantors & Documents" 
-                  className="shadow-sm border-gray-100 rounded-3xl"
-                  headerActions={
-                    <Button
-                      onClick={() => setShowReturnDocModal(true)}
-                      disabled={(selectedLoan.status !== 'Closed' && selectedLoan.status !== 'NPA_CLOSED') || !!renewCalculations?.isDateInvalid}
-                      variant="primary"
-                      size="xs"
-                      className="bg-green-600 hover:bg-green-700 border-0"
-                    >
-                      Document Returned
-                    </Button>
+                  title={
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+                      <div>
+                        <span className="text-base font-extrabold text-slate-950 block">Statements & Logs</span>
+                        <span className="text-xs text-slate-600 font-bold block mt-0.5">Track transaction history and interest accruals</span>
+                      </div>
+                      <div className="flex gap-1.5 bg-gray-100 border border-gray-200 p-1 rounded-xl self-start sm:self-auto font-sans">
+                        <button
+                          onClick={() => setActiveLogTab('statement')}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${
+                            activeLogTab === 'statement' 
+                              ? 'bg-white text-green-800 shadow-sm border border-gray-150' 
+                              : 'text-slate-900 hover:text-black'
+                          }`}
+                        >
+                          Ledger Statement
+                        </button>
+                        <button
+                          onClick={() => setActiveLogTab('interest')}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${
+                            activeLogTab === 'interest' 
+                              ? 'bg-white text-green-800 shadow-sm border border-gray-150' 
+                              : 'text-slate-900 hover:text-black'
+                          }`}
+                        >
+                          Interest History
+                        </button>
+                      </div>
+                    </div>
                   }
+                  className="shadow-sm border-gray-100 rounded-3xl w-full font-sans"
                 >
-                  <div className="space-y-4 text-xs text-gray-700">
-                    <div>
-                      <h4 className="font-semibold text-gray-800 border-b pb-1 mb-2">Guarantor 1:</h4>
-                      <div className="grid grid-cols-2 gap-y-1">
-                        <span className="text-gray-400 font-medium">Name:</span>
-                        <span className="font-semibold text-gray-950 text-right">{guarantor1?.name || 'N/A'}</span>
-                        <span className="text-gray-400 font-medium">Phone No:</span>
-                        <span className="font-medium text-gray-800 text-right">{guarantor1?.phone || 'N/A'}</span>
-                        <span className="text-gray-400 font-medium">Aadhaar:</span>
-                        <span className="font-medium text-gray-800 font-mono text-right">{guarantor1?.aadhaar || 'N/A'}</span>
-                      </div>
+                  {activeLogTab === 'statement' ? (
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
+                      <table className="w-full text-[13px] text-left min-w-[1000px]">
+                        <thead>
+                          <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
+                            <th className="px-4 py-3.5">Date</th>
+                            <th className="px-4 py-3.5">A/C Name</th>
+                            <th className="px-4 py-3.5 text-right">Credit</th>
+                            <th className="px-4 py-3.5 text-right">Debit</th>
+                            <th className="px-4 py-3.5">User</th>
+                            <th className="px-4 py-3.5">Receipt No</th>
+                            <th className="px-4 py-3.5">Particulars</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-150 bg-white">
+                          {displayedStatementEntries.map((entry) => (
+                            <tr key={entry.id} className="hover:bg-gray-50/60 transition-colors">
+                              <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(entry.entry_date)}</td>
+                              <td className="px-4 py-3.5 font-black text-slate-950">{entry.account_name || 'CD A/C'}</td>
+                              <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
+                                {entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
+                              </td>
+                              <td className="px-4 py-3.5 text-right text-red-700 font-black text-sm">
+                                {entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN')}` : '-'}
+                              </td>
+                              <td className="px-4 py-3.5 text-slate-800 font-bold">{entry.user_name || 'Staff'}</td>
+                              <td className="px-4 py-3.5 font-mono text-slate-900 font-black">{entry.receipt_no || '-'}</td>
+                              <td className="px-4 py-3.5 text-slate-700 font-bold" title={entry.particulars}>{entry.particulars || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-
-                    <div>
-                      <h4 className="font-semibold text-gray-800 border-b pb-1 mb-2">Guarantor 2:</h4>
-                      <div className="grid grid-cols-2 gap-y-1">
-                        <span className="text-gray-400 font-medium">Name:</span>
-                        <span className="font-semibold text-gray-950 text-right">{guarantor2?.name || 'N/A'}</span>
-                        <span className="text-gray-400 font-medium">Phone No:</span>
-                        <span className="font-medium text-gray-800 text-right">{guarantor2?.phone || 'N/A'}</span>
-                        <span className="text-gray-400 font-medium">Aadhaar:</span>
-                        <span className="font-medium text-gray-800 font-mono text-right">{guarantor2?.aadhaar || 'N/A'}</span>
-                      </div>
+                  ) : (
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
+                      <table className="w-full text-[13px] text-left min-w-[1000px]">
+                        <thead>
+                          <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
+                            <th className="px-4 py-3.5">Date</th>
+                            <th className="px-4 py-3.5 text-right">Credit</th>
+                            <th className="px-4 py-3.5">Receipt No</th>
+                            <th className="px-4 py-3.5">Type</th>
+                            <th className="px-4 py-3.5">Particulars</th>
+                            <th className="px-4 py-3.5 text-center">Days Renewed</th>
+                            <th className="px-4 py-3.5">Renewed Till</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-150 bg-white">
+                          {displayedInterestDetails.map((detail) => (
+                            <tr key={detail.id} className="hover:bg-gray-50/60 transition-colors">
+                              <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(detail.entry_date)}</td>
+                              <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
+                                ₹{Number(detail.credit).toLocaleString('en-IN')}
+                              </td>
+                              <td className="px-4 py-3.5 font-mono text-slate-900 font-black">{detail.receipt_no || '-'}</td>
+                              <td className="px-4 py-3.5 font-black text-slate-950">{detail.row_type || '-'}</td>
+                              <td className="px-4 py-3.5 text-slate-700 font-bold" title={detail.particulars}>{detail.particulars || '-'}</td>
+                              <td className="px-4 py-3.5 text-center font-black text-slate-900">{detail.renewed_days > 0 ? `${detail.renewed_days} Days` : '-'}</td>
+                              <td className="px-4 py-3.5 font-bold text-slate-800">{detail.renewed_till_date ? formatDateOld(detail.renewed_till_date) : '-'}</td>
+                            </tr>
+                          ))}
+                          {displayedInterestDetails.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="text-center py-8 text-slate-500 font-bold italic">No interest details found for this loan</td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
                     </div>
-
-                    <div className="border-t pt-3 flex justify-between">
-                      <span className="text-gray-400 font-medium uppercase tracking-wider">Document Type:</span>
-                      <span className="font-medium text-gray-800 text-right max-w-[160px] truncate" title={loanDocuments.map(d => d.document_name).join(', ')}>
-                        {loanDocuments.map(d => d.document_name).join(', ') || 'N/A'}
-                      </span>
-                    </div>
-                  </div>
+                  )}
                 </Card>
 
-                {/* Photos Panel */}
+              </div>
+
+              {/* RIGHT COLUMN (1/3 Width): Summary & Files */}
+              <div className="lg:col-span-1 space-y-6">
+
+                {/* Bento Metrics Panel (Unified Summary Panel) */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white border border-gray-100 rounded-3xl p-3 shadow-sm text-center">
-                    <span className="text-gray-500 text-[10px] font-bold uppercase tracking-wider block mb-2">Loan Person</span>
-                    <div className="aspect-[3/4] rounded-2xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center">
-                      {selectedLoan.customer?.customer_photo_url ? (
-                        <img src={selectedLoan.customer.customer_photo_url} alt="Loan Person" className="w-full h-full object-cover" />
-                      ) : selectedLoan.customer_photo_url ? (
-                        <img src={selectedLoan.customer_photo_url} alt="Loan Person" className="w-full h-full object-cover" />
-                      ) : (
-                        <User className="w-10 h-10 text-gray-300" />
-                      )}
-                    </div>
+                  {/* Amount / Principal */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <span className="text-slate-800 text-xs uppercase font-extrabold tracking-wider block mb-1">Principal Bal.</span>
+                    <span className="text-xl font-black text-slate-950 block">₹{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  
-                  <div className="bg-white border border-gray-100 rounded-3xl p-3 shadow-sm text-center">
-                    <span className="text-gray-500 text-[10px] font-bold uppercase tracking-wider block mb-2">Surety Person</span>
-                    <div className="aspect-[3/4] rounded-2xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center">
-                      {guarantor1?.photo_url ? (
-                        <img src={guarantor1.photo_url} alt="Surety Person" className="w-full h-full object-cover" />
-                      ) : guarantor1?.customer_photo_url ? (
-                        <img src={guarantor1.customer_photo_url} alt="Surety Person" className="w-full h-full object-cover" />
-                      ) : selectedLoan.surety_photo_url ? (
-                        <img src={selectedLoan.surety_photo_url} alt="Surety Person" className="w-full h-full object-cover" />
-                      ) : (
-                        <User className="w-10 h-10 text-gray-300" />
-                      )}
+
+                  {/* Today Due */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <span className="text-slate-800 text-xs uppercase font-extrabold tracking-wider block mb-1">Today Due</span>
+                    <span className={`text-xl font-black block ${(ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty) < 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      ₹{(ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {/* Interest */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <span className="text-slate-800 text-xs uppercase font-extrabold tracking-wider block mb-1">Accrued Interest</span>
+                    <span className={`text-lg font-black block ${ledgerMetrics.pendingInterest < 0 ? 'text-emerald-700' : 'text-slate-950'}`}>
+                      ₹{ledgerMetrics.pendingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {/* Penalty */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <span className="text-slate-800 text-xs uppercase font-extrabold tracking-wider block mb-1">Accrued Penalty</span>
+                    <span className="text-lg font-black text-rose-700 block">₹{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+
+                  {/* Total for Renewal */}
+                  <div className="col-span-2 bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex justify-between items-center shadow-sm">
+                    <div>
+                      <span className="text-emerald-900 text-xs uppercase font-black tracking-wider block">Total for Renewal</span>
+                      <span className="text-[11px] text-emerald-800 font-bold block mt-0.5">To extend standard cycle</span>
                     </div>
+                    <span className="text-[22px] font-black text-emerald-800">
+                      ₹{ledgerMetrics.renewalDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {/* Total to Regularize */}
+                  <div className="col-span-2 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex justify-between items-center shadow-sm">
+                    <div>
+                      <span className="text-amber-900 text-xs uppercase font-black tracking-wider block">Total to Regularize</span>
+                      <span className="text-[11px] text-amber-800 font-bold block mt-0.5">Overdue interest + penalty + renewal</span>
+                    </div>
+                    <span className="text-[22px] font-black text-amber-800">
+                      ₹{ledgerMetrics.totalToRegularize.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {/* Payoff Close Card - Slate/Indigo theme */}
+                  <div className="col-span-2 bg-slate-950 border border-slate-900 rounded-2xl p-4 text-white flex justify-between items-center shadow-md hover:scale-[1.01] transition-transform">
+                    <div>
+                      <span className="text-white text-xs uppercase font-black tracking-wider block">Total for Close</span>
+                      <span className="text-[11px] text-slate-350 font-bold block mt-0.5">Full payoff principal & dues</span>
+                    </div>
+                    <span className="text-2xl font-black text-emerald-400">
+                      ₹{ledgerMetrics.totalClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
 
-                {/* CD Ledger Documents Details Registry */}
+                {/* Submitted Files & Media Card */}
                 <Card title="Submitted Files & Media" className="shadow-sm border-gray-100 rounded-3xl max-h-[300px] overflow-y-auto">
                   <div className="space-y-2.5">
                     {/* Document Upload selector */}
-                    <div className="flex gap-2 p-2 bg-gray-55 border rounded-xl items-center">
+                    <div className="flex gap-2 p-2 bg-gray-50 border border-gray-150 rounded-xl items-center">
                       <select 
                         value={docType} 
                         onChange={(e) => setDocType(e.target.value)} 
                         disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
-                        className="flex-1 text-xs bg-white border border-gray-150 p-1.5 rounded-lg focus:outline-none"
+                        className="flex-1 text-xs bg-white border border-gray-250 p-1.5 rounded-lg focus:outline-none font-sans font-bold text-slate-900"
                       >
                         <option value="Pledge Document">Pledge Document</option>
                         <option value="Aadhaar Card Copy">Aadhaar Card Copy</option>
@@ -2497,7 +2679,7 @@ const CDLedger: React.FC = () => {
                             <span className="font-semibold text-gray-800 truncate">{doc.name}</span>
                             <span className="text-[10px] text-gray-400 truncate">{doc.remarks}</span>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 font-sans">
                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
                               doc.returnedStatus === 'Returned' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'
                             }`}>
@@ -2531,127 +2713,116 @@ const CDLedger: React.FC = () => {
 
             </div>
 
-            {/* Bottom Tables */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              
-              {/* Left Bottom: Details (Borrower Ledger Statement) */}
-              <Card 
-                title="Borrower Ledger Statement" 
-                subtitle="All transactions and collection registry logs"
-                className="shadow-sm border-gray-100 rounded-3xl"
-              >
-                <div className="overflow-x-auto max-h-[350px] overflow-y-auto">
-                  <table className="w-full text-xs text-left min-w-[950px]">
-                    <thead>
-                      <tr className="bg-gray-50 text-gray-400 uppercase tracking-wider text-[10px] font-bold border-b border-gray-100">
-                        <th className="px-4 py-3">Date</th>
-                        <th className="px-4 py-3">A/C Name</th>
-                        <th className="px-4 py-3 text-right">Credit</th>
-                        <th className="px-4 py-3 text-right">Debit</th>
-                        <th className="px-4 py-3">User</th>
-                        <th className="px-4 py-3">Receipt No</th>
-                        <th className="px-4 py-3">Particulars</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 bg-white">
-                      {displayedStatementEntries.map((entry) => (
-                        <tr key={entry.id} className="hover:bg-gray-50/40 transition-colors">
-                          <td className="px-4 py-3 font-medium text-gray-700">{formatDateOld(entry.entry_date)}</td>
-                          <td className="px-4 py-3 font-bold text-gray-800">{entry.account_name || 'CD A/C'}</td>
-                          <td className="px-4 py-3 text-right text-green-700 font-semibold">
-                            {entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
-                          </td>
-                          <td className="px-4 py-3 text-right text-red-700 font-semibold">
-                            {entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN')}` : '-'}
-                          </td>
-                          <td className="px-4 py-3 text-gray-500 font-medium">{entry.user_name || 'Staff'}</td>
-                          <td className="px-4 py-3 font-mono text-gray-600">{entry.receipt_no || '-'}</td>
-                          <td className="px-4 py-3 text-gray-500 font-medium font-sans" title={entry.particulars}>{entry.particulars || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-
-              {/* Right Bottom: Interest Details */}
-              <Card 
-                title="Interest & Penalty Details" 
-                subtitle="Renewal history and calculated days"
-                className="shadow-sm border-gray-100 rounded-3xl"
-              >
-                <div className="overflow-x-auto max-h-[350px] overflow-y-auto">
-                  <table className="w-full text-xs text-left min-w-[950px]">
-                    <thead>
-                      <tr className="bg-gray-50 text-gray-400 uppercase tracking-wider text-[10px] font-bold border-b border-gray-100">
-                        <th className="px-4 py-3">Date</th>
-                        <th className="px-4 py-3 text-right">Credit</th>
-                        <th className="px-4 py-3">Receipt No</th>
-                        <th className="px-4 py-3">Type</th>
-                        <th className="px-4 py-3">Particulars</th>
-                        <th className="px-4 py-3 text-center">Days Renewed</th>
-                        <th className="px-4 py-3">Renewed Till</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 bg-white">
-                      {displayedInterestDetails.map((detail) => (
-                        <tr key={detail.id} className="hover:bg-gray-50/40 transition-colors">
-                          <td className="px-4 py-3 font-medium text-gray-700">{formatDateOld(detail.entry_date)}</td>
-                          <td className="px-4 py-3 text-right text-green-700 font-semibold">
-                            ₹{Number(detail.credit).toLocaleString('en-IN')}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-gray-650">{detail.receipt_no || '-'}</td>
-                          <td className="px-4 py-3 font-medium text-gray-700">{detail.row_type || '-'}</td>
-                          <td className="px-4 py-3 text-gray-500 font-medium font-sans" title={detail.particulars}>{detail.particulars || '-'}</td>
-                          <td className="px-4 py-3 text-center font-bold text-gray-800">{detail.renewed_days > 0 ? `${detail.renewed_days} Days` : '-'}</td>
-                          <td className="px-4 py-3 font-medium text-gray-700">{detail.renewed_till_date ? formatDateOld(detail.renewed_till_date) : '-'}</td>
-                        </tr>
-                      ))}
-                      {displayedInterestDetails.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="text-center py-8 text-gray-450 italic">No interest details found for this loan</td>
-                        </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-
-            </div>
-
             {/* Totals Summary Footer Card & Buttons */}
-            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
-              
-              {/* Bottom statistics display */}
-              <div className="flex-1 grid grid-cols-3 sm:grid-cols-6 gap-6 w-full text-center md:text-left">
-                <div>
-                  <span className="text-[10px] text-gray-400 font-bold uppercase block">Total Credit</span>
-                  <span className="text-sm font-bold text-green-700 font-mono">₹{bottomTotals.totalCredit.toLocaleString('en-IN')}</span>
+            <div className="bg-white px-5 py-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col gap-3">
+
+              {/* Stats row — flex-wrap so values never clip */}
+              <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+
+                {/* Total Credit */}
+                <div className="flex flex-col min-w-[90px]">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Total Credit</span>
+                  <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${bottomTotals.totalCredit > 0 ? 'text-green-700' : 'text-slate-300'}`}>
+                    ₹{bottomTotals.totalCredit.toLocaleString('en-IN')}
+                  </span>
                 </div>
-                <div>
-                  <span className="text-[10px] text-gray-400 font-bold uppercase block">Total Debit</span>
-                  <span className="text-sm font-bold text-red-750 font-mono">₹{bottomTotals.totalDebit.toLocaleString('en-IN')}</span>
+
+                {/* Divider */}
+                <div className="self-stretch w-px bg-slate-100 hidden sm:block" />
+
+                {/* Total Debit */}
+                <div className="flex flex-col min-w-[90px]">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Total Debit</span>
+                  <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${bottomTotals.totalDebit > 0 ? 'text-red-600' : 'text-slate-300'}`}>
+                    ₹{bottomTotals.totalDebit.toLocaleString('en-IN')}
+                  </span>
                 </div>
-                <div>
-                  <span className="text-[10px] text-gray-400 font-bold uppercase block">Present Bal.</span>
-                  <span className="text-sm font-bold text-orange-700 font-mono">₹{bottomTotals.presentBalance.toLocaleString('en-IN')}</span>
+
+                {/* Divider */}
+                <div className="self-stretch w-px bg-slate-100 hidden sm:block" />
+
+                {/* Present Balance */}
+                <div className="flex flex-col min-w-[90px]">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Present Bal.</span>
+                  <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${
+                    bottomTotals.presentBalance <= 0 ? 'text-slate-300'
+                    : bottomTotals.presentBalance < bottomTotals.totalDebit * 0.25 ? 'text-emerald-600'
+                    : 'text-amber-700'
+                  }`}>
+                    ₹{bottomTotals.presentBalance.toLocaleString('en-IN')}
+                  </span>
                 </div>
-                <div>
-                  <span className="text-[10px] text-gray-400 font-bold uppercase block">Total Dues</span>
-                  <span className="text-sm font-bold text-gray-900 font-mono">₹{bottomTotals.totalDues.toLocaleString('en-IN')}</span>
+
+                {/* Divider */}
+                <div className="self-stretch w-px bg-slate-100 hidden sm:block" />
+
+                {/* Total Dues + mini progress bar */}
+                <div className="flex flex-col min-w-[90px]">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Total Dues</span>
+                  <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${bottomTotals.totalDues > 0 ? 'text-slate-800' : 'text-slate-300'}`}>
+                    ₹{bottomTotals.totalDues.toLocaleString('en-IN')}
+                  </span>
+                  {bottomTotals.totalDues > 0 && (
+                    <div className="w-full h-[3px] bg-slate-100 rounded-full mt-1.5 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${Math.min(100, Math.round((bottomTotals.paidDues / bottomTotals.totalDues) * 100))}%`,
+                          background: bottomTotals.pendingDues <= 0 ? '#16a34a' : bottomTotals.paidDues > 0 ? '#f59e0b' : '#ef4444',
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <span className="text-[10px] text-gray-400 font-bold uppercase block">Paid Dues</span>
-                  <span className="text-sm font-bold text-emerald-700 font-mono">₹{bottomTotals.paidDues.toLocaleString('en-IN')}</span>
+
+                {/* Divider */}
+                <div className="self-stretch w-px bg-slate-100 hidden sm:block" />
+
+                {/* Paid Dues */}
+                <div className="flex flex-col min-w-[90px]">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">
+                    Paid Dues
+                    {bottomTotals.totalDues > 0 && (
+                      <span className="ml-1 text-[8px] font-normal text-slate-300 normal-case">
+                        {Math.min(100, Math.round((bottomTotals.paidDues / bottomTotals.totalDues) * 100))}%
+                      </span>
+                    )}
+                  </span>
+                  <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${
+                    bottomTotals.paidDues <= 0 ? 'text-slate-300'
+                    : bottomTotals.pendingDues <= 0 ? 'text-emerald-600'
+                    : 'text-emerald-700'
+                  }`}>
+                    ₹{bottomTotals.paidDues.toLocaleString('en-IN')}
+                  </span>
                 </div>
-                <div>
-                  <span className="text-[10px] text-gray-400 font-bold uppercase block">Pending Dues</span>
-                  <span className="text-sm font-bold text-red-650 font-mono">₹{bottomTotals.pendingDues.toLocaleString('en-IN')}</span>
+
+                {/* Divider */}
+                <div className="self-stretch w-px bg-slate-100 hidden sm:block" />
+
+                {/* Pending Dues */}
+                <div className="flex flex-col min-w-[90px]">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Pending Dues</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${bottomTotals.pendingDues > 0 ? 'text-red-600' : 'text-slate-300'}`}>
+                      ₹{bottomTotals.pendingDues.toLocaleString('en-IN')}
+                    </span>
+                    {bottomTotals.pendingDues > 0 && (
+                      <span className="inline-flex items-center gap-1 bg-red-50 border border-red-100 rounded-full px-1.5 py-0.5">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
+                        </span>
+                        <span className="text-[8px] text-red-500 font-semibold">DUE</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
+
               </div>
 
-              {/* Bottom right report / action buttons */}
-              <div className="flex gap-2.5">
+              {/* Buttons row — always below the stats */}
+              <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-50">
                 <Button
                   onClick={() => setShowPrintPreview(true)}
                   variant="primary"

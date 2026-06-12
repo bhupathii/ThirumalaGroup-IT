@@ -885,6 +885,7 @@ const EditLoanEntry: React.FC = () => {
                     value={loanCategory}
                     onChange={(e) => setLoanCategory(e.target.value as any)}
                     className="w-full border border-gray-300 rounded-lg p-1.5 focus:ring-2 focus:ring-green-500 finance-header-time"
+                    style={{ fontFamily: 'Times New Roman', fontSize: '15px', fontWeight: 'bold' }}
                   >
                     <option value="L">Regular Loan (L)</option>
                     <option value="CD">Chit Fund (CD)</option>
@@ -971,6 +972,7 @@ const EditLoanEntry: React.FC = () => {
                       value={dueType}
                       onChange={(e) => setDueType(e.target.value as any)}
                       className="w-full border border-gray-300 rounded-lg p-1.5 focus:ring-2 focus:ring-green-500 finance-header-time"
+                      style={{ fontFamily: 'Times New Roman', fontSize: '15px', fontWeight: 'bold' }}
                     >
                       <option value="Daily">Daily</option>
                       <option value="Weekly">Weekly</option>
@@ -984,16 +986,16 @@ const EditLoanEntry: React.FC = () => {
                 {/* Live Calculations Preview */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 mt-4 space-y-2.5">
                   <div className="flex justify-between border-b border-dashed border-gray-200 pb-1.5 items-center">
-                    <span className="text-gray-500 text-[10px] uppercase font-bold tracking-wider">Interest Preview:</span>
-                    <span className="font-semibold text-gray-800 text-xs">₹{formatRupee(liveCalculations.interestPreview)}</span>
+                    <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Interest Preview:</span>
+                    <span className="text-slate-950 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.interestPreview)}</span>
                   </div>
                   <div className="flex justify-between border-b border-dashed border-gray-200 pb-1.5 items-center">
-                    <span className="text-gray-500 text-[10px] uppercase font-bold tracking-wider">Renewal Due:</span>
-                    <span className="font-semibold text-gray-800 text-xs">₹{formatRupee(liveCalculations.renewalAmount)}</span>
+                    <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Renewal Due:</span>
+                    <span className="text-slate-950 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.renewalAmount)}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600 text-xs uppercase font-extrabold tracking-wider">Payable Amount:</span>
-                    <span className="font-extrabold text-green-700 text-sm">₹{formatRupee(liveCalculations.payableAmount)}</span>
+                    <span className="text-slate-900 text-[14px] uppercase font-black tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Payable Amount:</span>
+                    <span className="text-emerald-800 text-[22px] font-black" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.payableAmount)}</span>
                   </div>
                 </div>
               </div>
@@ -1060,6 +1062,7 @@ const EditLoanEntry: React.FC = () => {
                       value={status}
                       onChange={(e) => setStatus(e.target.value as any)}
                       className="w-full border border-gray-300 rounded-lg p-1.5 focus:ring-2 focus:ring-green-500 finance-header-time"
+                      style={{ fontFamily: 'Times New Roman', fontSize: '15px', fontWeight: 'bold' }}
                     >
                       <option value="Active">Active Account</option>
                       <option value="Closed">Closed Account</option>
