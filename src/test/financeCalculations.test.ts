@@ -343,11 +343,11 @@ describe('CD Ledger Calculation Rules', () => {
       const penaltyDays = dueDays <= 5 ? 0 : dueDays;
       const grossPenalty = penaltyDays <= 0 ? 0 : Number(((principal * 0.75 * penaltyDays) / 30 / 100).toFixed(2));
 
-      const effectiveGrossInterest = Math.max(grossInterest, interestPaidInCycle);
-      const effectiveGrossPenalty = Math.max(grossPenalty, penaltyPaidInCycle);
+      const effectiveGrossInterest = grossInterest;
+      const effectiveGrossPenalty = grossPenalty;
 
-      const outstandingInterest = Math.max(0, Number((effectiveGrossInterest - interestPaidInCycle).toFixed(2)));
-      const outstandingPenalty = Math.max(0, Number((effectiveGrossPenalty - penaltyPaidInCycle).toFixed(2)));
+      const outstandingInterest = Math.max(0, Number(grossInterest.toFixed(2)));
+      const outstandingPenalty = Math.max(0, Number(grossPenalty.toFixed(2)));
 
       const displayInterest = dueDays <= 0 ? 0 : outstandingInterest;
       const displayPenalty = dueDays <= 0 ? 0 : outstandingPenalty;
@@ -650,7 +650,7 @@ describe('CD Ledger Calculation Rules', () => {
         paymentAmount: 0,
         interestPaidInCycle: 1000 // Only Cycle 2 payments are counted here
       });
-      expect(cycle2.pendingDues).toBe(2000); // Correctly excludes penalty (0 days overdue for penalty since overdue is 2 days)
+      expect(cycle2.pendingDues).toBe(2200); // Correctly excludes penalty (0 days overdue for penalty since overdue is 2 days)
     });
 
     it('Test Case 16 - Single Source of Truth', () => {

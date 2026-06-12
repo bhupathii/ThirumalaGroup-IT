@@ -639,16 +639,28 @@ const CDLedger: React.FC = () => {
     //
     // When gross is negative but there are payments in cycle, effectiveGross
     // must be at least the paid amount so pending doesn't go negative.
-    const effectiveGrossInterest = Math.max(grossInterest, interestPaidInCycle);
-    const effectiveGrossPenalty  = Math.max(grossPenalty,  penaltyPaidInCycle);
+    const effectiveGrossInterest = grossInterest;
+    const effectiveGrossPenalty  = grossPenalty;
 
     // Outstanding dues for PAYMENT purposes (never negative)
-    const outstandingInterest = Math.max(0, Number((effectiveGrossInterest - interestPaidInCycle).toFixed(2)));
-    const outstandingPenalty  = Math.max(0, Number((effectiveGrossPenalty  - penaltyPaidInCycle).toFixed(2)));
+    const outstandingInterest = Math.max(0, Number(grossInterest.toFixed(2)));
+    const outstandingPenalty  = Math.max(0, Number(grossPenalty.toFixed(2)));
 
     // Display interest/penalty: show the raw formula value (never negative)
     const displayInterest = dueDays <= 0 ? 0 : outstandingInterest;
     const displayPenalty  = dueDays <= 0 ? 0 : outstandingPenalty;
+
+    // CD067 / CD070 debugging trace
+    console.log('=== CD LEDGER MIGRATION AUDIT TRACE ===', {
+      loan_number: selectedLoan.loan_id,
+      principal_balance: principalBalance,
+      due_days: dueDays,
+      interest_formula_result: grossInterest,
+      penalty_formula_result: grossPenalty,
+      interest_paid_considered: interestPaidInCycle,
+      penalty_paid_considered: penaltyPaidInCycle,
+      total_dues_result: outstandingInterest + outstandingPenalty
+    });
 
     return {
       isDateInvalid: false,
