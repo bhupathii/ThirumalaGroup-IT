@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useFormArrowNavigation } from '../hooks/useFormArrowNavigation';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
@@ -11,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import { useCreateCashBookEntry, useBulkCashBookOperations } from '../hooks/useCashBookData';
 import ModeLabel from '../components/UI/ModeLabel';
+import { useBook } from '../contexts/BookContext';
 import CustomCalendar from '../components/UI/CustomCalendar';
 import { useDropdownData, useRecentEntriesByDate } from '../hooks/useDashboardData';
 import { useQueryClient } from '@tanstack/react-query';
@@ -53,7 +55,13 @@ interface NewEntryForm {
 const NewEntry: React.FC = () => {
   const { user } = useAuth();
   const { mode: tableMode } = useTableMode();
+  const { currentBook } = useBook();
   const navigate = useNavigate();
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Enable arrow key navigation only in non-finance modes (Regular/ITR)
+  useFormArrowNavigation(formRef, tableMode !== 'finance');
+
   const [vehicleStats, setVehicleStats] = useState<{ expired: number; expiring: number } | null>(null);
   const [bgStats, setBgStats] = useState<{ expired: number; expiring: number } | null>(null);
   const [driverStats, setDriverStats] = useState<{ expired: number; expiring: number } | null>(null);
@@ -436,7 +444,7 @@ const NewEntry: React.FC = () => {
     sqlCommand: '',
   });
 
-  // Check if payment_mode column exists on mount
+  // Check if payment_mode column exists on mount and mode changes
   useEffect(() => {
     const checkPaymentModeColumn = async () => {
       setPaymentModeColumnStatus(prev => ({ ...prev, checking: true }));
@@ -461,7 +469,7 @@ const NewEntry: React.FC = () => {
     };
     
     checkPaymentModeColumn();
-  }, []);
+  }, [tableMode]);
 
   // Copy SQL to clipboard
   const copySQLToClipboard = () => {
@@ -699,6 +707,11 @@ const NewEntry: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (currentBook?.is_locked) {
+      toast.error('This Book is Locked (Read Only). Writing is blocked.');
+      return;
+    }
 
     // Validate main entry (all mandatory except credit/debit where either is required)
     if (
@@ -1794,11 +1807,33 @@ const NewEntry: React.FC = () => {
         </div>
       )}
       
+      {/* Locked Book Banner */}
+      {currentBook?.is_locked && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded-lg shadow-sm flex items-center gap-2 m-4 no-print flex-shrink-0">
+          <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 animate-pulse" />
+          <div>
+            <h3 className="text-xs font-bold text-red-800">This Book Is Locked (Read Only)</h3>
+            <p className="text-[10px] text-red-700">Writing, editing, and deletion operations are disabled for this accounting period.</p>
+          </div>
+        </div>
+      )}
+
       {/* Header - Fixed at top */}
       <div className='flex items-center justify-between p-1 bg-white border-b border-gray-200 flex-shrink-0'>
         <div>
           <div className='flex items-center gap-2 mb-1'>
-            <h1 className='text-lg font-bold text-gray-900'>New Entry</h1>
+            <h1 className='text-lg font-bold text-gray-900 flex items-center gap-2'>
+              New Entry
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                currentBook?.is_locked 
+                  ? 'bg-red-100 text-red-700' 
+                  : tableMode === 'itr' 
+                    ? 'bg-emerald-100 text-emerald-700' 
+                    : 'bg-blue-100 text-blue-700'
+              }`}>
+                {currentBook?.book_code || 'No Book'}
+              </span>
+            </h1>
             <ModeLabel />
           </div>
           <p className='text-xs text-gray-600'>
@@ -1903,12 +1938,125 @@ const NewEntry: React.FC = () => {
       {/* Main Content - Vertical Layout */}
       <div className='flex-1 p-1'>
         <div className='w-full max-w-7xl mx-auto flex flex-col'>
+          {/* Recent Transactions Section */}
+          <div className='w-full mb-4'>
+            <Card
+              title='Recent Transactions'
+              subtitle={`Entries for ${format(new Date(entry.date), 'dd-MMM-yyyy')} (LIFO - Last In First Out)`}
+              className='bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-md'
+            >
+              {recentLoading ? (
+                <div className='text-center py-8'>
+                  <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto'></div>
+                  <p className='mt-2 text-gray-600 font-medium text-base'>Loading transactions...</p>
+                </div>
+              ) : !recentEntries || !Array.isArray(recentEntries) || recentEntries.length === 0 ? (
+                <div className='text-center py-8 text-gray-500'>
+                  <div className='text-lg font-medium mb-2'>No transactions found for {format(new Date(entry.date), 'dd-MMM-yyyy')}</div>
+                  <div className='text-sm'>Try selecting a different date or create a new entry for this date.</div>
+                </div>
+              ) : (
+                <div className='overflow-x-auto'>
+                  <div className='max-h-96 overflow-y-auto'>
+                    <table className='w-full text-base table-fixed min-w-[1500px]'>
+                      <thead className='sticky top-0 bg-gray-50 z-10'>
+                        <tr className='border-b border-gray-200'>
+                          <th className='w-14 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                            S.No
+                          </th>
+                          <th className='w-28 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                            Date
+                          </th>
+                          <th className='w-56 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                            Company
+                          </th>
+                          <th className='w-56 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                            Account
+                          </th>
+                          <th className='w-56 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                            Sub Account
+                          </th>
+                          <th className='w-80 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                            Particulars
+                          </th>
+                          <th className='w-36 px-2 py-3 text-right font-bold text-gray-700 text-base'>
+                            Credit
+                          </th>
+                          <th className='w-36 px-2 py-3 text-right font-bold text-gray-700 text-base'>
+                            Debit
+                          </th>
+                          <th className='w-36 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                            Payment Mode
+                          </th>
+                          <th className='w-32 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                            Staff
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.isArray(recentEntries) && recentEntries.map((entry: any, index: number) => (
+                          <tr
+                            key={entry.id}
+                            className={`border-b hover:bg-gray-50 transition-colors ${
+                              index % 2 === 0 ? 'bg-white' : 'bg-gray-25'
+                            }`}
+                          >
+                            <td className='w-14 px-2 py-3 font-semibold text-base'>{index + 1}</td>
+                            <td className='w-28 px-2 py-3 text-base font-medium'>
+                              <div>{format(new Date(entry.c_date), 'dd-MMM-yy')}</div>
+                              {entry.pending_sync && (
+                                <span className='inline-flex items-center text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-1 animate-pulse'>
+                                  🔄 Pending Sync
+                                </span>
+                              )}
+                            </td>
+                            <td className='w-56 px-2 py-3 font-bold text-blue-600 text-base truncate' title={entry.company_name}>
+                              {entry.company_name}
+                            </td>
+                            <td className='w-56 px-2 py-3 text-base font-semibold truncate' title={entry.acc_name?.replace(/\[DELETED\]\s*/g, '')}>
+                              {entry.acc_name?.replace(/\[DELETED\]\s*/g, '') || '-'}
+                            </td>
+                            <td className='w-56 px-2 py-3 text-base font-semibold truncate' title={entry.sub_acc_name?.replace(/\[DELETED\]\s*/g, '')}>
+                              {entry.sub_acc_name?.replace(/\[DELETED\]\s*/g, '') || '-'}
+                            </td>
+                            <td
+                              className='w-80 px-2 py-3 text-base font-medium truncate'
+                              title={entry.particulars?.replace(/\[DELETED\]\s*/g, '')}
+                            >
+                              {entry.particulars?.replace(/\[DELETED\]\s*/g, '') || '-'}
+                            </td>
+                            <td className='w-36 px-2 py-3 text-right font-extrabold text-green-700 text-lg'>
+                              {entry.credit > 0
+                                ? `${entry.credit.toLocaleString()}`
+                                : '-'}
+                            </td>
+                            <td className='w-36 px-2 py-3 text-right font-extrabold text-red-700 text-lg'>
+                              {entry.debit > 0
+                                ? `${entry.debit.toLocaleString()}`
+                                : '-'}
+                            </td>
+                            <td className='w-36 px-2 py-3 text-base font-semibold truncate' title={entry.payment_mode || 'No payment mode'}>
+                              {entry.payment_mode && String(entry.payment_mode).trim() ? (entry.payment_mode === 'Online' ? 'Double' : entry.payment_mode === 'Bank Transfer' ? 'Bank' : String(entry.payment_mode).trim()) : '-'}
+                            </td>
+                            <td className='w-32 px-2 py-3 text-base font-semibold truncate' title={entry.staff}>
+                              {entry.staff}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </Card>
+          </div>
+
           {/* Entry Form - Full Panel */}
           <div className='w-full'>
             <Card
               className='p-2 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg'
             >
-              <form onSubmit={handleSubmit} className='space-y-2 text-xs' style={{ fontFamily: 'Times New Roman', fontSize: '12px' }}>
+              <form ref={formRef} onSubmit={handleSubmit} className='space-y-2 text-xs' style={{ fontFamily: 'Times New Roman', fontSize: '12px' }}>
                 {/* Dual Entry Toggle */}
                 <div className='flex items-center justify-center mb-0.5 p-1 bg-blue-50 rounded border border-blue-200'>
                   <input
@@ -2716,140 +2864,6 @@ const NewEntry: React.FC = () => {
               </form>
             </Card>
           </div>
-
-          {/* Recent Transactions Section */}
-          <div className='w-full mt-4'>
-            <Card
-              title='Recent Transactions'
-              subtitle={`Entries for ${format(new Date(entry.date), 'dd-MMM-yyyy')} (LIFO - Last In First Out)`}
-              className='bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
-            >
-              {recentLoading ? (
-                <div className='text-center py-8'>
-                  <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto'></div>
-                  <p className='mt-2 text-gray-600'>Loading transactions...</p>
-                </div>
-              ) : !recentEntries || !Array.isArray(recentEntries) || recentEntries.length === 0 ? (
-                <div className='text-center py-8 text-gray-500'>
-                  <div className='text-lg font-medium mb-2'>No transactions found for {format(new Date(entry.date), 'dd-MMM-yyyy')}</div>
-                  <div className='text-sm'>Try selecting a different date or create a new entry for this date.</div>
-                </div>
-              ) : (
-                <div className='overflow-x-auto'>
-                  <div className='max-h-48 overflow-y-auto'>
-                    <table className='w-full text-xs table-fixed'>
-                      <thead className='sticky top-0 bg-gray-50 z-10'>
-                        <tr className='border-b border-gray-200'>
-                          <th className='w-12 px-1 py-0 text-left font-medium text-gray-700'>
-                            S.No
-                          </th>
-                          <th className='w-16 px-1 py-0 text-left font-medium text-gray-700'>
-                            Date
-                          </th>
-                          <th className='w-20 px-1 py-0 text-left font-medium text-gray-700'>
-                            Company
-                          </th>
-                          <th className='w-20 px-1 py-0 text-left font-medium text-gray-700'>
-                            Account
-                          </th>
-                          <th className='w-20 px-1 py-0 text-left font-medium text-gray-700'>
-                            Sub Account
-                          </th>
-                          <th className='w-32 px-1 py-0 text-left font-medium text-gray-700'>
-                            Particulars
-                          </th>
-                          <th className='w-16 px-1 py-0 text-right font-medium text-gray-700'>
-                            Credit
-                          </th>
-                          <th className='w-16 px-1 py-0 text-right font-medium text-gray-700'>
-                            Debit
-                          </th>
-                          <th className='w-16 px-1 py-0 text-left font-medium text-gray-700'>
-                            Payment Mode
-                          </th>
-                          <th className='w-16 px-1 py-0 text-left font-medium text-gray-700'>
-                            Staff
-                          </th>
-                          <th className='w-20 px-1 py-0 text-center font-medium text-gray-700'>
-                            Status
-                          </th>
-                          <th className='w-20 px-1 py-0 text-center font-medium text-gray-700'>
-                            Entry Date and Time
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Array.isArray(recentEntries) && recentEntries.map((entry: any, index: number) => (
-                          <tr
-                            key={entry.id}
-                            className={`border-b hover:bg-gray-50 transition-colors ${
-                              index % 2 === 0 ? 'bg-white' : 'bg-gray-25'
-                            }`}
-                          >
-                            <td className='w-12 px-1 py-0 font-medium text-xs'>{index + 1}</td>
-                            <td className='w-16 px-1 py-0 text-xs'>
-                              {format(new Date(entry.c_date), 'dd-MMM-yy')}
-                            </td>
-                            <td className='w-20 px-1 py-0 font-medium text-blue-600 text-xs truncate' title={entry.company_name}>
-                              {entry.company_name}
-                            </td>
-                            <td className='w-20 px-1 py-0 text-xs truncate' title={entry.acc_name?.replace(/\[DELETED\]\s*/g, '')}>
-                              {entry.acc_name?.replace(/\[DELETED\]\s*/g, '') || '-'}
-                            </td>
-                            <td className='w-20 px-1 py-0 text-xs truncate' title={entry.sub_acc_name?.replace(/\[DELETED\]\s*/g, '')}>
-                              {entry.sub_acc_name?.replace(/\[DELETED\]\s*/g, '') || '-'}
-                            </td>
-                            <td
-                              className='w-32 px-1 py-0 text-xs truncate'
-                              title={entry.particulars?.replace(/\[DELETED\]\s*/g, '')}
-                            >
-                              {entry.particulars?.replace(/\[DELETED\]\s*/g, '') || '-'}
-                            </td>
-                            <td className='w-16 px-1 py-0 text-right font-medium text-green-600 text-xs'>
-                              {entry.credit > 0
-                                ? `${entry.credit.toLocaleString()}`
-                                : '-'}
-                            </td>
-                            <td className='w-16 px-1 py-0 text-right font-medium text-red-600 text-xs'>
-                              {entry.debit > 0
-                                ? `${entry.debit.toLocaleString()}`
-                                : '-'}
-                            </td>
-                            <td className='w-16 px-1 py-0 text-xs truncate' title={entry.payment_mode || 'No payment mode'}>
-                              {entry.payment_mode && String(entry.payment_mode).trim() ? (entry.payment_mode === 'Online' ? 'Double' : entry.payment_mode === 'Bank Transfer' ? 'Bank' : String(entry.payment_mode).trim()) : '-'}
-                            </td>
-                            <td className='w-16 px-1 py-0 text-xs truncate' title={entry.staff}>
-                              {entry.staff}
-                            </td>
-                            <td className='w-20 px-1 py-0 text-center'>
-                              {entry.approved ? (
-                                <span className='inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800'>
-                                  Approved
-                                </span>
-                              ) : (
-                                <span className='inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800'>
-                                  Pending
-                                </span>
-                              )}
-                            </td>
-                            <td className='w-20 px-1 py-0 text-center text-xs'>
-                              <div className='text-xs'>
-                                {format(new Date(entry.c_date), 'dd/MM/yyyy')}
-                              </div>
-                              <div className='text-xs text-gray-500'>
-                                {entry.entry_time ? format(new Date(entry.entry_time), 'HH:mm:ss a') : 'N/A'}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </Card>
-          </div>
-
         </div>
       </div>
 

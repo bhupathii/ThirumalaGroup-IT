@@ -8,7 +8,9 @@ import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
 import { format, parseISO } from 'date-fns';
 import CustomCalendar from '../components/UI/CustomCalendar';
-import { Calendar } from 'lucide-react';
+import { Calendar, AlertTriangle } from 'lucide-react';
+import { getSharedPrintStyles } from '../utils/print';
+import { useBook } from '../contexts/BookContext';
 
 interface BalanceSheetFilters {
   companyName: string;
@@ -23,6 +25,7 @@ interface BalanceSheetFilters {
 
 const BalanceSheet: React.FC = () => {
   const { mode: tableMode } = useTableMode();
+  const { currentBook } = useBook();
 
   const [filters, setFilters] = useState<BalanceSheetFilters>({
     companyName: '',
@@ -84,7 +87,7 @@ const BalanceSheet: React.FC = () => {
   useEffect(() => {
     loadDropdownData();
     generateBalanceSheet();
-  }, [tableMode]);
+  }, [tableMode, currentBook?.id]);
 
   useEffect(() => {
     generateBalanceSheet();
@@ -267,6 +270,11 @@ const BalanceSheet: React.FC = () => {
   };
 
   const addCustomRow = () => {
+    if (currentBook?.is_locked) {
+      toast.error('This book is locked. Cannot add custom rows.');
+      return;
+    }
+
     if (!newRowData.accountName.trim()) {
       toast.error('Please enter an account name');
       return;
@@ -390,6 +398,7 @@ const BalanceSheet: React.FC = () => {
             @media print {
               body { margin: 0; padding: 10px; }
             }
+            ${getSharedPrintStyles({ isLandscape: true })}
           </style>
         </head>
         <body>
@@ -403,29 +412,29 @@ const BalanceSheet: React.FC = () => {
           <table>
             <thead>
               <tr>
-                <th>Account Name</th>
-                <th class="text-right">Credit</th>
-                <th class="text-right">Debit</th>
-                <th class="text-right">Balance</th>
-                <th class="text-center">Result</th>
+                <th class="col-account">Account Name</th>
+                <th class="col-credit text-right">Credit</th>
+                <th class="col-debit text-right">Debit</th>
+                <th class="col-balance text-right">Balance</th>
+                <th class="col-status text-center">Result</th>
               </tr>
             </thead>
             <tbody>
               ${allAccounts.map(acc => `
                 <tr>
-                  <td>${acc.accountName}</td>
-                  <td class="text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
-                  <td class="text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
-                  <td class="text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
-                  <td class="text-center">${acc.result}</td>
+                  <td class="col-account">${acc.accountName}</td>
+                  <td class="col-credit text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
+                  <td class="col-debit text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
+                  <td class="col-balance text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
+                  <td class="col-status text-center">${acc.result}</td>
                 </tr>
               `).join('')}
               <tr class="totals">
-                <td><strong>TOTALS</strong></td>
-                <td class="text-right text-green"><strong>${totals.totalCredit.toLocaleString()}</strong></td>
-                <td class="text-right text-red"><strong>${totals.totalDebit.toLocaleString()}</strong></td>
-                <td class="text-right"><strong>${totals.balance.toLocaleString()}</strong></td>
-                <td class="text-center"><strong>${totals.balance >= 0 ? 'CREDIT' : 'DEBIT'}</strong></td>
+                <td class="col-account"><strong>TOTALS</strong></td>
+                <td class="col-credit text-right text-green"><strong>${totals.totalCredit.toLocaleString()}</strong></td>
+                <td class="col-debit text-right text-red"><strong>${totals.totalDebit.toLocaleString()}</strong></td>
+                <td class="col-balance text-right"><strong>${totals.balance.toLocaleString()}</strong></td>
+                <td class="col-status text-center"><strong>${totals.balance >= 0 ? 'CREDIT' : 'DEBIT'}</strong></td>
               </tr>
             </tbody>
           </table>
@@ -583,6 +592,7 @@ const BalanceSheet: React.FC = () => {
               body { margin: 0; padding: 10px; }
               .section { page-break-inside: avoid; }
             }
+            ${getSharedPrintStyles({ isLandscape: true })}
           </style>
         </head>
         <body>
@@ -598,29 +608,29 @@ const BalanceSheet: React.FC = () => {
             <table>
               <thead>
                 <tr>
-                  <th>Account Name</th>
-                  <th class="text-right">Credit</th>
-                  <th class="text-right">Debit</th>
-                  <th class="text-right">Balance</th>
-                  <th class="text-center">Result</th>
+                  <th class="col-account">Account Name</th>
+                  <th class="col-credit text-right">Credit</th>
+                  <th class="col-debit text-right">Debit</th>
+                  <th class="col-balance text-right">Balance</th>
+                  <th class="col-status text-center">Result</th>
                 </tr>
               </thead>
               <tbody>
                 ${plAccounts.map(acc => `
                   <tr>
-                    <td>${acc.accountName}</td>
-                    <td class="text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
-                    <td class="text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
-                    <td class="text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
-                    <td class="text-center">${acc.result}</td>
+                    <td class="col-account">${acc.accountName}</td>
+                    <td class="col-credit text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
+                    <td class="col-debit text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
+                    <td class="col-balance text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
+                    <td class="col-status text-center">${acc.result}</td>
                   </tr>
                 `).join('')}
                 <tr class="totals">
-                  <td><strong>P&L TOTALS</strong></td>
-                  <td class="text-right text-green"><strong>${plTotals.totalCredit.toLocaleString()}</strong></td>
-                  <td class="text-right text-red"><strong>${plTotals.totalDebit.toLocaleString()}</strong></td>
-                  <td class="text-right"><strong>${plTotals.balance.toLocaleString()}</strong></td>
-                  <td class="text-center"><strong>${plTotals.balance >= 0 ? 'PROFIT' : 'LOSS'}</strong></td>
+                  <td class="col-account"><strong>P&L TOTALS</strong></td>
+                  <td class="col-credit text-right text-green"><strong>${plTotals.totalCredit.toLocaleString()}</strong></td>
+                  <td class="col-debit text-right text-red"><strong>${plTotals.totalDebit.toLocaleString()}</strong></td>
+                  <td class="col-balance text-right"><strong>${plTotals.balance.toLocaleString()}</strong></td>
+                  <td class="col-status text-center"><strong>${plTotals.balance >= 0 ? 'PROFIT' : 'LOSS'}</strong></td>
                 </tr>
               </tbody>
             </table>
@@ -631,29 +641,29 @@ const BalanceSheet: React.FC = () => {
             <table>
               <thead>
                 <tr>
-                  <th>Account Name</th>
-                  <th class="text-right">Credit</th>
-                  <th class="text-right">Debit</th>
-                  <th class="text-right">Balance</th>
-                  <th class="text-center">Result</th>
+                  <th class="col-account">Account Name</th>
+                  <th class="col-credit text-right">Credit</th>
+                  <th class="col-debit text-right">Debit</th>
+                  <th class="col-balance text-right">Balance</th>
+                  <th class="col-status text-center">Result</th>
                 </tr>
               </thead>
               <tbody>
                 ${balanceSheetAccounts.map(acc => `
                   <tr>
-                    <td>${acc.accountName}</td>
-                    <td class="text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
-                    <td class="text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
-                    <td class="text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
-                    <td class="text-center">${acc.result}</td>
+                    <td class="col-account">${acc.accountName}</td>
+                    <td class="col-credit text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
+                    <td class="col-debit text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
+                    <td class="col-balance text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
+                    <td class="col-status text-center">${acc.result}</td>
                   </tr>
                 `).join('')}
                 <tr class="totals">
-                  <td><strong>BALANCE SHEET TOTALS</strong></td>
-                  <td class="text-right text-green"><strong>${bsTotals.totalCredit.toLocaleString()}</strong></td>
-                  <td class="text-right text-red"><strong>${bsTotals.totalDebit.toLocaleString()}</strong></td>
-                  <td class="text-right"><strong>${bsTotals.balance.toLocaleString()}</strong></td>
-                  <td class="text-center"><strong>${bsTotals.balance >= 0 ? 'CREDIT' : 'DEBIT'}</strong></td>
+                  <td class="col-account"><strong>BALANCE SHEET TOTALS</strong></td>
+                  <td class="col-credit text-right text-green"><strong>${bsTotals.totalCredit.toLocaleString()}</strong></td>
+                  <td class="col-debit text-right text-red"><strong>${bsTotals.totalDebit.toLocaleString()}</strong></td>
+                  <td class="col-balance text-right"><strong>${bsTotals.balance.toLocaleString()}</strong></td>
+                  <td class="col-status text-center"><strong>${bsTotals.balance >= 0 ? 'CREDIT' : 'DEBIT'}</strong></td>
                 </tr>
               </tbody>
             </table>
@@ -713,11 +723,33 @@ const BalanceSheet: React.FC = () => {
   return (
     <div className='min-h-screen flex flex-col'>
       <div className='max-w-6xl w-full mx-auto space-y-6'>
+        {/* Locked Book Banner */}
+        {currentBook?.is_locked && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl shadow-sm flex items-center gap-3 no-print">
+            <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 animate-pulse" />
+            <div>
+              <h3 className="text-sm font-bold text-red-800">This Book Is Locked (Read Only)</h3>
+              <p className="text-xs text-red-700">Writing, editing, and deletion operations are disabled for this accounting period.</p>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className='flex items-center justify-between'>
           <div>
             <div className='flex items-center gap-3 mb-1'>
-              <h1 className='text-3xl font-bold text-gray-900'>Balance Sheet</h1>
+              <h1 className='text-3xl font-bold text-gray-900 flex items-center gap-2.5'>
+                Balance Sheet
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  currentBook?.is_locked 
+                    ? 'bg-red-100 text-red-700' 
+                    : tableMode === 'itr' 
+                      ? 'bg-emerald-100 text-emerald-700' 
+                      : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {tableMode === 'itr' ? 'ITR Mode' : 'Regular Mode'} | {currentBook?.book_code || 'No Book'}
+                </span>
+              </h1>
               <ModeLabel />
             </div>
             <p className='text-gray-600'>
@@ -979,7 +1011,7 @@ const BalanceSheet: React.FC = () => {
                         checked={selectedAccountsForPL.has(newRowData.accountName)}
                         onChange={(e) => handlePLSelectionChange(newRowData.accountName, e.target.checked)}
                         className='w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2'
-                        disabled={!newRowData.accountName}
+                        disabled={!newRowData.accountName || currentBook?.is_locked}
                       />
                     </td>
                     <td className='px-3 py-2'>
@@ -989,6 +1021,7 @@ const BalanceSheet: React.FC = () => {
                         onChange={(e) => handleNewRowDataChange('accountName', e.target.value)}
                         placeholder='Account Name'
                         className='w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500'
+                        disabled={currentBook?.is_locked}
                       />
                     </td>
                     <td className='px-3 py-2'>
@@ -998,6 +1031,7 @@ const BalanceSheet: React.FC = () => {
                         onChange={(e) => handleNewRowDataChange('credit', e.target.value)}
                         placeholder='Credit'
                         className='w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500'
+                        disabled={currentBook?.is_locked}
                       />
                     </td>
                     <td className='px-3 py-2'>
@@ -1007,6 +1041,7 @@ const BalanceSheet: React.FC = () => {
                         onChange={(e) => handleNewRowDataChange('debit', e.target.value)}
                         placeholder='Debit'
                         className='w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500'
+                        disabled={currentBook?.is_locked}
                       />
                     </td>
                     <td className='px-3 py-2'>
@@ -1016,6 +1051,7 @@ const BalanceSheet: React.FC = () => {
                         onChange={(e) => handleNewRowDataChange('balance', e.target.value)}
                         placeholder='Balance'
                         className='w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500'
+                        disabled={currentBook?.is_locked}
                       />
                     </td>
                     <td className='px-3 py-2'>
@@ -1023,6 +1059,7 @@ const BalanceSheet: React.FC = () => {
                         value={newRowData.result}
                         onChange={(e) => handleNewRowDataChange('result', e.target.value)}
                         className='w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500'
+                        disabled={currentBook?.is_locked}
                       >
                         <option value='CREDIT'>CREDIT</option>
                         <option value='DEBIT'>DEBIT</option>
@@ -1038,7 +1075,7 @@ const BalanceSheet: React.FC = () => {
                         variant='primary'
                         size='sm'
                         onClick={addCustomRow}
-                        disabled={!newRowData.accountName.trim()}
+                        disabled={!newRowData.accountName.trim() || currentBook?.is_locked}
                       >
                         Add Row
                       </Button>
@@ -1056,6 +1093,7 @@ const BalanceSheet: React.FC = () => {
                             bothYesNo: 'NO'
                           });
                         }}
+                        disabled={currentBook?.is_locked}
                       >
                         Clear Form
                       </Button>

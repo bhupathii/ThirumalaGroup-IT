@@ -18,6 +18,7 @@ interface CustomCalendarProps {
   onClose?: () => void;
   entries?: any[];
   dotColor?: 'green' | 'red' | 'dark-red';
+  tooltipLabel?: string;
 }
 
 const CustomCalendar = ({
@@ -26,6 +27,7 @@ const CustomCalendar = ({
   onClose,
   entries: providedEntries,
   dotColor = 'red',
+  tooltipLabel,
 }: CustomCalendarProps) => {
   const { mode: tableMode } = useTableMode();
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -72,9 +74,9 @@ const CustomCalendar = ({
     };
   }, [providedEntries, tableMode]);
 
-  const datesWithEntries = useMemo(() => {
-    const set = new Set<string>();
-    if (!entries || entries.length === 0) return set;
+  const dateCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (!entries || entries.length === 0) return counts;
 
     entries.forEach((entry: any) => {
       if (!entry || !entry.c_date) return;
@@ -99,12 +101,16 @@ const CustomCalendar = ({
       }
       
       if (dateStr) {
-        set.add(dateStr);
+        counts[dateStr] = (counts[dateStr] || 0) + 1;
       }
     });
 
-    return set;
+    return counts;
   }, [entries]);
+
+  const datesWithEntries = useMemo(() => {
+    return new Set<string>(Object.keys(dateCounts));
+  }, [dateCounts]);
 
   const today = new Date();
   const year = currentMonth.getFullYear();
@@ -155,7 +161,7 @@ const CustomCalendar = ({
       : 'bg-red-500';
 
   return (
-    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 p-4 min-w-[280px]">
+    <div className="CustomCalendar absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 p-4 min-w-[280px]">
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => navigateMonth('prev')}
@@ -199,11 +205,18 @@ const CustomCalendar = ({
             bgClass = 'bg-blue-200 font-bold';
           }
 
+          const count = dateCounts[dateStr] || 0;
+          const label = tooltipLabel || (tableMode === 'finance' ? 'Entries' : 'Entries');
+          const titleText = count > 0 
+            ? `${format(date, 'dd-MMM-yyyy')}\n${count} ${label}`
+            : format(date, 'dd-MMM-yyyy');
+
           return (
             <button
               key={`${dateStr}-${index}`}
               onClick={() => handleDateClick(date)}
               type="button"
+              title={titleText}
               className={`
                 relative p-2 text-xs rounded transition-colors
                 ${!isCurrentMonth ? 'text-gray-300' : 'text-gray-700'}

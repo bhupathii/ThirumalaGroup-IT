@@ -575,9 +575,10 @@ const CDLedger: React.FC = () => {
 
     const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
     
-    // Current Due Date = Loan Date + Period Days
+    // Current Due Date = Loan Date + Period Days - 1
+    // VBA: DueDate = Date + Period − 1 (UpdatingDueDate.bas default path)
     const entryDateStart = new Date(startOfDay(entryDate));
-    const dueDate = new Date(entryDateStart.getTime() + periodDays * 24 * 60 * 60 * 1000);
+    const dueDate = new Date(entryDateStart.getTime() + (periodDays - 1) * 24 * 60 * 60 * 1000);
 
     // Dynamic Penalty Rate Lookup
     const penaltyRate = selectedLoan.penalty_percent !== undefined && selectedLoan.penalty_percent !== null ? Number(selectedLoan.penalty_percent) : 0.75;
@@ -852,8 +853,9 @@ const CDLedger: React.FC = () => {
       });
 
       // Dues calculation for this cycle
+      // VBA: DueDate = Date + Period − 1
       const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
-      const cycleDueDate = new Date(cycle.start + periodDays * 24 * 60 * 60 * 1000);
+      const cycleDueDate = new Date(cycle.start + (periodDays - 1) * 24 * 60 * 60 * 1000);
       const cycleDueDays = Math.max(0, Math.round((cycle.end - startOfDay(cycleDueDate)) / (1000 * 60 * 60 * 24)));
       
       const interestRate = Number(selectedLoan.interest_rate) || 3;
@@ -1226,7 +1228,10 @@ const CDLedger: React.FC = () => {
       'Renew',
       periodDays
     );
-    const renewBaseDateMs = Math.max(startOfDay(renewCalculations?.dueDate || paymentDate), startOfDay(paymentDate));
+    // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate, not payment date
+    const renewBaseDateMs = renewCalculations?.dueDate
+      ? startOfDay(renewCalculations.dueDate)
+      : startOfDay(paymentDate);
     const renewNextDueDate = renewSplit.renewedDays > 0 
       ? new Date(renewBaseDateMs + renewSplit.renewedDays * 24 * 60 * 60 * 1000) 
       : null;
@@ -1497,7 +1502,10 @@ const CDLedger: React.FC = () => {
 
       let renewedTillDate: string | null = null;
       if (renewedDays > 0) {
-        const baseDateMs = Math.max(startOfDay(renewCalculations?.dueDate || paymentDate), startOfDay(paymentDate));
+        // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate
+        const baseDateMs = renewCalculations?.dueDate
+          ? startOfDay(renewCalculations.dueDate)
+          : startOfDay(paymentDate);
         const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
         const tzoffset = nextDueDate.getTimezoneOffset() * 60000;
         renewedTillDate = new Date(nextDueDate.getTime() - tzoffset).toISOString().split('T')[0];
@@ -1550,8 +1558,11 @@ const CDLedger: React.FC = () => {
         
         // For renewal/partial: set loan date based on next_due_date = base_date + renewed_days
         // Loan start date = next_due_date - periodDays
+        // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate
         if (renewedDays > 0) {
-          const baseDateMs = Math.max(startOfDay(renewCalculations?.dueDate || paymentDate), startOfDay(paymentDate));
+          const baseDateMs = renewCalculations?.dueDate
+            ? startOfDay(renewCalculations.dueDate)
+            : startOfDay(paymentDate);
           const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
           
           console.log('=== RENEWAL DUE DATE ADVANCEMENT DEBUG ===');

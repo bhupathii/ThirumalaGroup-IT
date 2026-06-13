@@ -58,52 +58,20 @@ const ModeSelection: React.FC = () => {
     { path: '/finance/user-access-management', key: 'user_access_management', adminOnly: true },
   ];
 
-  // Get the first available feature path for the user
-  const getFirstAvailableFeature = (mode: 'regular' | 'itr' | 'finance') => {
-    const isAdmin = user?.is_admin || false;
-    const featuresByMode = user?.featuresByMode || { regular: [], itr: [], finance: [] };
-    
-    // Get features for the selected mode
-    const features = isAdmin 
-      ? (mode === 'finance' ? financeMenuItems : menuItems).map(item => item.key) // Admins have all features
-      : (featuresByMode[mode] || []);
-    
-    const activeItems = mode === 'finance' ? financeMenuItems : menuItems;
-    
-    // Find the first menu item that matches a user feature (skip dashboard)
-    for (const item of activeItems) {
-      // Skip admin-only items for non-admins
-      if (item.adminOnly && !isAdmin) continue;
-      
-      // Skip dashboard - we want the first actual feature
-      if (item.key === 'dashboard' || item.key === 'finance_dashboard') continue;
-      
-      // If user has this feature, return its path
-      if (features.includes(item.key)) {
-        return item.path;
-      }
-    }
-    
-    // Fallback to dashboard
-    return mode === 'finance' ? '/finance' : '/';
-  };
 
   const handleRegularMode = () => {
     setMode('regular');
-    const firstFeature = getFirstAvailableFeature('regular');
-    navigate(firstFeature);
+    navigate('/', { replace: true });
   };
 
   const handleITRMode = () => {
     setMode('itr');
-    const firstFeature = getFirstAvailableFeature('itr');
-    navigate(firstFeature);
+    navigate('/', { replace: true });
   };
 
   const handleFinanceMode = () => {
     setMode('finance');
-    const firstFeature = getFirstAvailableFeature('finance');
-    navigate(firstFeature);
+    navigate('/finance', { replace: true });
   };
 
   // Determine which modes the user can access based on their features

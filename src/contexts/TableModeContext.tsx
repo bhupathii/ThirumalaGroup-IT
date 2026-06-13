@@ -1,11 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { db } from '../lib/offlineQueueDB';
+import { toast } from 'react-hot-toast';
+import { queryClient } from '../lib/queryClient';
 
 type TableMode = 'regular' | 'itr' | 'finance';
 
 interface TableModeContextType {
   mode: TableMode;
-  toggleMode: () => void;
-  setMode: (mode: TableMode) => void;
+  toggleMode: () => void | Promise<void>;
+  setMode: (mode: TableMode) => void | Promise<void>;
   isITRMode: boolean;
   isFinanceMode: boolean;
 }
@@ -39,11 +42,40 @@ export const TableModeProvider: React.FC<{ children: React.ReactNode }> = ({
     );
   }, [mode]);
 
-  const toggleMode = () => {
+  const toggleMode = async () => {
+    try {
+      const count = await db.queued_operations
+        .where('status')
+        .equals('pending_sync')
+        .count();
+      if (count > 0) {
+        toast.error(`Cannot switch modes while there are ${count} unsynchronized records. Please sync first.`);
+        return;
+      }
+    } catch (err) {
+      console.error('Failed to check offline queue before toggling mode:', err);
+    }
+    // Clear all React Query cache so next render fetches fresh data for the new mode
+    queryClient.clear();
     setMode(prev => (prev === 'regular' ? 'itr' : prev === 'itr' ? 'finance' : 'regular'));
   };
 
-  const setModeDirect = (newMode: TableMode) => {
+  const setModeDirect = async (newMode: TableMode) => {
+    if (newMode === mode) return;
+    try {
+      const count = await db.queued_operations
+        .where('status')
+        .equals('pending_sync')
+        .count();
+      if (count > 0) {
+        toast.error(`Cannot switch modes while there are ${count} unsynchronized records. Please sync first.`);
+        return;
+      }
+    } catch (err) {
+      console.error('Failed to check offline queue before setting mode:', err);
+    }
+    // Clear all React Query cache so next render fetches fresh data for the new mode
+    queryClient.clear();
     setMode(newMode);
   };
 

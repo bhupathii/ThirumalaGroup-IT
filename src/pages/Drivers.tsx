@@ -9,10 +9,12 @@ import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
-import { Edit } from 'lucide-react';
+import { Edit, AlertTriangle } from 'lucide-react';
+import { useBook } from '../contexts/BookContext';
 
 const Drivers: React.FC = () => {
   const { mode: tableMode } = useTableMode();
+  const { currentBook } = useBook();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
@@ -41,7 +43,7 @@ const Drivers: React.FC = () => {
 
   useEffect(() => {
     loadDrivers();
-  }, [tableMode]);
+  }, [tableMode, currentBook?.id]);
 
   const loadDrivers = async () => {
     setLoading(true);
@@ -68,6 +70,10 @@ const Drivers: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentBook?.is_locked) {
+      toast.error('This Book is Locked (Read Only). Writing/Editing/Deletion is blocked.');
+      return;
+    }
     setLoading(true);
 
     try {
@@ -149,19 +155,43 @@ const Drivers: React.FC = () => {
   };
 
   const handleEdit = (driver: Driver) => {
+    if (currentBook?.is_locked) {
+      toast.error('This Book is Locked (Read Only). Writing/Editing/Deletion is blocked.');
+      return;
+    }
     setEditingDriver({ ...driver });
     setShowAddForm(false);
   };
 
   return (
     <div className='min-h-screen flex flex-col'>
+      {/* Locked Book Banner */}
+      {currentBook?.is_locked && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl shadow-sm flex items-center gap-3 no-print mb-6">
+          <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 animate-pulse" />
+          <div>
+            <h3 className="text-sm font-bold text-red-800">This Book Is Locked (Read Only)</h3>
+            <p className="text-xs text-red-700">Writing, editing, and deletion operations are disabled for this accounting period.</p>
+          </div>
+        </div>
+      )}
+
       {/* Page content */}
       <div className='space-y-6'>
         <div className='flex items-center justify-between'>
           <div>
             <div className='flex items-center gap-3 mb-1'>
-              <h1 className='text-2xl font-bold text-gray-900'>
+              <h1 className='text-2xl font-bold text-gray-900 flex items-center gap-2.5'>
                 Drivers Management
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  currentBook?.is_locked 
+                    ? 'bg-red-100 text-red-700' 
+                    : tableMode === 'itr' 
+                      ? 'bg-emerald-100 text-emerald-700' 
+                      : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {tableMode === 'itr' ? 'ITR Mode' : 'Regular Mode'} | {currentBook?.book_code || 'No Book'}
+                </span>
               </h1>
               <ModeLabel />
             </div>
@@ -170,14 +200,16 @@ const Drivers: React.FC = () => {
             </p>
           </div>
 
-          <Button
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-              setEditingDriver(null);
-            }}
-          >
-            Add Driver
-          </Button>
+          {!currentBook?.is_locked && (
+            <Button
+              onClick={() => {
+                setShowAddForm(!showAddForm);
+                setEditingDriver(null);
+              }}
+            >
+              Add Driver
+            </Button>
+          )}
         </div>
 
         {/* Add/Edit Driver Form */}
@@ -382,14 +414,16 @@ const Drivers: React.FC = () => {
                     </td>
                     <td className='px-3 py-2 text-center'>
                       <div className='flex items-center gap-2'>
-                        <Button
-                          size='sm'
-                          variant='secondary'
-                          icon={Edit}
-                          onClick={() => handleEdit(driver)}
-                        >
-                          Edit
-                        </Button>
+                        {!currentBook?.is_locked && (
+                          <Button
+                            size='sm'
+                            variant='secondary'
+                            icon={Edit}
+                            onClick={() => handleEdit(driver)}
+                          >
+                            Edit
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -25,7 +25,10 @@ import {
   DollarSign,
   Phone,
   Shield,
+  Bell,
+  RefreshCw,
 } from 'lucide-react';
+import { supabaseDB } from '../../lib/supabaseDatabase';
 
 interface MenuItem {
   icon: React.ComponentType<any>;
@@ -38,7 +41,40 @@ interface MenuItem {
 
 const Sidebar: React.FC = () => {
   const { user, logout } = useAuth();
-  const { isFinanceMode } = useTableMode();
+  const { isFinanceMode, mode: tableMode } = useTableMode();
+  const [activeRemindersCount, setActiveRemindersCount] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    if (!user || isFinanceMode) {
+      setActiveRemindersCount(0);
+      return;
+    }
+    
+    const fetchCount = async () => {
+      const count = await supabaseDB.getActiveRemindersCount(
+        tableMode as 'regular' | 'itr',
+        user.id,
+        user.is_admin
+      );
+      setActiveRemindersCount(count);
+    };
+
+    fetchCount();
+    
+    // Poll every 15 seconds
+    const interval = setInterval(fetchCount, 15000);
+    
+    // Listen for custom event to refresh immediately
+    const handleRefresh = () => {
+      fetchCount();
+    };
+    window.addEventListener('refresh-reminders-count', handleRefresh);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('refresh-reminders-count', handleRefresh);
+    };
+  }, [user, tableMode, isFinanceMode]);
 
   // Debug: Log user features to help diagnose issues
   React.useEffect(() => {
@@ -112,6 +148,8 @@ const Sidebar: React.FC = () => {
       key: 'balance_sheet',
     },
     { icon: Truck, label: 'Vehicles', path: '/vehicles', key: 'vehicles' },
+    { icon: Bell, label: 'Reminders', path: '/reminders', key: 'reminders' },
+    { icon: RefreshCw, label: 'Sync Center', path: '/sync-center', key: 'sync_center', showForAll: true },
     {
       icon: CreditCard,
       label: 'Bank Guarantees',
@@ -125,6 +163,13 @@ const Sidebar: React.FC = () => {
       label: 'User Management',
       path: '/user-management',
       key: 'users',
+      adminOnly: true,
+    },
+    {
+      icon: Book,
+      label: 'Book Management',
+      path: '/book-management',
+      key: 'book_management',
       adminOnly: true,
     },
   ];
@@ -160,6 +205,7 @@ const Sidebar: React.FC = () => {
       key: 'user_access_management',
       adminOnly: true,
     },
+    { icon: RefreshCw, label: 'Sync Center', path: '/sync-center', key: 'sync_center', showForAll: true },
   ];
 
   const activeMenuItems = isFinanceMode ? financeMenuItems : menuItems;
@@ -208,6 +254,10 @@ const Sidebar: React.FC = () => {
         <ul className='space-y-1'>
           {activeMenuItems
             .filter(item => {
+              if (item.showForAll) {
+                return true;
+              }
+              
               // Admin-only items: only show to admins
               if (item.adminOnly) {
                 return user?.is_admin;
@@ -242,7 +292,14 @@ const Sidebar: React.FC = () => {
                   <span className='w-5 h-5 flex items-center justify-center'>
                     <item.icon className='w-5 h-5 group-hover:scale-110 transition-transform' />
                   </span>
-                  <span className='truncate'>{item.label}</span>
+                  <span className='truncate flex items-center justify-between w-full'>
+                    <span>{item.label}</span>
+                    {item.key === 'reminders' && activeRemindersCount > 0 && (
+                      <span className="ml-2 px-1.5 py-0.5 rounded-full text-xs font-bold leading-none bg-red-500 text-white shadow-sm">
+                        {activeRemindersCount}
+                      </span>
+                    )}
+                  </span>
                 </NavLink>
               </li>
             ))}

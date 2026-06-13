@@ -20,7 +20,8 @@ import {
   BarChart3,
   History,
   Shield,
-  Settings
+  Settings,
+  RefreshCw,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -44,6 +45,7 @@ const FinanceSidebar: React.FC = () => {
       title: 'Overview',
       items: [
         { icon: Home, label: 'Dashboard', path: '/finance', key: 'finance_dashboard' },
+        { icon: RefreshCw, label: 'Sync Center', path: '/sync-center', key: 'sync_center' },
       ],
     },
     {

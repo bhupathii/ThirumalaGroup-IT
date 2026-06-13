@@ -1,16 +1,16 @@
 import React, { useState, useCallback } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
-// import { supabaseDB } from '../lib/supabaseDatabase';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabaseDatabase';
 import { getTableName } from '../lib/tableNames';
 import { useAuth } from '../contexts/AuthContext';
-// import { useTableMode } from '../contexts/TableModeContext';
+import { useTableMode } from '../contexts/TableModeContext';
+import { useBook } from '../contexts/BookContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
 import { format } from 'date-fns';
 import { importFromFile } from '../utils/excel';
-import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react';
 
 // Helper functions - Memoized for better performance
 const sanitizeString = (value: unknown): string => {
@@ -532,6 +532,8 @@ const validateEntry = (entry: any) => {
 
 const CsvUpload: React.FC = () => {
   const { user } = useAuth();
+  const { mode: tableMode } = useTableMode();
+  const { currentBook } = useBook();
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadPreview, setUploadPreview] = useState<Record<string, unknown>[]>([]);
@@ -564,6 +566,11 @@ const CsvUpload: React.FC = () => {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleFileUpload = async (file: File) => {
+    if (currentBook?.is_locked) {
+      toast.error('This book is locked. File upload disabled.');
+      return;
+    }
+
     if (!file.name.endsWith('.csv')) {
       toast.error('Please upload a CSV file');
       return;
@@ -627,6 +634,11 @@ const CsvUpload: React.FC = () => {
   }, []);
 
   const handleImportCSV = async () => {
+    if (currentBook?.is_locked) {
+      toast.error('This book is locked. Cannot import data.');
+      return;
+    }
+
     if (!uploadedFile || uploadPreview.length === 0) {
       toast.error('Please upload a valid CSV file first');
       return;
@@ -1931,6 +1943,10 @@ const CsvUpload: React.FC = () => {
 
   // Sync offline data to Supabase when connection is restored
   const syncOfflineData = async () => {
+    if (currentBook?.is_locked) {
+      toast.error('This book is locked. Cannot sync offline data.');
+      return;
+    }
     try {
       const offlineData = JSON.parse(
         localStorage.getItem('csv_upload_data') || '[]'
@@ -1963,11 +1979,31 @@ const CsvUpload: React.FC = () => {
       <ModeLabel />
       <div className='flex-1 overflow-y-auto p-6'>
         <div className='w-full max-w-6xl mx-auto'>
+          {/* Locked Book Banner */}
+          {currentBook?.is_locked && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl shadow-sm flex items-center gap-3 no-print mb-6">
+              <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 animate-pulse" />
+              <div>
+                <h3 className="text-sm font-bold text-red-800">This Book Is Locked (Read Only)</h3>
+                <p className="text-xs text-red-700">Writing, editing, and deletion operations are disabled for this accounting period.</p>
+              </div>
+            </div>
+          )}
+
           {/* Header */}
           <div className='flex items-center justify-between mb-6'>
             <div>
-              <h1 className='text-3xl font-bold text-gray-900'>
+              <h1 className='text-3xl font-bold text-gray-900 flex items-center gap-2.5'>
                 CSV Data Upload - COMPREHENSIVE SOLUTION
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  currentBook?.is_locked 
+                    ? 'bg-red-100 text-red-700' 
+                    : tableMode === 'itr' 
+                      ? 'bg-emerald-100 text-emerald-700' 
+                      : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {tableMode === 'itr' ? 'ITR Mode' : 'Regular Mode'} | {currentBook?.book_code || 'No Book'}
+                </span>
               </h1>
               <p className='text-gray-600'>
                 🚀{' '}
@@ -1994,7 +2030,7 @@ const CsvUpload: React.FC = () => {
               <Button variant='secondary' onClick={viewOfflineData}>
                 View Offline Data
               </Button>
-              <Button variant='secondary' onClick={syncOfflineData}>
+              <Button variant='secondary' onClick={syncOfflineData} disabled={currentBook?.is_locked}>
                 Sync to DB
               </Button>
               <Button variant='secondary' onClick={clearOfflineData}>
@@ -2304,7 +2340,7 @@ const CsvUpload: React.FC = () => {
                 <Button
                   onClick={handleImportCSV}
                   disabled={
-                    !uploadedFile || uploadPreview.length === 0 || uploadLoading
+                    !uploadedFile || uploadPreview.length === 0 || uploadLoading || currentBook?.is_locked
                   }
                   className='flex-1 text-lg py-3'
                 >
@@ -2347,6 +2383,10 @@ const CsvUpload: React.FC = () => {
                 {/* Debug Mode - Simple Upload */}
                 <Button
                   onClick={async () => {
+                    if (currentBook?.is_locked) {
+                      toast.error('This book is locked. Action disabled.');
+                      return;
+                    }
                     if (!uploadedFile) return;
                     console.log('Debug mode: Simple CSV upload...');
                     setUploadLoading(true);

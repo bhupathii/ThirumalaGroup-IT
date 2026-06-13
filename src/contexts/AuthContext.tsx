@@ -44,6 +44,7 @@ const ADMIN_FEATURES = [
   'drivers',
   'bank_guarantees',
   'users',
+  'reminders',
   // Finance Mode Features
   'finance_dashboard',
   'loan_entry',
@@ -69,6 +70,7 @@ const ADMIN_FEATURES = [
   'aadhaar_search',
   'logs',
   'user_access_management',
+  'book_management',
 ];
 const getFeaturesForMode = (
   featuresByMode: Record<ModeKey, string[]>,

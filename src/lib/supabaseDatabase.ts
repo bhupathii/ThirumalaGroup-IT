@@ -1,6 +1,8 @@
-import { supabase } from './supabase';
+import { supabase as rawSupabase } from './supabase';
 import { FinancialCalculator } from './financialCalculations';
 import { getTableName, getTableMode } from './tableNames';
+import { db, QueuedOperation } from './offlineQueueDB';
+import { toast } from 'react-hot-toast';
 
 // Types
 export interface Company {
@@ -122,8 +124,550 @@ export interface Driver {
   license_back_url?: string | null;
 }
 
+export interface Reminder {
+  id: string;
+  title: string;
+  description: string | null;
+  event_date: string;
+  event_time: string | null;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  reminder_type: 'one_time' | 'recurring';
+  recurring_interval: 'daily' | 'weekly' | 'monthly' | 'yearly' | null;
+  notify_before_days: number;
+  assigned_user_id: string | null;
+  status: 'pending' | 'completed';
+  mode: 'regular' | 'itr';
+  category: 'GENERAL' | 'VEHICLE' | 'LOAN' | 'STAFF' | 'DOCUMENT' | 'TAX' | 'MEETING' | 'FOLLOWUP';
+  completion_notes: string | null;
+  completed_at: string | null;
+  snoozed_until: string | null;
+  is_system_generated: boolean;
+  created_by: string;
+  created_at: string | null;
+  updated_at: string | null;
+  deleted_at: string | null;
+  assigned_username?: string | null;
+  creator_username?: string | null;
+}
+
+const isScopedTable = (table: string): boolean => {
+  const scopedTables = [
+    'companies', 'companies_itr',
+    'company_main_accounts', 'company_main_accounts_itr',
+    'company_main_sub_acc', 'company_main_sub_acc_itr',
+    'cash_book', 'cash_book_itr',
+    'original_cash_book', 'original_cash_book_itr',
+    'edit_cash_book', 'edit_cash_book_itr',
+    'deleted_cash_book', 'deleted_cash_book_itr',
+    'ledger', 'ledger_itr',
+    'balance_sheet', 'balance_sheet_itr',
+    'vehicles', 'vehicles_itr',
+    'drivers', 'drivers_itr',
+    'bank_guarantees', 'bank_guarantees_itr',
+    'reminders',
+    'finance_loans', 'finance_transactions', 'finance_capital_entries', 'finance_dues', 'finance_cd_ledger_entries', 'finance_cashbook_entries'
+  ];
+  return scopedTables.includes(table);
+};
+
+const createBuilderProxy = (builder: any, table: string): any => {
+  return new Proxy(builder, {
+    get(target, prop, receiver) {
+      // Intercept .then for offline write resolution
+      if (prop === 'then') {
+        const offlineInfo = target._offlineInfo;
+        if (offlineInfo && offlineInfo.operation_type && !supabaseDB.isOnline) {
+          return function (resolve: any, reject: any) {
+            supabaseDB.handleOfflineWrite(offlineInfo)
+              .then(data => resolve({ data, error: null }))
+              .catch(err => resolve({ data: null, error: err }));
+          };
+        }
+      }
+
+      const origMethod = target[prop];
+      if (typeof origMethod !== 'function') {
+        return origMethod;
+      }
+
+      return function (...args: any[]) {
+        const methodName = String(prop);
+
+        if (isScopedTable(table) && supabaseDB.currentBookId && !supabaseDB.isScopeBypassed()) {
+          if (methodName === 'select') {
+            const nextBuilder = origMethod.apply(target, args);
+            const proxied = createBuilderProxy(nextBuilder.eq('book_id', supabaseDB.currentBookId), table);
+            if (target._offlineInfo) {
+              proxied._offlineInfo = { ...target._offlineInfo };
+            }
+            return proxied;
+          }
+          
+          if (methodName === 'insert') {
+            if (supabaseDB.isBookLocked) {
+              throw new Error('This Book is Locked (Read Only). Writing is blocked.');
+            }
+            const records = args[0];
+            if (Array.isArray(records)) {
+              args[0] = records.map(r => ({ ...r, book_id: supabaseDB.currentBookId }));
+            } else if (records && typeof records === 'object') {
+              args[0] = { ...records, book_id: supabaseDB.currentBookId };
+            }
+            const nextBuilder = origMethod.apply(target, args);
+            const proxied = createBuilderProxy(nextBuilder, table);
+            proxied._offlineInfo = {
+              table,
+              operation_type: 'INSERT',
+              payload: args[0],
+              filters: []
+            };
+            return proxied;
+          }
+
+          if (methodName === 'update') {
+            if (supabaseDB.isBookLocked) {
+              throw new Error('This Book is Locked (Read Only). Editing is blocked.');
+            }
+            const nextBuilder = origMethod.apply(target, args);
+            const proxied = createBuilderProxy(nextBuilder.eq('book_id', supabaseDB.currentBookId), table);
+            proxied._offlineInfo = {
+              table,
+              operation_type: 'UPDATE',
+              payload: args[0],
+              filters: []
+            };
+            return proxied;
+          }
+
+          if (methodName === 'delete') {
+            if (supabaseDB.isBookLocked) {
+              throw new Error('This Book is Locked (Read Only). Deletion is blocked.');
+            }
+            const nextBuilder = origMethod.apply(target, args);
+            const proxied = createBuilderProxy(nextBuilder.eq('book_id', supabaseDB.currentBookId), table);
+            proxied._offlineInfo = {
+              table,
+              operation_type: 'DELETE',
+              payload: null,
+              filters: []
+            };
+            return proxied;
+          }
+
+          if (methodName === 'upsert') {
+            if (supabaseDB.isBookLocked) {
+              throw new Error('This Book is Locked (Read Only). Writing is blocked.');
+            }
+            const records = args[0];
+            if (Array.isArray(records)) {
+              args[0] = records.map(r => ({ ...r, book_id: supabaseDB.currentBookId }));
+            } else if (records && typeof records === 'object') {
+              args[0] = { ...records, book_id: supabaseDB.currentBookId };
+            }
+            const nextBuilder = origMethod.apply(target, args);
+            const proxied = createBuilderProxy(nextBuilder, table);
+            proxied._offlineInfo = {
+              table,
+              operation_type: 'UPSERT',
+              payload: args[0],
+              filters: []
+            };
+            return proxied;
+          }
+        }
+
+        const result = origMethod.apply(target, args);
+
+        // Track filter parameters and offline info for builders (scoped or unscoped)
+        const isBuilder = result && typeof result === 'object' && (typeof result.select === 'function' || typeof result.from === 'function');
+        
+        if (isBuilder) {
+          result._offlineInfo = target._offlineInfo || {
+            table,
+            operation_type: null,
+            payload: null,
+            filters: []
+          };
+
+          if (['insert', 'update', 'delete', 'upsert'].includes(methodName)) {
+            result._offlineInfo.operation_type = methodName.toUpperCase();
+            if (args[0]) {
+              result._offlineInfo.payload = args[0];
+            }
+          } else if (['eq', 'in', 'neq', 'gt', 'lt'].includes(methodName) && result._offlineInfo) {
+            result._offlineInfo.filters.push({
+              type: methodName,
+              field: args[0],
+              value: args[1]
+            });
+          }
+
+          return createBuilderProxy(result, table);
+        }
+
+        if (result && typeof result === 'object' && typeof result.then === 'function') {
+          return result;
+        }
+        return typeof result?.select === 'function' || typeof result?.from === 'function'
+          ? createBuilderProxy(result, table)
+          : result;
+      };
+    }
+  });
+};
+
+export const supabase = {
+  ...rawSupabase,
+  from(table: string) {
+    const builder = rawSupabase.from(table);
+    return createBuilderProxy(builder, table);
+  }
+};
+
 // Supabase Database Service
 class SupabaseDatabase {
+  currentBookId: string = '';
+  isBookLocked: boolean = false;
+  private bypassBookScope: boolean = false;
+
+  // New offline support fields
+  isOnline: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  isSyncing: boolean = false;
+  currentBookName: string = '';
+  currentUserId: string = '';
+
+  setBookId(id: string) {
+    this.currentBookId = id;
+    console.log(`🔌 Database client scoped to book_id: ${id}`);
+  }
+
+  setBookName(name: string) {
+    this.currentBookName = name;
+    console.log(`🔌 Database client scoped to book name: ${name}`);
+  }
+
+  setBookLocked(locked: boolean) {
+    this.isBookLocked = locked;
+    console.log(`🔌 Database client locked state: ${locked}`);
+  }
+
+  setUserId(id: string) {
+    this.currentUserId = id;
+  }
+
+  async bypassScope<T>(fn: () => Promise<T>): Promise<T> {
+    this.bypassBookScope = true;
+    try {
+      return await fn();
+    } finally {
+      this.bypassBookScope = false;
+    }
+  }
+
+  isScopeBypassed() {
+    return this.bypassBookScope;
+  }
+
+  // Offline support helper functions
+  async handleOfflineWrite(info: any) {
+    const offline_uuid = crypto.randomUUID();
+    const mode = getTableMode();
+    const book_id = this.currentBookId || '';
+    const book_name = this.currentBookName || 'Unknown Book';
+    
+    let user_id = this.currentUserId;
+    if (!user_id) {
+      const { data: { session } } = await rawSupabase.auth.getSession();
+      user_id = session?.user?.id || 'unknown';
+    }
+
+    let payload = info.payload || {};
+    let targetId = '';
+    
+    const idFilter = info.filters.find((f: any) => f.field === 'id');
+    if (idFilter) {
+      targetId = idFilter.value;
+    }
+
+    if (info.operation_type === 'INSERT' || info.operation_type === 'UPSERT') {
+      if (Array.isArray(payload)) {
+        payload = payload.map(item => {
+          const itemId = item.id || crypto.randomUUID();
+          return {
+            ...item,
+            id: itemId,
+            book_id
+          };
+        });
+      } else {
+        payload.id = payload.id || offline_uuid;
+        payload.book_id = book_id;
+      }
+    } else if (info.operation_type === 'UPDATE') {
+      payload.id = payload.id || targetId;
+      payload.book_id = book_id;
+    } else if (info.operation_type === 'DELETE') {
+      payload = {
+        id: targetId,
+        book_id
+      };
+      if (info.table === 'cash_book') {
+        const { data: { session } } = await rawSupabase.auth.getSession();
+        payload.deleted_by = (session?.user as any)?.username || session?.user?.email || 'offline_sync';
+      }
+    }
+
+    const op = {
+      offline_uuid,
+      mode,
+      book_id,
+      book_name,
+      user_id,
+      created_at: new Date().toISOString(),
+      operation_type: info.operation_type,
+      table: info.table,
+      payload,
+      status: 'pending_sync' as const
+    };
+
+    await db.queued_operations.put(op);
+    toast.success('Saved Offline');
+    window.dispatchEvent(new CustomEvent('offline-queue-changed'));
+
+    return Array.isArray(payload) ? payload : { id: payload.id || targetId || offline_uuid, ...payload };
+  }
+
+  async mergeOfflineOperations<T extends { id: string; pending_sync?: boolean }>(
+    table: string,
+    onlineRecords: T[]
+  ): Promise<T[]> {
+    try {
+      const pendingOps = await db.queued_operations
+        .where('status')
+        .equals('pending_sync')
+        .and(op => op.table === table && op.book_id === this.currentBookId)
+        .toArray();
+
+      if (pendingOps.length === 0) {
+        return onlineRecords;
+      }
+
+      let list = [...onlineRecords];
+
+      // Sort pending operations by creation date to process sequentially
+      const sortedOps = pendingOps.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+      for (const op of sortedOps) {
+        if (op.operation_type === 'INSERT' || op.operation_type === 'UPSERT') {
+          const payload = op.payload;
+          if (Array.isArray(payload)) {
+            payload.forEach(item => {
+              const idx = list.findIndex(r => r.id === item.id);
+              const mergedItem = { ...item, pending_sync: true } as unknown as T;
+              if (idx !== -1) {
+                list[idx] = mergedItem;
+              } else {
+                list.unshift(mergedItem);
+              }
+            });
+          } else {
+            const idx = list.findIndex(r => r.id === payload.id);
+            const mergedItem = { ...payload, pending_sync: true } as unknown as T;
+            if (idx !== -1) {
+              list[idx] = mergedItem;
+            } else {
+              list.unshift(mergedItem);
+            }
+          }
+        } else if (op.operation_type === 'UPDATE') {
+          const payload = op.payload;
+          list = list.map(item => {
+            if (item.id === payload.id) {
+              return {
+                ...item,
+                ...payload,
+                pending_sync: true
+              } as T;
+            }
+            return item;
+          });
+        } else if (op.operation_type === 'DELETE') {
+          const payload = op.payload;
+          list = list.filter(item => item.id !== payload.id);
+        }
+      }
+
+      return list;
+    } catch (err) {
+      console.error(`Error merging offline operations for table ${table}:`, err);
+      return onlineRecords;
+    }
+  }
+
+  async syncOfflineQueue(): Promise<void> {
+    console.log('🔄 Offline queue synchronization starting...');
+    const { data: { session }, error: authError } = await rawSupabase.auth.getSession();
+    if (authError || !session) {
+      console.warn('⚠️ Sync deferred: user is not authenticated.');
+      return;
+    }
+    
+    const pendingOps = await db.queued_operations
+      .where('status')
+      .anyOf(['pending_sync', 'failed'])
+      .sortBy('created_at');
+
+    if (pendingOps.length === 0) {
+      console.log('✅ Offline queue is empty or already synced.');
+      return;
+    }
+
+    console.log(`📦 Found ${pendingOps.length} unsynced operations. Processing...`);
+
+    for (const op of pendingOps) {
+      await db.queued_operations.update(op.offline_uuid, { status: 'syncing' });
+      window.dispatchEvent(new CustomEvent('offline-queue-changed'));
+
+      try {
+        await this.syncOperation(op);
+        await db.queued_operations.update(op.offline_uuid, {
+          status: 'synced',
+          synced_at: new Date().toISOString(),
+          error_message: undefined
+        });
+        console.log(`✅ Synced operation ${op.offline_uuid} (${op.operation_type} on ${op.table})`);
+      } catch (err: any) {
+        console.error(`❌ Sync failed for operation ${op.offline_uuid}:`, err);
+        const errMsg = err.message || String(err);
+        const isDbRejection = err.code && typeof err.code === 'string' && err.code.length === 5;
+        
+        await db.queued_operations.update(op.offline_uuid, {
+          status: isDbRejection ? 'conflict' : 'failed',
+          error_message: errMsg
+        });
+      }
+      window.dispatchEvent(new CustomEvent('offline-queue-changed'));
+    }
+
+    try {
+      window.dispatchEvent(new CustomEvent('offline-sync-complete'));
+    } catch (e) {
+      console.error('Error dispatching offline-sync-complete:', e);
+    }
+  }
+
+  async syncOperation(item: QueuedOperation): Promise<void> {
+    const originalBookId = this.currentBookId;
+    const originalLocked = this.isBookLocked;
+    const originalMode = localStorage.getItem('table_mode');
+
+    this.currentBookId = item.book_id;
+    this.isBookLocked = false;
+    localStorage.setItem('table_mode', item.mode);
+
+    try {
+      const resolvedTable = getTableName(item.table, item.mode);
+      
+      if (item.operation_type === 'INSERT') {
+        const { error } = await rawSupabase.from(resolvedTable).insert(item.payload);
+        if (error) throw error;
+      } else if (item.operation_type === 'UPDATE') {
+        const recordId = item.payload.id || item.payload.offline_uuid;
+        const { error } = await rawSupabase.from(resolvedTable).update(item.payload).eq('id', recordId);
+        if (error) throw error;
+      } else if (item.operation_type === 'DELETE') {
+        if (item.table === 'cash_book') {
+          const recordId = item.payload.id || item.payload.offline_uuid;
+          const deletedBy = item.payload.deleted_by || 'offline_sync';
+          const success = await this.deleteCashBookEntry(recordId, deletedBy);
+          if (!success) {
+            throw new Error('Failed to delete cash book entry during sync');
+          }
+        } else {
+          const recordId = item.payload.id || item.payload.offline_uuid;
+          const { error } = await rawSupabase.from(resolvedTable).delete().eq('id', recordId);
+          if (error) throw error;
+        }
+      } else if (item.operation_type === 'UPSERT') {
+        const { error } = await rawSupabase.from(resolvedTable).upsert(item.payload);
+        if (error) throw error;
+      }
+    } finally {
+      this.currentBookId = originalBookId;
+      this.isBookLocked = originalLocked;
+      if (originalMode) {
+        localStorage.setItem('table_mode', originalMode);
+      } else {
+        localStorage.removeItem('table_mode');
+      }
+    }
+  }
+
+
+  async verifyBookIsEmpty(bookId: string): Promise<{ isEmpty: boolean; details?: string }> {
+    return this.bypassScope(async () => {
+      const checks = [
+        { table: 'companies', label: 'Companies' },
+        { table: 'companies_itr', label: 'Companies ITR' },
+        { table: 'cash_book', label: 'Transactions' },
+        { table: 'cash_book_itr', label: 'ITR Transactions' },
+        { table: 'vehicles', label: 'Vehicles' },
+        { table: 'vehicles_itr', label: 'ITR Vehicles' },
+        { table: 'drivers', label: 'Drivers' },
+        { table: 'drivers_itr', label: 'ITR Drivers' },
+        { table: 'bank_guarantees', label: 'Bank Guarantees' },
+        { table: 'bank_guarantees_itr', label: 'ITR Bank Guarantees' },
+        { table: 'reminders', label: 'Reminders' },
+        { table: 'finance_loans', label: 'Finance Loans' }
+      ];
+
+      for (const check of checks) {
+        const { count, error } = await rawSupabase
+          .from(check.table)
+          .select('*', { count: 'exact', head: true })
+          .eq('book_id', bookId);
+
+        if (!error && count && count > 0) {
+          return { isEmpty: false, details: `${count} records in ${check.label}` };
+        }
+      }
+
+      return { isEmpty: true };
+    });
+  }
+
+  async getBookMetrics(bookId: string): Promise<{
+    companies: number;
+    accounts: number;
+    transactions: number;
+    vehicles: number;
+    reminders: number;
+  }> {
+    return this.bypassScope(async () => {
+      const { count: companies } = await rawSupabase.from('companies').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+      const { count: companiesItr } = await rawSupabase.from('companies_itr').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+      
+      const { count: accounts } = await rawSupabase.from('company_main_accounts').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+      const { count: accountsItr } = await rawSupabase.from('company_main_accounts_itr').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+      
+      const { count: transactions } = await rawSupabase.from('cash_book').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+      const { count: transactionsItr } = await rawSupabase.from('cash_book_itr').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+
+      const { count: vehicles } = await rawSupabase.from('vehicles').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+      const { count: vehiclesItr } = await rawSupabase.from('vehicles_itr').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+
+      const { count: reminders } = await rawSupabase.from('reminders').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+
+      return {
+        companies: (companies || 0) + (companiesItr || 0),
+        accounts: (accounts || 0) + (accountsItr || 0),
+        transactions: (transactions || 0) + (transactionsItr || 0),
+        vehicles: (vehicles || 0) + (vehiclesItr || 0),
+        reminders: reminders || 0
+      };
+    });
+  }
+
   // Utility function to check and add payment_mode column if missing
   // Note: This requires service_role permissions, so it may not work with anon key
   async ensurePaymentModeColumnExists(): Promise<boolean> {
@@ -792,10 +1336,10 @@ class SupabaseDatabase {
         };
       });
       
-      return cleanedData;
+      return this.mergeOfflineOperations('cash_book', cleanedData);
     } catch (error) {
       console.error('Error in getCashBookEntries:', error);
-      return [];
+      return this.mergeOfflineOperations('cash_book', []);
     }
   }
 
@@ -1399,7 +1943,7 @@ class SupabaseDatabase {
 
     if (error) {
       console.error('Error fetching entries by date:', error);
-      return [];
+      return this.mergeOfflineOperations('cash_book', []);
     }
     
     // Clean fields and normalize approved to strict boolean
@@ -1455,7 +1999,7 @@ class SupabaseDatabase {
       };
     });
     
-    return cleanedData as CashBookEntry[];
+    return this.mergeOfflineOperations('cash_book', cleanedData as CashBookEntry[]);
   }
 
   // Bulk insert/update operations for dual entry create (used by hooks)
@@ -2200,7 +2744,7 @@ class SupabaseDatabase {
       }
       const unique = Array.from(new Set((data || []).map((r: any) => (r.staff || '').trim())))
         .filter(Boolean)
-        .map(name => ({ value: name, label: name }));
+        .map(name => ({ value: name as string, label: name as string }));
       return unique;
     } catch (err) {
       console.error('Error in getDistinctStaffNames:', err);
@@ -2223,7 +2767,7 @@ class SupabaseDatabase {
       }
       const unique = Array.from(new Set((data || []).map((r: any) => (r.users || '').trim())))
         .filter(Boolean)
-        .map(name => ({ value: name, label: name }));
+        .map(name => ({ value: name as string, label: name as string }));
       return unique;
     } catch (err) {
       console.error('Error in getDistinctUserNames:', err);
@@ -2572,10 +3116,10 @@ class SupabaseDatabase {
 
     if (error) {
       console.error('Error fetching vehicles:', error);
-      return [];
+      return this.mergeOfflineOperations('vehicles', []);
     }
 
-    return data || [];
+    return this.mergeOfflineOperations('vehicles', data || []);
   }
 
   async addVehicle(
@@ -5261,7 +5805,7 @@ class SupabaseDatabase {
         }
       }
       
-      console.log(`✅ Cleanup completed! Updated ${totalUpdated} entries across all tables`);
+      console.log(`Clean up completed! Updated ${totalUpdated} entries across all tables`);
       return { 
         success: true, 
         message: `Successfully cleaned up [DELETED] text from ${totalUpdated} entries`, 
@@ -5275,6 +5819,213 @@ class SupabaseDatabase {
         message: `Cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 
         updatedCount: 0 
       };
+    }
+  }
+
+  // Reminders Operations
+  async getReminders(mode: 'regular' | 'itr', userId: string, isAdmin: boolean): Promise<Reminder[]> {
+    try {
+      console.log('🔄 Fetching reminders for mode:', mode, 'User ID:', userId, 'Is Admin:', isAdmin);
+      
+      let query = supabase
+        .from('reminders')
+        .select(`
+          *,
+          assigned_user:users!assigned_user_id(username),
+          creator:users!created_by(username)
+        `)
+        .eq('mode', mode)
+        .is('deleted_at', null)
+        .order('event_date', { ascending: true });
+
+      // Non-admins can only see their own reminders or reminders assigned to "All Users" (null)
+      if (!isAdmin) {
+        query = query.or(`assigned_user_id.is.null,assigned_user_id.eq.${userId},created_by.eq.${userId}`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('❌ Error fetching reminders:', error);
+        return this.mergeOfflineOperations('reminders', []);
+      }
+
+      const mapped = (data || []).map((r: any) => ({
+        ...r,
+        assigned_username: r.assigned_user?.username || null,
+        creator_username: r.creator?.username || null
+      }));
+
+      return this.mergeOfflineOperations('reminders', mapped as Reminder[]);
+    } catch (error) {
+      console.error('❌ Error in getReminders:', error);
+      return this.mergeOfflineOperations('reminders', []);
+    }
+  }
+
+  async createReminder(reminder: Omit<Reminder, 'id' | 'created_at' | 'updated_at'>): Promise<Reminder | null> {
+    try {
+      console.log('➕ Creating reminder:', reminder);
+      const { data, error } = await supabase
+        .from('reminders')
+        .insert([reminder])
+        .select(`
+          *,
+          assigned_user:users!assigned_user_id(username),
+          creator:users!created_by(username)
+        `)
+        .single();
+
+      if (error) {
+        console.error('❌ Error creating reminder:', error);
+        return null;
+      }
+
+      const mapped = {
+        ...data,
+        assigned_username: data.assigned_user?.username || null,
+        creator_username: data.creator?.username || null
+      };
+
+      return mapped as Reminder;
+    } catch (error) {
+      console.error('❌ Error in createReminder:', error);
+      return null;
+    }
+  }
+
+  async updateReminder(id: string, reminder: Partial<Reminder>): Promise<Reminder | null> {
+    try {
+      console.log('🔄 Updating reminder:', id, reminder);
+      const { data, error } = await supabase
+        .from('reminders')
+        .update({
+          ...reminder,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select(`
+          *,
+          assigned_user:users!assigned_user_id(username),
+          creator:users!created_by(username)
+        `)
+        .single();
+
+      if (error) {
+        console.error('❌ Error updating reminder:', error);
+        return null;
+      }
+
+      const mapped = {
+        ...data,
+        assigned_username: data.assigned_user?.username || null,
+        creator_username: data.creator?.username || null
+      };
+
+      return mapped as Reminder;
+    } catch (error) {
+      console.error('❌ Error in updateReminder:', error);
+      return null;
+    }
+  }
+
+  async deleteReminder(id: string): Promise<boolean> {
+    try {
+      console.log('🗑️ Soft deleting reminder:', id);
+      const { error } = await supabase
+        .from('reminders')
+        .update({
+          deleted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (error) {
+        console.error('❌ Error deleting reminder:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('❌ Error in deleteReminder:', error);
+      return false;
+    }
+  }
+
+  async getReminderStats(mode: 'regular' | 'itr', userId: string, isAdmin: boolean): Promise<{ pending: number; today: number; upcoming: number; overdue: number; completed: number }> {
+    try {
+      const reminders = await this.getReminders(mode, userId, isAdmin);
+      
+      const stats = {
+        pending: 0,
+        today: 0,
+        upcoming: 0,
+        overdue: 0,
+        completed: 0
+      };
+
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      const todayTime = new Date(todayStr).getTime();
+
+      reminders.forEach(r => {
+        if (r.status === 'completed') {
+          stats.completed++;
+        } else if (r.status === 'pending') {
+          stats.pending++;
+          
+          const eventDateStr = r.event_date;
+          const eventTime = new Date(eventDateStr).getTime();
+          
+          // Check if snoozed currently
+          const isSnoozed = r.snoozed_until && new Date(r.snoozed_until) > now;
+          
+          if (!isSnoozed) {
+            const diffDays = Math.ceil((eventTime - todayTime) / (1000 * 60 * 60 * 24));
+            
+            if (diffDays < 0) {
+              stats.overdue++;
+            } else if (diffDays === 0) {
+              stats.today++;
+            } else if (diffDays <= r.notify_before_days) {
+              stats.upcoming++;
+            }
+          }
+        }
+      });
+
+      return stats;
+    } catch (error) {
+      console.error('❌ Error getting reminder stats:', error);
+      return { pending: 0, today: 0, upcoming: 0, overdue: 0, completed: 0 };
+    }
+  }
+
+  async getActiveRemindersCount(mode: 'regular' | 'itr', userId: string, isAdmin: boolean): Promise<number> {
+    try {
+      const reminders = await this.getReminders(mode, userId, isAdmin);
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      const todayTime = new Date(todayStr).getTime();
+      
+      let count = 0;
+      reminders.forEach(r => {
+        if (r.status === 'pending') {
+          const isSnoozed = r.snoozed_until && new Date(r.snoozed_until) > now;
+          if (!isSnoozed) {
+            const eventTime = new Date(r.event_date).getTime();
+            const diffDays = Math.ceil((eventTime - todayTime) / (1000 * 60 * 60 * 24));
+            
+            if (diffDays <= r.notify_before_days) {
+              count++;
+            }
+          }
+        }
+      });
+      return count;
+    } catch (error) {
+      console.error('❌ Error getting active reminders count:', error);
+      return 0;
     }
   }
 }

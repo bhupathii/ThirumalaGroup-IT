@@ -9,6 +9,7 @@ import ModeLabel from '../components/UI/ModeLabel';
 import { format, differenceInDays } from 'date-fns';
 import { BankGuarantee } from '../lib/supabaseDatabase';
 import { supabaseDB } from '../lib/supabaseDatabase';
+import { useBook } from '../contexts/BookContext';
 import {
   CreditCard,
   AlertTriangle,
@@ -22,6 +23,7 @@ import {
 
 const BankGuarantees: React.FC = () => {
   const { mode: tableMode } = useTableMode();
+  const { currentBook } = useBook();
   const [bankGuarantees, setBankGuarantees] = useState<BankGuarantee[]>([]);
   const [filteredBGs, setFilteredBGs] = useState<BankGuarantee[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -65,7 +67,7 @@ const BankGuarantees: React.FC = () => {
   useEffect(() => {
     loadBankGuarantees();
     loadCustomDepartments();
-  }, [tableMode]);
+  }, [tableMode, currentBook?.id]);
 
   useEffect(() => {
     applyFilters();
@@ -242,6 +244,10 @@ const BankGuarantees: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentBook?.is_locked) {
+      toast.error('This Book is Locked (Read Only). Writing/Editing/Deletion is blocked.');
+      return;
+    }
     setLoading(true);
 
     try {
@@ -288,19 +294,40 @@ const BankGuarantees: React.FC = () => {
   };
 
   const handleEdit = (bg: BankGuarantee) => {
+    if (currentBook?.is_locked) {
+      toast.error('This Book is Locked (Read Only). Writing/Editing/Deletion is blocked.');
+      return;
+    }
     setEditingBG({ ...bg });
     setShowAddForm(false);
   };
 
-  const handleCancel = (bgId: string) => {
+  const handleCancel = async (bgId: string) => {
+    if (currentBook?.is_locked) {
+      toast.error('This Book is Locked (Read Only). Writing/Editing/Deletion is blocked.');
+      return;
+    }
     if (
       window.confirm('Are you sure you want to cancel this Bank Guarantee?')
     ) {
-      const updatedBGs = bankGuarantees.map(bg =>
-        bg.id === bgId ? { ...bg, cancelled: true } : bg
-      );
-      setBankGuarantees(updatedBGs);
-      toast.success('Bank Guarantee cancelled successfully!');
+      setLoading(true);
+      try {
+        const bg = bankGuarantees.find(item => item.id === bgId);
+        if (bg) {
+          const success = await supabaseDB.updateBankGuarantee(bgId, { ...bg, cancelled: true });
+          if (success) {
+            toast.success('Bank Guarantee cancelled successfully!');
+            await loadBankGuarantees();
+          } else {
+            toast.error('Failed to cancel Bank Guarantee');
+          }
+        }
+      } catch (error) {
+        console.error('Error cancelling bank guarantee:', error);
+        toast.error('Error cancelling bank guarantee');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -362,11 +389,33 @@ const BankGuarantees: React.FC = () => {
 
   return (
     <div className='space-y-6'>
+      {/* Locked Book Banner */}
+      {currentBook?.is_locked && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl shadow-sm flex items-center gap-3 no-print mb-6">
+          <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 animate-pulse" />
+          <div>
+            <h3 className="text-sm font-bold text-red-800">This Book Is Locked (Read Only)</h3>
+            <p className="text-xs text-red-700">Writing, editing, and deletion operations are disabled for this accounting period.</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className='flex items-center justify-between'>
         <div>
           <div className='flex items-center gap-3 mb-1'>
-            <h1 className='text-3xl font-bold text-gray-900'>Bank Guarantees</h1>
+            <h1 className='text-3xl font-bold text-gray-900 flex items-center gap-2.5'>
+              Bank Guarantees
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                currentBook?.is_locked 
+                  ? 'bg-red-100 text-red-700' 
+                  : tableMode === 'itr' 
+                    ? 'bg-emerald-100 text-emerald-700' 
+                    : 'bg-blue-100 text-blue-700'
+              }`}>
+                {tableMode === 'itr' ? 'ITR Mode' : 'Regular Mode'} | {currentBook?.book_code || 'No Book'}
+              </span>
+            </h1>
             <ModeLabel />
           </div>
           <p className='text-gray-600'>
@@ -380,14 +429,16 @@ const BankGuarantees: React.FC = () => {
           <Button variant='secondary' onClick={exportToExcel}>
             Export
           </Button>
-          <Button
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-              setEditingBG(null);
-            }}
-          >
-            Add BG
-          </Button>
+          {!currentBook?.is_locked && (
+            <Button
+              onClick={() => {
+                setShowAddForm(!showAddForm);
+                setEditingBG(null);
+              }}
+            >
+              Add BG
+            </Button>
+          )}
         </div>
       </div>
 
@@ -807,7 +858,7 @@ const BankGuarantees: React.FC = () => {
                           >
                             View
                           </Button>
-                          {!bg.cancelled && (
+                          {!bg.cancelled && !currentBook?.is_locked && (
                             <>
                               <Button
                                 size='sm'

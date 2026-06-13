@@ -21,6 +21,189 @@ export interface PrintOptions {
   isPrintMode?: boolean;
 }
 
+export interface SharedPrintStyleOptions {
+  isLandscape?: boolean;
+}
+
+export const getSharedPrintStyles = (options?: SharedPrintStyleOptions) => {
+  const isLandscape = options?.isLandscape ?? true;
+  return `
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 10pt;
+      line-height: 1.4;
+      margin: 0;
+      padding: 15px;
+      background-color: #fff;
+      color: #000;
+    }
+    
+    table {
+      width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      margin-bottom: 15px;
+    }
+    
+    th, td {
+      border: 1px solid #000;
+      padding: 4px 3px;
+      font-size: 10pt;
+      line-height: 1.2;
+      box-sizing: border-box;
+      word-wrap: break-word;
+      overflow: hidden;
+      font-weight: bold;
+    }
+    
+    th {
+      background-color: #f3f4f6;
+      font-weight: bold;
+      text-align: left;
+    }
+    
+    /* Column widths and wrapping behaviors */
+    .col-sno {
+      width: 45px !important;
+    }
+    .col-date {
+      width: 90px !important;
+    }
+    .col-qty, .col-purchase-qty, .col-sale-qty {
+      width: 80px !important;
+      white-space: nowrap !important;
+      text-align: center !important;
+    }
+    .col-credit {
+      width: 110px !important;
+      min-width: 110px !important;
+      white-space: nowrap !important;
+      text-align: right !important;
+    }
+    .col-debit {
+      width: 110px !important;
+      min-width: 110px !important;
+      white-space: nowrap !important;
+      text-align: right !important;
+    }
+    .col-balance {
+      width: 130px !important;
+      min-width: 130px !important;
+      white-space: nowrap !important;
+      text-align: right !important;
+    }
+    .col-amount {
+      width: 130px !important;
+      min-width: 130px !important;
+      white-space: nowrap !important;
+      text-align: right !important;
+    }
+    .col-opening-balance, .col-opening {
+      width: 130px !important;
+      min-width: 130px !important;
+      white-space: nowrap !important;
+      text-align: right !important;
+    }
+    .col-closing-balance, .col-closing {
+      width: 130px !important;
+      min-width: 130px !important;
+      white-space: nowrap !important;
+      text-align: right !important;
+    }
+    
+    .col-particulars {
+      width: auto !important;
+      white-space: normal !important;
+      word-wrap: break-word !important;
+    }
+    .col-company {
+      width: auto !important;
+      white-space: normal !important;
+      word-wrap: break-word !important;
+    }
+    .col-account {
+      width: auto !important;
+      white-space: normal !important;
+      word-wrap: break-word !important;
+    }
+    .col-sub-account {
+      width: auto !important;
+      white-space: normal !important;
+      word-wrap: break-word !important;
+    }
+    .col-status {
+      width: 90px !important;
+      white-space: nowrap !important;
+      text-align: center !important;
+    }
+
+    .text-right {
+      text-align: right !important;
+    }
+    .text-center {
+      text-align: center !important;
+    }
+    .text-bold {
+      font-weight: bold !important;
+    }
+    .approved {
+      background-color: #d1fae5 !important;
+    }
+    .pending {
+      background-color: #fef3c7 !important;
+    }
+
+    @media print {
+      @page {
+        size: A4 ${isLandscape ? 'landscape' : 'portrait'};
+        margin: 8mm;
+      }
+      body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+      }
+      th {
+        background-color: #f3f4f6 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .approved {
+        background-color: #d1fae5 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .pending {
+        background-color: #fef3c7 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  `;
+};
+
+export const getColClass = (key: string) => {
+  const k = key.toLowerCase();
+  if (k === 'sno' || k === 's_no' || k === 's.no') return 'col-sno';
+  if (k === 'date' || k === 'c_date' || k === 'date') return 'col-date';
+  if (k === 'credit') return 'col-credit';
+  if (k === 'debit') return 'col-debit';
+  if (k === 'balance') return 'col-balance';
+  if (k === 'amount') return 'col-amount';
+  if (k.includes('purchaseqty') || k.includes('purchase_qty') || k.includes('purchase quantity') || k.includes('purchase quantity') || k === 'purchasequantity') return 'col-purchase-qty';
+  if (k.includes('saleqty') || k.includes('sale_qty') || k.includes('sale quantity') || k === 'salequantity') return 'col-sale-qty';
+  if (k.includes('qty')) return 'col-qty';
+  if (k === 'particulars') return 'col-particulars';
+  if (k === 'companyname' || k === 'company_name' || k === 'company') return 'col-company';
+  if (k === 'accountname' || k === 'acc_name' || k === 'account') return 'col-account';
+  if (k === 'subaccount' || k === 'sub_acc_name' || k === 'sub account') return 'col-sub-account';
+  if (k === 'approved' || k === 'status') return 'col-status';
+  return '';
+};
+
 export const printTable = (
   data: any[],
   columns: { key: string; label: string; width?: string }[],
@@ -164,6 +347,7 @@ export const printTable = (
     .text-green { color: #059669; }
     .text-red { color: #dc2626; }
     .text-orange { color: #ea580c; }
+    ${getSharedPrintStyles({ isLandscape: orientation === 'landscape' })}
   `;
 
   const tableRows = data
@@ -194,7 +378,7 @@ export const printTable = (
             }
           }
 
-          return `<td>${displayValue || ''}</td>`;
+          return `<td class="${getColClass(col.key)}">${displayValue || ''}</td>`;
         })
         .join('');
 
@@ -203,7 +387,7 @@ export const printTable = (
     .join('');
 
   const tableHeaders = columns
-    .map(col => `<th style="width: ${col.width || 'auto'}">${col.label}</th>`)
+    .map(col => `<th class="${getColClass(col.key)}" style="width: ${col.width || 'auto'}">${col.label}</th>`)
     .join('');
 
   let summaryHTML = '';
@@ -490,7 +674,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
             }
           }
 
-          return `<td style="border:1px solid #000;padding:4px 3px;font-weight:bold;">${displayValue}</td>`;
+          return `<td class="${getColClass(col.key)}">${displayValue}</td>`;
         })
         .join('');
 
@@ -502,7 +686,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
   const tableHeaders = filteredColumns
     .map(
       col =>
-        `<th style="width:${col.width};border:1px solid #000;padding:5px 4px;background:#f3f4f6;font-size:11px;text-align:left;">${col.label}</th>`
+        `<th class="${getColClass(col.key)}">${col.label}</th>`
     )
     .join('');
 
@@ -531,30 +715,30 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     <tr style="border-top: 2px solid #000; font-weight: bold;">
       <td colspan="4" style="border: 1px solid #000; padding: 5px 4px;"></td>
       <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">Total</td>
-      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right; color: #059669;">${formatCurrency(creditTotal)}</td>
-      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right; color: #dc2626;">${formatCurrency(debitTotal)}</td>
-      <td style="border: 1px solid #000; padding: 5px 4px;"></td>
+      <td class="col-credit" style="color: #059669;">${formatCurrency(creditTotal)}</td>
+      <td class="col-debit" style="color: #dc2626;">${formatCurrency(debitTotal)}</td>
+      <td class="col-status"></td>
     </tr>
     <tr style="font-weight: bold;">
       <td colspan="4" style="border: 1px solid #000; padding: 5px 4px;"></td>
       <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">Opening Balance</td>
-      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right; color: #059669;">${formatCurrency(openingBalanceValue)}</td>
-      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">-</td>
-      <td style="border: 1px solid #000; padding: 5px 4px;"></td>
+      <td class="col-credit" style="color: #059669;">${formatCurrency(openingBalanceValue)}</td>
+      <td class="col-debit">-</td>
+      <td class="col-status"></td>
     </tr>
     <tr style="font-weight: bold;">
       <td colspan="4" style="border: 1px solid #000; padding: 5px 4px;"></td>
       <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">Closing Balance</td>
-      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">-</td>
-      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right; color: #dc2626;">${formatCurrency(closingBalanceValue)}</td>
-      <td style="border: 1px solid #000; padding: 5px 4px;"></td>
+      <td class="col-credit">-</td>
+      <td class="col-debit" style="color: #dc2626;">${formatCurrency(closingBalanceValue)}</td>
+      <td class="col-status"></td>
     </tr>
     <tr style="background: #f3f4f6; font-weight: bold; border-bottom: 2px solid #000;">
       <td colspan="4" style="border: 1px solid #000; padding: 5px 4px;"></td>
       <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">Grand Total</td>
-      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right; color: #059669;">${formatCurrency(grandTotalCredit)}</td>
-      <td style="border: 1px solid #000; padding: 5px 4px; text-align: right; color: #dc2626;">${formatCurrency(grandTotalDebit)}</td>
-      <td style="border: 1px solid #000; padding: 5px 4px;"></td>
+      <td class="col-credit" style="color: #059669;">${formatCurrency(grandTotalCredit)}</td>
+      <td class="col-debit" style="color: #dc2626;">${formatCurrency(grandTotalDebit)}</td>
+      <td class="col-status"></td>
     </tr>
   `;
 
@@ -660,7 +844,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       margin: 0 0 8px 0;
       font-size: 11px;
       font-weight: bold;
-      table-layout: auto;
+      table-layout: fixed;
     }
 
     .print-footer {
@@ -691,6 +875,8 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     .no-print button:hover {
       background: #1d4ed8;
     }
+
+    ${getSharedPrintStyles({ isLandscape: true })}
   `;
 
   const html = `<!DOCTYPE html>

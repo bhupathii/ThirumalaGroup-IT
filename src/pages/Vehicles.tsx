@@ -3,33 +3,27 @@ import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import Select from '../components/UI/Select';
-import { vehicleTypes } from '../lib/mockData';
-import { useAuth } from '../contexts/AuthContext';
 import { useTableMode } from '../contexts/TableModeContext';
 import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
-import { format, differenceInDays, parseISO } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { supabaseDB } from '../lib/supabaseDatabase';
 import { Vehicle } from '../lib/supabaseDatabase';
 import { supabase } from '../lib/supabase';
+import { useBook } from '../contexts/BookContext';
 import {
   X,
   Truck,
   AlertTriangle,
-  Calendar,
-  FileText,
   Edit,
-  Trash2,
-  Eye,
-  Download,
   Clock,
   CheckCircle,
   Search,
 } from 'lucide-react';
 
 const Vehicles: React.FC = () => {
-  const { user } = useAuth();
   const { mode: tableMode } = useTableMode();
+  const { currentBook } = useBook();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [filteredVehicles, setFilteredVehicles] = useState<Vehicle[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -69,7 +63,7 @@ const Vehicles: React.FC = () => {
 
   useEffect(() => {
     loadVehicles();
-  }, [tableMode]);
+  }, [tableMode, currentBook?.id]);
 
   useEffect(() => {
     applyFilters();
@@ -225,6 +219,10 @@ const Vehicles: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentBook?.is_locked) {
+      toast.error('This Book is Locked (Read Only). Writing/Editing/Deletion is blocked.');
+      return;
+    }
     setLoading(true);
 
     try {
@@ -313,53 +311,41 @@ const Vehicles: React.FC = () => {
   };
 
   const handleEdit = (vehicle: Vehicle) => {
+    if (currentBook?.is_locked) {
+      toast.error('This Book is Locked (Read Only). Writing/Editing/Deletion is blocked.');
+      return;
+    }
     setEditingVehicle({ ...vehicle });
     setShowAddForm(false);
   };
 
-  const handleDelete = (vehicleId: string) => {
+  const handleDelete = async (vehicleId: string) => {
+    if (currentBook?.is_locked) {
+      toast.error('This Book is Locked (Read Only). Writing/Editing/Deletion is blocked.');
+      return;
+    }
     if (window.confirm('Are you sure you want to delete this vehicle?')) {
-      setVehicles(vehicles.filter(v => v.id !== vehicleId));
-      toast.success('Vehicle deleted successfully!');
+      setLoading(true);
+      try {
+        const success = await supabaseDB.deleteVehicle(vehicleId);
+        if (success) {
+          toast.success('Vehicle deleted successfully!');
+          await loadVehicles();
+        } else {
+          toast.error('Failed to delete vehicle');
+        }
+      } catch (error) {
+        console.error('Error deleting vehicle:', error);
+        toast.error('Error deleting vehicle');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   const handleViewDetails = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle);
     setShowDetails(true);
-  };
-
-  const exportToExcel = () => {
-    const exportData = filteredVehicles.map(vehicle => ({
-      'S.No': vehicle.sno,
-      'Vehicle Number': vehicle.v_no,
-      Type: vehicle.v_type,
-      Particulars: vehicle.particulars,
-      'Tax Expiry': vehicle.tax_exp_date,
-      'Insurance Expiry': vehicle.insurance_exp_date,
-      'Fitness Expiry': vehicle.fitness_exp_date,
-      'Permit Expiry': vehicle.permit_exp_date,
-      'Date Added': vehicle.date_added,
-    }));
-
-    // Create CSV content
-    const headers = Object.keys(exportData[0] || {});
-    const csvContent = [
-      headers.join(','),
-      ...exportData.map(row =>
-        headers.map(header => `"${row[header as keyof typeof row]}"`).join(',')
-      ),
-    ].join('\n');
-
-    // Download file
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `vehicles-${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Vehicles exported successfully!');
   };
 
   const vehicleTypeOptions = [
@@ -386,12 +372,32 @@ const Vehicles: React.FC = () => {
 
   return (
     <div className='min-h-screen flex flex-col'>
+      {/* Locked Book Banner */}
+      {currentBook?.is_locked && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl shadow-sm flex items-center gap-3 no-print mb-6">
+          <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 animate-pulse" />
+          <div>
+            <h3 className="text-sm font-bold text-red-800">This Book Is Locked (Read Only)</h3>
+            <p className="text-xs text-red-700">Writing, editing, and deletion operations are disabled for this accounting period.</p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className='flex items-center justify-between'>
         <div>
           <div className='flex items-center gap-3 mb-1'>
-            <h1 className='text-3xl font-bold text-gray-900'>
+            <h1 className='text-3xl font-bold text-gray-900 flex items-center gap-2.5'>
               Vehicles Management
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                currentBook?.is_locked 
+                  ? 'bg-red-100 text-red-700' 
+                  : tableMode === 'itr' 
+                    ? 'bg-emerald-100 text-emerald-700' 
+                    : 'bg-blue-100 text-blue-700'
+              }`}>
+                {tableMode === 'itr' ? 'ITR Mode' : 'Regular Mode'} | {currentBook?.book_code || 'No Book'}
+              </span>
             </h1>
             <ModeLabel />
           </div>
@@ -403,14 +409,16 @@ const Vehicles: React.FC = () => {
           <Button variant='secondary' onClick={loadVehicles}>
             Refresh
           </Button>
-          <Button
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-              setEditingVehicle(null);
-            }}
-          >
-            Add Vehicle
-          </Button>
+          {!currentBook?.is_locked && (
+            <Button
+              onClick={() => {
+                setShowAddForm(!showAddForm);
+                setEditingVehicle(null);
+              }}
+            >
+              Add Vehicle
+            </Button>
+          )}
         </div>
       </div>
 
@@ -727,7 +735,12 @@ const Vehicles: React.FC = () => {
                     >
                       <td className='px-3 py-2 font-medium'>{vehicle.sno}</td>
                       <td className='px-3 py-2 font-bold text-blue-700'>
-                        {vehicle.v_no}
+                        <div>{vehicle.v_no}</div>
+                        {(vehicle as any).pending_sync && (
+                          <span className='inline-flex items-center text-[10px] font-bold text-amber-600 bg-amber-50 px-1 py-0.5 rounded border border-amber-200 mt-0.5 animate-pulse font-outfit'>
+                            🔄 Pending Sync
+                          </span>
+                        )}
                       </td>
                       <td className='px-3 py-2'>{vehicle.v_type || ''}</td>
                       <td className='px-3 py-2'>{vehicle.particulars || ''}</td>
@@ -887,23 +900,27 @@ const Vehicles: React.FC = () => {
                           >
                             View
                           </Button>
-                          <Button
-                            size='sm'
-                            variant='secondary'
-                            icon={Edit}
-                            onClick={() => handleEdit(vehicle)}
-                            className='px-2'
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            size='sm'
-                            variant='danger'
-                            onClick={() => handleDelete(vehicle.id)}
-                            className='px-2'
-                          >
-                            Delete
-                          </Button>
+                          {!currentBook?.is_locked && (
+                            <>
+                              <Button
+                                size='sm'
+                                variant='secondary'
+                                icon={Edit}
+                                onClick={() => handleEdit(vehicle)}
+                                className='px-2'
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                size='sm'
+                                variant='danger'
+                                onClick={() => handleDelete(vehicle.id)}
+                                className='px-2'
+                              >
+                                Delete
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

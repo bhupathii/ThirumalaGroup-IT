@@ -220,26 +220,10 @@ export const financeCalculationService = {
       };
     }
 
-    // Default or 'Renew'
-    const totalDue = Number((penDue + intDue).toFixed(2));
-    const useSequential = pAmt >= (totalDue - 200);
-
-    if (!useSequential && pAmt <= totalDue) {
-      // Proportional split (Scenario B)
-      const targetPenalty = Number((pAmt * 0.20).toFixed(2));
-      const penaltyPaid = Math.max(0, Math.min(targetPenalty, penDue));
-      const interestPaid = Number((pAmt - penaltyPaid).toFixed(2));
-      return {
-        penaltyPaid: Number(penaltyPaid.toFixed(2)),
-        overdueInterestPaid: Number(interestPaid.toFixed(2)),
-        renewalInterestPaid: 0,
-        interestPaid: Number(interestPaid.toFixed(2)),
-        principalPaid: 0,
-        renewedDays: 0,
-        remaining: 0
-      };
-    } else {
-      // Sequential split with renewal (Scenario C)
+    // VBA: RDAYS = (TotalAmountPaying − Penalty) / DailyInterest
+    // Always strict sequential: Penalty first, then remainder buys interest days.
+    // No proportional split — the legacy system never used one.
+    {
       const penaltyPaid = Math.max(0, Math.min(pAmt, penDue));
       let remaining = Number((pAmt - penaltyPaid).toFixed(2));
 
@@ -249,11 +233,13 @@ export const financeCalculationService = {
       const penaltyOutstanding = Number((penDue - penaltyPaid).toFixed(2));
       const overdueInterestOutstanding = Number((intDue - overdueInterestPaid).toFixed(2));
 
+      // Only buy renewal days if all outstanding dues have been cleared
       const isDuesCleared = penaltyOutstanding === 0 && overdueInterestOutstanding === 0;
 
       const renewalInterestPaid = isDuesCleared ? remaining : 0;
       const totalInterestPaid = Number((overdueInterestPaid + renewalInterestPaid).toFixed(2));
 
+      // dailyInterestValue = principal × rate / 100 / 30 (same as VBA DailyInterest)
       const dailyInterestValue = days > 0 ? (renDue / days) : (renDue / 10);
       const renewedDays = dailyInterestValue > 0 ? Math.floor(renewalInterestPaid / dailyInterestValue) : 0;
 

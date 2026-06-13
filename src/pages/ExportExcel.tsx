@@ -3,22 +3,20 @@ import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import Select from '../components/UI/Select';
-import { supabaseDB } from '../lib/supabaseDatabase';
-import { supabase } from '../lib/supabase';
+import { supabaseDB, supabase } from '../lib/supabaseDatabase';
 import { getTableName } from '../lib/tableNames';
 import { exportToExcel, formatDataForExcel } from '../utils/excel';
-import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useBook } from '../contexts/BookContext';
+import { useTableMode } from '../contexts/TableModeContext';
 import {
-  TrendingUp,
-  TrendingDown,
   FileText,
   Truck,
   CreditCard,
-  Users,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface ExportOptions {
@@ -45,7 +43,8 @@ interface ExportOptions {
 }
 
 const ExportExcel: React.FC = () => {
-  const { user } = useAuth();
+  const { currentBook } = useBook();
+  const { mode: tableMode } = useTableMode();
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     reportType: 'cashbook',
     dateRange: 'thisMonth',
@@ -74,7 +73,7 @@ const ExportExcel: React.FC = () => {
 
   useEffect(() => {
     loadDropdownData();
-  }, []);
+  }, [currentBook?.id]);
 
   useEffect(() => {
     if (
@@ -110,12 +109,12 @@ const ExportExcel: React.FC = () => {
         .neq('payment_mode', '');
       
       if (!paymentModeError && paymentModeData) {
-        const uniquePaymentModes = [...new Set(
+        const uniquePaymentModes: string[] = [...new Set(
           paymentModeData
-            .map(entry => entry.payment_mode)
-            .filter(mode => mode && String(mode).trim() !== '')
-            .map(mode => String(mode).trim())
-        )].sort();
+            .map((entry: any) => entry.payment_mode)
+            .filter((mode: any) => mode && String(mode).trim() !== '')
+            .map((mode: any) => String(mode).trim())
+        )].sort() as string[];
         
         // Helper function to map payment mode values to display labels
         const getPaymentModeLabel = (mode: string): string => {
@@ -124,7 +123,7 @@ const ExportExcel: React.FC = () => {
           return mode;
         };
         
-        const paymentModeDataOptions = uniquePaymentModes.map(mode => ({
+        const paymentModeDataOptions = uniquePaymentModes.map((mode: string) => ({
           value: mode,
           label: getPaymentModeLabel(mode),
         }));
@@ -485,24 +484,7 @@ const ExportExcel: React.FC = () => {
     }));
   };
 
-  const getReportTypeIcon = (type: string) => {
-    switch (type) {
-      case 'cashbook':
-        return FileText;
-      case 'ledger':
-        return TrendingUp;
-      case 'balancesheet':
-        return TrendingDown;
-      case 'vehicles':
-        return Truck;
-      case 'bankguarantees':
-        return CreditCard;
-      case 'drivers':
-        return Users;
-      default:
-        return FileText;
-    }
-  };
+
 
   const reportTypes = [
     { value: 'cashbook', label: 'Cash Book Entries', icon: undefined },
@@ -528,6 +510,37 @@ const ExportExcel: React.FC = () => {
   return (
     <div className='min-h-screen flex flex-col'>
       <div className='max-w-5xl w-full mx-auto space-y-6'>
+        {/* Locked Book Banner */}
+        {currentBook?.is_locked && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl shadow-sm flex items-center gap-3 no-print">
+            <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 animate-pulse" />
+            <div>
+              <h3 className="text-sm font-bold text-red-800">This Book Is Locked (Read Only)</h3>
+              <p className="text-xs text-red-700">Writing, editing, and deletion operations are disabled for this accounting period.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Header */}
+        <div className='flex items-center justify-between'>
+          <div>
+            <div className='flex items-center gap-3 mb-1'>
+              <h1 className='text-3xl font-bold text-gray-900 flex items-center gap-2.5'>
+                Export Data
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  currentBook?.is_locked 
+                    ? 'bg-red-100 text-red-700' 
+                    : tableMode === 'itr' 
+                      ? 'bg-emerald-100 text-emerald-700' 
+                      : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {tableMode === 'itr' ? 'ITR Mode' : 'Regular Mode'} | {currentBook?.book_code || 'No Book'}
+                </span>
+              </h1>
+            </div>
+            <p className='text-gray-600'>Export data from database to Excel, CSV, or PDF formats</p>
+          </div>
+        </div>
         {/* Responsive export controls */}
         <div className='flex flex-col md:flex-row gap-4 items-end'>
           {/* Report Type */}

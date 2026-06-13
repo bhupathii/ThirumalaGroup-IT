@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTableMode } from '../contexts/TableModeContext';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import toast, { Toaster } from 'react-hot-toast';
@@ -13,10 +14,11 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { user, login } = useAuth();
+  const { setMode } = useTableMode();
 
   if (user) {
-    // Always show mode selection after login
-    return <Navigate to='/mode-selection' replace />;
+    const defaultMode = user.mode || localStorage.getItem('table_mode') || 'regular';
+    return <Navigate to={defaultMode === 'finance' ? '/finance' : '/'} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,8 +34,9 @@ const Login: React.FC = () => {
 
     if (result.success) {
       toast.success('Login successful!');
-      // Always redirect to mode selection
-      navigate('/mode-selection', { replace: true });
+      const defaultMode = result.userMode || localStorage.getItem('table_mode') || 'regular';
+      setMode(defaultMode as 'regular' | 'itr' | 'finance');
+      navigate(defaultMode === 'finance' ? '/finance' : '/', { replace: true });
     } else {
       toast.error(result.error || 'Login failed');
     }

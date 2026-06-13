@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useTableMode } from '../../contexts/TableModeContext';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
 import { financeCalculationService } from '../../services/financeCalculationService';
@@ -29,6 +30,15 @@ interface DashboardStats {
 }
 
 const FinanceDashboard: React.FC = () => {
+  const navigate = useNavigate();
+  const { mode: tableMode } = useTableMode();
+
+  useEffect(() => {
+    if (tableMode !== 'finance') {
+      navigate('/', { replace: true });
+    }
+  }, [tableMode, navigate]);
+
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats>({
     totalDisbursed: 0,
@@ -40,8 +50,14 @@ const FinanceDashboard: React.FC = () => {
   const [recentLoans, setRecentLoans] = useState<any[]>([]);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    if (tableMode === 'finance') {
+      fetchDashboardData();
+    }
+  }, [tableMode]);
+
+  if (tableMode !== 'finance') {
+    return null;
+  }
 
   const fetchDashboardData = async () => {
     try {
