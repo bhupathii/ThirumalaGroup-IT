@@ -879,12 +879,56 @@ const Reminders: React.FC = () => {
                     onChange={val => handleInputChange('priority', val)}
                     options={priorities}
                   />
-                  <Select
-                    label="Notify Before *"
-                    value={editingReminder ? String(editingReminder.notify_before_days) : String(newReminder.notify_before_days)}
-                    onChange={val => handleInputChange('notify_before_days', Number(val))}
-                    options={notifyDaysOptions}
-                  />
+                  <div className="flex flex-col">
+                    <Select
+                      label="Notify Before *"
+                      value={
+                        editingReminder
+                          ? ['0', '1', '3', '7', '15', '30'].includes(String(editingReminder.notify_before_days))
+                            ? String(editingReminder.notify_before_days)
+                            : 'custom'
+                          : ['0', '1', '3', '7', '15', '30'].includes(String(newReminder.notify_before_days))
+                            ? String(newReminder.notify_before_days)
+                            : 'custom'
+                      }
+                      onChange={val => {
+                        if (val === 'custom') {
+                          handleInputChange('notify_before_days', 2);
+                        } else {
+                          handleInputChange('notify_before_days', Number(val));
+                        }
+                      }}
+                      options={[
+                        ...notifyDaysOptions,
+                        { value: 'custom', label: 'Custom...' }
+                      ]}
+                    />
+                    {editingReminder ? (
+                      !['0', '1', '3', '7', '15', '30'].includes(String(editingReminder.notify_before_days)) && (
+                        <div className="mt-2">
+                          <Input
+                            label="Custom Notify Days *"
+                            type="number"
+                            min={0}
+                            value={editingReminder.notify_before_days}
+                            onChange={val => handleInputChange('notify_before_days', Number(val))}
+                          />
+                        </div>
+                      )
+                    ) : (
+                      !['0', '1', '3', '7', '15', '30'].includes(String(newReminder.notify_before_days)) && (
+                        <div className="mt-2">
+                          <Input
+                            label="Custom Notify Days *"
+                            type="number"
+                            min={0}
+                            value={newReminder.notify_before_days}
+                            onChange={val => handleInputChange('notify_before_days', Number(val))}
+                          />
+                        </div>
+                      )
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1956,89 +1956,89 @@ const NewEntry: React.FC = () => {
                   <div className='text-sm'>Try selecting a different date or create a new entry for this date.</div>
                 </div>
               ) : (
-                <div className='overflow-x-auto'>
-                  <div className='max-h-96 overflow-y-auto'>
-                    <table className='w-full text-base table-fixed min-w-[1500px]'>
+                <div className='w-full overflow-x-auto border border-gray-200 rounded-lg shadow-sm bg-white'>
+                  <div className='max-h-96 overflow-y-auto custom-scrollbar'>
+                    <table className='w-full text-[13px] table-fixed min-w-full divide-y divide-gray-200'>
                       <thead className='sticky top-0 bg-gray-50 z-10'>
                         <tr className='border-b border-gray-200'>
-                          <th className='w-14 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                          <th className='w-[4%] xl:w-[3%] px-1.5 py-2 text-center font-semibold text-gray-700 text-[14px] leading-tight'>
                             S.No
                           </th>
-                          <th className='w-28 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                          <th className='w-[10%] xl:w-[8%] px-1.5 py-2 text-left font-semibold text-gray-700 text-[14px] leading-tight'>
                             Date
                           </th>
-                          <th className='w-56 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                          <th className='w-[13%] xl:w-[11%] px-1.5 py-2 text-left font-semibold text-gray-700 text-[14px] leading-tight'>
                             Company
                           </th>
-                          <th className='w-56 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                          <th className='w-[13%] xl:w-[11%] px-1.5 py-2 text-left font-semibold text-gray-700 text-[14px] leading-tight'>
                             Account
                           </th>
-                          <th className='w-56 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                          <th className='w-[13%] xl:w-[11%] px-1.5 py-2 text-left font-semibold text-gray-700 text-[14px] leading-tight'>
                             Sub Account
                           </th>
-                          <th className='w-80 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                          <th className='w-[22%] xl:w-[26%] px-1.5 py-2 text-left font-semibold text-gray-700 text-[14px] leading-tight'>
                             Particulars
                           </th>
-                          <th className='w-36 px-2 py-3 text-right font-bold text-gray-700 text-base'>
+                          <th className='w-[9%] xl:w-[8%] px-1.5 py-2 text-right font-semibold text-gray-700 text-[14px] leading-tight'>
                             Credit
                           </th>
-                          <th className='w-36 px-2 py-3 text-right font-bold text-gray-700 text-base'>
+                          <th className='w-[9%] xl:w-[8%] px-1.5 py-2 text-right font-semibold text-gray-700 text-[14px] leading-tight'>
                             Debit
                           </th>
-                          <th className='w-36 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                          <th className='w-[9%] xl:w-[8%] px-1.5 py-2 text-left font-semibold text-gray-700 text-[14px] leading-tight'>
                             Payment Mode
                           </th>
-                          <th className='w-32 px-2 py-3 text-left font-bold text-gray-700 text-base'>
+                          <th className='w-[8%] xl:w-[6%] px-1.5 py-2 text-left font-semibold text-gray-700 text-[14px] leading-tight'>
                             Staff
                           </th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className='divide-y divide-gray-100'>
                         {Array.isArray(recentEntries) && recentEntries.map((entry: any, index: number) => (
                           <tr
                             key={entry.id}
-                            className={`border-b hover:bg-gray-50 transition-colors ${
+                            className={`hover:bg-gray-50 transition-colors h-[38px] md:h-[40px] ${
                               index % 2 === 0 ? 'bg-white' : 'bg-gray-25'
                             }`}
                           >
-                            <td className='w-14 px-2 py-3 font-semibold text-base'>{index + 1}</td>
-                            <td className='w-28 px-2 py-3 text-base font-medium'>
-                              <div>{format(new Date(entry.c_date), 'dd-MMM-yy')}</div>
+                            <td className='w-[4%] xl:w-[3%] px-1.5 py-1.5 text-center font-medium text-gray-600 text-[13px]'>{index + 1}</td>
+                            <td className='w-[10%] xl:w-[8%] px-1.5 py-1.5 text-[13px] font-medium text-gray-800 leading-tight'>
+                              <div className='truncate'>{format(new Date(entry.c_date), 'dd-MMM-yy')}</div>
                               {entry.pending_sync && (
-                                <span className='inline-flex items-center text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-1 animate-pulse'>
-                                  🔄 Pending Sync
+                                <span className='inline-flex items-center text-[9px] font-bold text-amber-600 bg-amber-50 px-1 py-0.2 rounded border border-amber-200 animate-pulse'>
+                                  Sync
                                 </span>
                               )}
                             </td>
-                            <td className='w-56 px-2 py-3 font-bold text-blue-600 text-base truncate' title={entry.company_name}>
+                            <td className='w-[13%] xl:w-[11%] px-1.5 py-1.5 font-bold text-blue-600 text-[13px] truncate' title={entry.company_name}>
                               {entry.company_name}
                             </td>
-                            <td className='w-56 px-2 py-3 text-base font-semibold truncate' title={entry.acc_name?.replace(/\[DELETED\]\s*/g, '')}>
+                            <td className='w-[13%] xl:w-[11%] px-1.5 py-1.5 text-[13px] font-medium text-gray-800 truncate' title={entry.acc_name?.replace(/\[DELETED\]\s*/g, '')}>
                               {entry.acc_name?.replace(/\[DELETED\]\s*/g, '') || '-'}
                             </td>
-                            <td className='w-56 px-2 py-3 text-base font-semibold truncate' title={entry.sub_acc_name?.replace(/\[DELETED\]\s*/g, '')}>
+                            <td className='w-[13%] xl:w-[11%] px-1.5 py-1.5 text-[13px] font-medium text-gray-800 truncate' title={entry.sub_acc_name?.replace(/\[DELETED\]\s*/g, '')}>
                               {entry.sub_acc_name?.replace(/\[DELETED\]\s*/g, '') || '-'}
                             </td>
                             <td
-                              className='w-80 px-2 py-3 text-base font-medium truncate'
+                              className='w-[22%] xl:w-[26%] px-1.5 py-1.5 text-[13px] font-medium text-gray-800 truncate'
                               title={entry.particulars?.replace(/\[DELETED\]\s*/g, '')}
                             >
                               {entry.particulars?.replace(/\[DELETED\]\s*/g, '') || '-'}
                             </td>
-                            <td className='w-36 px-2 py-3 text-right font-extrabold text-green-700 text-lg'>
+                            <td className='w-[9%] xl:w-[8%] px-1.5 py-1.5 text-right font-semibold text-green-750 text-[13px] tabular-nums'>
                               {entry.credit > 0
                                 ? `${entry.credit.toLocaleString()}`
                                 : '-'}
                             </td>
-                            <td className='w-36 px-2 py-3 text-right font-extrabold text-red-700 text-lg'>
+                            <td className='w-[9%] xl:w-[8%] px-1.5 py-1.5 text-right font-semibold text-red-750 text-[13px] tabular-nums'>
                               {entry.debit > 0
                                 ? `${entry.debit.toLocaleString()}`
                                 : '-'}
                             </td>
-                            <td className='w-36 px-2 py-3 text-base font-semibold truncate' title={entry.payment_mode || 'No payment mode'}>
+                            <td className='w-[9%] xl:w-[8%] px-1.5 py-1.5 text-[13px] font-medium text-gray-800 truncate' title={entry.payment_mode || 'No payment mode'}>
                               {entry.payment_mode && String(entry.payment_mode).trim() ? (entry.payment_mode === 'Online' ? 'Double' : entry.payment_mode === 'Bank Transfer' ? 'Bank' : String(entry.payment_mode).trim()) : '-'}
                             </td>
-                            <td className='w-32 px-2 py-3 text-base font-semibold truncate' title={entry.staff}>
+                            <td className='w-[8%] xl:w-[6%] px-1.5 py-1.5 text-[13px] font-medium text-gray-800 truncate' title={entry.staff}>
                               {entry.staff}
                             </td>
                           </tr>
@@ -2288,7 +2288,6 @@ const NewEntry: React.FC = () => {
                   <div className='space-y-0.5 md:col-span-2'>
                     <SearchableSelect
                       ref={staffRef}
-                      tabIndex={-1}
                       label='Staff'
                       value={entry.staff}
                       onChange={value => {
@@ -2401,7 +2400,6 @@ const NewEntry: React.FC = () => {
                   />
                   <SearchableSelect
                     ref={paymentModeRef}
-                    tabIndex={entry.paymentMode ? -1 : undefined}
                     label='Payment Mode'
                     value={entry.paymentMode}
                     onChange={val => {

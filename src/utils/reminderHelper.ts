@@ -1,4 +1,4 @@
-import { parseISO, startOfDay, addDays, addWeeks, addMonths, addYears, differenceInDays, format } from 'date-fns';
+import { startOfDay, addDays, addWeeks, addMonths, addYears, differenceInDays } from 'date-fns';
 import { supabaseDB, Reminder } from '../lib/supabaseDatabase';
 
 export interface CreateReminderParams {
@@ -17,6 +17,27 @@ export interface CreateReminderParams {
 }
 
 /**
+ * Helper to parse YYYY-MM-DD string into a local Date object at midnight to avoid timezone shifts.
+ */
+export function parseLocalDate(dateStr: string): Date {
+  const parts = dateStr.split('-');
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+  return new Date(year, month, day);
+}
+
+/**
+ * Helper to format a local Date object into YYYY-MM-DD format.
+ */
+export function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Checks if a reminder should be shown as a notification on the dashboard
  */
 export function canShowReminderNotification(reminder: Partial<Reminder>, today: Date = new Date()): boolean {
@@ -25,11 +46,13 @@ export function canShowReminderNotification(reminder: Partial<Reminder>, today: 
   }
 
   const todayStart = startOfDay(today);
-  const eventDate = startOfDay(parseISO(reminder.event_date || ''));
+  if (!reminder.event_date) return false;
+  
+  const eventDate = parseLocalDate(reminder.event_date);
 
   // If snoozed, check if snooze has elapsed
   if (reminder.snoozed_until) {
-    const snoozeDate = startOfDay(parseISO(reminder.snoozed_until));
+    const snoozeDate = parseLocalDate(reminder.snoozed_until);
     if (snoozeDate > todayStart) {
       return false; // Hidden due to active snooze
     }
@@ -53,8 +76,9 @@ export function getReminderColorStatus(reminder: Partial<Reminder>, today: Date 
   }
 
   const todayStart = startOfDay(today);
-  const eventDate = startOfDay(parseISO(reminder.event_date || ''));
+  if (!reminder.event_date) return 'blue';
   
+  const eventDate = parseLocalDate(reminder.event_date);
   const diff = differenceInDays(eventDate, todayStart);
 
   if (diff < 0) {
@@ -74,7 +98,7 @@ export function getReminderColorStatus(reminder: Partial<Reminder>, today: Date 
  * Automatically calculates the next occurrence date for a recurring reminder
  */
 export function calculateNextOccurrence(currentDateStr: string, interval: 'daily' | 'weekly' | 'monthly' | 'yearly'): string {
-  const currentDate = parseISO(currentDateStr);
+  const currentDate = parseLocalDate(currentDateStr);
   let nextDate: Date;
 
   switch (interval) {
@@ -94,7 +118,7 @@ export function calculateNextOccurrence(currentDateStr: string, interval: 'daily
       nextDate = addDays(currentDate, 1);
   }
 
-  return format(nextDate, 'yyyy-MM-dd');
+  return formatLocalDate(nextDate);
 }
 
 /**

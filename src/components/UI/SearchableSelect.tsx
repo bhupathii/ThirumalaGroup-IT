@@ -269,6 +269,13 @@ const SearchableSelect = forwardRef<HTMLInputElement, SearchableSelectProps>(
             onKeyDown={handleKeyDown}
             onClick={handleInputClick}
             onFocus={handleFocus}
+            onBlur={() => {
+              setTimeout(() => {
+                setIsOpen(false);
+                setSearchTerm('');
+                setHighlightedIndex(-1);
+              }, 150);
+            }}
             placeholder={isOpen && displayValue && !allowCopy ? displayValue : placeholder}
             disabled={disabled}
             required={required}

@@ -136,6 +136,7 @@ const matchSearchTerm = (entry: any, searchTerm: string): boolean => {
 
 const EditEntry: React.FC = () => {
   const { user, isAdmin } = useAuth();
+  const canDelete = isAdmin || !!(user?.features?.includes('delete_entry'));
   const { mode: tableMode } = useTableMode();
   const { currentBook } = useBook();
   const formRef = useRef<HTMLFormElement>(null);
@@ -1046,8 +1047,8 @@ const EditEntry: React.FC = () => {
   };
 
   const handleDelete = async (entry: any) => {
-    if (!isAdmin) {
-      toast.error('Only admins can delete entries');
+    if (!canDelete) {
+      toast.error('You do not have permission to delete entries');
       return;
     }
 
@@ -1274,6 +1275,10 @@ const EditEntry: React.FC = () => {
               color: #6b7280;
             }
             @media print {
+              @page {
+                size: portrait;
+                margin: 8mm;
+              }
               body { margin: 20px; }
               .voucher-section { page-break-inside: avoid; }
             }
@@ -1812,7 +1817,7 @@ const EditEntry: React.FC = () => {
                           >
                             <Edit className='w-5 h-5 text-white' />
                           </Button>
-                          {isAdmin && (
+                          {canDelete && (
                             <Button
                               variant='danger'
                               onClick={() => handleDelete(entry)}

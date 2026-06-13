@@ -396,9 +396,10 @@ const BalanceSheet: React.FC = () => {
               padding-top: 5px;
             }
             @media print {
+              @page { size: portrait; margin: 8mm; }
               body { margin: 0; padding: 10px; }
             }
-            ${getSharedPrintStyles({ isLandscape: true })}
+            ${getSharedPrintStyles({ isLandscape: false })}
           </style>
         </head>
         <body>
@@ -589,10 +590,11 @@ const BalanceSheet: React.FC = () => {
               padding-top: 5px;
             }
             @media print {
+              @page { size: portrait; margin: 8mm; }
               body { margin: 0; padding: 10px; }
               .section { page-break-inside: avoid; }
             }
-            ${getSharedPrintStyles({ isLandscape: true })}
+            ${getSharedPrintStyles({ isLandscape: false })}
           </style>
         </head>
         <body>

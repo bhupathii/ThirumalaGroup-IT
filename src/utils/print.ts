@@ -26,14 +26,14 @@ export interface SharedPrintStyleOptions {
 }
 
 export const getSharedPrintStyles = (options?: SharedPrintStyleOptions) => {
-  const isLandscape = options?.isLandscape ?? true;
+  const isLandscape = options?.isLandscape ?? false;
   return `
     body {
       font-family: Arial, sans-serif;
-      font-size: 10pt;
-      line-height: 1.4;
+      font-size: ${isLandscape ? '10pt' : '8pt'};
+      line-height: 1.3;
       margin: 0;
-      padding: 15px;
+      padding: ${isLandscape ? '15px' : '8px'};
       background-color: #fff;
       color: #000;
     }
@@ -42,14 +42,14 @@ export const getSharedPrintStyles = (options?: SharedPrintStyleOptions) => {
       width: 100%;
       table-layout: fixed;
       border-collapse: collapse;
-      margin-bottom: 15px;
+      margin-bottom: 12px;
     }
     
     th, td {
-      border: 1px solid #000;
-      padding: 4px 3px;
-      font-size: 10pt;
-      line-height: 1.2;
+      border: 1.5px solid #000;
+      padding: ${isLandscape ? '4px 3px' : '3px 2px'};
+      font-size: ${isLandscape ? '10pt' : '8pt'};
+      line-height: 1.15;
       box-sizing: border-box;
       word-wrap: break-word;
       overflow: hidden;
@@ -62,52 +62,52 @@ export const getSharedPrintStyles = (options?: SharedPrintStyleOptions) => {
       text-align: left;
     }
     
-    /* Column widths and wrapping behaviors */
+    /* Column widths and wrapping behaviors adjusted for portrait compatibility */
     .col-sno {
-      width: 45px !important;
+      width: ${isLandscape ? '45px' : '30px'} !important;
     }
     .col-date {
-      width: 90px !important;
+      width: ${isLandscape ? '90px' : '65px'} !important;
     }
     .col-qty, .col-purchase-qty, .col-sale-qty {
-      width: 80px !important;
-      white-space: nowrap !important;
+      width: ${isLandscape ? '80px' : '55px'} !important;
+      white-space: normal !important;
       text-align: center !important;
     }
     .col-credit {
-      width: 110px !important;
-      min-width: 110px !important;
-      white-space: nowrap !important;
+      width: ${isLandscape ? '110px' : '75px'} !important;
+      min-width: ${isLandscape ? '110px' : 'unset'} !important;
+      white-space: normal !important;
       text-align: right !important;
     }
     .col-debit {
-      width: 110px !important;
-      min-width: 110px !important;
-      white-space: nowrap !important;
+      width: ${isLandscape ? '110px' : '75px'} !important;
+      min-width: ${isLandscape ? '110px' : 'unset'} !important;
+      white-space: normal !important;
       text-align: right !important;
     }
     .col-balance {
-      width: 130px !important;
-      min-width: 130px !important;
-      white-space: nowrap !important;
+      width: ${isLandscape ? '130px' : '85px'} !important;
+      min-width: ${isLandscape ? '130px' : 'unset'} !important;
+      white-space: normal !important;
       text-align: right !important;
     }
     .col-amount {
-      width: 130px !important;
-      min-width: 130px !important;
-      white-space: nowrap !important;
+      width: ${isLandscape ? '130px' : '85px'} !important;
+      min-width: ${isLandscape ? '130px' : 'unset'} !important;
+      white-space: normal !important;
       text-align: right !important;
     }
     .col-opening-balance, .col-opening {
-      width: 130px !important;
-      min-width: 130px !important;
-      white-space: nowrap !important;
+      width: ${isLandscape ? '130px' : '85px'} !important;
+      min-width: ${isLandscape ? '130px' : 'unset'} !important;
+      white-space: normal !important;
       text-align: right !important;
     }
     .col-closing-balance, .col-closing {
-      width: 130px !important;
-      min-width: 130px !important;
-      white-space: nowrap !important;
+      width: ${isLandscape ? '130px' : '85px'} !important;
+      min-width: ${isLandscape ? '130px' : 'unset'} !important;
+      white-space: normal !important;
       text-align: right !important;
     }
     
@@ -132,8 +132,8 @@ export const getSharedPrintStyles = (options?: SharedPrintStyleOptions) => {
       word-wrap: break-word !important;
     }
     .col-status {
-      width: 90px !important;
-      white-space: nowrap !important;
+      width: ${isLandscape ? '90px' : '65px'} !important;
+      white-space: normal !important;
       text-align: center !important;
     }
 
@@ -156,12 +156,13 @@ export const getSharedPrintStyles = (options?: SharedPrintStyleOptions) => {
     @media print {
       @page {
         size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-        margin: 8mm;
+        margin: ${isLandscape ? '8mm' : '5mm'};
       }
       body {
         margin: 0 !important;
         padding: 0 !important;
         background: white !important;
+        font-size: ${isLandscape ? '10pt' : '8pt'} !important;
       }
       th {
         background-color: #f3f4f6 !important;
@@ -876,7 +877,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
       background: #1d4ed8;
     }
 
-    ${getSharedPrintStyles({ isLandscape: true })}
+    ${getSharedPrintStyles({ isLandscape: orientation === 'landscape' })}
   `;
 
   const html = `<!DOCTYPE html>

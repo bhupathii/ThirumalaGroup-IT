@@ -85,6 +85,11 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
 
       <style>{`
         @media print {
+          @page {
+            size: portrait;
+            margin: 8mm;
+          }
+
           /* Hide app layout elements */
           aside, header, nav, .hide-on-print {
             display: none !important;
@@ -102,18 +107,23 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
             display: block !important;
             background: white !important;
             color: black !important;
-            font-size: 12px !important;
+            font-size: 10px !important;
           }
 
           /* Table cleanups for print */
           .print-document table {
             border-collapse: collapse !important;
             width: 100% !important;
+            table-layout: auto !important;
           }
           .print-document th, .print-document td {
             border: 1px solid #000000 !important;
-            padding: 6px !important;
+            padding: 4px 3px !important;
             color: black !important;
+            font-size: 9px !important;
+            line-height: 1.2 !important;
+            white-space: normal !important;
+            word-break: break-word !important;
           }
           .print-document th {
             background-color: #f8fafc !important;

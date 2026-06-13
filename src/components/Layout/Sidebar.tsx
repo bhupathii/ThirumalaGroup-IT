@@ -149,7 +149,7 @@ const Sidebar: React.FC = () => {
     },
     { icon: Truck, label: 'Vehicles', path: '/vehicles', key: 'vehicles' },
     { icon: Bell, label: 'Reminders', path: '/reminders', key: 'reminders' },
-    { icon: RefreshCw, label: 'Sync Center', path: '/sync-center', key: 'sync_center', showForAll: true },
+    { icon: RefreshCw, label: 'Sync Center', path: '/sync-center', key: 'sync_center' },
     {
       icon: CreditCard,
       label: 'Bank Guarantees',
@@ -170,7 +170,6 @@ const Sidebar: React.FC = () => {
       label: 'Book Management',
       path: '/book-management',
       key: 'book_management',
-      adminOnly: true,
     },
   ];
 
@@ -205,7 +204,7 @@ const Sidebar: React.FC = () => {
       key: 'user_access_management',
       adminOnly: true,
     },
-    { icon: RefreshCw, label: 'Sync Center', path: '/sync-center', key: 'sync_center', showForAll: true },
+    { icon: RefreshCw, label: 'Sync Center', path: '/sync-center', key: 'sync_center' },
   ];
 
   const activeMenuItems = isFinanceMode ? financeMenuItems : menuItems;

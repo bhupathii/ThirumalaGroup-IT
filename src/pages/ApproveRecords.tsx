@@ -1191,7 +1191,7 @@ const ApproveRecords: React.FC = () => {
             <title>${title}</title>
             <style>
               @media print {
-                @page { margin: 1in; }
+                @page { size: portrait; margin: 8mm; }
               }
               body { font-family: Arial, sans-serif; font-size: 12px; margin: 0; padding: 20px; }
               .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
@@ -1204,7 +1204,7 @@ const ApproveRecords: React.FC = () => {
               .pending { background-color: #fef3c7; }
               .summary { margin: 20px 0; padding: 15px; background-color: #f8f9fa; border: 1px solid #dee2e6; }
               .footer { text-align: center; margin-top: 20px; font-size: 10px; color: #666; }
-              ${getSharedPrintStyles({ isLandscape: true })}
+              ${getSharedPrintStyles({ isLandscape: false })}
             </style>
           </head>
           <body>
@@ -1295,7 +1295,7 @@ const ApproveRecords: React.FC = () => {
             <title>${title}</title>
             <style>
               @media print {
-                @page { margin: 1in; }
+                @page { size: portrait; margin: 8mm; }
               }
               body { font-family: Arial, sans-serif; font-size: 12px; margin: 0; padding: 20px; }
               .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
@@ -1309,7 +1309,7 @@ const ApproveRecords: React.FC = () => {
               .summary { margin: 20px 0; padding: 15px; background-color: #f8f9fa; border: 1px solid #dee2e6; }
               .footer { text-align: center; margin-top: 20px; font-size: 10px; color: #666; }
               .page-break { page-break-before: always; }
-              ${getSharedPrintStyles({ isLandscape: true })}
+              ${getSharedPrintStyles({ isLandscape: false })}
             </style>
           </head>
           <body>
@@ -1869,7 +1869,7 @@ const ApproveRecords: React.FC = () => {
                       <td className='px-3 py-2'>{entry.staff}</td>
                       <td className='px-3 py-2'>{entry.users}</td>
                       <td className='px-3 py-2'>
-                        {`${format(new Date(entry.c_date), 'dd/MM/yyyy')} ${format(new Date(entry.entry_time), 'HH:mm:ss')}`}
+                        {`${format(new Date(entry.c_date), 'dd/MM/yyyy')} ${format(new Date(entry.entry_time), 'hh:mm:ss a')}`}
                       </td>
                       <td className='px-3 py-2'>
                         <Button
@@ -2054,7 +2054,7 @@ const ApproveRecords: React.FC = () => {
                       <td className='px-3 py-2'>{entry.staff}</td>
                       <td className='px-3 py-2'>{entry.users}</td>
                       <td className='px-3 py-2'>
-                        {`${format(new Date(entry.c_date), 'dd/MM/yyyy')} ${format(new Date(entry.entry_time), 'HH:mm:ss')}`}
+                        {`${format(new Date(entry.c_date), 'dd/MM/yyyy')} ${format(new Date(entry.entry_time), 'hh:mm:ss a')}`}
                       </td>
                       <td className='px-3 py-2'>
                         <Button
@@ -2260,7 +2260,7 @@ const ApproveRecords: React.FC = () => {
                       {d.users}
                     </td>
                     <td className='w-20 px-1 py-1 text-xs'>
-                      {format(new Date(d.deleted_at), 'HH:mm:ss')}
+                      {format(new Date(d.deleted_at), 'hh:mm:ss a')}
                     </td>
                     <td className='w-20 px-1 py-1 text-center'>
                       {d.approved === true || d.approved === 'true' ? (

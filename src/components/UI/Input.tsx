@@ -21,6 +21,7 @@ interface InputProps {
   style?: React.CSSProperties;
   error?: boolean;
   inputMode?: 'none' | 'text' | 'decimal' | 'numeric' | 'tel' | 'search' | 'email' | 'url';
+  maxLength?: number;
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -45,6 +46,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       style,
       error = false,
       inputMode,
+      maxLength,
     },
     ref
   ) => {
@@ -161,6 +163,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             max={max}
             step={step}
             inputMode={inputMode}
+            maxLength={maxLength}
             className={`w-full border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed ${
               error 
                 ? 'border-red-500 bg-red-50 focus:ring-red-500' 

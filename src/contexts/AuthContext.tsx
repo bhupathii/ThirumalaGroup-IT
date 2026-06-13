@@ -46,6 +46,8 @@ const ADMIN_FEATURES = [
   'bank_guarantees',
   'users',
   'reminders',
+  'delete_entry',
+  'sync_center',
   // Finance Mode Features
   'finance_dashboard',
   'loan_entry',

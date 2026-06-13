@@ -1022,7 +1022,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
               page-break-inside: avoid;
               page-break-after: auto;
             }
-            ${getSharedPrintStyles({ isLandscape: true })}
+            ${getSharedPrintStyles({ isLandscape: false })}
           </style>
         </head>
         <body>

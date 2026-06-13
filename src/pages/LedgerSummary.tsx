@@ -540,11 +540,11 @@ const LedgerSummary: React.FC = () => {
               body { margin: 0; }
               .no-print { display: none; }
               @page {
-                size: auto;
-                margin: 10mm 15mm;
+                size: portrait;
+                margin: 8mm;
               }
             }
-            ${getSharedPrintStyles({ isLandscape: true })}
+            ${getSharedPrintStyles({ isLandscape: false })}
           </style>
         </head>
         <body>
