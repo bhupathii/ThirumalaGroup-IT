@@ -14,11 +14,13 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { user, login } = useAuth();
-  const { setMode } = useTableMode();
+  const { mode } = useTableMode();
 
   if (user) {
-    const defaultMode = user.mode || localStorage.getItem('table_mode') || 'regular';
-    return <Navigate to={defaultMode === 'finance' ? '/finance' : '/'} replace />;
+    if (!mode) {
+      return <Navigate to='/choose-mode' replace />;
+    }
+    return <Navigate to={mode === 'finance' ? '/finance' : '/'} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,9 +36,7 @@ const Login: React.FC = () => {
 
     if (result.success) {
       toast.success('Login successful!');
-      const defaultMode = result.userMode || localStorage.getItem('table_mode') || 'regular';
-      setMode(defaultMode as 'regular' | 'itr' | 'finance');
-      navigate(defaultMode === 'finance' ? '/finance' : '/', { replace: true });
+      navigate('/choose-mode', { replace: true });
     } else {
       toast.error(result.error || 'Login failed');
     }

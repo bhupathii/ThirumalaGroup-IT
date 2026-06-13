@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import bcrypt from 'bcryptjs';
+import { queryClient } from '../lib/queryClient';
 
 type ModeKey = 'regular' | 'itr' | 'finance';
 const MODE_VALUES: ModeKey[] = ['regular', 'itr', 'finance'];
 const getStoredMode = (): ModeKey => {
-  const mode = localStorage.getItem('table_mode');
+  const mode = sessionStorage.getItem('table_mode') || localStorage.getItem('table_mode');
   return (mode === 'itr' ? 'itr' : mode === 'finance' ? 'finance' : 'regular') as ModeKey;
 };
 const createEmptyModeFeatureMap = () =>
@@ -101,6 +102,7 @@ interface AuthContextType {
     password: string
   ) => Promise<{ success: boolean; error?: string; userMode?: 'regular' | 'itr' | 'finance' | null }>;
   logout: () => Promise<void>;
+  reloadPermissions: () => Promise<void>;
   changePassword: (
     currentPassword: string,
     newPassword: string
@@ -361,11 +363,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const logout = async () => {
     try {
-      setUser(null);
+      // Clear localStorage items
+      localStorage.removeItem('table_mode');
+      localStorage.removeItem('selectedMode');
+      localStorage.removeItem('regularSelectedBook');
+      localStorage.removeItem('itrSelectedBook');
+      localStorage.removeItem('financeSelectedBook');
+      localStorage.removeItem('currentBookId');
+
+      // Clear sessionStorage items
       sessionStorage.removeItem('thirumala_user');
       sessionStorage.removeItem('thirumala_session_time');
+      sessionStorage.removeItem('table_mode');
+      sessionStorage.removeItem('selectedMode');
+
+      // Clear React Query cache
+      queryClient.clear();
+
+      setUser(null);
     } catch (error) {
       console.error('Logout error:', error);
+    }
+  };
+
+  const reloadPermissions = async () => {
+    if (!user) return;
+    try {
+      const { featuresByMode } = await loadFeaturesForUser(user.id, user.is_admin);
+      const activeMode = getStoredMode();
+      const nextFeatures = user.is_admin
+        ? [...ADMIN_FEATURES]
+        : getFeaturesForMode(featuresByMode, activeMode);
+      
+      const updatedUser = {
+        ...user,
+        features: nextFeatures,
+        featuresByMode,
+      };
+      
+      setUser(updatedUser);
+      sessionStorage.setItem('thirumala_user', JSON.stringify(updatedUser));
+    } catch (error) {
+      console.error('Error reloading permissions:', error);
     }
   };
 
@@ -436,7 +475,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, logout, changePassword, isAdmin, isAuthenticated }}
+      value={{ user, loading, login, logout, reloadPermissions, changePassword, isAdmin, isAuthenticated }}
     >
       {children}
     </AuthContext.Provider>

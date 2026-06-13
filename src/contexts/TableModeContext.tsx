@@ -2,8 +2,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db } from '../lib/offlineQueueDB';
 import { toast } from 'react-hot-toast';
 import { queryClient } from '../lib/queryClient';
+import { useAuth } from './AuthContext';
 
-type TableMode = 'regular' | 'itr' | 'finance';
+type TableMode = 'regular' | 'itr' | 'finance' | null;
 
 interface TableModeContextType {
   mode: TableMode;
@@ -26,15 +27,33 @@ export const useTableMode = () => {
 export const TableModeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  // Load mode from localStorage, default to 'regular'
+  const { user, reloadPermissions } = useAuth();
+
+  // Load mode from sessionStorage or localStorage, default to null (no mode selected)
   const [mode, setMode] = useState<TableMode>(() => {
-    const saved = localStorage.getItem('table_mode');
-    return (saved === 'itr' ? 'itr' : saved === 'finance' ? 'finance' : 'regular') as TableMode;
+    const saved = sessionStorage.getItem('table_mode') || localStorage.getItem('table_mode');
+    if (saved === 'itr' || saved === 'finance' || saved === 'regular') {
+      return saved as TableMode;
+    }
+    return null;
   });
 
-  // Save to localStorage whenever mode changes
+  // Reset mode when user logs out
   useEffect(() => {
-    localStorage.setItem('table_mode', mode);
+    if (!user) {
+      setMode(null);
+    }
+  }, [user]);
+
+  // Save to storage whenever mode changes
+  useEffect(() => {
+    if (mode) {
+      sessionStorage.setItem('table_mode', mode);
+      localStorage.setItem('table_mode', mode);
+    } else {
+      sessionStorage.removeItem('table_mode');
+      localStorage.removeItem('table_mode');
+    }
     window.dispatchEvent(
       new CustomEvent<TableMode>('table-mode-changed', {
         detail: mode,
@@ -62,21 +81,31 @@ export const TableModeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const setModeDirect = async (newMode: TableMode) => {
     if (newMode === mode) return;
-    try {
-      const count = await db.queued_operations
-        .where('status')
-        .equals('pending_sync')
-        .count();
-      if (count > 0) {
-        toast.error(`Cannot switch modes while there are ${count} unsynchronized records. Please sync first.`);
-        return;
+    
+    // Only check offline queue if switching to a non-null mode
+    if (newMode !== null) {
+      try {
+        const count = await db.queued_operations
+          .where('status')
+          .equals('pending_sync')
+          .count();
+        if (count > 0) {
+          toast.error(`Cannot switch modes while there are ${count} unsynchronized records. Please sync first.`);
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to check offline queue before setting mode:', err);
       }
-    } catch (err) {
-      console.error('Failed to check offline queue before setting mode:', err);
     }
+    
     // Clear all React Query cache so next render fetches fresh data for the new mode
     queryClient.clear();
     setMode(newMode);
+
+    // Reload permissions/features for the newly selected mode
+    if (newMode !== null) {
+      await reloadPermissions();
+    }
   };
 
   const value: TableModeContextType = {
@@ -93,4 +122,3 @@ export const TableModeProvider: React.FC<{ children: React.ReactNode }> = ({
     </TableModeContext.Provider>
   );
 };
-

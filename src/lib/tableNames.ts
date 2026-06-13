@@ -9,7 +9,7 @@ type TableMode = 'regular' | 'itr';
  * Get current table mode from localStorage
  */
 export const getTableMode = (): TableMode => {
-  const saved = localStorage.getItem('table_mode');
+  const saved = sessionStorage.getItem('table_mode') || localStorage.getItem('table_mode');
   return (saved === 'itr' ? 'itr' : 'regular') as TableMode;
 };
 

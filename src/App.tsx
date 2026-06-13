@@ -9,7 +9,7 @@ import { Toaster } from 'react-hot-toast';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { TableModeProvider } from './contexts/TableModeContext';
+import { TableModeProvider, useTableMode } from './contexts/TableModeContext';
 import { queryClient } from './lib/queryClient';
 import Layout from './components/Layout/Layout';
 import Login from './pages/Login';
@@ -159,6 +159,7 @@ const AppContent: React.FC = () => {
   // Defined here to ensure it's always within the AuthProvider context
   const ProtectedRouteWrapper: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
     const { user, loading } = useAuth();
+    const { mode } = useTableMode();
 
     if (loading) {
       return (
@@ -175,13 +176,19 @@ const AppContent: React.FC = () => {
       return <Navigate to='/login' replace />;
     }
 
-    // If children provided, render them (for mode-selection page)
+    // If children provided, render them (for mode-selection/choose-mode page)
     if (children) {
       return <>{children}</>;
     }
 
+    // Direct URL protection: if no mode is selected, redirect to /choose-mode
+    if (!mode) {
+      return <Navigate to='/choose-mode' replace />;
+    }
+
     // Otherwise render Layout (for other protected routes)
-    return <Layout />;
+    // Pass active mode as key to force complete layout and component remounting
+    return <Layout key={mode} />;
   };
 
   return (
@@ -215,6 +222,14 @@ const AppContent: React.FC = () => {
         <Route path='/login' element={<Login />} />
         <Route
           path='/mode-selection'
+          element={
+            <ProtectedRouteWrapper>
+              <ModeSelection />
+            </ProtectedRouteWrapper>
+          }
+        />
+        <Route
+          path='/choose-mode'
           element={
             <ProtectedRouteWrapper>
               <ModeSelection />

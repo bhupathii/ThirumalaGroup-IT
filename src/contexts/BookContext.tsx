@@ -63,9 +63,11 @@ export const BookProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const activeBookMode = (isFinanceMode ? 'regular' : tableMode) as 'regular' | 'itr';
 
   const refreshBooks = useCallback(async () => {
-    if (!user) {
+    if (!user || !tableMode) {
       setBooks([]);
       setCurrentBook(null);
+      supabaseDB.setBookId('');
+      supabaseDB.setBookLocked(false);
       setLoading(false);
       return;
     }
@@ -133,6 +135,11 @@ export const BookProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Load/Reload books when user or active book mode changes
   useEffect(() => {
+    // Synchronously reset book selection and database state on mode transitions
+    setCurrentBook(null);
+    supabaseDB.setBookId('');
+    supabaseDB.setBookLocked(false);
+
     refreshBooks();
   }, [refreshBooks]);
 
