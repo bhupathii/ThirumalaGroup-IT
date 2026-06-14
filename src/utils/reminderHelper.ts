@@ -15,6 +15,7 @@ export interface CreateReminderParams {
   category?: 'GENERAL' | 'VEHICLE' | 'LOAN' | 'STAFF' | 'DOCUMENT' | 'TAX' | 'MEETING' | 'FOLLOWUP';
   is_system_generated?: boolean;
   book_id?: string | null;
+  play_sound?: boolean;
 }
 
 /**
@@ -42,7 +43,7 @@ export function formatLocalDate(date: Date): string {
  * Checks if a reminder should be shown as a notification on the dashboard
  */
 export function canShowReminderNotification(reminder: Partial<Reminder>, today: Date = new Date()): boolean {
-  if (reminder.status !== 'pending' || reminder.deleted_at) {
+  if (reminder.status !== 'pending' || reminder.deleted_at || reminder.seen) {
     return false;
   }
 
@@ -145,7 +146,9 @@ export async function createSystemReminder(params: CreateReminderParams, created
     completed_at: null,
     snoozed_until: null,
     deleted_at: null,
-    book_id: params.book_id || null
+    book_id: params.book_id || null,
+    play_sound: params.play_sound ?? true,
+    seen: false
   };
 
   return await supabaseDB.createReminder(reminderData);

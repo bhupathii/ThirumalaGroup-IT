@@ -4,7 +4,7 @@ import { format, parseISO, addDays } from 'date-fns';
 import { 
   Bell, Plus, Search, Calendar as CalendarIcon, List, Edit, Trash2, 
   Clock, CheckCircle, ChevronLeft, ChevronRight, User, 
-  Sparkles, X, AlertTriangle
+  Sparkles, X, AlertTriangle, Eye
 } from 'lucide-react';
 import { supabaseDB, Reminder, User as DBUser } from '../lib/supabaseDatabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,6 +20,12 @@ import {
   getReminderColorStatus, 
   calculateNextOccurrence 
 } from '../utils/reminderHelper';
+import { 
+  isSoundEnabled, 
+  setSoundEnabled, 
+  getSoundVolume, 
+  setSoundVolume 
+} from '../utils/reminderSound';
 import toast from 'react-hot-toast';
 
 const Reminders: React.FC = () => {
@@ -38,6 +44,31 @@ const Reminders: React.FC = () => {
   const highlightReminderId = queryParams.get('highlightReminder') || location.state?.highlightReminderId;
 
   const [activeHighlightId, setActiveHighlightId] = useState<string | null>(null);
+
+  // Global sound states
+  const [globalSoundEnabled, setGlobalSoundEnabled] = useState(isSoundEnabled());
+  const [globalSoundVolume, setGlobalSoundVolume] = useState(getSoundVolume());
+
+  useEffect(() => {
+    const handleSoundChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.enabled === 'boolean') {
+        setGlobalSoundEnabled(detail.enabled);
+      }
+    };
+    const handleVolumeChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.volume === 'string') {
+        setGlobalSoundVolume(detail.volume as 'soft' | 'normal' | 'loud');
+      }
+    };
+    window.addEventListener('reminder-sound-changed', handleSoundChanged);
+    window.addEventListener('reminder-sound-volume-changed', handleVolumeChanged);
+    return () => {
+      window.removeEventListener('reminder-sound-changed', handleSoundChanged);
+      window.removeEventListener('reminder-sound-volume-changed', handleVolumeChanged);
+    };
+  }, []);
 
   // Handle highlight route logic
   useEffect(() => {
@@ -91,7 +122,8 @@ const Reminders: React.FC = () => {
     notify_before_days: 0,
     assigned_user_id: '' as string | null,
     category: 'GENERAL' as 'GENERAL' | 'VEHICLE' | 'LOAN' | 'STAFF' | 'DOCUMENT' | 'TAX' | 'MEETING' | 'FOLLOWUP',
-    is_system_generated: false
+    is_system_generated: false,
+    play_sound: true
   });
 
   // Load reminders and users
@@ -294,7 +326,8 @@ const Reminders: React.FC = () => {
       completed_at: null,
       snoozed_until: null,
       deleted_at: null,
-      book_id: currentBook?.id || null
+      book_id: currentBook?.id || null,
+      play_sound: newReminder.play_sound
     };
 
     const result = await supabaseDB.createReminder(payload);
@@ -314,7 +347,8 @@ const Reminders: React.FC = () => {
         notify_before_days: 0,
         assigned_user_id: '',
         category: 'GENERAL',
-        is_system_generated: false
+        is_system_generated: false,
+        play_sound: true
       });
     } else {
       toast.error('Failed to create reminder');
@@ -340,7 +374,8 @@ const Reminders: React.FC = () => {
       notify_before_days: Number(editingReminder.notify_before_days),
       assigned_user_id: editingReminder.assigned_user_id,
       category: editingReminder.category,
-      status: editingReminder.status
+      status: editingReminder.status,
+      play_sound: editingReminder.play_sound ?? true
     };
 
     const result = await supabaseDB.updateReminder(editingReminder.id, updates);
@@ -384,6 +419,21 @@ const Reminders: React.FC = () => {
       loadData();
     } else {
       toast.error('Failed to snooze reminder');
+    }
+  };
+
+  // Seen action
+  const handleMarkSeen = async (id: string) => {
+    if (currentBook?.is_locked) {
+      toast.error('This Book is Locked (Read Only). Writing/Editing/Deletion is blocked.');
+      return;
+    }
+    const result = await supabaseDB.updateReminder(id, { seen: true });
+    if (result) {
+      toast.success('Reminder marked as seen');
+      loadData();
+    } else {
+      toast.error('Failed to mark reminder as seen');
     }
   };
 
@@ -433,7 +483,8 @@ const Reminders: React.FC = () => {
           completed_at: null,
           snoozed_until: null,
           deleted_at: null,
-          book_id: showCompleteModal.book_id
+          book_id: showCompleteModal.book_id,
+          play_sound: showCompleteModal.play_sound ?? true
         };
 
         const replicated = await supabaseDB.createReminder(nextReminder);
@@ -455,15 +506,15 @@ const Reminders: React.FC = () => {
   const getPriorityBadgeClass = (priority: string) => {
     switch (priority) {
       case 'critical':
-        return 'bg-red-100 text-red-800 border-red-200';
+        return 'bg-red-600 text-white border-red-700 shadow-md';
       case 'high':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
+        return 'bg-orange-500 text-white border-orange-600 shadow-md';
       case 'medium':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        return 'bg-yellow-400 text-yellow-950 border-yellow-500 shadow-sm';
       case 'low':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
+        return 'bg-blue-200 text-blue-900 border-blue-400 shadow-sm';
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return 'bg-gray-200 text-gray-800 border-gray-400 shadow-sm';
     }
   };
 
@@ -505,6 +556,41 @@ const Reminders: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-2.5">
+          {/* Sound Settings in Reminders Toolbar */}
+          <div className="flex items-center gap-1.5 bg-gray-100 border border-gray-200 p-1 rounded-xl shadow-sm">
+            <button
+              type="button"
+              onClick={() => {
+                const nextVal = !globalSoundEnabled;
+                setGlobalSoundEnabled(nextVal);
+                setSoundEnabled(nextVal);
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-bold font-outfit transition-all ${
+                globalSoundEnabled
+                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                  : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-100'
+              }`}
+              title={globalSoundEnabled ? 'Disable Reminder Sound' : 'Enable Reminder Sound'}
+            >
+              {globalSoundEnabled ? '🔔 Sound ON' : '🔕 Sound OFF'}
+            </button>
+            
+            <select
+              value={globalSoundVolume}
+              onChange={(e) => {
+                const vol = e.target.value as 'soft' | 'normal' | 'loud';
+                setGlobalSoundVolume(vol);
+                setSoundVolume(vol);
+              }}
+              className="text-xs font-semibold text-gray-600 bg-white border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+              title="Reminder Sound Volume"
+            >
+              <option value="soft">Soft Volume</option>
+              <option value="normal">Normal Volume</option>
+              <option value="loud">Loud Volume</option>
+            </select>
+          </div>
+
           {/* View Toggler */}
           <div className="bg-gray-100 border border-gray-200 p-0.5 rounded-xl flex">
             <button
@@ -720,13 +806,18 @@ const Reminders: React.FC = () => {
                       const colorStatus = getReminderColorStatus(r);
                       const isSnoozed = r.snoozed_until && new Date(r.snoozed_until) > new Date();
                       const isHighlighted = r.id === activeHighlightId;
+                      const todayStr = format(new Date(), 'yyyy-MM-dd');
+                      const isDueUnseen = r.status === 'pending' && !r.seen && r.event_date <= todayStr;
                       
                       let rowBg = 'hover:bg-gray-50';
                       let borderStyle = 'border-b border-gray-100';
 
                       if (isHighlighted) {
-                        rowBg = 'bg-[#FEF3C7] hover:bg-[#FEF3C7]';
-                        borderStyle = 'border-2 border-[#F59E0B]';
+                        rowBg = 'bg-[#FFF7ED] hover:bg-[#FFEDD5]';
+                        borderStyle = 'border-2 border-[#F97316]';
+                      } else if (isDueUnseen) {
+                        rowBg = 'bg-orange-50/40 hover:bg-orange-50/80';
+                        borderStyle = 'border-b border-orange-200';
                       } else if (r.status === 'completed') {
                         rowBg = 'bg-green-25/50 hover:bg-green-25';
                       } else if (colorStatus === 'dark-red') {
@@ -740,7 +831,7 @@ const Reminders: React.FC = () => {
                           className={`transition-all duration-1000 ${borderStyle} ${rowBg}`}
                         >
                           <td className="px-4 py-3 font-semibold text-xs text-gray-500">
-                            <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 border border-slate-200 font-bold">
+                            <span className="px-2.5 py-1 rounded-full bg-slate-200 text-slate-900 border border-slate-400 font-bold shadow-sm">
                               {r.category || 'GENERAL'}
                             </span>
                           </td>
@@ -748,7 +839,7 @@ const Reminders: React.FC = () => {
                             <div className="font-bold text-gray-900 flex items-center gap-2">
                               {r.title}
                               {isHighlighted && (
-                                <span className='inline-flex items-center text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 animate-pulse'>
+                                <span className='inline-flex items-center text-[10px] font-bold text-orange-800 bg-orange-100 px-2 py-0.5 rounded-full border border-orange-300 animate-pulse'>
                                   📌 Selected Reminder
                                 </span>
                               )}
@@ -795,14 +886,14 @@ const Reminders: React.FC = () => {
                                 {r.assigned_username}
                               </span>
                             ) : (
-                              <span className="text-blue-600 font-bold uppercase text-[10px] tracking-wide bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">All Users</span>
+                              <span className="text-blue-700 font-bold uppercase text-[10px] tracking-wide bg-blue-100 border border-blue-300 px-2 py-0.5 rounded-full shadow-sm">All Users</span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {r.status === 'completed' ? (
-                              <span className="px-2 py-0.5 text-xs font-bold bg-green-100 text-green-800 border border-green-200 rounded-full">Completed</span>
+                              <span className="px-2 py-0.5 text-xs font-bold bg-green-200 text-green-900 border border-green-400 rounded-full shadow-sm">Completed</span>
                             ) : (
-                              <span className="px-2 py-0.5 text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-200 rounded-full">Pending</span>
+                              <span className="px-2 py-0.5 text-xs font-bold bg-yellow-200 text-yellow-900 border border-yellow-400 rounded-full shadow-sm">Pending</span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-gray-600 text-xs font-semibold">
@@ -821,6 +912,17 @@ const Reminders: React.FC = () => {
                                       >
                                         <CheckCircle className="w-4 h-4" />
                                       </button>
+
+                                      {!r.seen && (
+                                        <button
+                                          onClick={() => handleMarkSeen(r.id)}
+                                          title="Mark Seen (Mute alerts/sound)"
+                                          className="inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed px-2 py-1.5 text-sm text-indigo-700 bg-indigo-50 border border-indigo-300 hover:bg-indigo-100 focus:ring-indigo-500"
+                                        >
+                                          <Eye className="w-4 h-4" />
+                                        </button>
+                                      )}
+
                                       {/* Snooze Dropdown */}
                                       <div className="relative group">
                                         <Button
@@ -1036,6 +1138,19 @@ const Reminders: React.FC = () => {
                   )}
                 </div>
 
+                <div className="flex items-center gap-2 py-2">
+                  <input
+                    type="checkbox"
+                    id="play_sound_checkbox"
+                    checked={editingReminder ? (editingReminder.play_sound ?? true) : newReminder.play_sound}
+                    onChange={e => handleInputChange('play_sound', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor="play_sound_checkbox" className="text-sm font-semibold text-gray-700 select-none cursor-pointer">
+                    Play Sound for this Reminder
+                  </label>
+                </div>
+
                 <div className="flex gap-3 pt-3 border-t">
                   <Button type="submit">
                     Save
@@ -1058,7 +1173,8 @@ const Reminders: React.FC = () => {
                           notify_before_days: 0,
                           assigned_user_id: '',
                           category: 'GENERAL',
-                          is_system_generated: false
+                          is_system_generated: false,
+                          play_sound: true
                         });
                       }
                       setShowAddForm(false);

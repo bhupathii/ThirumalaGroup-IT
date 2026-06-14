@@ -150,6 +150,8 @@ export interface Reminder {
   assigned_username?: string | null;
   creator_username?: string | null;
   book_id: string | null;
+  play_sound?: boolean;
+  seen?: boolean;
 }
 
 const isScopedTable = (table: string): boolean => {
@@ -6277,10 +6279,11 @@ class SupabaseDatabase {
           const eventDateStr = r.event_date;
           const eventTime = new Date(eventDateStr).getTime();
           
-          // Check if snoozed currently
+          // Check if snoozed currently or marked as seen
           const isSnoozed = r.snoozed_until && new Date(r.snoozed_until) > now;
+          const isAcknowledged = isSnoozed || r.seen;
           
-          if (!isSnoozed) {
+          if (!isAcknowledged) {
             const diffDays = Math.ceil((eventTime - todayTime) / (1000 * 60 * 60 * 24));
             
             if (diffDays < 0) {
@@ -6310,7 +6313,7 @@ class SupabaseDatabase {
       
       let count = 0;
       reminders.forEach(r => {
-        if (r.status === 'pending') {
+        if (r.status === 'pending' && !r.seen) {
           const isSnoozed = r.snoozed_until && new Date(r.snoozed_until) > now;
           if (!isSnoozed) {
             const eventTime = new Date(r.event_date).getTime();

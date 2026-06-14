@@ -167,12 +167,26 @@ const Dashboard: React.FC = () => {
   // Trigger sound when active reminders load or update
   useEffect(() => {
     if (activeReminders.length === 0) return;
-    
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+
     let playSound = false;
     activeReminders.forEach((r) => {
-      if (!playedReminderIdsRef.current.has(r.id)) {
+      // Only play sound when:
+      // 1. Reminder is due (event_date <= today)
+      // 2. Reminder has sound enabled (play_sound !== false)
+      // 3. Global sound is enabled (handled inside playReminderSound())
+      // 4. Reminder has not been marked as Seen or Completed
+      const isDue = r.event_date <= todayStr;
+      const hasSoundEnabled = r.play_sound !== false;
+      const isUnseen = !r.seen;
+      const isPending = r.status === 'pending';
+
+      if (isDue && hasSoundEnabled && isUnseen && isPending && !playedReminderIdsRef.current.has(r.id)) {
         playedReminderIdsRef.current.add(r.id);
         playSound = true;
+      } else if (!playedReminderIdsRef.current.has(r.id)) {
+        // Track non-playing reminders too to avoid future re-plays
+        playedReminderIdsRef.current.add(r.id);
       }
     });
 
@@ -409,6 +423,26 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleMarkSeen = async (reminder: Reminder) => {
+    try {
+      const updated = await supabaseDB.updateReminder(reminder.id, {
+        seen: true,
+      });
+      if (updated) {
+        toast.success('Reminder marked as seen');
+        // Remove from played set so it doesn't linger
+        playedReminderIdsRef.current.delete(reminder.id);
+        fetchRemindersData();
+        window.dispatchEvent(new Event('refresh-reminders-count'));
+      } else {
+        toast.error('Failed to mark reminder as seen');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Error marking reminder as seen');
+    }
+  };
+
   const handleCompleteSubmit = async () => {
     if (!completionReminder || !user) return;
     setIsCompleting(true);
@@ -448,7 +482,8 @@ const Dashboard: React.FC = () => {
             completed_at: null,
             snoozed_until: null,
             deleted_at: null,
-            book_id: completionReminder.book_id
+            book_id: completionReminder.book_id,
+            play_sound: completionReminder.play_sound ?? true
           };
 
           const replicated = await supabaseDB.createReminder(nextReminder);
@@ -951,11 +986,15 @@ const Dashboard: React.FC = () => {
                 label = 'Soon';
               }
 
-              return (
+            return (
                 <div 
                   key={r.id}
                   onClick={() => navigate(`/reminders?highlightReminder=${r.id}`)}
-                  className={`border hover:border-gray-300 transition-all rounded px-2.5 py-1.5 flex items-center justify-between gap-3 shadow-sm text-xs cursor-pointer ${colorClass}`}
+                  className={`border transition-all rounded px-2.5 py-1.5 flex items-center justify-between gap-3 shadow-sm text-xs cursor-pointer ${
+                    (colorStatus === 'dark-red' || colorStatus === 'red')
+                      ? 'bg-orange-100 text-orange-950 border-orange-300 hover:border-orange-400'
+                      : colorClass
+                  }`}
                 >
                   <div className='flex items-center gap-2'>
                     <span className='font-bold uppercase tracking-wider text-[9px] bg-white/80 px-1 py-0.5 rounded shadow-sm border border-black/5'>{label}</span>
@@ -970,7 +1009,14 @@ const Dashboard: React.FC = () => {
                       onClick={(e) => { e.stopPropagation(); setCompletionReminder(r); }}
                       className='text-[10px] font-bold bg-white text-green-700 hover:bg-green-50 px-2 py-0.5 rounded border border-green-200 transition-colors flex items-center gap-0.5 shadow-sm'
                     >
-                      <CheckCircle className='w-3 h-3' /> Done
+                      <CheckCircle className='w-3 h-3' /> Complete
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleMarkSeen(r); }}
+                      className='text-[10px] font-bold bg-white text-indigo-700 hover:bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 transition-colors flex items-center gap-0.5 shadow-sm'
+                      title='Mark as seen (mute alerts)'
+                    >
+                      <Eye className='w-3 h-3' /> Seen
                     </button>
                     {/* Snooze Dropdown */}
                     <div className='relative group'>

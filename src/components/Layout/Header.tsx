@@ -8,8 +8,6 @@ import { useBook } from '../../contexts/BookContext';
 import { useOffline } from '../../contexts/OfflineContext';
 import { toast } from 'react-hot-toast';
 
-import { isSoundEnabled, setSoundEnabled } from '../../utils/reminderSound';
-
 const Header: React.FC = () => {
   const today = new Date();
   const { user } = useAuth();
@@ -21,27 +19,7 @@ const Header: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Sound settings state & sync
-  const [soundEnabled, setSoundEnabledState] = useState(isSoundEnabled());
 
-  useEffect(() => {
-    const handleSoundChanged = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail && typeof detail.enabled === 'boolean') {
-        setSoundEnabledState(detail.enabled);
-      }
-    };
-    window.addEventListener('reminder-sound-changed', handleSoundChanged);
-    return () => {
-      window.removeEventListener('reminder-sound-changed', handleSoundChanged);
-    };
-  }, []);
-
-  const handleToggleSound = () => {
-    const nextVal = !soundEnabled;
-    setSoundEnabledState(nextVal);
-    setSoundEnabled(nextVal);
-  };
 
   // Form states for creating a book
   const [bookCode, setBookCode] = useState('');
@@ -253,28 +231,7 @@ const Header: React.FC = () => {
               )}
             </div>
 
-            {/* Reminder Sound Toggle Button */}
-            {user && (
-              <button
-                onClick={handleToggleSound}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold font-outfit shadow-sm transition-all ${
-                  soundEnabled
-                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
-                    : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
-                }`}
-                title={soundEnabled ? 'Disable Reminder Sound' : 'Enable Reminder Sound'}
-              >
-                {soundEnabled ? (
-                  <>
-                    <span className="text-xs">🔔</span> Sound ON
-                  </>
-                ) : (
-                  <>
-                    <span className="text-xs">🔕</span> Sound OFF
-                  </>
-                )}
-              </button>
-            )}
+
 
             <div className="flex items-center gap-2 finance-input">
               <span className='text-gray-600'>Welcome,</span>
