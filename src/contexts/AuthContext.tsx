@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import bcrypt from 'bcryptjs';
 import { queryClient } from '../lib/queryClient';
+import { supabaseDB } from '../lib/supabaseDatabase';
+import { initAudioContext } from '../utils/reminderSound';
 
 type ModeKey = 'regular' | 'itr' | 'finance';
 const MODE_VALUES: ModeKey[] = ['regular', 'itr', 'finance'];
@@ -237,9 +239,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             }
 
             setUser(parsedUser);
+            supabaseDB.setUserId(parsedUser.id);
           } else {
             sessionStorage.removeItem('thirumala_user');
             sessionStorage.removeItem('thirumala_session_time');
+            supabaseDB.setUserId('');
           }
         }
       } catch (error) {
@@ -354,8 +358,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
       
       setUser(userData);
+      supabaseDB.setUserId(userData.id);
       sessionStorage.setItem('thirumala_user', JSON.stringify(userData));
       sessionStorage.setItem('thirumala_session_time', Date.now().toString());
+
+      // Unlock/init audio context since the login was a button click interaction
+      initAudioContext();
+
+      // Trigger background sync of master data cache
+      if (navigator.onLine) {
+        import('../lib/offlineMasterData').then(({ syncAllMasterData }) => {
+          syncAllMasterData().catch(err => console.error('Error syncing master data on login:', err));
+        }).catch(err => console.error('Error importing offlineMasterData:', err));
+      }
+
       return { success: true, userMode: userData.mode };
     } catch (err) {
       console.error('Login error:', err);
@@ -383,6 +399,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       queryClient.clear();
 
       setUser(null);
+      supabaseDB.setUserId('');
     } catch (error) {
       console.error('Logout error:', error);
     }

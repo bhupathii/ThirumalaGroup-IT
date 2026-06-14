@@ -82,8 +82,8 @@ export const TableModeProvider: React.FC<{ children: React.ReactNode }> = ({
   const setModeDirect = async (newMode: TableMode) => {
     if (newMode === mode) return;
     
-    // Only check offline queue if switching to a non-null mode
-    if (newMode !== null) {
+    // Only check offline queue if switching from one active mode to another active mode
+    if (mode !== null && newMode !== null && newMode !== mode) {
       try {
         const count = await db.queued_operations
           .where('status')

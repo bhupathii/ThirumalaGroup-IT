@@ -303,8 +303,13 @@ const AppContent: React.FC = () => {
   );
 };
 
+import { setupAudioUnlock } from './utils/reminderSound';
+
 const App: React.FC = () => {
   React.useEffect(() => {
+    // Enable browser AudioContext unlock on first user interaction
+    setupAudioUnlock();
+
     const handleWheel = () => {
       const activeElement = document.activeElement;
       if (

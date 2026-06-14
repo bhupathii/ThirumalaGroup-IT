@@ -67,7 +67,8 @@ const processBatchIndividually = async (
   errorCount: number,
   parsedDates: number,
   fallbackDates: number,
-  currentUser: { username?: string } | null
+  currentUser: { username?: string } | null,
+  currentBookId?: string
 ) => {
   console.log('Processing batch individually as fallback...');
 
@@ -336,6 +337,7 @@ const processBatchIndividually = async (
           )
         ),
         cb: 'CB',
+        book_id: currentBookId || null,
       };
 
       // Validate entry
@@ -1254,6 +1256,7 @@ const CsvUpload: React.FC = () => {
                     )
                   ),
                   cb: 'CB',
+                  book_id: currentBook?.id || null,
                   sno: globalIndex + 1,
                   approved: false,
                   edited: false,
@@ -1348,8 +1351,8 @@ const CsvUpload: React.FC = () => {
                   const safeEntries = batchEntries.map(entry => ({
                     ...entry,
                     company_name: 'Default Company',
-                    main_account: 'Default Account',
-                    sub_account: 'Default Sub Account',
+                    acc_name: 'Default Account',
+                    sub_acc_name: 'Default Sub Account',
                   }));
 
                   const { data: safeResult, error: safeError } = await supabase
@@ -1383,8 +1386,9 @@ const CsvUpload: React.FC = () => {
                     const entry = batchEntries[i];
                     const fallbackEntry = {
                       company_name: 'Default Company',
-                      main_account: 'Default Account',
-                      sub_account: 'Default Sub Account',
+                      acc_name: 'Default Account',
+                      sub_acc_name: 'Default Sub Account',
+                      book_id: entry.book_id || null,
                       c_date:
                         entry.c_date ||
                         new Date().toISOString().slice(0, 19).replace('T', ' '),
@@ -1471,7 +1475,8 @@ const CsvUpload: React.FC = () => {
                 errorCount,
                 parsedDates,
                 fallbackDates,
-                user
+                user,
+                currentBook?.id
               );
             } else {
               errorCount += batch.length;

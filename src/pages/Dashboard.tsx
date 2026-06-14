@@ -15,6 +15,13 @@ import { useDashboardStats, useCompanyBalances, useDropdownData, useInvalidateDa
 import ModeLabel from '../components/UI/ModeLabel';
 import toast from 'react-hot-toast';
 import {
+  isSoundEnabled,
+  setSoundEnabled,
+  getSoundVolume,
+  setSoundVolume,
+  playReminderSound,
+} from '../utils/reminderSound';
+import {
   TrendingUp,
   TrendingDown,
   DollarSign,
@@ -115,6 +122,64 @@ const Dashboard: React.FC = () => {
   const [completionReminder, setCompletionReminder] = useState<Reminder | null>(null);
   const [completionNotes, setCompletionNotes] = useState('');
   const [isCompleting, setIsCompleting] = useState(false);
+
+  // Sound settings state & sync
+  const [soundEnabled, setSoundEnabledState] = useState(isSoundEnabled());
+  const [soundVolume, setSoundVolumeState] = useState(getSoundVolume());
+  const playedReminderIdsRef = React.useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const handleSoundChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.enabled === 'boolean') {
+        setSoundEnabledState(detail.enabled);
+      }
+    };
+    const handleVolumeChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.volume === 'string') {
+        setSoundVolumeState(detail.volume as 'soft' | 'normal' | 'loud');
+      }
+    };
+    window.addEventListener('reminder-sound-changed', handleSoundChanged);
+    window.addEventListener('reminder-sound-volume-changed', handleVolumeChanged);
+    return () => {
+      window.removeEventListener('reminder-sound-changed', handleSoundChanged);
+      window.removeEventListener('reminder-sound-volume-changed', handleVolumeChanged);
+    };
+  }, []);
+
+  const handleToggleSound = () => {
+    const nextVal = !soundEnabled;
+    setSoundEnabledState(nextVal);
+    setSoundEnabled(nextVal);
+  };
+
+  const handleVolumeChange = (vol: 'soft' | 'normal' | 'loud') => {
+    setSoundVolumeState(vol);
+    setSoundVolume(vol);
+    // Play a preview sound when changing volume
+    setTimeout(() => {
+      playReminderSound();
+    }, 50);
+  };
+
+  // Trigger sound when active reminders load or update
+  useEffect(() => {
+    if (activeReminders.length === 0) return;
+    
+    let playSound = false;
+    activeReminders.forEach((r) => {
+      if (!playedReminderIdsRef.current.has(r.id)) {
+        playedReminderIdsRef.current.add(r.id);
+        playSound = true;
+      }
+    });
+
+    if (playSound) {
+      playReminderSound();
+    }
+  }, [activeReminders]);
 
   // React Query hooks for data fetching
   const { data: stats, isLoading: statsLoading, isFetching: statsFetching } = useDashboardStats(selectedDate);
@@ -382,7 +447,8 @@ const Dashboard: React.FC = () => {
             completion_notes: null,
             completed_at: null,
             snoozed_until: null,
-            deleted_at: null
+            deleted_at: null,
+            book_id: completionReminder.book_id
           };
 
           const replicated = await supabaseDB.createReminder(nextReminder);
@@ -1571,17 +1637,67 @@ const Dashboard: React.FC = () => {
         
         <div className="space-y-6 lg:sticky lg:top-4">
           <Card title="Reminders Calendar" subtitle="Monthly view of scheduled reminders">
-            <div className="flex justify-center">
-              <RemindersCalendar
-                reminders={reminders}
-                isMini={true}
-                onDateSelect={(dateStr) => {
-                  setSelectedCalendarDate(dateStr);
-                  const dateReminders = reminders.filter(r => r.event_date === dateStr && !r.deleted_at);
-                  setSelectedDateReminders(dateReminders);
-                  setShowCalendarModal(true);
-                }}
-              />
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-center">
+                <RemindersCalendar
+                  reminders={reminders}
+                  isMini={true}
+                  onDateSelect={(dateStr) => {
+                    setSelectedCalendarDate(dateStr);
+                    const dateReminders = reminders.filter(r => r.event_date === dateStr && !r.deleted_at);
+                    setSelectedDateReminders(dateReminders);
+                    setShowCalendarModal(true);
+                  }}
+                />
+              </div>
+
+              {/* Reminder Sound Controls */}
+              <div className="border-t border-gray-150 pt-4 flex flex-col gap-3 font-outfit" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                    {soundEnabled ? (
+                      <>
+                        <span className="text-sm">🔔</span> Reminder Sound: ON
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-sm">🔕</span> Reminder Sound: OFF
+                      </>
+                    )}
+                  </span>
+                  <button
+                    onClick={handleToggleSound}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold border transition-all shadow-sm ${
+                      soundEnabled
+                        ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                        : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                    }`}
+                  >
+                    {soundEnabled ? 'Turn OFF' : 'Turn ON'}
+                  </button>
+                </div>
+                
+                {soundEnabled && (
+                  <div className="flex items-center justify-between text-xs bg-gray-50 p-2 rounded-lg border border-gray-200">
+                    <span className="text-gray-500 font-medium text-[11px]">Chime Volume:</span>
+                    <div className="flex gap-1">
+                      {(['soft', 'normal', 'loud'] as const).map((vol) => (
+                        <button
+                          key={vol}
+                          onClick={() => handleVolumeChange(vol)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
+                            soundVolume === vol
+                              ? 'bg-blue-600 text-white shadow-sm scale-105'
+                              : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                          }`}
+                        >
+                          {vol}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </Card>
         </div>

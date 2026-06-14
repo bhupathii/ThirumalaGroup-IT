@@ -14,6 +14,7 @@ export interface CreateReminderParams {
   mode: 'regular' | 'itr';
   category?: 'GENERAL' | 'VEHICLE' | 'LOAN' | 'STAFF' | 'DOCUMENT' | 'TAX' | 'MEETING' | 'FOLLOWUP';
   is_system_generated?: boolean;
+  book_id?: string | null;
 }
 
 /**
@@ -143,7 +144,8 @@ export async function createSystemReminder(params: CreateReminderParams, created
     completion_notes: null,
     completed_at: null,
     snoozed_until: null,
-    deleted_at: null
+    deleted_at: null,
+    book_id: params.book_id || null
   };
 
   return await supabaseDB.createReminder(reminderData);

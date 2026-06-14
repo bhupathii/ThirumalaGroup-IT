@@ -247,7 +247,8 @@ const Reminders: React.FC = () => {
       completion_notes: null,
       completed_at: null,
       snoozed_until: null,
-      deleted_at: null
+      deleted_at: null,
+      book_id: currentBook?.id || null
     };
 
     const result = await supabaseDB.createReminder(payload);
@@ -385,7 +386,8 @@ const Reminders: React.FC = () => {
           completion_notes: null,
           completed_at: null,
           snoozed_until: null,
-          deleted_at: null
+          deleted_at: null,
+          book_id: showCompleteModal.book_id
         };
 
         const replicated = await supabaseDB.createReminder(nextReminder);
@@ -751,14 +753,13 @@ const Reminders: React.FC = () => {
                                 <>
                                   {r.status === 'pending' && (
                                     <>
-                                      <Button
-                                        size="sm"
+                                      <button
                                         onClick={() => setShowCompleteModal(r)}
                                         title="Mark Completed"
-                                        className="px-2 text-green-700 bg-green-50 border-green-300 hover:bg-green-100"
+                                        className="inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed px-2 py-1.5 text-sm text-green-700 bg-green-50 border border-green-300 hover:bg-green-100 focus:ring-green-500"
                                       >
                                         <CheckCircle className="w-4 h-4" />
-                                      </Button>
+                                      </button>
                                       {/* Snooze Dropdown */}
                                       <div className="relative group">
                                         <Button

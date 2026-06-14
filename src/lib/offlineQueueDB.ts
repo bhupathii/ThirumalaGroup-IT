@@ -16,15 +16,26 @@ export interface QueuedOperation {
   error_message?: string;
 }
 
+export interface OfflineMasterData {
+  id: string; // primary key (e.g., "companies_regular")
+  table_name: string;
+  mode: 'regular' | 'itr';
+  records: any[];
+  last_synced_at: string;
+}
+
 class OfflineQueueDatabase extends Dexie {
   queued_operations!: Table<QueuedOperation, string>;
+  offline_master_data!: Table<OfflineMasterData, string>;
 
   constructor() {
     super('OfflineQueueDatabase');
-    this.version(2).stores({
-      queued_operations: 'offline_uuid, mode, schema, book_id, user_id, status, created_at, synced_at'
+    this.version(3).stores({
+      queued_operations: 'offline_uuid, mode, schema, book_id, user_id, status, created_at, synced_at',
+      offline_master_data: 'id, table_name, mode'
     });
   }
 }
 
 export const db = new OfflineQueueDatabase();
+

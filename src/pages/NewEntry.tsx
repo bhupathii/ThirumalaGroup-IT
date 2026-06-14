@@ -14,6 +14,8 @@ import { useCreateCashBookEntry, useBulkCashBookOperations } from '../hooks/useC
 import ModeLabel from '../components/UI/ModeLabel';
 import { useBook } from '../contexts/BookContext';
 import CustomCalendar from '../components/UI/CustomCalendar';
+import { useOffline } from '../contexts/OfflineContext';
+import { fetchAndCacheMasterData } from '../lib/offlineMasterData';
 import { useDropdownData, useRecentEntriesByDate } from '../hooks/useDashboardData';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/queryClient';
@@ -31,6 +33,9 @@ import {
   Database,
   Copy,
   ExternalLink,
+  Download,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface NewEntryForm {
@@ -56,11 +61,28 @@ const NewEntry: React.FC = () => {
   const { user } = useAuth();
   const { mode: tableMode } = useTableMode();
   const { currentBook } = useBook();
+  const { isOnline } = useOffline();
+  const [isCacheSyncing, setIsCacheSyncing] = useState(false);
   const navigate = useNavigate();
   const formRef = useRef<HTMLFormElement>(null);
 
   // Enable arrow key navigation only in non-finance modes (Regular/ITR)
   useFormArrowNavigation(formRef, tableMode !== 'finance');
+
+  const handleManualCacheRefresh = async () => {
+    setIsCacheSyncing(true);
+    try {
+      await fetchAndCacheMasterData(tableMode === 'itr' ? 'itr' : 'regular');
+      toast.success('Offline cache updated successfully!');
+      queryClient.invalidateQueries({ queryKey: queryKeys.dropdowns.companies() });
+      await loadUsersData();
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to refresh offline cache');
+    } finally {
+      setIsCacheSyncing(false);
+    }
+  };
 
   const [vehicleStats, setVehicleStats] = useState<{ expired: number; expiring: number } | null>(null);
   const [bgStats, setBgStats] = useState<{ expired: number; expiring: number } | null>(null);
@@ -199,6 +221,7 @@ const NewEntry: React.FC = () => {
   const { data: recentEntries, isLoading: recentLoading } = useRecentEntriesByDate(entry.date);
 
   const [dualEntryEnabled, setDualEntryEnabled] = useState(false);
+  const [showAllRecent, setShowAllRecent] = useState(false);
   const [mainDateInput, setMainDateInput] = useState('');
   const [dualDateInput, setDualDateInput] = useState('');
   const [showMainCalendar, setShowMainCalendar] = useState(false);
@@ -1604,25 +1627,8 @@ const NewEntry: React.FC = () => {
                   )
                 ),
                 users: user?.username || 'admin',
+                book_id: currentBook?.id || undefined,
                 sale_qty: sanitizeNumber(
-                  getFieldValue(
-                    row,
-                    [
-                      'Purchase Qty',
-                      'Purchase Quantity',
-                      'Quantity Purchased',
-                      'PurchaseQty',
-                      'PurchaseQuantity',
-                      'QuantityPurchased',
-                      'Buy Qty',
-                      'BuyQty',
-                      'Buy Quantity',
-                      'BuyQuantity',
-                    ],
-                    0
-                  )
-                ),
-                purchase_qty: sanitizeNumber(
                   getFieldValue(
                     row,
                     [
@@ -1638,6 +1644,24 @@ const NewEntry: React.FC = () => {
                       'SalesQuantity',
                       'Qty Sold',
                       'QtySold',
+                    ],
+                    0
+                  )
+                ),
+                purchase_qty: sanitizeNumber(
+                  getFieldValue(
+                    row,
+                    [
+                      'Purchase Qty',
+                      'Purchase Quantity',
+                      'Quantity Purchased',
+                      'PurchaseQty',
+                      'PurchaseQuantity',
+                      'QuantityPurchased',
+                      'Buy Qty',
+                      'BuyQty',
+                      'Buy Quantity',
+                      'BuyQuantity',
                     ],
                     0
                   )
@@ -1833,6 +1857,11 @@ const NewEntry: React.FC = () => {
               }`}>
                 {currentBook?.book_code || 'No Book'}
               </span>
+              {!isOnline && (
+                <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1">
+                  📦 Using Offline Cache
+                </span>
+              )}
             </h1>
             <ModeLabel />
           </div>
@@ -1858,6 +1887,18 @@ const NewEntry: React.FC = () => {
               </div>
             </div>
             <div className='flex gap-1'>
+              {isOnline && (
+                <Button
+                  variant='secondary'
+                  onClick={handleManualCacheRefresh}
+                  size='sm'
+                  className='text-xs bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-800 font-bold'
+                  icon={Download}
+                  disabled={isCacheSyncing}
+                >
+                  {isCacheSyncing ? 'Caching...' : 'Cache Offline Data'}
+                </Button>
+              )}
               <Button
                 variant='secondary'
                 onClick={loadUsersData}
@@ -1994,7 +2035,7 @@ const NewEntry: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className='divide-y divide-gray-100'>
-                        {Array.isArray(recentEntries) && recentEntries.map((entry: any, index: number) => (
+                        {Array.isArray(recentEntries) && (showAllRecent ? recentEntries : recentEntries.slice(0, 4)).map((entry: any, index: number) => (
                           <tr
                             key={entry.id}
                             className={`hover:bg-gray-50 transition-colors h-[38px] md:h-[40px] ${
@@ -2046,6 +2087,25 @@ const NewEntry: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
+                  {Array.isArray(recentEntries) && recentEntries.length > 4 && (
+                    <div className='px-4 py-2 border-t border-gray-200 bg-gray-50 flex justify-center'>
+                      <button
+                        type='button'
+                        onClick={() => setShowAllRecent(!showAllRecent)}
+                        className='text-xs font-bold text-blue-600 hover:text-blue-800 focus:outline-none flex items-center gap-1 transition-all'
+                      >
+                        {showAllRecent ? (
+                          <>
+                            Show Less <ChevronUp className="w-3.5 h-3.5" />
+                          </>
+                        ) : (
+                          <>
+                            Show All ({recentEntries.length} entries) <ChevronDown className="w-3.5 h-3.5" />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </Card>

@@ -40,6 +40,15 @@ const ApproveRecords: React.FC = () => {
   const { mode: tableMode } = useTableMode();
   const { currentBook } = useBook();
 
+  const isApprovedStatus = (val: any): boolean => {
+    if (val === true) return true;
+    if (typeof val === 'string') {
+      const norm = val.toLowerCase().trim();
+      return norm === 'true' || norm === 'approved';
+    }
+    return false;
+  };
+
   const [filters, setFilters] = useState<ApprovalFilters>({
     date: format(new Date(), 'yyyy-MM-dd'),
     company: '',
@@ -243,7 +252,11 @@ const ApproveRecords: React.FC = () => {
         throw pendingError;
       }
 
-      const activePending = (pendingData || []).filter((e: any) => e.approved !== 'rejected');
+      // Merge offline operations into the pending list first
+      const mergedPending = await supabaseDB.mergeOfflineOperations('cash_book', pendingData || []);
+
+      // Filter out truly approved and rejected records
+      const activePending = mergedPending.filter((e: any) => !isApprovedStatus(e.approved) && e.approved !== 'rejected');
       setAllPendingEntries(activePending);
 
       let approvedData: any[] = [];
@@ -253,13 +266,26 @@ const ApproveRecords: React.FC = () => {
           .from(getTableName('cash_book'))
           .select('*')
           .eq('c_date', filters.date)
-          .in('approved', [true, 'true']);
+          .in('approved', [true, 'true', 'approved', 'Approved', 'APPROVED']);
         
         if (approvedError) {
           console.error('[ApproveRecords] Error loading approved entries:', approvedError);
           throw approvedError;
         }
         approvedData = approvedRes || [];
+        approvedData = await supabaseDB.mergeOfflineOperations('cash_book', approvedData);
+
+        // Scan the merged pending list for entries that were approved offline for this date and add them
+        const offlineApprovedForDate = mergedPending.filter((e: any) => e.c_date === filters.date && isApprovedStatus(e.approved));
+        
+        // Combine them avoiding duplicates
+        const approvedIds = new Set(approvedData.map(e => e.id));
+        offlineApprovedForDate.forEach((e: any) => {
+          if (!approvedIds.has(e.id)) {
+            approvedData.push(e);
+            approvedIds.add(e.id);
+          }
+        });
       }
       setApprovedEntries(approvedData);
 
@@ -267,6 +293,26 @@ const ApproveRecords: React.FC = () => {
       let deleted = await supabaseDB.getDeletedCashBook();
       setDeletedEntries(deleted || []);
     } catch (error) {
+      if (!navigator.onLine) {
+        console.log('[ApproveRecords] App is offline, loading entries from local queue...');
+        try {
+          const mergedPending = await supabaseDB.mergeOfflineOperations('cash_book', []);
+          const activePending = mergedPending.filter((e: any) => !isApprovedStatus(e.approved) && e.approved !== 'rejected');
+          setAllPendingEntries(activePending);
+
+          const approvedForDate = mergedPending.filter((e: any) => e.c_date === filters.date && isApprovedStatus(e.approved));
+          setApprovedEntries(approvedForDate);
+
+          const deleted = await supabaseDB.getDeletedCashBook();
+          setDeletedEntries(deleted || []);
+          
+          toast.success('Offline mode: Loaded local changes');
+          return; // Prevent standard error message
+        } catch (offlineErr) {
+          console.error('[ApproveRecords] Error loading offline data:', offlineErr);
+        }
+      }
+
       setFetchError('Failed to load entries from the database.');
       console.error('[ApproveRecords] Error loading entries:', error);
       toast.error('Failed to load entries');
@@ -304,6 +350,20 @@ const ApproveRecords: React.FC = () => {
   useEffect(() => {
     setDisplayDate(convertToDisplayFormat(filters.date) || format(new Date(), 'dd/MM/yyyy'));
   }, [filters.date]);
+
+  // Clamp currentPage
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [filteredEntries.length, totalPages, currentPage]);
+
+  // Clamp approvedPage
+  useEffect(() => {
+    if (approvedTotalPages > 0 && approvedPage > approvedTotalPages) {
+      setApprovedPage(approvedTotalPages);
+    }
+  }, [filteredApprovedEntries.length, approvedTotalPages, approvedPage]);
 
   const applyFilters = () => {
     // 1. Filter pending entries by date and dropdown filters
@@ -362,14 +422,12 @@ const ApproveRecords: React.FC = () => {
     }
     
     const pendingDeleted = del.filter(d => {
-      return d.approved !== true && 
-        d.approved !== 'true' && 
-        d.approved !== 'rejected';
+      return !isApprovedStatus(d.approved) && d.approved !== 'rejected';
     });
     setFilteredDeletedEntries(pendingDeleted);
 
     const totalDeleted = del.length;
-    const approvedDeleted = del.filter(d => d.approved === true || d.approved === 'true').length;
+    const approvedDeleted = del.filter(d => isApprovedStatus(d.approved)).length;
     const rejectedDeleted = del.filter(d => d.approved === 'rejected').length;
     const pendingDeletedCount = totalDeleted - approvedDeleted - rejectedDeleted;
     setDeletedSummary({ totalRecords: totalDeleted, approvedDeleted, rejectedDeleted, pendingDeleted: pendingDeletedCount });
@@ -419,15 +477,11 @@ const ApproveRecords: React.FC = () => {
       });
     }
     
-    const approvedDeleted = deletedFiltered.filter(d => d.approved === true || d.approved === 'true').length;
+    const approvedDeleted = deletedFiltered.filter(d => isApprovedStatus(d.approved)).length;
     const rejectedDeleted = deletedFiltered.filter(d => d.approved === 'rejected').length;
     const totalDeleted = deletedFiltered.length;
     const pendingDeleted = deletedFiltered.filter(d => 
-      (d.approved === null || 
-      d.approved === undefined || 
-      d.approved === '' ||
-      d.approved === 'false' ||
-      d.approved === false) && d.approved !== 'rejected'
+      !isApprovedStatus(d.approved) && d.approved !== 'rejected'
     ).length;
     
     setDeletedSummary({
@@ -780,14 +834,7 @@ const ApproveRecords: React.FC = () => {
     const companyEntries = filteredEntries.filter(
       entry => {
         const matchesCompany = entry.company_name === filters.company;
-        const approved = entry.approved;
-        const isPending = (
-          approved === null ||
-          approved === undefined ||
-          approved === '' ||
-          approved === 'false' ||
-          approved === false
-        ) && approved !== 'true' && approved !== 'rejected';
+        const isPending = !isApprovedStatus(entry.approved) && entry.approved !== 'rejected';
         return matchesCompany && isPending;
       }
     );
@@ -867,14 +914,7 @@ const ApproveRecords: React.FC = () => {
     const staffEntries = filteredEntries.filter(
       entry => {
         const matchesStaff = entry.staff === filters.staff;
-        const approved = entry.approved;
-        const isPending = (
-          approved === null ||
-          approved === undefined ||
-          approved === '' ||
-          approved === 'false' ||
-          approved === false
-        ) && approved !== 'true' && approved !== 'rejected';
+        const isPending = !isApprovedStatus(entry.approved) && entry.approved !== 'rejected';
         return matchesStaff && isPending;
       }
     );
@@ -947,16 +987,7 @@ const ApproveRecords: React.FC = () => {
     }
     // Get all pending entries (not approved and not rejected)
     const pendingEntries = filteredEntries.filter(
-      entry => {
-        const approved = entry.approved;
-        return (
-          approved === null ||
-          approved === undefined ||
-          approved === '' ||
-          approved === 'false' ||
-          approved === false
-        ) && approved !== 'true' && approved !== 'rejected';
-      }
+      entry => !isApprovedStatus(entry.approved) && entry.approved !== 'rejected'
     );
 
     if (pendingEntries.length === 0) {
@@ -1018,16 +1049,7 @@ const ApproveRecords: React.FC = () => {
   const approveAllWithConfirmation = async () => {
     // Get all pending entries (not approved and not rejected)
     const pendingEntries = filteredEntries.filter(
-      entry => {
-        const approved = entry.approved;
-        return (
-          approved === null ||
-          approved === undefined ||
-          approved === '' ||
-          approved === 'false' ||
-          approved === false
-        ) && approved !== 'true' && approved !== 'rejected';
-      }
+      entry => !isApprovedStatus(entry.approved) && entry.approved !== 'rejected'
     );
 
     if (pendingEntries.length === 0) {
@@ -1798,6 +1820,9 @@ const ApproveRecords: React.FC = () => {
                     Entry Date & Time
                   </th>
                   <th className='px-3 py-2 text-left font-medium text-gray-700'>
+                    Status
+                  </th>
+                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
                     Actions
                   </th>
                 </tr>
@@ -1805,7 +1830,7 @@ const ApproveRecords: React.FC = () => {
               <tbody>
                 {getCurrentPageEntries().length === 0 ? (
                   <tr>
-                    <td colSpan={13} className='text-center py-8 text-gray-500'>
+                    <td colSpan={14} className='text-center py-8 text-gray-500'>
                       No pending records found matching the selected filters.
                     </td>
                   </tr>
@@ -1813,10 +1838,10 @@ const ApproveRecords: React.FC = () => {
                   getCurrentPageEntries().map((entry, index) => (
                     <tr
                       key={entry.id}
-                      className={`border-b hover:bg-gray-50 transition-colors ${
-                        entry.approved !== true && entry.approved !== 'true' && entry.approved !== 'rejected'
-                          ? 'bg-orange-50' // Orange background for pending records
-                          : index % 2 === 0 ? 'bg-white' : 'bg-gray-25'
+                      className={`border-b transition-colors cursor-pointer ${
+                        entry.edited === true || entry.edited === 'true'
+                          ? 'bg-[#FDE7F3] hover:bg-[#FBCFE8]'
+                          : 'bg-orange-50 hover:bg-orange-100'
                       }`}
                       onClick={e => {
                         if (
@@ -1829,6 +1854,13 @@ const ApproveRecords: React.FC = () => {
                         }
                         handleSelectEntry(entry.id);
                       }}
+                      onDoubleClick={() => {
+                        setViewEntry(entry);
+                        setViewDraft({ ...entry });
+                        setViewEditing(false);
+                        setViewOpen(true);
+                      }}
+                      title="Double click to view details"
                     >
                       <td className='px-3 py-2'>
                         <input
@@ -1841,7 +1873,7 @@ const ApproveRecords: React.FC = () => {
                           className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
                         />
                       </td>
-                      <td className='px-3 py-2 font-medium'>{index + 1}</td>
+                      <td className='px-3 py-2 font-medium'>{index + 1 + (currentPage - 1) * recordsPerPage}</td>
                       <td className='px-3 py-2'>
                         {format(new Date(entry.c_date), 'dd/MM/yyyy')}
                       </td>
@@ -1872,16 +1904,43 @@ const ApproveRecords: React.FC = () => {
                         {`${format(new Date(entry.c_date), 'dd/MM/yyyy')} ${format(new Date(entry.entry_time), 'hh:mm:ss a')}`}
                       </td>
                       <td className='px-3 py-2'>
-                        <Button
-                          variant='secondary'
-                          onClick={() => {
-                            handleDirectApprove(entry.id);
-                          }}
-                          disabled={entry.approved === true}
-                          className='text-xs px-2 py-1'
-                        >
-                          Approve
-                        </Button>
+                        {entry.edited === true || entry.edited === 'true' ? (
+                          <span className='inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-pink-100 text-pink-800 border border-pink-200'>
+                            ✏️ Edited
+                          </span>
+                        ) : (
+                          <span className='inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200'>
+                            📝 New
+                          </span>
+                        )}
+                      </td>
+                      <td className='px-3 py-2'>
+                        <div className='flex gap-1.5'>
+                          <Button
+                            variant='secondary'
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewEntry(entry);
+                              setViewDraft({ ...entry });
+                              setViewEditing(false);
+                              setViewOpen(true);
+                            }}
+                            className='text-xs px-2 py-1'
+                          >
+                            View
+                          </Button>
+                          <Button
+                            variant='secondary'
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDirectApprove(entry.id);
+                            }}
+                            disabled={entry.approved === true}
+                            className='text-xs px-2 py-1'
+                          >
+                            Approve
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1915,7 +1974,7 @@ const ApproveRecords: React.FC = () => {
                 <p className='text-sm text-gray-700'>
                   Showing{' '}
                   <span className='font-semibold'>
-                    {currentPage * recordsPerPage - recordsPerPage + 1}
+                    {filteredEntries.length === 0 ? 0 : (currentPage * recordsPerPage - recordsPerPage + 1)}
                   </span>{' '}
                   to{' '}
                   <span className='font-semibold'>
@@ -2007,6 +2066,9 @@ const ApproveRecords: React.FC = () => {
                     Entry Date & Time
                   </th>
                   <th className='px-3 py-2 text-left font-medium text-gray-700'>
+                    Status
+                  </th>
+                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
                     Actions
                   </th>
                 </tr>
@@ -2014,7 +2076,7 @@ const ApproveRecords: React.FC = () => {
               <tbody>
                 {getApprovedPageEntries().length === 0 ? (
                   <tr>
-                    <td colSpan={12} className='text-center py-8 text-gray-500'>
+                    <td colSpan={13} className='text-center py-8 text-gray-500'>
                       No approved records found matching the selected filters.
                     </td>
                   </tr>
@@ -2022,11 +2084,18 @@ const ApproveRecords: React.FC = () => {
                   getApprovedPageEntries().map((entry, index) => (
                     <tr
                       key={entry.id}
-                      className={`border-b hover:bg-gray-50 transition-colors ${
-                        index % 2 === 0 ? 'bg-white' : 'bg-gray-25'
+                      className={`border-b transition-colors cursor-pointer ${
+                        index % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-25 hover:bg-gray-50'
                       }`}
+                      onDoubleClick={() => {
+                        setViewEntry(entry);
+                        setViewDraft({ ...entry });
+                        setViewEditing(false);
+                        setViewOpen(true);
+                      }}
+                      title="Double click to view details"
                     >
-                      <td className='px-3 py-2 font-medium'>{index + 1}</td>
+                      <td className='px-3 py-2 font-medium'>{index + 1 + (approvedPage - 1) * recordsPerPage}</td>
                       <td className='px-3 py-2'>
                         {format(new Date(entry.c_date), 'dd/MM/yyyy')}
                       </td>
@@ -2057,15 +2126,36 @@ const ApproveRecords: React.FC = () => {
                         {`${format(new Date(entry.c_date), 'dd/MM/yyyy')} ${format(new Date(entry.entry_time), 'hh:mm:ss a')}`}
                       </td>
                       <td className='px-3 py-2'>
-                        <Button
-                          variant='secondary'
-                          onClick={() => {
-                            handleCancelDirectApprove(entry.id);
-                          }}
-                          className='text-xs px-2 py-1'
-                        >
-                          Cancel Approve
-                        </Button>
+                        <span className='inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 border border-green-200'>
+                          ✅ Approved
+                        </span>
+                      </td>
+                      <td className='px-3 py-2'>
+                        <div className='flex gap-1.5'>
+                          <Button
+                            variant='secondary'
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewEntry(entry);
+                              setViewDraft({ ...entry });
+                              setViewEditing(false);
+                              setViewOpen(true);
+                            }}
+                            className='text-xs px-2 py-1'
+                          >
+                            View
+                          </Button>
+                          <Button
+                            variant='secondary'
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCancelDirectApprove(entry.id);
+                            }}
+                            className='text-xs px-2 py-1'
+                          >
+                            Cancel Approve
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -2099,7 +2189,7 @@ const ApproveRecords: React.FC = () => {
                 <p className='text-sm text-gray-700'>
                   Showing{' '}
                   <span className='font-semibold'>
-                    {approvedPage * recordsPerPage - recordsPerPage + 1}
+                    {filteredApprovedEntries.length === 0 ? 0 : (approvedPage * recordsPerPage - recordsPerPage + 1)}
                   </span>{' '}
                   to{' '}
                   <span className='font-semibold'>
@@ -2228,8 +2318,10 @@ const ApproveRecords: React.FC = () => {
               </thead>
               <tbody>
                 {filteredDeletedEntries.map((d, index) => (
-                  <tr key={d.id} className={`border-b hover:bg-gray-50 transition-colors ${
-                    d.approved !== true && d.approved !== 'true' && d.approved !== 'rejected' ? 'bg-orange-50' : ''
+                  <tr key={d.id} className={`border-b transition-colors ${
+                    !isApprovedStatus(d.approved) && d.approved !== 'rejected' 
+                      ? 'bg-red-50 hover:bg-red-100' 
+                      : 'hover:bg-gray-50'
                   }`}>
                     <td className='w-12 px-1 py-1 font-medium text-xs'>{index + 1}</td>
                     <td className='w-16 px-1 py-1 text-xs'>
@@ -2263,17 +2355,17 @@ const ApproveRecords: React.FC = () => {
                       {format(new Date(d.deleted_at), 'hh:mm:ss a')}
                     </td>
                     <td className='w-20 px-1 py-1 text-center'>
-                      {d.approved === true || d.approved === 'true' ? (
-                        <span className='inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800'>
-                          Approved
+                      {isApprovedStatus(d.approved) ? (
+                        <span className='inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 border border-green-200'>
+                          ✅ Approved
                         </span>
                       ) : d.approved === 'rejected' ? (
-                        <span className='inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800'>
+                        <span className='inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200'>
                           Rejected
                         </span>
                       ) : (
-                        <span className='inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800'>
-                          Pending
+                        <span className='inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200 animate-pulse'>
+                          🗑️ Delete Request
                         </span>
                       )}
                     </td>
@@ -2313,7 +2405,14 @@ const ApproveRecords: React.FC = () => {
         <div className='fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4'>
           <div className='bg-white rounded-lg w-full max-w-2xl p-4'>
             <div className='flex items-center justify-between mb-3'>
-              <h3 className='text-lg font-semibold'>Entry Details</h3>
+              <div className='flex items-center gap-2'>
+                <h3 className='text-lg font-semibold'>Entry Details</h3>
+                {(viewEntry.edited === true || viewEntry.edited === 'true') && (
+                  <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-pink-100 text-pink-800 border border-pink-200 animate-pulse'>
+                    ✏️ Edited Record
+                  </span>
+                )}
+              </div>
               <button onClick={() => setViewOpen(false)} className='text-gray-500'>✕</button>
             </div>
             <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>

@@ -73,6 +73,32 @@ export const BookProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       setLoading(true);
+
+      // Offline fallback: load selected book from localStorage if offline to prevent clearing selection
+      if (!navigator.onLine) {
+        const storageKey = activeBookMode === 'itr' ? 'itrSelectedBook' : 'regularSelectedBook';
+        const storedBookId = localStorage.getItem(storageKey);
+        if (storedBookId) {
+          const dummyBook: Book = {
+            id: storedBookId,
+            book_code: 'OFFLINE',
+            name: activeBookMode === 'itr' ? 'ITR Mode' : 'Regular Mode',
+            mode: activeBookMode,
+            is_default: false,
+            is_active: true,
+            is_locked: false,
+            is_archived: false,
+            display_order: 0
+          };
+          setCurrentBook(dummyBook);
+          setBooks([dummyBook]);
+          supabaseDB.setBookId(storedBookId);
+          supabaseDB.setBookLocked(false);
+          setLoading(false);
+          return;
+        }
+      }
+
       // Query books filtering out deleted ones.
       // Filter by mode ('regular' or 'itr'). 
       // Non-admins shouldn't see archived books.
@@ -140,6 +166,16 @@ export const BookProvider: React.FC<{ children: React.ReactNode }> = ({ children
     supabaseDB.setBookLocked(false);
 
     refreshBooks();
+  }, [refreshBooks]);
+
+  // Refresh books list when network status changes to online
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('📶 Network back online, refreshing books list...');
+      refreshBooks();
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
   }, [refreshBooks]);
 
   const selectBook = async (bookId: string) => {

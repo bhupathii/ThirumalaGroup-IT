@@ -17,6 +17,7 @@ const getTableBookForQuery = (): string => {
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      networkMode: 'always',
       // Keep data fresh longer to avoid refetch on back/forward
       staleTime: 15 * 60 * 1000, // 15 minutes
       // Keep cache around longer between navigations
@@ -33,6 +34,7 @@ export const queryClient = new QueryClient({
       structuralSharing: true,
     },
     mutations: {
+      networkMode: 'always',
       // Retry mutations once
       retry: 1,
     },

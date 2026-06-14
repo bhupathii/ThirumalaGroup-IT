@@ -14,6 +14,10 @@ import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
 import CustomCalendar from '../components/UI/CustomCalendar';
 import { format } from 'date-fns';
+import { useOffline } from '../contexts/OfflineContext';
+import { fetchAndCacheMasterData, getCachedMasterData } from '../lib/offlineMasterData';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryClient';
 import {
   Calendar,
   Edit,
@@ -23,6 +27,7 @@ import {
   Eye,
   Trash2,
   AlertCircle,
+  Download,
 } from 'lucide-react';
 
 interface EditHistory {
@@ -139,11 +144,43 @@ const EditEntry: React.FC = () => {
   const canDelete = isAdmin || !!(user?.features?.includes('delete_entry'));
   const { mode: tableMode } = useTableMode();
   const { currentBook } = useBook();
+  const { isOnline } = useOffline();
+  const [isCacheSyncing, setIsCacheSyncing] = useState(false);
+  const queryClient = useQueryClient();
   const formRef = useRef<HTMLFormElement>(null);
+
+  const handleManualCacheRefresh = async () => {
+    setIsCacheSyncing(true);
+    try {
+      await fetchAndCacheMasterData(tableMode === 'itr' ? 'itr' : 'regular');
+      toast.success('Offline cache updated successfully!');
+      queryClient.invalidateQueries({ queryKey: queryKeys.dropdowns.companies() });
+      await loadDropdownData();
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to refresh offline cache');
+    } finally {
+      setIsCacheSyncing(false);
+    }
+  };
   
   const [entries, setEntries] = useState<any[]>([]);
   const [selectedEntry, setSelectedEntry] = useState<any>(null);
   const [editMode, setEditMode] = useState(false);
+  const [editDateInput, setEditDateInput] = useState('');
+
+  useEffect(() => {
+    if (selectedEntry?.c_date) {
+      try {
+        setEditDateInput(format(new Date(selectedEntry.c_date), 'dd/MM/yyyy'));
+      } catch (e) {
+        console.error('Error formatting selected entry date:', e);
+        setEditDateInput('');
+      }
+    } else {
+      setEditDateInput('');
+    }
+  }, [selectedEntry?.id, editMode]);
   
   // Enable arrow key navigation only in non-finance modes (Regular/ITR) when in edit mode
   useFormArrowNavigation(formRef, tableMode !== 'finance' && editMode);
@@ -596,29 +633,43 @@ const EditEntry: React.FC = () => {
       setAllSubAccounts(allSubAccountsData);
 
       // Load payment modes
-      const { data: amountsData, error: amountsError } = await supabase
-        .from(getTableName('cash_book'))
-        .select('payment_mode')
-        .not('payment_mode', 'is', null);
+      if (!navigator.onLine) {
+        console.log('📦 [offlineMasterData] Loading payment modes from IndexedDB cache...');
+        const cachedModes = await getCachedMasterData(tableMode === 'itr' ? 'payment_modes_itr' : 'payment_modes', tableMode === 'itr' ? 'itr' : 'regular');
+        if (cachedModes && cachedModes.length > 0) {
+          setPaymentModeOptions(cachedModes);
+        } else {
+          setPaymentModeOptions([
+            { value: 'Cash', label: 'Cash' },
+            { value: 'Bank Transfer', label: 'Bank' },
+            { value: 'Online', label: 'Double' }
+          ]);
+        }
+      } else {
+        const { data: amountsData, error: amountsError } = await supabase
+          .from(getTableName('cash_book'))
+          .select('payment_mode')
+          .not('payment_mode', 'is', null);
 
-      if (!amountsError && amountsData) {
-        const uniquePaymentModes = [...new Set(
-          amountsData
-            .map(entry => entry.payment_mode)
-            .filter(mode => mode && String(mode).trim() !== '')
-            .map(mode => String(mode).trim())
-        )];
-        
-        const standardPaymentModes = ['Cash', 'Bank Transfer', 'Online'];
-        const allPaymentModes = [...new Set([...standardPaymentModes, ...uniquePaymentModes])];
-        
-        const getPaymentModeLabel = (mode: string): string => {
-          if (mode === 'Online') return 'Double';
-          if (mode === 'Bank Transfer') return 'Bank';
-          return mode;
-        };
-        
-        setPaymentModeOptions(allPaymentModes.map(mode => ({ value: mode, label: getPaymentModeLabel(mode) })));
+        if (!amountsError && amountsData) {
+          const uniquePaymentModes = [...new Set(
+            amountsData
+              .map(entry => entry.payment_mode)
+              .filter(mode => mode && String(mode).trim() !== '')
+              .map(mode => String(mode).trim())
+          )];
+          
+          const standardPaymentModes = ['Cash', 'Bank Transfer', 'Online'];
+          const allPaymentModes = [...new Set([...standardPaymentModes, ...uniquePaymentModes])];
+          
+          const getPaymentModeLabel = (mode: string): string => {
+            if (mode === 'Online') return 'Double';
+            if (mode === 'Bank Transfer') return 'Bank';
+            return mode;
+          };
+          
+          setPaymentModeOptions(allPaymentModes.map(mode => ({ value: mode, label: getPaymentModeLabel(mode) })));
+        }
       }
       
       console.log('✅ All dropdown data loaded successfully');
@@ -1011,10 +1062,35 @@ const EditEntry: React.FC = () => {
       return;
     }
 
+    // Validate manual date input format and validity
+    const datePattern = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+    const match = editDateInput.match(datePattern);
+    if (!match) {
+      toast.error('Please enter a valid date in dd/MM/yyyy format');
+      return;
+    }
+
+    const [, dd, mm, yyyy] = match;
+    const year = parseInt(yyyy);
+    const month = parseInt(mm) - 1;
+    const day = parseInt(dd);
+    const testDate = new Date(year, month, day);
+
+    if (
+      testDate.getFullYear() !== year ||
+      testDate.getMonth() !== month ||
+      testDate.getDate() !== day
+    ) {
+      toast.error('The date entered is invalid (e.g., check days in month or leap years)');
+      return;
+    }
+
+    const isoDateStr = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+
     setLoading(true);
     try {
       // If the entry was approved or rejected, set it to pending on edit
-      const updates = { ...selectedEntry };
+      const updates = { ...selectedEntry, c_date: isoDateStr };
       if (
         selectedEntry.approved === 'true' ||
         selectedEntry.approved === 'false'
@@ -1388,6 +1464,11 @@ const EditEntry: React.FC = () => {
               }`}>
                 {currentBook?.book_code || 'No Book'}
               </span>
+              {!isOnline && (
+                <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2.5 py-0.5 rounded-full animate-pulse flex items-center gap-1">
+                  📦 Using Offline Cache
+                </span>
+              )}
             </h1>
             <ModeLabel />
           </div>
@@ -1396,6 +1477,17 @@ const EditEntry: React.FC = () => {
           </p>
         </div>
         <div className='flex items-center gap-3'>
+          {isOnline && (
+            <Button
+              variant='secondary'
+              onClick={handleManualCacheRefresh}
+              className='bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-800 font-bold'
+              icon={Download}
+              disabled={isCacheSyncing}
+            >
+              {isCacheSyncing ? 'Caching...' : 'Cache Offline Data'}
+            </Button>
+          )}
           <Button
             variant='secondary'
             onClick={async () => {
@@ -2136,9 +2228,30 @@ const EditEntry: React.FC = () => {
                         <div className="relative">
                           <input
                             type="text"
-                            value={selectedEntry?.c_date ? format(new Date(selectedEntry.c_date), 'dd/MM/yyyy') : ''}
-                            readOnly
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-bold"
+                            value={editDateInput}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setEditDateInput(v);
+                              const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                              if (m) {
+                                const [, dd, mm, yyyy] = m;
+                                const year = parseInt(yyyy);
+                                const month = parseInt(mm) - 1;
+                                const day = parseInt(dd);
+                                const testDate = new Date(year, month, day);
+                                if (
+                                  testDate.getFullYear() === year &&
+                                  testDate.getMonth() === month &&
+                                  testDate.getDate() === day
+                                ) {
+                                  handleInputChange('c_date', `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`);
+                                }
+                              }
+                            }}
+                            readOnly={!editMode}
+                            className={`w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold ${
+                              !editMode ? 'bg-gray-100 cursor-not-allowed text-gray-500' : 'bg-white text-gray-900'
+                            }`}
                             style={{ fontWeight: 'bold' }}
                             placeholder="dd/MM/yyyy"
                           />
@@ -2157,6 +2270,11 @@ const EditEntry: React.FC = () => {
                             onDateSelect={(date) => {
                               if (editMode) {
                                 handleInputChange('c_date', date);
+                                try {
+                                  setEditDateInput(format(new Date(date), 'dd/MM/yyyy'));
+                                } catch (e) {
+                                  console.error(e);
+                                }
                               } else {
                                 // In view mode, filter entries by selected date
                                 setSelectedDateFilter(date);

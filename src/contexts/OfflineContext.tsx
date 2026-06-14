@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db } from '../lib/offlineQueueDB';
 import { supabaseDB } from '../lib/supabaseDatabase';
+import { syncAllMasterData } from '../lib/offlineMasterData';
 
 interface OfflineContextType {
   isOnline: boolean;
@@ -104,6 +105,9 @@ export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } else {
         updateStats();
       }
+
+      // Sync master data cache
+      syncAllMasterData().catch(err => console.error('Error syncing master data cache:', err));
     };
 
     const handleOffline = () => {
@@ -121,6 +125,9 @@ export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Initial operations
     updateStats();
     cleanUpRetentionHistory();
+    if (navigator.onLine) {
+      syncAllMasterData().catch(err => console.error('Error syncing master data cache:', err));
+    }
 
     const handleQueueChange = () => {
       updateStats();

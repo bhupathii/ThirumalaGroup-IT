@@ -2,6 +2,7 @@ import { supabase as rawSupabase, resolveSchemaAndTable } from './supabase';
 import { FinancialCalculator } from './financialCalculations';
 import { getTableName, getTableMode } from './tableNames';
 import { db, QueuedOperation } from './offlineQueueDB';
+import { getCachedMasterData } from './offlineMasterData';
 import { toast } from 'react-hot-toast';
 
 // Types
@@ -148,6 +149,7 @@ export interface Reminder {
   deleted_at: string | null;
   assigned_username?: string | null;
   creator_username?: string | null;
+  book_id: string | null;
 }
 
 const isScopedTable = (table: string): boolean => {
@@ -334,13 +336,17 @@ const createBuilderProxy = (builder: any, table: string): any => {
   });
 };
 
-export const supabase = {
-  ...rawSupabase,
-  from(table: string) {
-    const builder = rawSupabase.from(table);
-    return createBuilderProxy(builder, table);
+export const supabase = new Proxy(rawSupabase, {
+  get(target, prop, receiver) {
+    if (prop === 'from') {
+      return (table: string) => {
+        const builder = rawSupabase.from(table);
+        return createBuilderProxy(builder, table);
+      };
+    }
+    return Reflect.get(target, prop, receiver);
   }
-};
+}) as typeof rawSupabase;
 
 // Supabase Database Service
 class SupabaseDatabase {
@@ -373,6 +379,19 @@ class SupabaseDatabase {
     this.currentUserId = id;
   }
 
+  getCurrentUserFromStorage() {
+    if (typeof window === 'undefined') return null;
+    try {
+      const savedUser = sessionStorage.getItem('thirumala_user');
+      if (savedUser) {
+        return JSON.parse(savedUser);
+      }
+    } catch (err) {
+      console.error('Error reading user from session storage:', err);
+    }
+    return null;
+  }
+
   async bypassScope<T>(fn: () => Promise<T>): Promise<T> {
     this.bypassBookScope = true;
     try {
@@ -394,11 +413,8 @@ class SupabaseDatabase {
     const book_id = this.currentBookId || '';
     const book_name = this.currentBookName || 'Unknown Book';
     
-    let user_id = this.currentUserId;
-    if (!user_id) {
-      const { data: { session } } = await rawSupabase.auth.getSession();
-      user_id = session?.user?.id || 'unknown';
-    }
+    const storageUser = this.getCurrentUserFromStorage();
+    const user_id = this.currentUserId || storageUser?.id || 'unknown';
 
     let payload = info.payload || {};
     let targetId = '';
@@ -431,8 +447,8 @@ class SupabaseDatabase {
         book_id
       };
       if (info.table === 'cash_book') {
-        const { data: { session } } = await rawSupabase.auth.getSession();
-        payload.deleted_by = (session?.user as any)?.username || session?.user?.email || 'offline_sync';
+        const storageUser = this.getCurrentUserFromStorage();
+        payload.deleted_by = storageUser?.username || 'offline_sync';
       }
     }
 
@@ -526,8 +542,9 @@ class SupabaseDatabase {
 
   async syncOfflineQueue(): Promise<void> {
     console.log('🔄 Offline queue synchronization starting...');
-    const { data: { session }, error: authError } = await rawSupabase.auth.getSession();
-    if (authError || !session) {
+    const storageUser = this.getCurrentUserFromStorage();
+    const isAuthenticated = !!(this.currentUserId || storageUser);
+    if (!isAuthenticated) {
       console.warn('⚠️ Sync deferred: user is not authenticated.');
       return;
     }
@@ -581,7 +598,9 @@ class SupabaseDatabase {
     const originalLocked = this.isBookLocked;
     const originalMode = localStorage.getItem('table_mode');
 
-    this.currentBookId = item.book_id;
+    // Healing logic: if the operation has no book ID, fallback to the current active book ID
+    const resolvedBookId = item.book_id || originalBookId;
+    this.currentBookId = resolvedBookId;
     this.isBookLocked = false;
     localStorage.setItem('table_mode', item.mode);
 
@@ -591,11 +610,19 @@ class SupabaseDatabase {
       const client = rawSupabase.schema(resolvedSchema);
       
       if (item.operation_type === 'INSERT') {
-        const { error } = await client.from(resolvedTable).insert(item.payload);
+        const payload = { ...item.payload };
+        if (!payload.book_id && resolvedBookId) {
+          payload.book_id = resolvedBookId;
+        }
+        const { error } = await client.from(resolvedTable).insert(payload);
         if (error) throw error;
       } else if (item.operation_type === 'UPDATE') {
-        const recordId = item.payload.id || item.payload.offline_uuid;
-        const { error } = await client.from(resolvedTable).update(item.payload).eq('id', recordId);
+        const payload = { ...item.payload };
+        if (!payload.book_id && resolvedBookId) {
+          payload.book_id = resolvedBookId;
+        }
+        const recordId = payload.id || payload.offline_uuid;
+        const { error } = await client.from(resolvedTable).update(payload).eq('id', recordId);
         if (error) throw error;
       } else if (item.operation_type === 'DELETE') {
         if (resolvedTable === 'cash_book') {
@@ -735,10 +762,44 @@ class SupabaseDatabase {
   // Company operations
   async getCompanies(): Promise<Company[]> {
     try {
+      const tableMode = getTableMode();
+      if (!this.isOnline) {
+        const mode = tableMode === 'itr' ? 'itr' : 'regular';
+        const tableName = mode === 'itr' ? 'companies_itr' : 'companies';
+        console.log(`📦 [offlineMasterData] Fetching companies from IndexedDB cache for mode: ${mode}`);
+        const cached = await getCachedMasterData(tableName, mode);
+
+        const pendingInserts = await db.queued_operations
+          .where('status')
+          .equals('pending_sync')
+          .and(op => (op.table === 'companies' || op.table === 'companies_itr') && op.operation_type === 'INSERT')
+          .toArray();
+
+        const pendingCompanies = pendingInserts.map((op: any) => {
+          const payload = op.payload;
+          return {
+            id: payload.id || op.offline_uuid,
+            company_name: payload.company_name,
+            address: payload.address || null,
+            created_at: op.created_at,
+            updated_at: op.created_at
+          } as unknown as Company;
+        });
+
+        const seen = new Set<string>();
+        const combined = [...pendingCompanies, ...cached].filter((c: any) => {
+          const name = c.company_name?.trim();
+          if (!name || seen.has(name)) return false;
+          seen.add(name);
+          return true;
+        });
+        return combined;
+      }
+
       // Use getTableName to switch between companies and companies_itr based on mode
       const tableName = getTableName('companies');
       console.log('🔄 Fetching all companies from', tableName, 'table...');
-      console.log('📊 Current mode:', getTableMode(), '→ Using table:', tableName);
+      console.log('📊 Current mode:', tableMode, '→ Using table:', tableName);
       
       // Load all companies with explicit high limit
       const { data, error } = await supabase
@@ -754,7 +815,7 @@ class SupabaseDatabase {
 
       // Filter out duplicates and empty company names
       const seen = new Set<string>();
-      const uniqueCompanies = (data || []).filter(company => {
+      const uniqueCompanies = (data || []).filter((company: any) => {
         const name = company.company_name?.trim();
         if (!name) return false; // Filter out empty names
         if (seen.has(name)) return false; // Filter out duplicates
@@ -790,7 +851,7 @@ class SupabaseDatabase {
       }
 
       // Get unique company names (in case there are duplicates)
-      const uniqueCompanies = [...new Set(data?.map(c => c.company_name?.trim()).filter(Boolean))];
+      const uniqueCompanies = [...new Set((data || []).map((c: any) => c.company_name?.trim()).filter(Boolean))];
       console.log('📊 Distinct companies count:', uniqueCompanies.length);
       
       return uniqueCompanies.length;
@@ -824,7 +885,7 @@ class SupabaseDatabase {
       }
 
       // Get unique company names
-      const uniqueCompanyNames = [...new Set(cashBookData.map(entry => entry.company_name).filter(Boolean))];
+      const uniqueCompanyNames = [...new Set((cashBookData || []).map((entry: any) => entry.company_name).filter(Boolean))];
       console.log('📊 Found companies with data:', uniqueCompanyNames.length, uniqueCompanyNames);
 
       if (uniqueCompanyNames.length === 0) {
@@ -888,7 +949,7 @@ class SupabaseDatabase {
         return { success: false, deleted: [], error: deleteError.message };
       }
 
-      const deletedNames = deletedCompanies?.map(c => c.company_name) || [];
+      const deletedNames = (deletedCompanies || []).map((c: Company) => c.company_name);
       console.log('✅ Successfully deleted companies:', deletedNames.length);
       console.log('📋 Deleted company names:', deletedNames);
 
@@ -995,6 +1056,12 @@ class SupabaseDatabase {
 
   // Account operations
   async getAccounts(): Promise<Account[]> {
+    if (!this.isOnline) {
+      const tableMode = getTableMode();
+      const mode = tableMode === 'itr' ? 'itr' : 'regular';
+      const tableName = mode === 'itr' ? 'company_main_accounts_itr' : 'company_main_accounts';
+      return await getCachedMasterData(tableName, mode);
+    }
     const { data, error } = await supabase
       .from(getTableName('company_main_accounts'))
       .select('*')
@@ -1009,6 +1076,13 @@ class SupabaseDatabase {
   }
 
   async getAccountsByCompany(companyName: string): Promise<Account[]> {
+    if (!this.isOnline) {
+      const tableMode = getTableMode();
+      const mode = tableMode === 'itr' ? 'itr' : 'regular';
+      const tableName = mode === 'itr' ? 'company_main_accounts_itr' : 'company_main_accounts';
+      const cached = await getCachedMasterData(tableName, mode);
+      return cached.filter((acc: any) => acc.company_name === companyName);
+    }
     const { data, error } = await supabase
       .from(getTableName('company_main_accounts'))
       .select('*')
@@ -1107,6 +1181,12 @@ class SupabaseDatabase {
 
   // Sub Account operations
   async getSubAccounts(): Promise<SubAccount[]> {
+    if (!this.isOnline) {
+      const tableMode = getTableMode();
+      const mode = tableMode === 'itr' ? 'itr' : 'regular';
+      const tableName = mode === 'itr' ? 'company_main_sub_acc_itr' : 'company_main_sub_acc';
+      return await getCachedMasterData(tableName, mode);
+    }
     const { data, error } = await supabase
       .from(getTableName('company_main_sub_acc'))
       .select('*')
@@ -1145,9 +1225,9 @@ class SupabaseDatabase {
       // Normalize and get unique sub account names
       // Trim whitespace, convert to lowercase for case-insensitive comparison
       const normalizedSubAccounts = data
-        .map(item => item.sub_acc?.trim())
+        .map((item: any) => item.sub_acc?.trim())
         .filter(Boolean) // Remove null, undefined, and empty strings
-        .map(acc => acc.toLowerCase()); // Normalize to lowercase for case-insensitive comparison
+        .map((acc: any) => acc.toLowerCase()); // Normalize to lowercase for case-insensitive comparison
 
       // Get unique sub account names using Set
       const uniqueSubAccounts = [...new Set(normalizedSubAccounts)];
@@ -1181,7 +1261,7 @@ class SupabaseDatabase {
       }
 
       // Get unique account names
-      const uniqueAccounts = [...new Set(data?.map(item => item.acc_name).filter(Boolean))];
+      const uniqueAccounts = [...new Set((data || []).map((item: any) => item.acc_name).filter(Boolean))];
       console.log('📊 Distinct main accounts count from company_main_accounts:', uniqueAccounts.length);
       
       return uniqueAccounts.length;
@@ -1325,7 +1405,7 @@ class SupabaseDatabase {
       }
       
       // Clean fields and normalize approved flag to strict boolean
-      const cleanedData = (data || []).map((entry, idx) => {
+      const cleanedData = (data || []).map((entry: any, idx: number) => {
         // CRITICAL: Extract payment_mode from database - handle all edge cases
         let paymentMode = '';
         
@@ -1368,7 +1448,7 @@ class SupabaseDatabase {
           sub_acc_name: entry.sub_acc_name?.replace(/\[DELETED\]\s*/g, '').trim() || '',
           particulars: entry.particulars?.replace(/\[DELETED\]\s*/g, '').trim() || '',
           company_name: entry.company_name?.replace(/\[DELETED\]\s*/g, '').trim() || '',
-          approved: entry.approved === true || entry.approved === 'true',
+          approved: entry.approved === true || (typeof entry.approved === 'string' && ['true', 'approved'].includes(entry.approved.toLowerCase().trim())),
           payment_mode: paymentMode // Always include payment_mode (even if empty string)
         };
       });
@@ -1424,7 +1504,7 @@ class SupabaseDatabase {
       console.log(`✅ Fetched ${resultCount} entries for today`);
       
       // Clean fields and normalize approved flag to strict boolean
-      const cleanedData = (data || []).map(entry => {
+      const cleanedData = (data || []).map((entry: any) => {
         // Preserve payment_mode if it exists, otherwise fallback to credit_mode/debit_mode
         let paymentMode = '';
         
@@ -1453,7 +1533,7 @@ class SupabaseDatabase {
           sub_acc_name: entry.sub_acc_name?.replace(/\[DELETED\]\s*/g, '').trim() || '',
           particulars: entry.particulars?.replace(/\[DELETED\]\s*/g, '').trim() || '',
           company_name: entry.company_name?.replace(/\[DELETED\]\s*/g, '').trim() || '',
-          approved: entry.approved === true || entry.approved === 'true',
+          approved: entry.approved === true || (typeof entry.approved === 'string' && ['true', 'approved'].includes(entry.approved.toLowerCase().trim())),
           payment_mode: paymentMode
         };
       });
@@ -1587,7 +1667,7 @@ class SupabaseDatabase {
       }
 
       console.log(`📊 Filtered entries loaded: ${data?.length || 0} (Total available: ${count || 0})`);
-      console.log('📊 Sample of returned entries:', data?.slice(0, 2).map(e => ({ 
+      console.log('📊 Sample of returned entries:', data?.slice(0, 2).map((e: any) => ({ 
         id: e.id, 
         company: e.company_name, 
         date: e.c_date 
@@ -1643,7 +1723,7 @@ class SupabaseDatabase {
       }
 
       console.log(`📊 Filtered entries loaded: ${data?.length || 0} (Total available: ${count || 0})`);
-      console.log('📊 Sample of returned entries:', data?.slice(0, 2).map(e => ({ 
+      console.log('📊 Sample of returned entries:', data?.slice(0, 2).map((e: any) => ({ 
         id: e.id, 
         company: e.company_name, 
         date: e.c_date 
@@ -1984,7 +2064,7 @@ class SupabaseDatabase {
     }
     
     // Clean fields and normalize approved to strict boolean
-    const cleanedData = (data || []).map((entry, idx) => {
+    const cleanedData = (data || []).map((entry: any, idx: number) => {
       // CRITICAL: Extract payment_mode from database - handle all edge cases
       let paymentMode = '';
       
@@ -2031,7 +2111,7 @@ class SupabaseDatabase {
         sub_acc_name: entry.sub_acc_name?.replace(/\[DELETED\]\s*/g, '').trim() || '',
         particulars: entry.particulars?.replace(/\[DELETED\]\s*/g, '').trim() || '',
         company_name: entry.company_name?.replace(/\[DELETED\]\s*/g, '').trim() || '',
-        approved: entry.approved === true || entry.approved === 'true',
+        approved: entry.approved === true || (typeof entry.approved === 'string' && ['true', 'approved'].includes(entry.approved.toLowerCase().trim())),
         payment_mode: paymentMode // This is the processed payment_mode that should be displayed
       };
     });
@@ -2242,8 +2322,8 @@ class SupabaseDatabase {
 
       // Create audit logs for each updated entry
       if (oldEntries && updatedEntries && editedBy) {
-        const auditLogs = oldEntries.map((oldEntry) => {
-          const updatedEntry = updatedEntries.find(e => e.id === oldEntry.id);
+        const auditLogs = oldEntries.map((oldEntry: any) => {
+          const updatedEntry = updatedEntries.find((e: any) => e.id === oldEntry.id);
           if (!updatedEntry) return null;
           
           return {
@@ -2769,6 +2849,32 @@ class SupabaseDatabase {
   // Distinct staff names from cash_book for free-text staff selection
   async getDistinctStaffNames(): Promise<{ value: string; label: string }[]> {
     try {
+      if (!this.isOnline) {
+        const tableMode = getTableMode();
+        const mode = tableMode === 'itr' ? 'itr' : 'regular';
+        const tableName = mode === 'itr' ? 'staff_itr' : 'staff';
+        console.log(`📦 [offlineMasterData] Fetching distinct staff names from IndexedDB cache`);
+        const cached = await getCachedMasterData(tableName, mode);
+
+        const pendingOps = await db.queued_operations
+          .where('status')
+          .equals('pending_sync')
+          .and(op => op.table === 'cash_book' && op.book_id === this.currentBookId)
+          .toArray();
+
+        const pendingStaff = pendingOps
+          .map((op: any) => op.payload.staff?.trim())
+          .filter(Boolean);
+
+        const cachedStaffNames = cached.map((item: any) => item.value);
+        const combined = [...pendingStaff, ...cachedStaffNames];
+        const unique = Array.from(new Set(combined))
+          .filter(Boolean)
+          .map(name => ({ value: name, label: name }));
+
+        return unique;
+      }
+
       const { data, error } = await supabase
         .from(getTableName('cash_book'))
         .select('staff')
@@ -3053,7 +3159,7 @@ class SupabaseDatabase {
         return [];
       }
 
-      return (data || []).map(cred => ({
+      return (data || []).map((cred: any) => ({
         username: cred.username,
         password: cred.password,
         is_admin: cred.is_admin,
@@ -3374,7 +3480,7 @@ class SupabaseDatabase {
       if (sumData && sumData.length > 0) {
         console.log(`📊 Processing ${sumData.length} records for calculations...`);
         
-        totalCredit = sumData.reduce((sum, entry) => {
+        totalCredit = sumData.reduce((sum: number, entry: any) => {
           const credit = parseFloat(entry.credit) || 0;
           if (isNaN(credit)) {
             console.warn('⚠️ Invalid credit value found:', entry.credit);
@@ -3383,7 +3489,7 @@ class SupabaseDatabase {
           return sum + credit;
         }, 0);
         
-        totalDebit = sumData.reduce((sum, entry) => {
+        totalDebit = sumData.reduce((sum: number, entry: any) => {
           const debit = parseFloat(entry.debit) || 0;
           if (isNaN(debit)) {
             console.warn('⚠️ Invalid debit value found:', entry.debit);
@@ -3499,11 +3605,11 @@ class SupabaseDatabase {
         .limit(1000);
       
       if (!allError && allData) {
-        const nonNumericCredits = allData.filter(entry => 
+        const nonNumericCredits = allData.filter((entry: any) => 
           entry.credit !== null && isNaN(parseFloat(entry.credit))
         ).length;
         
-        const nonNumericDebits = allData.filter(entry => 
+        const nonNumericDebits = allData.filter((entry: any) => 
           entry.debit !== null && isNaN(parseFloat(entry.debit))
         ).length;
         
@@ -3753,10 +3859,10 @@ class SupabaseDatabase {
     const entries = data || [];
     
     const totalCredit = entries.reduce(
-      (sum, e) => sum + (e.credit || 0),
+      (sum: number, e: any) => sum + (e.credit || 0),
       0
     );
-    const totalDebit = entries.reduce((sum, e) => sum + (e.debit || 0), 0);
+    const totalDebit = entries.reduce((sum: number, e: any) => sum + (e.debit || 0), 0);
     const balance = totalCredit - totalDebit;
     const totalTransactions = entries.length;
 
@@ -3998,11 +4104,11 @@ class SupabaseDatabase {
         console.log('📋 Sample cash book record:', cashBookData[0]);
         
         // Check if any records have been edited
-        const editedRecords = cashBookData.filter(record => record.edited === true);
+        const editedRecords = cashBookData.filter((record: any) => record.edited === true);
         console.log('📋 Edited records found:', editedRecords.length);
         
         // Check if any records have different updated_at and created_at
-        const updatedRecords = cashBookData.filter(record => 
+        const updatedRecords = cashBookData.filter((record: any) => 
           record.updated_at && record.created_at && 
           record.updated_at !== record.created_at
         );
@@ -4042,7 +4148,7 @@ class SupabaseDatabase {
         console.log('✅ Successfully fetched edited records from cash_book:', editedData.length);
         
         // Transform the data to match audit log format
-        const auditLogData = editedData.map(record => ({
+        const auditLogData = editedData.map((record: any) => ({
           id: record.id,
           cash_book_id: record.id,
           old_values: JSON.stringify({
@@ -4102,7 +4208,7 @@ class SupabaseDatabase {
         console.log('✅ Successfully fetched edited records (no ordering):', noOrderData.length);
         
         // Transform the data to match audit log format
-        const auditLogData = noOrderData.map(record => ({
+        const auditLogData = noOrderData.map((record: any) => ({
           id: record.id,
           cash_book_id: record.id,
           old_values: JSON.stringify({
@@ -4155,7 +4261,7 @@ class SupabaseDatabase {
         console.log('✅ Successfully fetched updated records from cash_book:', updatedData.length);
         
         // Transform the data to match audit log format
-        const auditLogData = updatedData.map(record => ({
+        const auditLogData = updatedData.map((record: any) => ({
           id: record.id,
           cash_book_id: record.id,
           old_values: JSON.stringify({
@@ -4215,7 +4321,7 @@ class SupabaseDatabase {
         console.log('✅ Successfully fetched updated records (no ordering):', noOrderUpdatedData.length);
         
         // Transform the data to match audit log format
-        const auditLogData = noOrderUpdatedData.map(record => ({
+        const auditLogData = noOrderUpdatedData.map((record: any) => ({
           id: record.id,
           cash_book_id: record.id,
           old_values: JSON.stringify({
@@ -4269,7 +4375,7 @@ class SupabaseDatabase {
         console.log('✅ Successfully fetched recent records from cash_book:', anyData.length);
         
         // Transform the data to match audit log format
-        const auditLogData = anyData.map(record => ({
+        const auditLogData = anyData.map((record: any) => ({
           id: record.id,
           cash_book_id: record.id,
           old_values: JSON.stringify({
@@ -4324,7 +4430,7 @@ class SupabaseDatabase {
         console.log('✅ Found records in cash_book, showing as edit history:', fallbackData.length);
         
         // Transform the data to match audit log format
-        const auditLogData = fallbackData.map(record => ({
+        const auditLogData = fallbackData.map((record: any) => ({
           id: record.id,
           cash_book_id: record.id,
           old_values: JSON.stringify({
@@ -4376,7 +4482,7 @@ class SupabaseDatabase {
         console.log('✅ Found recent cash_book entries:', recentData.length);
         
         // Transform recent records to show as "recent entries" (not edits)
-        const recentEntries = recentData.map(record => ({
+        const recentEntries = recentData.map((record: any) => ({
           id: `recent-${record.id}`,
           cash_book_id: record.id,
           old_values: JSON.stringify({
@@ -4435,7 +4541,7 @@ class SupabaseDatabase {
         if (!recentError && recentData && recentData.length > 0) {
           console.log('✅ Exception fallback: Found recent entries:', recentData.length);
           
-          const recentEntries = recentData.map(record => ({
+          const recentEntries = recentData.map((record: any) => ({
             id: `recent-exception-${record.id}`,
             cash_book_id: record.id,
             old_values: JSON.stringify({
@@ -4492,7 +4598,7 @@ class SupabaseDatabase {
       
       if (!editCashBookError && editCashBookData && editCashBookData.length > 0) {
         const dates = new Set<string>();
-        editCashBookData.forEach(record => {
+        editCashBookData.forEach((record: any) => {
           if (record.edited_at) {
             const dateStr = String(record.edited_at).slice(0, 10); // Extract YYYY-MM-DD
             if (dateStr) dates.add(dateStr);
@@ -4511,7 +4617,7 @@ class SupabaseDatabase {
       
       if (!auditLogError && auditLogData && auditLogData.length > 0) {
         const dates = new Set<string>();
-        auditLogData.forEach(record => {
+        auditLogData.forEach((record: any) => {
           if (record.edited_at) {
             const dateStr = String(record.edited_at).slice(0, 10); // Extract YYYY-MM-DD
             if (dateStr) dates.add(dateStr);
@@ -4531,7 +4637,7 @@ class SupabaseDatabase {
       
       if (!cashBookError && cashBookData && cashBookData.length > 0) {
         const dates = new Set<string>();
-        cashBookData.forEach(record => {
+        cashBookData.forEach((record: any) => {
           if (record.updated_at) {
             const dateStr = String(record.updated_at).slice(0, 10); // Extract YYYY-MM-DD
             if (dateStr) dates.add(dateStr);
@@ -4564,7 +4670,7 @@ class SupabaseDatabase {
         console.log('✅ [SIMPLE] Successfully fetched records:', data.length);
         
         // Transform to audit log format
-        return data.map(record => ({
+        return data.map((record: any) => ({
           id: record.id,
           cash_book_id: record.id,
           old_values: JSON.stringify({
@@ -5256,6 +5362,28 @@ class SupabaseDatabase {
 
   // Get unique values for dropdowns in Edit Entry page
   async getUniqueParticulars(): Promise<string[]> {
+    if (!this.isOnline) {
+      const tableMode = getTableMode();
+      const mode = tableMode === 'itr' ? 'itr' : 'regular';
+      const tableName = mode === 'itr' ? 'particulars_itr' : 'particulars';
+      console.log(`📦 [offlineMasterData] Fetching distinct particulars from IndexedDB cache`);
+      const cached = await getCachedMasterData(tableName, mode);
+
+      const pendingOps = await db.queued_operations
+        .where('status')
+        .equals('pending_sync')
+        .and(op => op.table === 'cash_book' && op.book_id === this.currentBookId)
+        .toArray();
+
+      const pendingParticulars = pendingOps
+        .map((op: any) => op.payload.particulars?.trim())
+        .filter(Boolean);
+
+      const combined = [...pendingParticulars, ...cached];
+      const unique = Array.from(new Set(combined));
+      return unique.sort();
+    }
+
     const { data, error } = await supabase
       .from(getTableName('cash_book'))
       .select('particulars')
@@ -5268,8 +5396,8 @@ class SupabaseDatabase {
     }
 
     const uniqueParticulars = [
-      ...new Set(data?.map(item => item.particulars).filter(Boolean)),
-    ];
+      ...new Set((data || []).map((item: any) => item.particulars).filter(Boolean)),
+    ] as string[];
     return uniqueParticulars.sort();
   }
 
@@ -5286,9 +5414,9 @@ class SupabaseDatabase {
     }
 
     const uniqueQuantities = [
-      ...new Set(data?.map(item => item.sale_qty).filter(Boolean)),
-    ];
-    return uniqueQuantities.sort((a, b) => a - b);
+      ...new Set((data || []).map((item: any) => item.sale_qty).filter(Boolean)),
+    ] as number[];
+    return uniqueQuantities.sort((a: any, b: any) => a - b);
   }
 
   async getUniquePurchaseQuantities(): Promise<number[]> {
@@ -5304,9 +5432,9 @@ class SupabaseDatabase {
     }
 
     const uniqueQuantities = [
-      ...new Set(data?.map(item => item.purchase_qty).filter(Boolean)),
-    ];
-    return uniqueQuantities.sort((a, b) => a - b);
+      ...new Set((data || []).map((item: any) => item.purchase_qty).filter(Boolean)),
+    ] as number[];
+    return uniqueQuantities.sort((a: any, b: any) => a - b);
   }
 
   async getUniqueCreditAmounts(): Promise<number[]> {
@@ -5322,9 +5450,9 @@ class SupabaseDatabase {
     }
 
     const uniqueAmounts = [
-      ...new Set(data?.map(item => item.credit).filter(Boolean)),
-    ];
-    return uniqueAmounts.sort((a, b) => a - b);
+      ...new Set((data || []).map((item: any) => item.credit).filter(Boolean)),
+    ] as number[];
+    return uniqueAmounts.sort((a: any, b: any) => a - b);
   }
 
   async getUniqueDebitAmounts(): Promise<number[]> {
@@ -5340,14 +5468,23 @@ class SupabaseDatabase {
     }
 
     const uniqueAmounts = [
-      ...new Set(data?.map(item => item.debit).filter(Boolean)),
-    ];
-    return uniqueAmounts.sort((a, b) => a - b);
+      ...new Set((data || []).map((item: any) => item.debit).filter(Boolean)),
+    ] as number[];
+    return uniqueAmounts.sort((a: any, b: any) => a - b);
   }
 
   // New functions for dependent dropdowns
   async getDistinctAccountNames(): Promise<string[]> {
     try {
+      const tableMode = getTableMode();
+      if (!this.isOnline) {
+        const mode = tableMode === 'itr' ? 'itr' : 'regular';
+        const tableName = mode === 'itr' ? 'company_main_accounts_itr' : 'company_main_accounts';
+        console.log(`📦 [offlineMasterData] Fetching distinct account names from IndexedDB cache for mode: ${mode}`);
+        const cached = await getCachedMasterData(tableName, mode);
+        const names = cached.map((acc: any) => acc.acc_name?.trim()).filter(Boolean);
+        return [...new Set(names)].sort();
+      }
       const { data, error } = await supabase
         .from(getTableName('cash_book'))
         .select('acc_name')
@@ -5359,7 +5496,7 @@ class SupabaseDatabase {
         return [];
       }
 
-      const uniqueAccounts = [...new Set(data?.map(item => item.acc_name))];
+      const uniqueAccounts = [...new Set((data || []).map((item: any) => item.acc_name))] as string[];
       return uniqueAccounts.sort();
     } catch (error) {
       console.error('Error in getDistinctAccountNames:', error);
@@ -5370,6 +5507,35 @@ class SupabaseDatabase {
   // Company-based filtering functions
   async getDistinctAccountNamesByCompany(companyName: string): Promise<string[]> {
     try {
+      const tableMode = getTableMode();
+      if (!this.isOnline) {
+        const mode = tableMode === 'itr' ? 'itr' : 'regular';
+        const tableName = mode === 'itr' ? 'company_main_accounts_itr' : 'company_main_accounts';
+        console.log(`📦 [offlineMasterData] Fetching accounts for company "${companyName}" from IndexedDB cache`);
+        const cached = await getCachedMasterData(tableName, mode);
+        
+        // Filter cached accounts by company
+        const filteredCached = cached
+          .filter((acc: any) => acc.company_name === companyName)
+          .map((acc: any) => acc.acc_name);
+
+        // Merge from pending insertions in queued_operations
+        const pendingInserts = await db.queued_operations
+          .where('status')
+          .equals('pending_sync')
+          .and(op => (op.table === 'company_main_accounts' || op.table === 'company_main_accounts_itr') && op.operation_type === 'INSERT')
+          .toArray();
+
+        const pendingAccounts = pendingInserts
+          .map((op: any) => op.payload)
+          .filter((p: any) => p.company_name === companyName && p.acc_name)
+          .map((p: any) => p.acc_name);
+
+        const combined = [...pendingAccounts, ...filteredCached];
+        const unique = [...new Set(combined)];
+        return unique.sort();
+      }
+
       console.log(`🔍 [DEBUG] Fetching account names for company: "${companyName}"`);
       
       // Get accounts from cash_book table (existing entries)
@@ -5397,8 +5563,8 @@ class SupabaseDatabase {
       }
 
       // Combine both sources with additional validation
-      const cashBookAccounts = cashBookData?.map(item => item.acc_name) || [];
-      const mainAccounts = mainAccountsData?.map(item => item.acc_name) || [];
+      const cashBookAccounts = cashBookData?.map((item: any) => item.acc_name) || [];
+      const mainAccounts = mainAccountsData?.map((item: any) => item.acc_name) || [];
       
       console.log(`📊 [DEBUG] Cash book accounts for company "${companyName}":`, cashBookAccounts.length, 'accounts');
       console.log(`📊 [DEBUG] Cash book raw data:`, cashBookData?.slice(0, 5));
@@ -5421,6 +5587,18 @@ class SupabaseDatabase {
 
   async getSubAccountsByAccountName(accountName: string): Promise<string[]> {
     try {
+      const tableMode = getTableMode();
+      if (!this.isOnline) {
+        const mode = tableMode === 'itr' ? 'itr' : 'regular';
+        const tableName = mode === 'itr' ? 'company_main_sub_acc_itr' : 'company_main_sub_acc';
+        console.log(`📦 [offlineMasterData] Fetching sub-accounts for account "${accountName}" from IndexedDB cache`);
+        const cached = await getCachedMasterData(tableName, mode);
+        const filteredCached = cached
+          .filter((sub: any) => sub.acc_name === accountName)
+          .map((sub: any) => sub.sub_acc?.trim())
+          .filter(Boolean);
+        return [...new Set(filteredCached)].sort();
+      }
       const { data, error } = await supabase
         .from(getTableName('cash_book'))
         .select('sub_acc_name')
@@ -5433,7 +5611,7 @@ class SupabaseDatabase {
         return [];
       }
 
-      const uniqueSubAccounts = [...new Set(data?.map(item => item.sub_acc_name))];
+      const uniqueSubAccounts = [...new Set((data || []).map((item: any) => item.sub_acc_name))] as string[];
       return uniqueSubAccounts.sort();
     } catch (error) {
       console.error('Error in getSubAccountsByAccountName:', error);
@@ -5443,6 +5621,36 @@ class SupabaseDatabase {
 
   async getSubAccountsByAccountAndCompany(accountName: string, companyName: string): Promise<string[]> {
     try {
+      const tableMode = getTableMode();
+      if (!this.isOnline) {
+        const mode = tableMode === 'itr' ? 'itr' : 'regular';
+        const tableName = mode === 'itr' ? 'company_main_sub_acc_itr' : 'company_main_sub_acc';
+        console.log(`📦 [offlineMasterData] Fetching sub-accounts for account "${accountName}" and company "${companyName}" from IndexedDB cache`);
+        const cached = await getCachedMasterData(tableName, mode);
+
+        // Filter cached sub-accounts
+        const filteredCached = cached
+          .filter((sub: any) => sub.acc_name === accountName && sub.company_name === companyName)
+          .map((sub: any) => sub.sub_acc);
+
+        // Merge from pending insertions in queued_operations
+        const pendingInserts = await db.queued_operations
+          .where('status')
+          .equals('pending_sync')
+          .and(op => (op.table === 'company_main_sub_acc' || op.table === 'company_main_sub_acc_itr') && op.operation_type === 'INSERT')
+          .toArray();
+
+        const pendingSubAccounts = pendingInserts
+          .map((op: any) => op.payload)
+          .filter((p: any) => p.acc_name === accountName && p.company_name === companyName && p.sub_acc)
+          .map((p: any) => p.sub_acc);
+
+        // Combine and return unique
+        const combined = [...pendingSubAccounts, ...filteredCached];
+        const unique = [...new Set(combined)];
+        return unique.sort();
+      }
+
       console.log(`🔍 [DEBUG] Fetching sub-account names for account: "${accountName}" and company: "${companyName}"`);
       
       // Get sub-accounts from cash_book table (existing entries)
@@ -5472,8 +5680,8 @@ class SupabaseDatabase {
       }
 
       // Combine both sources with additional validation
-      const cashBookSubAccounts = cashBookData?.map(item => item.sub_acc_name) || [];
-      const subAccounts = subAccountsData?.map(item => item.sub_acc) || [];
+      const cashBookSubAccounts = cashBookData?.map((item: any) => item.sub_acc_name) || [];
+      const subAccounts = subAccountsData?.map((item: any) => item.sub_acc) || [];
       
       console.log(`📊 [DEBUG] Cash book sub-accounts for account "${accountName}" and company "${companyName}":`, cashBookSubAccounts.length, 'sub-accounts');
       console.log(`📊 [DEBUG] Cash book raw data:`, cashBookData?.slice(0, 5));
@@ -5509,7 +5717,7 @@ class SupabaseDatabase {
         return [];
       }
 
-      const uniqueParticulars = [...new Set(data?.map(item => item.particulars))];
+      const uniqueParticulars = [...new Set((data || []).map((item: any) => item.particulars))] as string[];
       return uniqueParticulars.sort();
     } catch (error) {
       console.error('Error in getParticularsBySubAccount:', error);
@@ -5520,6 +5728,15 @@ class SupabaseDatabase {
   // Get all distinct sub-account names from cash_book (all 67k records)
   async getDistinctSubAccountNames(): Promise<string[]> {
     try {
+      const tableMode = getTableMode();
+      if (!this.isOnline) {
+        const mode = tableMode === 'itr' ? 'itr' : 'regular';
+        const tableName = mode === 'itr' ? 'company_main_sub_acc_itr' : 'company_main_sub_acc';
+        console.log(`📦 [offlineMasterData] Fetching distinct sub-account names from IndexedDB cache for mode: ${mode}`);
+        const cached = await getCachedMasterData(tableName, mode);
+        const names = cached.map((sub: any) => sub.sub_acc?.trim()).filter(Boolean);
+        return [...new Set(names)].sort();
+      }
       const { data, error } = await supabase
         .from(getTableName('cash_book'))
         .select('sub_acc_name')
@@ -5532,7 +5749,7 @@ class SupabaseDatabase {
         return [];
       }
 
-      const uniqueSubAccounts = [...new Set(data?.map(item => item.sub_acc_name))];
+      const uniqueSubAccounts = [...new Set((data || []).map((item: any) => item.sub_acc_name))] as string[];
       return uniqueSubAccounts.sort();
     } catch (error) {
       console.error('Error in getDistinctSubAccountNames:', error);
@@ -5556,7 +5773,7 @@ class SupabaseDatabase {
         return [];
       }
 
-      const uniqueSubAccounts = [...new Set(data?.map(item => item.sub_acc_name))];
+      const uniqueSubAccounts = [...new Set((data || []).map((item: any) => item.sub_acc_name))] as string[];
       return uniqueSubAccounts.sort();
     } catch (error) {
       console.error('Error in getDistinctSubAccountNamesByCompany:', error);
@@ -5574,26 +5791,26 @@ class SupabaseDatabase {
         .from(getTableName('cash_book'))
         .select('company_name')
         .not('company_name', 'is', null)
-        .not('company_name', 'eq', '');
+        .not('company_name', 'eq', '') as { data: any[] | null; error: any };
       
       if (companyError) {
         console.error('Error fetching company names:', companyError);
         return;
       }
       
-      const uniqueCompanies = [...new Set(companyData?.map(item => item.company_name))].sort();
+      const uniqueCompanies = [...new Set((companyData || []).map((item: any) => item.company_name))].sort();
       console.log('📊 [DEBUG] All unique company names in database:', uniqueCompanies);
       
       // Check for BVR and BVT specifically
-      const bvrData = companyData?.filter(item => 
+      const bvrData = (companyData || []).filter((item: any) => 
         item.company_name?.toLowerCase().includes('bvr') || 
         item.company_name?.toLowerCase().includes('bvt')
       );
-      console.log('📊 [DEBUG] BVR/BVT related company names:', bvrData?.map(item => item.company_name));
+      console.log('📊 [DEBUG] BVR/BVT related company names:', bvrData.map((item: any) => item.company_name));
       
       // Get account names for BVR and BVT companies
       for (const company of uniqueCompanies) {
-        if (company?.toLowerCase().includes('bvr') || company?.toLowerCase().includes('bvt')) {
+        if (company && typeof company === 'string' && (company.toLowerCase().includes('bvr') || company.toLowerCase().includes('bvt'))) {
           console.log(`🔍 [DEBUG] Checking accounts for company: "${company}"`);
           const accounts = await this.getDistinctAccountNamesByCompany(company);
           console.log(`📊 [DEBUG] Found ${accounts.length} accounts for "${company}":`, accounts);
@@ -5866,11 +6083,7 @@ class SupabaseDatabase {
       
       let query = supabase
         .from('reminders')
-        .select(`
-          *,
-          assigned_user:users!assigned_user_id(username),
-          creator:users!created_by(username)
-        `)
+        .select('*')
         .eq('mode', mode)
         .is('deleted_at', null)
         .order('event_date', { ascending: true });
@@ -5887,10 +6100,26 @@ class SupabaseDatabase {
         return this.mergeOfflineOperations('reminders', []);
       }
 
+      // Fetch user mappings
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, username');
+
+      if (usersError) {
+        console.error('❌ Error fetching users for reminders mapping:', usersError);
+      }
+
+      const userMap = new Map<string, string>();
+      if (usersData) {
+        usersData.forEach((u: any) => {
+          userMap.set(u.id, u.username);
+        });
+      }
+
       const mapped = (data || []).map((r: any) => ({
         ...r,
-        assigned_username: r.assigned_user?.username || null,
-        creator_username: r.creator?.username || null
+        assigned_username: r.assigned_user_id ? userMap.get(r.assigned_user_id) || null : null,
+        creator_username: r.created_by ? userMap.get(r.created_by) || null : null
       }));
 
       return this.mergeOfflineOperations('reminders', mapped as Reminder[]);
@@ -5906,11 +6135,7 @@ class SupabaseDatabase {
       const { data, error } = await supabase
         .from('reminders')
         .insert([reminder])
-        .select(`
-          *,
-          assigned_user:users!assigned_user_id(username),
-          creator:users!created_by(username)
-        `)
+        .select('*')
         .single();
 
       if (error) {
@@ -5918,10 +6143,31 @@ class SupabaseDatabase {
         return null;
       }
 
+      if (!data) {
+        console.error('❌ No data returned on reminder creation');
+        return null;
+      }
+
+      // Fetch user mappings
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, username');
+
+      if (usersError) {
+        console.error('❌ Error fetching users for reminder mapping:', usersError);
+      }
+
+      const userMap = new Map<string, string>();
+      if (usersData) {
+        usersData.forEach((u: any) => {
+          userMap.set(u.id, u.username);
+        });
+      }
+
       const mapped = {
         ...data,
-        assigned_username: data.assigned_user?.username || null,
-        creator_username: data.creator?.username || null
+        assigned_username: data.assigned_user_id ? userMap.get(data.assigned_user_id) || null : null,
+        creator_username: data.created_by ? userMap.get(data.created_by) || null : null
       };
 
       return mapped as Reminder;
@@ -5941,11 +6187,7 @@ class SupabaseDatabase {
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
-        .select(`
-          *,
-          assigned_user:users!assigned_user_id(username),
-          creator:users!created_by(username)
-        `)
+        .select('*')
         .single();
 
       if (error) {
@@ -5953,10 +6195,31 @@ class SupabaseDatabase {
         return null;
       }
 
+      if (!data) {
+        console.error('❌ No data returned on reminder update');
+        return null;
+      }
+
+      // Fetch user mappings
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, username');
+
+      if (usersError) {
+        console.error('❌ Error fetching users for reminder mapping:', usersError);
+      }
+
+      const userMap = new Map<string, string>();
+      if (usersData) {
+        usersData.forEach((u: any) => {
+          userMap.set(u.id, u.username);
+        });
+      }
+
       const mapped = {
         ...data,
-        assigned_username: data.assigned_user?.username || null,
-        creator_username: data.creator?.username || null
+        assigned_username: data.assigned_user_id ? userMap.get(data.assigned_user_id) || null : null,
+        creator_username: data.created_by ? userMap.get(data.created_by) || null : null
       };
 
       return mapped as Reminder;
