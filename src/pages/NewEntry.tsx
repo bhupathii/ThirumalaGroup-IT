@@ -1010,8 +1010,11 @@ const NewEntry: React.FC = () => {
       setTimeout(() => {
         if (dateRef.current) {
           dateRef.current.focus();
+          try {
+            dateRef.current.select();
+          } catch (err) {}
         }
-      }, 100);
+      }, 150);
       
       // Invalidate React Query cache to refresh recent entries
       console.log('🔄 Invalidating cache for date:', entry.date);
@@ -1918,7 +1921,7 @@ const NewEntry: React.FC = () => {
         <div className='flex flex-wrap gap-2 px-2 py-1.5 bg-gray-50 border-b border-gray-200 flex-shrink-0'>
           {vehicleStats && (
             <div 
-              onClick={() => navigate('/vehicles')}
+              onClick={() => navigate('/vehicles?highlightExpiring=true')}
               className='bg-white border border-gray-200 hover:border-gray-300 transition-all rounded px-2.5 py-1 flex items-center gap-1.5 cursor-pointer shadow-sm text-[11px]'
             >
               <span className='font-bold text-gray-700'>Vehicle Expiry:</span>
@@ -1937,7 +1940,7 @@ const NewEntry: React.FC = () => {
           )}
           {bgStats && (
             <div 
-              onClick={() => navigate('/bank-guarantees')}
+              onClick={() => navigate('/bank-guarantees?highlightExpiring=true')}
               className='bg-white border border-gray-200 hover:border-gray-300 transition-all rounded px-2.5 py-1 flex items-center gap-1.5 cursor-pointer shadow-sm text-[11px]'
             >
               <span className='font-bold text-gray-700'>Bank Guarantee Expiry:</span>
@@ -1956,7 +1959,7 @@ const NewEntry: React.FC = () => {
           )}
           {driverStats && (
             <div 
-              onClick={() => navigate('/drivers')}
+              onClick={() => navigate('/drivers?highlightExpiring=true')}
               className='bg-white border border-gray-200 hover:border-gray-300 transition-all rounded px-2.5 py-1 flex items-center gap-1.5 cursor-pointer shadow-sm text-[11px]'
             >
               <span className='font-bold text-gray-700'>Driver Expiry:</span>
@@ -2125,6 +2128,7 @@ const NewEntry: React.FC = () => {
                     checked={dualEntryEnabled}
                     onChange={e => setDualEntryEnabled(e.target.checked)}
                     className='mr-3 w-4 h-4'
+                    tabIndex={-1}
                   />
                   <label
                     htmlFor='dualEntryEnabled'
@@ -2354,20 +2358,12 @@ const NewEntry: React.FC = () => {
                         setEntry(prev => ({ ...prev, staff: value }));
                         setSessionStaff(value);
                       }}
-                      onSelect={() => {
-                        // Auto-navigate to credit amount when staff is selected
-                        setTimeout(() => {
-                          if (creditRef.current) {
-                            creditRef.current.focus();
-                          }
-                        }, 100);
-                      }}
                       options={users}
                       placeholder='Select staff...'
-                      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, creditRef)}
                       required
                       size='sm'
                       className='staff-field'
+                      tabIndex={-1}
                     />
                     <div className='flex gap-1'>
                       <Button
@@ -2416,10 +2412,10 @@ const NewEntry: React.FC = () => {
                         if (debitRef.current && !debitRef.current.disabled) {
                           debitRef.current.focus();
                         } else {
-                          if (entry.paymentMode) {
-                            if (quantityCheckedRef.current) quantityCheckedRef.current.focus();
-                          } else {
-                            if (paymentModeRef.current) paymentModeRef.current.focus();
+                          if (dualEntryEnabled && dualCompanyNameRef.current) {
+                            dualCompanyNameRef.current.focus();
+                          } else if (saveBtnRef.current) {
+                            saveBtnRef.current.focus();
                           }
                         }
                       }
@@ -2445,10 +2441,10 @@ const NewEntry: React.FC = () => {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        if (entry.paymentMode) {
-                          if (quantityCheckedRef.current) quantityCheckedRef.current.focus();
-                        } else {
-                          if (paymentModeRef.current) paymentModeRef.current.focus();
+                        if (dualEntryEnabled && dualCompanyNameRef.current) {
+                          dualCompanyNameRef.current.focus();
+                        } else if (saveBtnRef.current) {
+                          saveBtnRef.current.focus();
                         }
                       }
                     }}
@@ -2466,14 +2462,6 @@ const NewEntry: React.FC = () => {
                       setEntry(prev => ({ ...prev, paymentMode: val }));
                       localStorage.setItem('lastSelectedPaymentMode', val);
                     }}
-                    onSelect={() => {
-                      // Auto-navigate to Quantity Details checkbox when payment mode is selected
-                      setTimeout(() => {
-                        if (quantityCheckedRef.current) {
-                          quantityCheckedRef.current.focus();
-                        }
-                      }, 100);
-                    }}
                     options={[
                       { value: '', label: 'Select payment mode...' },
                       { value: 'Cash', label: 'Cash' },
@@ -2481,9 +2469,9 @@ const NewEntry: React.FC = () => {
                       { value: 'Online', label: 'Double' }
                     ]}
                     placeholder='Select payment mode...'
-                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, quantityCheckedRef)}
                     required
                     size='sm'
+                    tabIndex={-1}
                   />
                 </div>
 
@@ -2500,30 +2488,7 @@ const NewEntry: React.FC = () => {
                         quantityChecked: e.target.checked,
                       }))
                     }
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const nextChecked = !entry.quantityChecked;
-                        setEntry(prev => ({
-                          ...prev,
-                          quantityChecked: nextChecked,
-                        }));
-                        
-                        if (nextChecked) {
-                          setTimeout(() => {
-                            if (purchaseQRef.current) purchaseQRef.current.focus();
-                          }, 100);
-                        } else {
-                          setTimeout(() => {
-                            if (dualEntryEnabled && dualCompanyNameRef.current) {
-                              dualCompanyNameRef.current.focus();
-                            } else if (saveBtnRef.current) {
-                              saveBtnRef.current.focus();
-                            }
-                          }, 100);
-                        }
-                      }
-                    }}
+                    tabIndex={-1}
                     className='w-4 h-4'
                   />
                   <label
@@ -2552,13 +2517,13 @@ const NewEntry: React.FC = () => {
                           purchaseQ: saleVal ? '' : prev.purchaseQ // Clear purchase if sale has value
                         }));
                       }}
-                      onKeyDown={(e) => handleKeyDown(e, saleQRef)}
                       disabled={!!entry.purchaseQ}
                       placeholder='0'
                       type='number'
                       min='0'
                       step='0.01'
                       size='sm'
+                      tabIndex={-1}
                     />
                     <Input
                       ref={saleQRef}
@@ -2573,22 +2538,13 @@ const NewEntry: React.FC = () => {
                           saleQ: purchaseVal ? '' : prev.saleQ // Clear sale if purchase has value
                         }));
                       }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          if (dualEntryEnabled && dualCompanyNameRef.current) {
-                            dualCompanyNameRef.current.focus();
-                          } else if (saveBtnRef.current) {
-                            saveBtnRef.current.focus();
-                          }
-                        }
-                      }}
                       disabled={!!entry.saleQ}
                       placeholder='0'
                       type='number'
                       min='0'
                       step='0.01'
                       size='sm'
+                      tabIndex={-1}
                     />
                   </div>
                 )}
@@ -2714,7 +2670,18 @@ const NewEntry: React.FC = () => {
                           }
                         }}
                         disabled={!!entry.credit || !!dualEntry.debit || (!entry.credit && !entry.debit)}
-                        onKeyDown={(e) => handleKeyDown(e, dualDebitRef)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (dualDebitRef.current && !dualDebitRef.current.disabled) {
+                              dualDebitRef.current.focus();
+                            } else {
+                              if (saveBtnRef.current) {
+                                saveBtnRef.current.focus();
+                              }
+                            }
+                          }
+                        }}
                         placeholder='Enter credit amount'
                         type='number'
                         min='0'
@@ -2734,7 +2701,14 @@ const NewEntry: React.FC = () => {
                           }
                         }}
                         disabled={!!entry.debit || !!dualEntry.credit || (!entry.credit && !entry.debit)}
-                        onKeyDown={(e) => handleKeyDown(e, dualQuantityCheckedRef)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (saveBtnRef.current) {
+                              saveBtnRef.current.focus();
+                            }
+                          }
+                        }}
                         placeholder='Enter debit amount'
                         type='number'
                         min='0'
@@ -2758,29 +2732,8 @@ const NewEntry: React.FC = () => {
                               purchaseQ: e.target.checked ? prev.purchaseQ : '',
                             }))
                           }
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              const nextChecked = !dualEntry.quantityChecked;
-                              setDualEntry(prev => ({
-                                ...prev,
-                                quantityChecked: nextChecked,
-                                saleQ: nextChecked ? prev.saleQ : '',
-                                purchaseQ: nextChecked ? prev.purchaseQ : '',
-                              }));
-                              
-                              if (nextChecked) {
-                                setTimeout(() => {
-                                  if (dualPurchaseQRef.current) dualPurchaseQRef.current.focus();
-                                }, 100);
-                              } else {
-                                setTimeout(() => {
-                                  if (saveBtnRef.current) saveBtnRef.current.focus();
-                                }, 100);
-                              }
-                            }
-                          }}
                           id='dualQuantityChecked'
+                          tabIndex={-1}
                         />
                         <label
                           htmlFor='dualQuantityChecked'
@@ -2810,11 +2763,11 @@ const NewEntry: React.FC = () => {
                                 dualPurchaseQManuallyEdited.current = false;
                               }
                             }}
-                            onKeyDown={(e) => handleKeyDown(e, dualSaleQRef)}
                             disabled={!entry.purchaseQ}
                             placeholder='0'
                             type='number'
                             min='0'
+                            tabIndex={-1}
                           />
                           <Input
                             ref={dualSaleQRef}
@@ -2834,18 +2787,11 @@ const NewEntry: React.FC = () => {
                                 dualSaleQManuallyEdited.current = false;
                               }
                             }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                if (saveBtnRef.current) {
-                                  saveBtnRef.current.focus();
-                                }
-                              }
-                            }}
                             disabled={!entry.saleQ}
                             placeholder='0'
                             type='number'
                             min='0'
+                            tabIndex={-1}
                           />
                         </div>
                       )}
@@ -2913,8 +2859,19 @@ const NewEntry: React.FC = () => {
                       dualSaleQManuallyEdited.current = false;
                       // Accounts are now managed by React Query
                       setSubAccounts([]);
+
+                      // Focus back to main Date field
+                      setTimeout(() => {
+                        if (dateRef.current) {
+                          dateRef.current.focus();
+                          try {
+                            dateRef.current.select();
+                          } catch (err) {}
+                        }
+                      }, 150);
                     }}
                     className='px-4 py-1 text-xs font-bold'
+                    tabIndex={-1}
                   >
                     Reset
                   </Button>

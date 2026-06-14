@@ -73,34 +73,18 @@ export const useFormArrowNavigation = (
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Keep Tab and Shift+Tab behavior unchanged.
-      if (e.key === 'Tab') return;
-
       const isLeft = e.key === 'ArrowLeft';
       const isRight = e.key === 'ArrowRight';
       const isEnter = e.key === 'Enter';
+      const isTab = e.key === 'Tab';
 
-      if (!isLeft && !isRight && !isEnter) return;
+      if (!isLeft && !isRight && !isEnter && !isTab) return;
 
       const form = formRef.current;
       if (!form) return;
 
       const activeElement = document.activeElement as HTMLElement;
       if (!activeElement || !form.contains(activeElement)) return;
-
-      // Do not interfere with textarea
-      if (activeElement.tagName.toLowerCase() === 'textarea') {
-        return;
-      }
-
-      // Check if dropdown option navigation is active (dropdown is open)
-      const isDropdownOpen = 
-        activeElement.getAttribute('aria-expanded') === 'true' || 
-        !!document.querySelector('[role="listbox"]');
-
-      // Check if date picker calendar is open
-      const isCalendarOpen = !!document.querySelector('.CustomCalendar');
-      if (isCalendarOpen) return;
 
       // Helper to dynamically get focusable fields in correct visible DOM order
       const getFocusableElements = () => {
@@ -126,6 +110,43 @@ export const useFormArrowNavigation = (
           return true;
         });
       };
+
+      if (isTab) {
+        const focusable = getFocusableElements();
+        if (focusable.length === 0) return;
+
+        const currentIndex = focusable.indexOf(activeElement);
+        if (currentIndex === -1) return;
+
+        if (e.shiftKey) {
+          // Shift + Tab: loop back to last element if currently at first
+          if (currentIndex === 0) {
+            e.preventDefault();
+            focusAndSelect(focusable[focusable.length - 1]);
+          }
+        } else {
+          // Tab: loop back to first element if currently at last
+          if (currentIndex === focusable.length - 1) {
+            e.preventDefault();
+            focusAndSelect(focusable[0]);
+          }
+        }
+        return;
+      }
+
+      // Do not interfere with textarea
+      if (activeElement.tagName.toLowerCase() === 'textarea') {
+        return;
+      }
+
+      // Check if dropdown option navigation is active (dropdown is open)
+      const isDropdownOpen = 
+        activeElement.getAttribute('aria-expanded') === 'true' || 
+        !!document.querySelector('[role="listbox"]');
+
+      // Check if date picker calendar is open
+      const isCalendarOpen = !!document.querySelector('.CustomCalendar');
+      if (isCalendarOpen) return;
 
       if (isLeft || isRight) {
         const { isAtStart, isAtEnd } = getInputCursorEdges(activeElement);

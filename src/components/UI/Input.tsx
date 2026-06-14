@@ -22,6 +22,7 @@ interface InputProps {
   error?: boolean;
   inputMode?: 'none' | 'text' | 'decimal' | 'numeric' | 'tel' | 'search' | 'email' | 'url';
   maxLength?: number;
+  tabIndex?: number;
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -47,6 +48,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       error = false,
       inputMode,
       maxLength,
+      tabIndex,
     },
     ref
   ) => {
@@ -164,6 +166,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             step={step}
             inputMode={inputMode}
             maxLength={maxLength}
+            tabIndex={tabIndex}
             className={`w-full border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed ${
               error 
                 ? 'border-red-500 bg-red-50 focus:ring-red-500' 

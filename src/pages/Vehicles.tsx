@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
@@ -28,6 +29,36 @@ const Vehicles: React.FC = () => {
   const [filteredVehicles, setFilteredVehicles] = useState<Vehicle[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const highlightExpiring = queryParams.get('highlightExpiring') === 'true' || location.state?.highlightExpiring;
+
+  const [isHighlightActive, setIsHighlightActive] = useState(false);
+
+  useEffect(() => {
+    if (highlightExpiring && vehicles.length > 0) {
+      setIsHighlightActive(true);
+      const timer = setTimeout(() => {
+        setIsHighlightActive(false);
+      }, 5000); // 5 seconds highlight
+
+      const scrollTimer = setTimeout(() => {
+        const firstExpiringVehicle = vehicles.find(v => hasExpiredDocuments(v) || hasExpiringDocuments(v));
+        if (firstExpiringVehicle) {
+          const element = document.getElementById(`vehicle-row-${firstExpiringVehicle.id}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }, 300);
+
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(scrollTimer);
+      };
+    }
+  }, [vehicles, highlightExpiring]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
@@ -125,6 +156,17 @@ const Vehicles: React.FC = () => {
           default:
             return true;
         }
+      });
+    }
+
+    // If highlightExpiring is true, sort expiring/expired to the top
+    if (highlightExpiring) {
+      filtered.sort((a, b) => {
+        const aExp = hasExpiredDocuments(a) || hasExpiringDocuments(a);
+        const bExp = hasExpiredDocuments(b) || hasExpiringDocuments(b);
+        if (aExp && !bExp) return -1;
+        if (!aExp && bExp) return 1;
+        return 0;
       });
     }
 
@@ -723,19 +765,35 @@ const Vehicles: React.FC = () => {
                   const hasExpiringDoc = hasExpiringDocuments(vehicle);
                   const hasExpiredDoc = hasExpiredDocuments(vehicle);
                   const isExpiringSoon = hasExpiringDoc || hasExpiredDoc;
+                  const isHighlighted = isHighlightActive && isExpiringSoon;
+
+                  let rowBg = 'hover:bg-gray-50';
+                  let borderClass = 'border-b border-gray-100';
+
+                  if (isHighlighted) {
+                    rowBg = 'bg-[#FEF3C7] hover:bg-[#FEF3C7]';
+                    borderClass = 'border-2 border-[#F59E0B]';
+                  } else if (isExpiringSoon) {
+                    rowBg = 'bg-red-50 hover:bg-red-100';
+                    borderClass = 'border-b border-red-200';
+                  }
 
                   return (
                     <tr
                       key={vehicle.id}
-                      className={`border-b transition-colors ${
-                        isExpiringSoon
-                          ? 'bg-red-50 hover:bg-red-100 border-red-200'
-                          : 'hover:bg-gray-50'
-                      }`}
+                      id={`vehicle-row-${vehicle.id}`}
+                      className={`transition-all duration-1000 ${borderClass} ${rowBg}`}
                     >
                       <td className='px-3 py-2 font-medium'>{vehicle.sno}</td>
                       <td className='px-3 py-2 font-bold text-blue-700'>
-                        <div>{vehicle.v_no}</div>
+                        <div className="flex items-center gap-2">
+                          {vehicle.v_no}
+                          {isHighlighted && (
+                            <span className='inline-flex items-center text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 animate-pulse'>
+                              🔔 Opened From Dashboard
+                            </span>
+                          )}
+                        </div>
                         {(vehicle as any).pending_sync && (
                           <span className='inline-flex items-center text-[10px] font-bold text-amber-600 bg-amber-50 px-1 py-0.5 rounded border border-amber-200 mt-0.5 animate-pulse font-outfit'>
                             🔄 Pending Sync

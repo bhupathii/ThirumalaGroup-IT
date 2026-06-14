@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
@@ -29,6 +30,36 @@ const BankGuarantees: React.FC = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingBG, setEditingBG] = useState<BankGuarantee | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const highlightExpiring = queryParams.get('highlightExpiring') === 'true' || location.state?.highlightExpiring;
+
+  const [isHighlightActive, setIsHighlightActive] = useState(false);
+
+  useEffect(() => {
+    if (highlightExpiring && bankGuarantees.length > 0) {
+      setIsHighlightActive(true);
+      const timer = setTimeout(() => {
+        setIsHighlightActive(false);
+      }, 5000); // 5 seconds highlight
+
+      const scrollTimer = setTimeout(() => {
+        const firstExpiringBG = bankGuarantees.find(bg => !bg.cancelled && (getExpiryStatus(bg.exp_date).status === 'expired' || getExpiryStatus(bg.exp_date).status === 'expiring'));
+        if (firstExpiringBG) {
+          const element = document.getElementById(`bg-row-${firstExpiringBG.id}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }, 300);
+
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(scrollTimer);
+      };
+    }
+  }, [bankGuarantees, highlightExpiring]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBG, setSelectedBG] = useState<BankGuarantee | null>(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -172,6 +203,17 @@ const BankGuarantees: React.FC = () => {
       filtered = filtered.filter(bg => {
         const status = getExpiryStatus(bg.exp_date).status;
         return status === filters.expiryStatus;
+      });
+    }
+
+    // If highlightExpiring is true, sort expiring/expired active BGs to the top
+    if (highlightExpiring) {
+      filtered.sort((a, b) => {
+        const aStatus = !a.cancelled && (getExpiryStatus(a.exp_date).status === 'expired' || getExpiryStatus(a.exp_date).status === 'expiring');
+        const bStatus = !b.cancelled && (getExpiryStatus(b.exp_date).status === 'expired' || getExpiryStatus(b.exp_date).status === 'expiring');
+        if (aStatus && !bStatus) return -1;
+        if (!aStatus && bStatus) return 1;
+        return 0;
       });
     }
 
@@ -800,17 +842,33 @@ const BankGuarantees: React.FC = () => {
               <tbody>
                 {filteredBGs.map((bg, index) => {
                   const expiryStatus = getExpiryStatus(bg.exp_date);
+                  const isExpiringSoon = !bg.cancelled && (expiryStatus.status === 'expired' || expiryStatus.status === 'expiring');
+                  const isHighlighted = isHighlightActive && isExpiringSoon;
+
+                  let rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-25';
+                  let borderClass = 'border-b border-gray-100';
+
+                  if (isHighlighted) {
+                    rowBg = 'bg-[#FEF3C7] hover:bg-[#FEF3C7]';
+                    borderClass = 'border-2 border-[#F59E0B]';
+                  }
 
                   return (
                     <tr
                       key={bg.id}
-                      className={`border-b hover:bg-gray-50 transition-colors ${
-                        index % 2 === 0 ? 'bg-white' : 'bg-gray-25'
-                      } ${bg.cancelled ? 'opacity-60' : ''}`}
+                      id={`bg-row-${bg.id}`}
+                      className={`hover:bg-gray-50 transition-all duration-1000 ${borderClass} ${rowBg} ${bg.cancelled ? 'opacity-60' : ''}`}
                     >
                       <td className='px-3 py-2 font-medium'>{bg.sno}</td>
                       <td className='px-3 py-2 font-medium text-blue-600'>
-                        {bg.bg_no}
+                        <div className="flex items-center gap-2">
+                          {bg.bg_no}
+                          {isHighlighted && (
+                            <span className='inline-flex items-center text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 animate-pulse'>
+                              🔔 Opened From Dashboard
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className='px-3 py-2 text-center'>
                         {format(new Date(bg.issue_date), 'dd-MM-yyyy')}

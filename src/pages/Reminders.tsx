@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { format, parseISO, addDays } from 'date-fns';
 import { 
   Bell, Plus, Search, Calendar as CalendarIcon, List, Edit, Trash2, 
@@ -31,6 +32,38 @@ const Reminders: React.FC = () => {
   const [users, setUsers] = useState<DBUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const highlightReminderId = queryParams.get('highlightReminder') || location.state?.highlightReminderId;
+
+  const [activeHighlightId, setActiveHighlightId] = useState<string | null>(null);
+
+  // Handle highlight route logic
+  useEffect(() => {
+    if (highlightReminderId) {
+      setActiveHighlightId(highlightReminderId);
+      const timer = setTimeout(() => {
+        setActiveHighlightId(null);
+      }, 5000); // 5 seconds highlight
+      return () => clearTimeout(timer);
+    }
+  }, [highlightReminderId]);
+
+  useEffect(() => {
+    if (!loading && highlightReminderId) {
+      setViewMode('list');
+      setSelectedFilterDate(''); // clear date filter to show the target
+      
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`reminder-${highlightReminderId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, highlightReminderId]);
   
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -173,7 +206,15 @@ const Reminders: React.FC = () => {
 
   // Filtered Reminders List
   const filteredReminders = useMemo(() => {
-    return reminders.filter((r) => {
+    const highlighted = highlightReminderId 
+      ? reminders.find(r => r.id === highlightReminderId)
+      : null;
+
+    const remaining = reminders.filter((r) => {
+      if (highlightReminderId && r.id === highlightReminderId) {
+        return false; // exclude from normal list to place it at the top
+      }
+
       // 1. Search text
       if (searchTerm) {
         const query = searchTerm.toLowerCase();
@@ -205,7 +246,12 @@ const Reminders: React.FC = () => {
 
       return true;
     });
-  }, [reminders, searchTerm, filterCategory, filterPriority, filterStatus, filterAssignedUser, selectedFilterDate]);
+
+    if (highlighted) {
+      return [highlighted, ...remaining];
+    }
+    return remaining;
+  }, [reminders, searchTerm, filterCategory, filterPriority, filterStatus, filterAssignedUser, selectedFilterDate, highlightReminderId]);
 
   // Form handlers
   const handleInputChange = (field: string, value: any) => {
@@ -673,16 +719,26 @@ const Reminders: React.FC = () => {
                     {filteredReminders.map((r) => {
                       const colorStatus = getReminderColorStatus(r);
                       const isSnoozed = r.snoozed_until && new Date(r.snoozed_until) > new Date();
+                      const isHighlighted = r.id === activeHighlightId;
                       
                       let rowBg = 'hover:bg-gray-50';
-                      if (r.status === 'completed') {
+                      let borderStyle = 'border-b border-gray-100';
+
+                      if (isHighlighted) {
+                        rowBg = 'bg-[#FEF3C7] hover:bg-[#FEF3C7]';
+                        borderStyle = 'border-2 border-[#F59E0B]';
+                      } else if (r.status === 'completed') {
                         rowBg = 'bg-green-25/50 hover:bg-green-25';
                       } else if (colorStatus === 'dark-red') {
                         rowBg = 'bg-red-25/70 hover:bg-red-25';
                       }
 
                       return (
-                        <tr key={r.id} className={`border-b border-gray-100 transition-colors ${rowBg}`}>
+                        <tr 
+                          key={r.id} 
+                          id={`reminder-${r.id}`}
+                          className={`transition-all duration-1000 ${borderStyle} ${rowBg}`}
+                        >
                           <td className="px-4 py-3 font-semibold text-xs text-gray-500">
                             <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 border border-slate-200 font-bold">
                               {r.category || 'GENERAL'}
@@ -691,6 +747,11 @@ const Reminders: React.FC = () => {
                           <td className="px-4 py-3">
                             <div className="font-bold text-gray-900 flex items-center gap-2">
                               {r.title}
+                              {isHighlighted && (
+                                <span className='inline-flex items-center text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 animate-pulse'>
+                                  📌 Selected Reminder
+                                </span>
+                              )}
                               {(r as any).pending_sync && (
                                 <span className='inline-flex items-center text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 animate-pulse font-outfit'>
                                   🔄 Pending Sync

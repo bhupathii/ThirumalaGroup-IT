@@ -866,7 +866,7 @@ const Dashboard: React.FC = () => {
         <div className='flex flex-wrap gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg shadow-sm flex-shrink-0 no-print'>
           {vehicleStats && (
             <div 
-              onClick={() => navigate('/vehicles')}
+              onClick={() => navigate('/vehicles?highlightExpiring=true')}
               className='bg-white border border-gray-200 hover:border-gray-300 transition-all rounded px-2.5 py-1.5 flex items-center gap-1.5 cursor-pointer shadow-sm text-xs'
             >
               <span className='font-bold text-gray-700'>Vehicle Expiry:</span>
@@ -885,7 +885,7 @@ const Dashboard: React.FC = () => {
           )}
           {bgStats && (
             <div 
-              onClick={() => navigate('/bank-guarantees')}
+              onClick={() => navigate('/bank-guarantees?highlightExpiring=true')}
               className='bg-white border border-gray-200 hover:border-gray-300 transition-all rounded px-2.5 py-1.5 flex items-center gap-1.5 cursor-pointer shadow-sm text-xs'
             >
               <span className='font-bold text-gray-700'>Bank Guarantee Expiry:</span>
@@ -904,7 +904,7 @@ const Dashboard: React.FC = () => {
           )}
           {driverStats && (
             <div 
-              onClick={() => navigate('/drivers')}
+              onClick={() => navigate('/drivers?highlightExpiring=true')}
               className='bg-white border border-gray-200 hover:border-gray-300 transition-all rounded px-2.5 py-1.5 flex items-center gap-1.5 cursor-pointer shadow-sm text-xs'
             >
               <span className='font-bold text-gray-700'>Driver Expiry:</span>
@@ -954,7 +954,8 @@ const Dashboard: React.FC = () => {
               return (
                 <div 
                   key={r.id}
-                  className={`border hover:border-gray-300 transition-all rounded px-2.5 py-1.5 flex items-center justify-between gap-3 shadow-sm text-xs ${colorClass}`}
+                  onClick={() => navigate(`/reminders?highlightReminder=${r.id}`)}
+                  className={`border hover:border-gray-300 transition-all rounded px-2.5 py-1.5 flex items-center justify-between gap-3 shadow-sm text-xs cursor-pointer ${colorClass}`}
                 >
                   <div className='flex items-center gap-2'>
                     <span className='font-bold uppercase tracking-wider text-[9px] bg-white/80 px-1 py-0.5 rounded shadow-sm border border-black/5'>{label}</span>
@@ -964,9 +965,9 @@ const Dashboard: React.FC = () => {
                       <span className='inline-flex items-center text-[8px] bg-indigo-100 text-indigo-800 px-1 rounded font-bold uppercase tracking-tight'>System</span>
                     )}
                   </div>
-                  <div className='flex items-center gap-1.5'>
+                  <div className='flex items-center gap-1.5' onClick={(e) => e.stopPropagation()}>
                     <button 
-                      onClick={() => setCompletionReminder(r)}
+                      onClick={(e) => { e.stopPropagation(); setCompletionReminder(r); }}
                       className='text-[10px] font-bold bg-white text-green-700 hover:bg-green-50 px-2 py-0.5 rounded border border-green-200 transition-colors flex items-center gap-0.5 shadow-sm'
                     >
                       <CheckCircle className='w-3 h-3' /> Done
@@ -983,7 +984,7 @@ const Dashboard: React.FC = () => {
                       </div>
                     </div>
                     <button
-                      onClick={() => navigate('/reminders')}
+                      onClick={(e) => { e.stopPropagation(); navigate(`/reminders?highlightReminder=${r.id}`); }}
                       className='text-slate-400 hover:text-slate-600 p-0.5'
                       title='View details'
                     >
@@ -1866,7 +1867,14 @@ const Dashboard: React.FC = () => {
                 else if (colorStatus === 'yellow') colorClass = 'border-l-4 border-yellow-400 bg-yellow-25';
 
                 return (
-                  <div key={r.id} className={`p-3 rounded-lg flex items-start justify-between gap-3 text-xs ${colorClass}`}>
+                  <div 
+                    key={r.id} 
+                    onClick={() => {
+                      setShowLoginAlert(false);
+                      navigate(`/reminders?highlightReminder=${r.id}`);
+                    }}
+                    className={`p-3 rounded-lg flex items-start justify-between gap-3 text-xs cursor-pointer hover:opacity-90 transition-opacity ${colorClass}`}
+                  >
                     <div>
                       <div className="font-bold text-gray-800">{r.title}</div>
                       {r.description && <div className="text-gray-600 mt-1 line-clamp-2">{r.description}</div>}
