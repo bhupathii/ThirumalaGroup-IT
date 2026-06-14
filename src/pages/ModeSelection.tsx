@@ -10,54 +10,6 @@ const ModeSelection: React.FC = () => {
   const { setMode } = useTableMode();
   const { user } = useAuth();
 
-  // Menu items mapping (same as Sidebar)
-  const menuItems = [
-    { path: '/', key: 'dashboard' },
-    { path: '/new-entry', key: 'new_entry' },
-    { path: '/edit-entry', key: 'edit_entry' },
-    { path: '/daily-report', key: 'daily_report' },
-    { path: '/detailed-ledger', key: 'detailed_ledger' },
-    { path: '/ledger-summary', key: 'ledger_summary' },
-    { path: '/approve-records', key: 'approve_records' },
-    { path: '/edited-records', key: 'edited_records' },
-    { path: '/deleted-records', key: 'deleted_records' },
-    { path: '/replace-form', key: 'replace_form' },
-    { path: '/export-excel', key: 'export' },
-    { path: '/csv-upload', key: 'csv_upload' },
-    { path: '/balance-sheet', key: 'balance_sheet' },
-    { path: '/vehicles', key: 'vehicles' },
-    { path: '/bank-guarantees', key: 'bank_guarantees' },
-    { path: '/drivers', key: 'drivers' },
-    { path: '/user-management', key: 'users', adminOnly: true },
-  ];
-
-  const financeMenuItems = [
-    { path: '/finance', key: 'finance_dashboard' },
-    { path: '/finance/loan-entry', key: 'loan_entry' },
-    { path: '/finance/edit-loan-entry', key: 'edit_loan_entry' },
-    { path: '/finance/partners', key: 'partners' },
-    { path: '/finance/search', key: 'search' },
-    { path: '/finance/calculator', key: 'calculator' },
-    { path: '/finance/capital-entry', key: 'capital_entry' },
-    { path: '/finance/camera', key: 'camera' },
-    { path: '/finance/daybook', key: 'daybook' },
-    { path: '/finance/general-ledger', key: 'general_ledger' },
-    { path: '/finance/cd-ledger', key: 'cd_ledger' },
-    { path: '/finance/stbd-ledger', key: 'stbd_ledger' },
-    { path: '/finance/hp-ledger', key: 'hp_ledger' },
-    { path: '/finance/tbd-ledger', key: 'tbd_ledger' },
-    { path: '/finance/dues-ledger', key: 'dues_ledger' },
-    { path: '/finance/pl', key: 'pl' },
-    { path: '/finance/final-statement', key: 'final_statement' },
-    { path: '/finance/business-report', key: 'business_report' },
-    { path: '/finance/partner-performance', key: 'partner_performance' },
-    { path: '/finance/new-customers', key: 'new_customers' },
-    { path: '/finance/phone-editor', key: 'phone_editor' },
-    { path: '/finance/aadhaar-search', key: 'aadhaar_search' },
-    { path: '/finance/logs', key: 'logs' },
-    { path: '/finance/user-access-management', key: 'user_access_management', adminOnly: true },
-  ];
-
 
   const handleRegularMode = () => {
     setMode('regular');

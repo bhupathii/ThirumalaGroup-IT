@@ -51,19 +51,18 @@ export const useBook = () => {
 };
 
 export const BookProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { mode: tableMode, isFinanceMode } = useTableMode();
+  const { mode: tableMode } = useTableMode();
   const { user } = useAuth();
   
   const [books, setBooks] = useState<Book[]>([]);
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Map 'finance' mode to 'regular' books context as business tables in finance scope
-  // are stored in REG-LEGACY/regular books.
-  const activeBookMode = (isFinanceMode ? 'regular' : tableMode) as 'regular' | 'itr';
+  // Map active book mode (only regular and itr modes support books)
+  const activeBookMode = (tableMode === 'itr' ? 'itr' : 'regular') as 'regular' | 'itr';
 
   const refreshBooks = useCallback(async () => {
-    if (!user || !tableMode) {
+    if (!user || !tableMode || tableMode === 'finance') {
       setBooks([]);
       setCurrentBook(null);
       supabaseDB.setBookId('');

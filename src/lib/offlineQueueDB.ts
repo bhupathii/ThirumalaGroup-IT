@@ -2,7 +2,8 @@ import Dexie, { Table } from 'dexie';
 
 export interface QueuedOperation {
   offline_uuid: string; // primary key
-  mode: 'regular' | 'itr';
+  mode: 'regular' | 'itr' | 'finance';
+  schema: 'regular' | 'itr' | 'finance' | 'public';
   book_id: string;
   book_name: string;
   user_id: string;
@@ -20,8 +21,8 @@ class OfflineQueueDatabase extends Dexie {
 
   constructor() {
     super('OfflineQueueDatabase');
-    this.version(1).stores({
-      queued_operations: 'offline_uuid, mode, book_id, user_id, status, created_at, synced_at'
+    this.version(2).stores({
+      queued_operations: 'offline_uuid, mode, schema, book_id, user_id, status, created_at, synced_at'
     });
   }
 }

@@ -1,4 +1,4 @@
-import { supabase as rawSupabase } from './supabase';
+import { supabase as rawSupabase, resolveSchemaAndTable } from './supabase';
 import { FinancialCalculator } from './financialCalculations';
 import { getTableName, getTableMode } from './tableNames';
 import { db, QueuedOperation } from './offlineQueueDB';
@@ -152,32 +152,50 @@ export interface Reminder {
 
 const isScopedTable = (table: string): boolean => {
   const scopedTables = [
-    'companies', 'companies_itr',
-    'company_main_accounts', 'company_main_accounts_itr',
-    'company_main_sub_acc', 'company_main_sub_acc_itr',
-    'cash_book', 'cash_book_itr',
-    'original_cash_book', 'original_cash_book_itr',
-    'edit_cash_book', 'edit_cash_book_itr',
-    'deleted_cash_book', 'deleted_cash_book_itr',
-    'ledger', 'ledger_itr',
-    'balance_sheet', 'balance_sheet_itr',
-    'vehicles', 'vehicles_itr',
-    'drivers', 'drivers_itr',
-    'bank_guarantees', 'bank_guarantees_itr',
+    'books',
+    'companies',
+    'company_main_accounts',
+    'company_main_sub_acc',
+    'cash_book',
+    'original_cash_book',
+    'edit_cash_book',
+    'deleted_cash_book',
+    'ledger',
+    'balance_sheet',
+    'vehicles',
+    'drivers',
+    'bank_guarantees',
     'reminders',
-    'finance_loans', 'finance_transactions', 'finance_capital_entries', 'finance_dues', 'finance_cd_ledger_entries', 'finance_cashbook_entries'
+    'loans',
+    'loan_transactions',
+    'capital_entries',
+    'due_entries',
+    'cd_ledger_entries',
+    'cashbook_entries',
+    'borrowers',
+    'loan_types'
   ];
-  return scopedTables.includes(table);
+  // Strip finance_ prefix and _itr suffix for backward compatibility checks
+  let cleanTable = table;
+  if (table.startsWith('finance_')) {
+    cleanTable = table.substring(8);
+    if (cleanTable === 'customers') cleanTable = 'borrowers';
+    if (cleanTable === 'transactions') cleanTable = 'loan_transactions';
+    if (cleanTable === 'dues') cleanTable = 'due_entries';
+  } else if (table.endsWith('_itr')) {
+    cleanTable = table.substring(0, table.length - 4);
+  }
+  return scopedTables.includes(cleanTable);
 };
 
 const createBuilderProxy = (builder: any, table: string): any => {
   return new Proxy(builder, {
-    get(target, prop, receiver) {
+    get(target, prop, _receiver) {
       // Intercept .then for offline write resolution
       if (prop === 'then') {
         const offlineInfo = target._offlineInfo;
         if (offlineInfo && offlineInfo.operation_type && !supabaseDB.isOnline) {
-          return function (resolve: any, reject: any) {
+          return function (resolve: any, _reject: any) {
             supabaseDB.handleOfflineWrite(offlineInfo)
               .then(data => resolve({ data, error: null }))
               .catch(err => resolve({ data: null, error: err }));
@@ -372,6 +390,7 @@ class SupabaseDatabase {
   async handleOfflineWrite(info: any) {
     const offline_uuid = crypto.randomUUID();
     const mode = getTableMode();
+    const { schema } = resolveSchemaAndTable(info.table);
     const book_id = this.currentBookId || '';
     const book_name = this.currentBookName || 'Unknown Book';
     
@@ -420,6 +439,7 @@ class SupabaseDatabase {
     const op = {
       offline_uuid,
       mode,
+      schema: schema as 'regular' | 'itr' | 'finance' | 'public',
       book_id,
       book_name,
       user_id,
@@ -566,17 +586,19 @@ class SupabaseDatabase {
     localStorage.setItem('table_mode', item.mode);
 
     try {
-      const resolvedTable = getTableName(item.table, item.mode);
+      const resolvedSchema = item.schema || (item.mode === 'itr' ? 'itr' : item.mode === 'finance' ? 'finance' : 'regular');
+      const { table: resolvedTable } = resolveSchemaAndTable(item.table);
+      const client = rawSupabase.schema(resolvedSchema);
       
       if (item.operation_type === 'INSERT') {
-        const { error } = await rawSupabase.from(resolvedTable).insert(item.payload);
+        const { error } = await client.from(resolvedTable).insert(item.payload);
         if (error) throw error;
       } else if (item.operation_type === 'UPDATE') {
         const recordId = item.payload.id || item.payload.offline_uuid;
-        const { error } = await rawSupabase.from(resolvedTable).update(item.payload).eq('id', recordId);
+        const { error } = await client.from(resolvedTable).update(item.payload).eq('id', recordId);
         if (error) throw error;
       } else if (item.operation_type === 'DELETE') {
-        if (item.table === 'cash_book') {
+        if (resolvedTable === 'cash_book') {
           const recordId = item.payload.id || item.payload.offline_uuid;
           const deletedBy = item.payload.deleted_by || 'offline_sync';
           const success = await this.deleteCashBookEntry(recordId, deletedBy);
@@ -585,11 +607,11 @@ class SupabaseDatabase {
           }
         } else {
           const recordId = item.payload.id || item.payload.offline_uuid;
-          const { error } = await rawSupabase.from(resolvedTable).delete().eq('id', recordId);
+          const { error } = await client.from(resolvedTable).delete().eq('id', recordId);
           if (error) throw error;
         }
       } else if (item.operation_type === 'UPSERT') {
-        const { error } = await rawSupabase.from(resolvedTable).upsert(item.payload);
+        const { error } = await client.from(resolvedTable).upsert(item.payload);
         if (error) throw error;
       }
     } finally {
@@ -606,29 +628,41 @@ class SupabaseDatabase {
 
   async verifyBookIsEmpty(bookId: string): Promise<{ isEmpty: boolean; details?: string }> {
     return this.bypassScope(async () => {
-      const checks = [
-        { table: 'companies', label: 'Companies' },
-        { table: 'companies_itr', label: 'Companies ITR' },
-        { table: 'cash_book', label: 'Transactions' },
-        { table: 'cash_book_itr', label: 'ITR Transactions' },
-        { table: 'vehicles', label: 'Vehicles' },
-        { table: 'vehicles_itr', label: 'ITR Vehicles' },
-        { table: 'drivers', label: 'Drivers' },
-        { table: 'drivers_itr', label: 'ITR Drivers' },
-        { table: 'bank_guarantees', label: 'Bank Guarantees' },
-        { table: 'bank_guarantees_itr', label: 'ITR Bank Guarantees' },
-        { table: 'reminders', label: 'Reminders' },
-        { table: 'finance_loans', label: 'Finance Loans' }
+      // Find the book's mode by checking both schemas
+      let bookMode: 'regular' | 'itr' | null = null;
+      const { data: regBook } = await rawSupabase.schema('regular').from('books').select('id, mode').eq('id', bookId).maybeSingle();
+      if (regBook) {
+        bookMode = 'regular';
+      } else {
+        const { data: itrBook } = await rawSupabase.schema('itr').from('books').select('id, mode').eq('id', bookId).maybeSingle();
+        if (itrBook) {
+          bookMode = 'itr';
+        }
+      }
+
+      if (!bookMode) {
+        return { isEmpty: true }; // Book not found, treat as empty
+      }
+
+      const tables = [
+        'companies',
+        'company_main_accounts',
+        'company_main_sub_acc',
+        'cash_book',
+        'vehicles',
+        'drivers',
+        'bank_guarantees',
+        'reminders'
       ];
 
-      for (const check of checks) {
-        const { count, error } = await rawSupabase
-          .from(check.table)
+      for (const table of tables) {
+        const { count, error } = await rawSupabase.schema(bookMode)
+          .from(table)
           .select('*', { count: 'exact', head: true })
           .eq('book_id', bookId);
 
         if (!error && count && count > 0) {
-          return { isEmpty: false, details: `${count} records in ${check.label}` };
+          return { isEmpty: false, details: `${count} records in ${bookMode}.${table}` };
         }
       }
 
@@ -644,25 +678,28 @@ class SupabaseDatabase {
     reminders: number;
   }> {
     return this.bypassScope(async () => {
-      const { count: companies } = await rawSupabase.from('companies').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
-      const { count: companiesItr } = await rawSupabase.from('companies_itr').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
-      
-      const { count: accounts } = await rawSupabase.from('company_main_accounts').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
-      const { count: accountsItr } = await rawSupabase.from('company_main_accounts_itr').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
-      
-      const { count: transactions } = await rawSupabase.from('cash_book').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
-      const { count: transactionsItr } = await rawSupabase.from('cash_book_itr').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+      // Find the book's mode
+      let bookMode: 'regular' | 'itr' = 'regular';
+      const { data: regBook } = await rawSupabase.schema('regular').from('books').select('id, mode').eq('id', bookId).maybeSingle();
+      if (!regBook) {
+        const { data: itrBook } = await rawSupabase.schema('itr').from('books').select('id, mode').eq('id', bookId).maybeSingle();
+        if (itrBook) {
+          bookMode = 'itr';
+        }
+      }
 
-      const { count: vehicles } = await rawSupabase.from('vehicles').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
-      const { count: vehiclesItr } = await rawSupabase.from('vehicles_itr').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
-
-      const { count: reminders } = await rawSupabase.from('reminders').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+      const schema = bookMode;
+      const { count: companies } = await rawSupabase.schema(schema).from('companies').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+      const { count: accounts } = await rawSupabase.schema(schema).from('company_main_accounts').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+      const { count: transactions } = await rawSupabase.schema(schema).from('cash_book').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+      const { count: vehicles } = await rawSupabase.schema(schema).from('vehicles').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
+      const { count: reminders } = await rawSupabase.schema(schema).from('reminders').select('*', { count: 'exact', head: true }).eq('book_id', bookId);
 
       return {
-        companies: (companies || 0) + (companiesItr || 0),
-        accounts: (accounts || 0) + (accountsItr || 0),
-        transactions: (transactions || 0) + (transactionsItr || 0),
-        vehicles: (vehicles || 0) + (vehiclesItr || 0),
+        companies: companies || 0,
+        accounts: accounts || 0,
+        transactions: transactions || 0,
+        vehicles: vehicles || 0,
         reminders: reminders || 0
       };
     });
