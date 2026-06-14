@@ -209,20 +209,25 @@ CREATE TABLE IF NOT EXISTS finance.books (
 );
 
 -- Copy books data
-INSERT INTO regular.books 
-SELECT * FROM public.books 
-WHERE mode = 'regular'
-ON CONFLICT (book_code) DO NOTHING;
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'books') THEN
+    INSERT INTO regular.books 
+    SELECT * FROM public.books 
+    WHERE mode = 'regular'
+    ON CONFLICT (book_code) DO NOTHING;
 
-INSERT INTO itr.books 
-SELECT * FROM public.books 
-WHERE mode = 'itr'
-ON CONFLICT (book_code) DO NOTHING;
+    INSERT INTO itr.books 
+    SELECT * FROM public.books 
+    WHERE mode = 'itr'
+    ON CONFLICT (book_code) DO NOTHING;
 
-INSERT INTO finance.books (id, book_code, name, description, is_default, is_active, is_locked, is_archived, display_order, color, created_by, created_at, updated_at, deleted_at)
-SELECT id, book_code, name, description, is_default, is_active, is_locked, is_archived, display_order, color, created_by, created_at, updated_at, deleted_at 
-FROM public.books
-ON CONFLICT (book_code) DO NOTHING;
+    INSERT INTO finance.books (id, book_code, name, description, is_default, is_active, is_locked, is_archived, display_order, color, created_by, created_at, updated_at, deleted_at)
+    SELECT id, book_code, name, description, is_default, is_active, is_locked, is_archived, display_order, color, created_by, created_at, updated_at, deleted_at 
+    FROM public.books
+    ON CONFLICT (book_code) DO NOTHING;
+  END IF;
+END $$;
 
 -- 6.2 Create Reminders Tables per mode
 CREATE TABLE IF NOT EXISTS regular.reminders (
@@ -276,13 +281,18 @@ CREATE TABLE IF NOT EXISTS itr.reminders (
 );
 
 -- Copy reminders data
-INSERT INTO regular.reminders 
-SELECT * FROM public.reminders 
-WHERE mode = 'regular';
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'reminders') THEN
+    INSERT INTO regular.reminders 
+    SELECT * FROM public.reminders 
+    WHERE mode = 'regular';
 
-INSERT INTO itr.reminders 
-SELECT * FROM public.reminders 
-WHERE mode = 'itr';
+    INSERT INTO itr.reminders 
+    SELECT * FROM public.reminders 
+    WHERE mode = 'itr';
+  END IF;
+END $$;
 
 -- Drop old books and reminders tables
 DROP TABLE IF EXISTS public.reminders CASCADE;
@@ -298,6 +308,31 @@ CREATE TABLE IF NOT EXISTS finance.loan_types (
 );
 
 -- Step 7: Apply constraints and references within schemas
+
+-- 7.0 Drop existing constraints in target schemas to enable safe rerun/idempotence
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (
+        SELECT tc.table_schema, tc.table_name, tc.constraint_name
+        FROM information_schema.table_constraints tc
+        WHERE tc.constraint_type IN ('FOREIGN KEY', 'UNIQUE')
+          AND tc.table_schema IN ('regular', 'itr', 'finance')
+          AND tc.table_name IN (
+            'books', 'companies', 'company_main_accounts', 'company_main_sub_acc',
+            'cash_book', 'original_cash_book', 'edit_cash_book', 'deleted_cash_book',
+            'ledger', 'balance_sheet', 'vehicles', 'drivers', 'bank_guarantees',
+            'reminders', 'partners', 'borrowers', 'loans', 'loan_transactions',
+            'capital_entries', 'due_entries', 'photos', 'documents', 'edited_logs',
+            'deleted_logs', 'cashbook_accounts', 'cashbook_entries', 'npa_records',
+            'ledger_settings', 'loan_documents', 'documents_returned', 'fingerprints',
+            'cd_ledger_entries', 'cd_interest_details', 'guarantors'
+          )
+    ) LOOP
+        EXECUTE 'ALTER TABLE ' || quote_ident(r.table_schema) || '.' || quote_ident(r.table_name) || ' DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE';
+    END LOOP;
+END $$;
 
 -- 7.1 Regular Schema Constraints
 ALTER TABLE regular.companies ADD CONSTRAINT companies_company_name_book_id_key UNIQUE (company_name, book_id);
@@ -383,3 +418,14 @@ ALTER TABLE finance.cd_ledger_entries ADD CONSTRAINT cd_ledger_entries_loan_id_f
 ALTER TABLE finance.cd_ledger_entries ADD CONSTRAINT cd_ledger_entries_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES finance.borrowers(id) ON DELETE CASCADE;
 
 ALTER TABLE finance.cd_interest_details ADD CONSTRAINT cd_interest_details_loan_id_fkey FOREIGN KEY (loan_id) REFERENCES finance.loans(id) ON DELETE CASCADE;
+
+-- Step 8: Grant schema usage and privileges to PostgREST roles (anon, authenticated, service_role)
+GRANT USAGE ON SCHEMA regular, itr, finance TO anon, authenticated, service_role;
+
+GRANT ALL ON ALL TABLES IN SCHEMA regular, itr, finance TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA regular, itr, finance TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA regular, itr, finance TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA regular, itr, finance GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA regular, itr, finance GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA regular, itr, finance GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
