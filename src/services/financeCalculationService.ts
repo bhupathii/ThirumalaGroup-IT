@@ -149,27 +149,19 @@ export const financeCalculationService = {
   },
 
   computeRenewSplit(paymentAmount: number, penaltyDue: number) {
-    if (penaltyDue > 0) {
-      let penaltyPaid = Number((paymentAmount * 0.20).toFixed(2));
-      let interestPaid = Number((paymentAmount * 0.80).toFixed(2));
-      
-      if (penaltyPaid > penaltyDue) {
-        penaltyPaid = penaltyDue;
-        interestPaid = Number((paymentAmount - penaltyPaid).toFixed(2));
-      }
-      
-      return {
-        penaltyPaid,
-        interestPaid,
-        principalPaid: 0
-      };
-    } else {
-      return {
-        penaltyPaid: 0,
-        interestPaid: Number(paymentAmount.toFixed(2)),
-        principalPaid: 0
-      };
+    let penaltyPaid = Number((paymentAmount * 0.20).toFixed(2));
+    let interestPaid = Number((paymentAmount * 0.80).toFixed(2));
+    
+    if (penaltyPaid > penaltyDue) {
+      penaltyPaid = penaltyDue;
+      interestPaid = Number((paymentAmount - penaltyPaid).toFixed(2));
     }
+    
+    return {
+      penaltyPaid,
+      interestPaid,
+      principalPaid: 0
+    };
   },
 
   computeCDPaymentSplit(
@@ -192,9 +184,6 @@ export const financeCalculationService = {
     if (actionType === 'Partial') {
       const totalOutstanding = penDue + intDue;
       if (pAmt >= totalOutstanding) {
-        // Option A: payment is >= outstanding interest + penalty
-        // Clears penalty and interest, remainder reduces principal.
-        // Due date is extended by dueDays (to the transaction/payment date).
         const penaltyPaid = penDue;
         const overdueInterestPaid = intDue;
         const principalPaid = Number((pAmt - totalOutstanding).toFixed(2));
@@ -209,25 +198,11 @@ export const financeCalculationService = {
           remaining: 0
         };
       } else {
-        // Option B: payment is < outstanding interest + penalty
-        // Remainder buys interest/penalty days (renewed days), no principal reduction.
-        const dailyInterestRate = days > 0 ? (renDue / days) : (renDue / 30);
-        const dailyPenaltyRate = penDue > 0 ? (prin * 0.75 / 100) / 30 : 0;
-        const dailyRateCombined = dailyInterestRate + dailyPenaltyRate;
-
-        const renewedDays = dailyRateCombined > 0 ? Math.round(pAmt / dailyRateCombined) : 0;
-
-        let penaltyPaid = 0;
-        let interestPaid = 0;
-        if (penDue > 0) {
-          penaltyPaid = Number((dailyPenaltyRate * renewedDays).toFixed(2));
-          interestPaid = Number((dailyInterestRate * renewedDays).toFixed(2));
-          const diff = Number((pAmt - penaltyPaid - interestPaid).toFixed(2));
-          if (diff !== 0) {
-            interestPaid = Number((interestPaid + diff).toFixed(2));
-          }
-        } else {
-          interestPaid = pAmt;
+        let penaltyPaid = Number((pAmt * 0.20).toFixed(2));
+        let interestPaid = Number((pAmt * 0.80).toFixed(2));
+        if (penaltyPaid > penDue) {
+            penaltyPaid = penDue;
+            interestPaid = Number((pAmt - penaltyPaid).toFixed(2));
         }
 
         return {
@@ -236,19 +211,35 @@ export const financeCalculationService = {
           renewalInterestPaid: 0,
           interestPaid: Number(interestPaid.toFixed(2)),
           principalPaid: 0,
-          renewedDays,
+          renewedDays: 0,
           remaining: 0
         };
       }
     }
 
     if (actionType === 'Close') {
-      let remaining = pAmt;
-      const penaltyPaid = Math.min(remaining, penDue);
-      remaining = Number((remaining - penaltyPaid).toFixed(2));
-      const overdueInterestPaid = Math.min(remaining, intDue);
-      remaining = Number((remaining - overdueInterestPaid).toFixed(2));
-      const principalPaid = Math.min(remaining, prin);
+      const totalDues = penDue + intDue;
+      let penaltyPaid: number;
+      let overdueInterestPaid: number;
+      let remaining: number;
+
+      if (pAmt >= totalDues) {
+        // Exact dues settled; remainder goes to principal
+        penaltyPaid = penDue;
+        overdueInterestPaid = intDue;
+        remaining = Number((pAmt - totalDues).toFixed(2));
+      } else {
+        // Partial close: 20% Penalty / 80% Interest from dues portion
+        penaltyPaid = Number((pAmt * 0.20).toFixed(2));
+        overdueInterestPaid = Number((pAmt * 0.80).toFixed(2));
+        if (penaltyPaid > penDue) {
+          penaltyPaid = penDue;
+          overdueInterestPaid = Number((pAmt - penaltyPaid).toFixed(2));
+        }
+        remaining = 0;
+      }
+
+      const principalPaid = Number(Math.min(remaining, prin).toFixed(2));
       remaining = Number((remaining - principalPaid).toFixed(2));
 
       return {
@@ -262,22 +253,24 @@ export const financeCalculationService = {
       };
     }
 
-    // VBA: RDAYS = (TotalAmountPaying − Penalty) / DailyInterest
-    // Always strict sequential: Penalty first, then remainder buys interest days.
-    // No proportional split — the legacy system never used one.
+    // Renew action: 20% Penalty / 80% Interest.
+    // renewedDays = interest portion ÷ daily interest rate.
     {
-      const penaltyPaid = Math.max(0, Math.min(pAmt, penDue));
-      const remaining = Number((pAmt - penaltyPaid).toFixed(2));
+      let penaltyPaid = Number((pAmt * 0.20).toFixed(2));
+      let interestPaid = Number((pAmt * 0.80).toFixed(2));
+      if (penaltyPaid > penDue) {
+        penaltyPaid = penDue;
+        interestPaid = Number((pAmt - penaltyPaid).toFixed(2));
+      }
 
-      // dailyInterestValue = principal × rate / 100 / 30 (same as VBA DailyInterest)
       const dailyInterestValue = days > 0 ? (renDue / days) : (renDue / 10);
-      const renewedDays = dailyInterestValue > 0 ? Math.floor(remaining / dailyInterestValue) : 0;
+      const renewedDays = dailyInterestValue > 0 ? Math.floor(interestPaid / dailyInterestValue) : 0;
 
       return {
         penaltyPaid: Number(penaltyPaid.toFixed(2)),
         overdueInterestPaid: 0,
-        renewalInterestPaid: remaining,
-        interestPaid: remaining,
+        renewalInterestPaid: interestPaid,
+        interestPaid: interestPaid,
         principalPaid: 0,
         renewedDays,
         remaining: 0
@@ -291,23 +284,33 @@ export const financeCalculationService = {
     penaltyDue: number,
     principalBalance: number
   ) {
-    let remaining = amountPaying;
+    const total = amountPaying;
+    const totalDues = penaltyDue + interestDue;
     let penaltyPaid = 0;
     let interestPaid = 0;
     let principalPaid = 0;
+    let remaining = 0;
 
-    // Split order: (1) Penalty first, (2) Interest second, (3) Principal last
-    if (remaining > 0) {
-      penaltyPaid = Math.min(remaining, penaltyDue);
-      remaining -= penaltyPaid;
-    }
-    if (remaining > 0) {
-      interestPaid = Math.min(remaining, interestDue);
-      remaining -= interestPaid;
-    }
-    if (remaining > 0) {
-      principalPaid = Math.min(remaining, principalBalance);
-      remaining -= principalPaid;
+    if (total >= totalDues) {
+      // Clears all dues; remainder goes to principal
+      penaltyPaid = penaltyDue;
+      interestPaid = interestDue;
+      const afterDues = Number((total - totalDues).toFixed(2));
+      principalPaid = Number(Math.min(afterDues, principalBalance).toFixed(2));
+      remaining = Number((afterDues - principalPaid).toFixed(2));
+    } else {
+      // Business rule: 20% Penalty / 80% Interest
+      if (penaltyDue > 0) {
+        penaltyPaid = Number((total * 0.20).toFixed(2));
+        interestPaid = Number((total * 0.80).toFixed(2));
+        if (penaltyPaid > penaltyDue) {
+          penaltyPaid = penaltyDue;
+          interestPaid = Number((total - penaltyPaid).toFixed(2));
+        }
+      } else {
+        interestPaid = total;
+      }
+      remaining = 0;
     }
 
     return {
