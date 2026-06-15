@@ -298,8 +298,8 @@ describe('CD Ledger Calculation Rules', () => {
         100000,
         'Renew'
       );
-      expect(split.penaltyPaid).toBe(200);
-      expect(split.interestPaid).toBe(800);
+      expect(split.penaltyPaid).toBe(500);
+      expect(split.interestPaid).toBe(500);
       expect(split.principalPaid).toBe(0);
     });
   });
@@ -343,9 +343,6 @@ describe('CD Ledger Calculation Rules', () => {
       const penaltyDays = dueDays <= 5 ? 0 : dueDays;
       const grossPenalty = penaltyDays <= 0 ? 0 : Number(((principal * 0.75 * penaltyDays) / 30 / 100).toFixed(2));
 
-      const effectiveGrossInterest = grossInterest;
-      const effectiveGrossPenalty = grossPenalty;
-
       const outstandingInterest = Math.max(0, Number(grossInterest.toFixed(2)));
       const outstandingPenalty = Math.max(0, Number(grossPenalty.toFixed(2)));
 
@@ -370,7 +367,8 @@ describe('CD Ledger Calculation Rules', () => {
         renewalDue,
         principal,
         actionType,
-        periodDays
+        periodDays,
+        dueDays
       );
 
       const renewedDays = split.renewedDays;
@@ -522,8 +520,8 @@ describe('CD Ledger Calculation Rules', () => {
         100000,
         'Renew'
       );
-      expect(split.penaltyPaid).toBe(200);
-      expect(split.interestPaid).toBe(800);
+      expect(split.penaltyPaid).toBe(500);
+      expect(split.interestPaid).toBe(500);
       expect(split.principalPaid).toBe(0);
     });
 
@@ -689,8 +687,8 @@ describe('CD Ledger Calculation Rules', () => {
       expect(res.interestPaid).toBe(3200);
       expect(res.penaltyPaid).toBe(0);
       expect(res.principalPaid).toBe(0);
-      expect(res.renewedDays).toBe(30);
-      expect(res.nextDueDate).toBe('2026-07-20');
+      expect(res.renewedDays).toBe(32);
+      expect(res.nextDueDate).toBe('2026-07-22');
     });
 
     it('Partial Payment Validation Case 2 - Excess Payment with Principal Reduction Only', () => {
@@ -706,11 +704,11 @@ describe('CD Ledger Calculation Rules', () => {
       expect(res.interest).toBe(200);
       expect(res.penalty).toBe(0);
       expect(res.totalDue).toBe(200);
-      expect(res.interestPaid).toBe(0);
+      expect(res.interestPaid).toBe(200);
       expect(res.penaltyPaid).toBe(0);
-      expect(res.principalPaid).toBe(7000);
-      expect(res.renewedDays).toBe(0);
-      expect(res.nextDueDate).toBeNull();
+      expect(res.principalPaid).toBe(6800);
+      expect(res.renewedDays).toBe(2);
+      expect(res.nextDueDate).toBe('2026-06-22');
     });
 
     it('Partial Payment Validation Case 3 - Heavy Excess Payment with Principal Reduction Only', () => {
@@ -726,11 +724,11 @@ describe('CD Ledger Calculation Rules', () => {
       expect(res.interest).toBe(200);
       expect(res.penalty).toBe(0);
       expect(res.totalDue).toBe(200);
-      expect(res.interestPaid).toBe(0);
+      expect(res.interestPaid).toBe(200);
       expect(res.penaltyPaid).toBe(0);
-      expect(res.principalPaid).toBe(10000);
-      expect(res.renewedDays).toBe(0);
-      expect(res.nextDueDate).toBeNull();
+      expect(res.principalPaid).toBe(9800);
+      expect(res.renewedDays).toBe(2);
+      expect(res.nextDueDate).toBe('2026-06-22');
     });
 
     describe('User Requested Validation Tests', () => {
@@ -743,11 +741,11 @@ describe('CD Ledger Calculation Rules', () => {
           paymentAmount: 3200,
           actionType: 'Partial'
         });
-        expect(res.interestPaid).toBe(0);
+        expect(res.interestPaid).toBe(200);
         expect(res.penaltyPaid).toBe(0);
-        expect(res.principalPaid).toBe(3200); // Entire amount reduces principal
-        expect(res.renewedDays).toBe(0); // Due date/cycle unchanged
-        expect(res.nextDueDate).toBeNull();
+        expect(res.principalPaid).toBe(3000); // Remainder reduces principal
+        expect(res.renewedDays).toBe(2); // Due date/cycle advanced by 2 days
+        expect(res.nextDueDate).toBe('2026-06-22');
       });
 
       it('Test 2 - Partial Payment - Payment of 5,000', () => {
@@ -759,11 +757,11 @@ describe('CD Ledger Calculation Rules', () => {
           paymentAmount: 5000,
           actionType: 'Partial'
         });
-        expect(res.interestPaid).toBe(0);
+        expect(res.interestPaid).toBe(200);
         expect(res.penaltyPaid).toBe(0);
-        expect(res.principalPaid).toBe(5000); // Entire amount reduces principal
-        expect(res.renewedDays).toBe(0); // Due date/cycle unchanged
-        expect(res.nextDueDate).toBeNull();
+        expect(res.principalPaid).toBe(4800); // Remainder reduces principal
+        expect(res.renewedDays).toBe(2); // Due date/cycle advanced by 2 days
+        expect(res.nextDueDate).toBe('2026-06-22');
       });
 
       it('Test 3 - Partial Payment - Payment of 10,000', () => {
@@ -775,11 +773,11 @@ describe('CD Ledger Calculation Rules', () => {
           paymentAmount: 10000,
           actionType: 'Partial'
         });
-        expect(res.interestPaid).toBe(0);
+        expect(res.interestPaid).toBe(200);
         expect(res.penaltyPaid).toBe(0);
-        expect(res.principalPaid).toBe(10000); // Entire amount reduces principal
-        expect(res.renewedDays).toBe(0); // Due date/cycle unchanged
-        expect(res.nextDueDate).toBeNull();
+        expect(res.principalPaid).toBe(9800); // Remainder reduces principal
+        expect(res.renewedDays).toBe(2); // Due date/cycle advanced by 2 days
+        expect(res.nextDueDate).toBe('2026-06-22');
       });
 
       it('Test 4 - Renewal Account - Payment of 10,000', () => {
@@ -849,11 +847,11 @@ describe('CD Ledger Calculation Rules', () => {
         expect(res.interest).toBe(13100);
         expect(res.penalty).toBe(3275);
         expect(res.totalDue).toBe(16375);
-        expect(res.penaltyPaid).toBe(1000);
-        expect(res.interestPaid).toBe(4000);
+        expect(res.penaltyPaid).toBe(3275);
+        expect(res.interestPaid).toBe(1725);
         expect(res.principalPaid).toBe(0);
-        expect(res.renewedDays).toBe(0);
-        expect(res.nextDueDate).toBeNull();
+        expect(res.renewedDays).toBe(17);
+        expect(res.nextDueDate).toBe('2026-06-27');
       });
  
       it('Validation Test 15 - Penalty Due = ₹315, Overdue Interest Due = ₹1,310, Payment = ₹1,500', () => {
@@ -872,8 +870,8 @@ describe('CD Ledger Calculation Rules', () => {
         expect(res.penaltyPaid).toBe(327.50);
         expect(res.interestPaid).toBe(1172.50);
         expect(res.principalPaid).toBe(0);
-        expect(res.renewedDays).toBe(0);
-        expect(res.nextDueDate).toBeNull();
+        expect(res.renewedDays).toBe(117);
+        expect(res.nextDueDate).toBe('2026-10-05');
       });
  
       it('Validation Test 16 - Penalty Due = ₹315, Overdue Interest Due = ₹1,310, Payment = ₹1,700', () => {
@@ -892,8 +890,8 @@ describe('CD Ledger Calculation Rules', () => {
         expect(res.penaltyPaid).toBe(327.50);
         expect(res.interestPaid).toBe(1372.50);
         expect(res.principalPaid).toBe(0);
-        expect(res.renewedDays).toBe(6);
-        expect(res.nextDueDate).toBe('2026-06-16');
+        expect(res.renewedDays).toBe(137);
+        expect(res.nextDueDate).toBe('2026-10-25');
       });
     });
 
@@ -969,7 +967,7 @@ describe('CD Ledger Calculation Rules', () => {
         expect(res.totalDue).toBe(187.50);
         expect(res.penaltyPaid).toBe(37.50);
         expect(res.interestPaid).toBe(562.50); // 600 - 37.50 = 562.50
-        expect(res.renewedDays).toBe(41); // 412.50 / 10 = 41.25 -> 41 days
+        expect(res.renewedDays).toBe(56); // 562.50 / 10 = 56.25 -> 56 days
       });
 
       it('verifies due date is calculated as loan_date + period_days exactly', () => {

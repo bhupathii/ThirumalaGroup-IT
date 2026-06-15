@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import { supabaseFinance, FinanceCustomer, FinancePartner } from '../../lib/supabaseFinance';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../lib/supabaseDatabase';
 import { 
   ArrowLeft, 
   Check, 

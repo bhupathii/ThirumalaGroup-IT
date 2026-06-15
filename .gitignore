@@ -131,3 +131,6 @@ fix_lint.js
 
 # Migration files not intended for repository
 supabase/mumbai_migration_schema.sql
+
+# Legacy database/software files
+old software/

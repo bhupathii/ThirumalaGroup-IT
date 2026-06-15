@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase } from './supabaseDatabase';
 
 // TypeScript Interfaces for Finance Mode
 export interface FinancePartner {
@@ -964,7 +964,7 @@ class SupabaseFinance {
             .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
           const hasExactMatch = entries.some(e => new Date(e.entry_date).getTime() === txTime && Number(e.credit) === Number(tx.amount) && !e.receipt_no) ||
-                                (exactDateNativeSum > 0 && Math.abs(exactDateNativeSum - Number(tx.amount)) < 0.01);
+                                (exactDateNativeSum > 0 && Math.abs(exactDateNativeSum - Number(tx.amount)) < 10.00);
 
           if (!hasExactMatch) {
             mappedEntries.push({
@@ -1235,13 +1235,28 @@ class SupabaseFinance {
         .from('finance_loans')
         .select(`
           id, loan_id, amount, date, status, npa_closed, loan_category, interest_rate, penalty_percent, duration_months,
-          customer:finance_customers!customer_id(*),
-          guarantor_1:finance_customers!guarantor_1_id(*),
-          guarantor_2:finance_customers!guarantor_2_id(*)
+          customer_id, guarantor_1_id, guarantor_2_id,
+          customer:finance_customers!customer_id(*)
         `)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data || [];
+      if (!data || data.length === 0) return [];
+
+      // Fetch customers to resolve guarantors in-memory to bypass missing DB foreign keys
+      const { data: customers } = await supabase
+        .from('finance_customers')
+        .select('*');
+
+      const customerMap = new Map();
+      if (customers) {
+        customers.forEach((c: any) => customerMap.set(c.id, c));
+      }
+
+      return data.map((loan: any) => ({
+        ...loan,
+        guarantor_1: loan.guarantor_1_id ? customerMap.get(loan.guarantor_1_id) : null,
+        guarantor_2: loan.guarantor_2_id ? customerMap.get(loan.guarantor_2_id) : null,
+      }));
     } catch (error) {
       console.error('Error fetching CD loans list:', error);
       return [];

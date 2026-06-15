@@ -575,10 +575,16 @@ const CDLedger: React.FC = () => {
 
     const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
     
-    // Current Due Date = Loan Date + Period Days - 1
-    // VBA: DueDate = Date + Period − 1 (UpdatingDueDate.bas default path)
-    const entryDateStart = new Date(startOfDay(entryDate));
-    const dueDate = new Date(entryDateStart.getTime() + (periodDays - 1) * 24 * 60 * 60 * 1000);
+    // Calculate base due date from original disbursement date
+    const baseDueDate = new Date(originalLoanDateMs + (periodDays - 1) * 24 * 60 * 60 * 1000);
+
+    // Sum total renewed days from cdInterestDetails note rows (credit === 0)
+    const totalRenewedDays = cdInterestDetails
+      .filter(d => Number(d.credit) === 0)
+      .reduce((sum, d) => sum + (Number(d.renewed_days) || 0), 0);
+
+    // Extended Due Date = Base Due Date + Total Renewed Days
+    const dueDate = new Date(baseDueDate.getTime() + totalRenewedDays * 24 * 60 * 60 * 1000);
 
     // Dynamic Penalty Rate Lookup
     const penaltyRate = selectedLoan.penalty_percent !== undefined && selectedLoan.penalty_percent !== null ? Number(selectedLoan.penalty_percent) : 0.75;
@@ -588,7 +594,7 @@ const CDLedger: React.FC = () => {
     console.log('period_days:', periodDays);
     console.log('loan_date:', selectedLoan.date);
     console.log('due_date:', dueDate.toISOString().split('T')[0]);
-    console.log('calculated_cycle_days:', Math.round((dueDate.getTime() - entryDateStart.getTime()) / (1000 * 60 * 60 * 24)));
+    console.log('calculated_cycle_days:', Math.round((dueDate.getTime() - originalLoanDate.getTime()) / (1000 * 60 * 60 * 24)));
     
     // Due Days = Payment Date - Due Date (Clamped to 0)
     const rawDueDays = Math.round((startOfDay(today) - startOfDay(dueDate)) / (1000 * 60 * 60 * 24));
@@ -620,17 +626,17 @@ const CDLedger: React.FC = () => {
     }
 
     // ── BUGFIX: Determine the true current-cycle start from the ledger ──────────
-    // The start of the current cycle is exactly the loan date in selectedLoan.date.
-    // Any payments posted with entry_date on or after this start date belong to the current cycle.
-    const cycleStartDateMs = startOfDay(selectedLoan.date);
+    // The start of the current cycle is exactly the due date of the current cycle.
+    // Any payments posted with entry_date strictly after the due date belong to the current cycle's overdue period.
+    const cycleStartDateMs = startOfDay(dueDate);
 
     // Paid amounts for the current cycle:
     const penaltyPaidInCycle = cdLedgerEntries
-      .filter(e => e.entry_type === 'penalty_payment' && startOfDay(e.entry_date) >= cycleStartDateMs)
+      .filter(e => e.entry_type === 'penalty_payment' && startOfDay(e.entry_date) > cycleStartDateMs)
       .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
     const interestPaidInCycle = cdLedgerEntries
-      .filter(e => e.entry_type === 'interest_payment' && startOfDay(e.entry_date) >= cycleStartDateMs)
+      .filter(e => e.entry_type === 'interest_payment' && startOfDay(e.entry_date) > cycleStartDateMs)
       .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
     // ── OLD ACCESS VBA: effective gross & pending dues ────────────────────────────
@@ -688,7 +694,7 @@ const CDLedger: React.FC = () => {
       interestPaid: interestPaidInCycle,
       principalPaid: 0
     };
-  }, [selectedLoan, paymentDate, cdLedgerEntries, currentPrincipalBalance]);
+  }, [selectedLoan, paymentDate, cdLedgerEntries, cdInterestDetails, currentPrincipalBalance]);
 
   // Date Formatter helper (returns format e.g. 07-Mar-26)
   const formatDateOld = (dateStr: string | Date | number | null | undefined) => {
@@ -821,7 +827,7 @@ const CDLedger: React.FC = () => {
         particulars: 'Document Charges Collected',
         user_name: 'System',
         entry_type: 'document_charge',
-        entry_date: selectedLoan.date
+        entry_date: disb ? disb.entry_date : selectedLoan.date
       });
     }
 
@@ -1230,7 +1236,7 @@ const CDLedger: React.FC = () => {
     );
     // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate, not payment date
     const renewBaseDateMs = renewCalculations?.dueDate
-      ? startOfDay(renewCalculations.dueDate)
+      ? Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate))
       : startOfDay(paymentDate);
     const renewNextDueDate = renewSplit.renewedDays > 0 
       ? new Date(renewBaseDateMs + renewSplit.renewedDays * 24 * 60 * 60 * 1000) 
@@ -1256,9 +1262,12 @@ const CDLedger: React.FC = () => {
       monthlyInterest,
       principalBefore,
       'Partial',
-      periodDays
+      periodDays,
+      renewCalculations.daysPastDue || 0
     );
-    const partialBaseDateMs = Math.max(startOfDay(renewCalculations?.dueDate || paymentDate), startOfDay(paymentDate));
+    const partialBaseDateMs = renewCalculations?.dueDate
+      ? Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate))
+      : startOfDay(paymentDate);
     const partialNextDueDate = partialSplit.renewedDays > 0 
       ? new Date(partialBaseDateMs + partialSplit.renewedDays * 24 * 60 * 60 * 1000) 
       : null;
@@ -1427,27 +1436,53 @@ const CDLedger: React.FC = () => {
       return;
     }
 
-    // Validation for Partial Payment principal bounds
+    // Validation for Partial Payment bounds
     if (actionType === 'Partial') {
-      const principal = ledgerMetrics.principalBalance || 0;
-      if (amount >= principal) {
-        toast.error(`Partial Payment amount (₹${amount.toFixed(2)}) must be strictly less than the outstanding principal balance (₹${principal.toFixed(2)}). To close the loan, please use Close Account.`);
+      const totalToRegularize = ledgerMetrics.totalToRegularize || 0;
+      if (amount < totalToRegularize) {
+        toast.error(`Partial Payment amount (₹${amount.toFixed(2)}) must be greater than or equal to the total to regularize amount (₹${totalToRegularize.toFixed(2)}).`);
         return;
       }
-    }
-
-    // Operator Warning/Confirmation when outstanding dues exist during Partial Payment
-    const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
-    const outstandingInterest = renewCalculations.outstandingInterest || 0;
-    if (actionType === 'Partial' && (outstandingPenalty > 0 || outstandingInterest > 0)) {
-      const totalOutstanding = outstandingPenalty + outstandingInterest;
-      const confirmMsg = `WARNING: There are outstanding dues of ₹${totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Interest: ₹${outstandingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Penalty: ₹${outstandingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}).\n\nMaking a Partial Payment will reduce the Principal Balance ONLY.\nIt will NOT pay off outstanding interest/penalty, NOT extend the due date, and NOT reset the accrual cycle.\n\nAre you sure you want to proceed with this Principal Reduction Only payment?`;
-      if (!window.confirm(confirmMsg)) {
+      const totalClose = ledgerMetrics.totalClose || 0;
+      if (amount >= totalClose) {
+        toast.error(`Partial Payment amount (₹${amount.toFixed(2)}) must be strictly less than the total close amount (₹${totalClose.toFixed(2)}). To close the loan, please use Close Account.`);
         return;
       }
     }
 
     const dueDays = renewCalculations.daysPastDue || 0;
+
+    // Operator Warning/Confirmation when outstanding dues exist during Partial Payment
+    const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
+    const outstandingInterest = renewCalculations.outstandingInterest || 0;
+    if (actionType === 'Partial') {
+      const totalOutstanding = outstandingPenalty + outstandingInterest;
+      const principalBefore = ledgerMetrics.principalBalance;
+      const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
+      const interestRate = Number(selectedLoan?.interest_rate) || 3;
+      const monthlyInterest = Number(((principalBefore * (interestRate / 100) * periodDays) / 30).toFixed(2));
+      
+      const split = financeCalculationService.computeCDPaymentSplit(
+        amount,
+        outstandingPenalty,
+        outstandingInterest,
+        monthlyInterest,
+        principalBefore,
+        'Partial',
+        periodDays,
+        dueDays
+      );
+
+      let confirmMsg = '';
+      if (amount >= totalOutstanding) {
+        confirmMsg = `You are making a Partial Payment of ₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. This will pay off the outstanding dues of ₹${totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Interest: ₹${outstandingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Penalty: ₹${outstandingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}) and reduce the Principal Balance by ₹${split.principalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}.\n\nThe loan's due date will be extended to the payment date (${formatDateOld(paymentDate)}).\n\nDo you want to proceed?`;
+      } else {
+        confirmMsg = `WARNING: The payment amount ₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} is less than the total outstanding dues of ₹${totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Interest: ₹${outstandingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Penalty: ₹${outstandingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}).\n\nNo principal reduction will occur. Instead, this payment will renew the loan by ${split.renewedDays} days.\n\nDo you want to proceed?`;
+      }
+      if (!window.confirm(confirmMsg)) {
+        return;
+      }
+    }
 
     setIsRenewing(true);
     try {
@@ -1490,7 +1525,8 @@ const CDLedger: React.FC = () => {
           monthlyInterest,
           principalBefore,
           actionType,
-          periodDays
+          periodDays,
+          dueDays
         );
         penaltyPaid   = split.penaltyPaid;
         overdueInterestPaid = split.overdueInterestPaid;
@@ -1504,7 +1540,7 @@ const CDLedger: React.FC = () => {
       if (renewedDays > 0) {
         // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate
         const baseDateMs = renewCalculations?.dueDate
-          ? startOfDay(renewCalculations.dueDate)
+          ? Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate))
           : startOfDay(paymentDate);
         const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
         const tzoffset = nextDueDate.getTimezoneOffset() * 60000;
@@ -1561,7 +1597,7 @@ const CDLedger: React.FC = () => {
         // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate
         if (renewedDays > 0) {
           const baseDateMs = renewCalculations?.dueDate
-            ? startOfDay(renewCalculations.dueDate)
+            ? Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate))
             : startOfDay(paymentDate);
           const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
           
@@ -2501,7 +2537,8 @@ const CDLedger: React.FC = () => {
                         isRenewing || 
                         !totalAmountPaying || 
                         Number(totalAmountPaying) <= 0 ||
-                        Number(totalAmountPaying) >= ledgerMetrics.principalBalance ||
+                        Number(totalAmountPaying) < ledgerMetrics.totalToRegularize ||
+                        Number(totalAmountPaying) >= ledgerMetrics.totalClose ||
                         selectedLoan.status === 'Closed' || 
                         selectedLoan.status === 'NPA_CLOSED' || 
                         !!renewCalculations?.isDateInvalid
