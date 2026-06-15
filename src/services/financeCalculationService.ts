@@ -17,6 +17,19 @@ export const financeCalculationService = {
   },
 
   /**
+   * Access-style integer rounding (Banker's rounding / Round(value,0))
+   * specifically used for day counts and non-rupee values.
+   */
+  bankersRound(value: number): number {
+    const floor = Math.floor(value);
+    const diff = value - floor;
+    if (diff < 0.5) return floor;
+    if (diff > 0.5) return floor + 1;
+    // Exactly 0.5 — round to nearest even (Banker's Rounding)
+    return floor % 2 === 0 ? floor : floor + 1;
+  },
+
+  /**
    * Calculates simple interest given a principal, rate per month, and days elapsed.
    */
   calculateSimpleInterest(principal: number, ratePerMonth: number, daysElapsed: number, daysPerYear: number = 365): number {
@@ -64,8 +77,9 @@ export const financeCalculationService = {
    * Calculates penalty (overdue) interest based on setting
    */
   calculatePenaltyFromSetting(principal: number, overdueDays: number, setting: FinanceLedgerSetting): number {
-    if (overdueDays <= 0) return 0;
-    return this.calculateSimpleInterest(principal, setting.overdue, overdueDays, setting.days_per_year);
+    const penaltyDays = this.bankersRound(overdueDays) <= 5 ? 0 : overdueDays;
+    if (penaltyDays <= 0) return 0;
+    return this.calculateSimpleInterest(principal, setting.overdue, penaltyDays, setting.days_per_year);
   },
 
   /**
@@ -148,9 +162,9 @@ export const financeCalculationService = {
   },
 
   calculatePenalty(principal: number, penaltyRate: number, dueDays: number, _periodDays?: number): number {
-    const penaltyDays = dueDays <= 5 ? 0 : dueDays;
+    const penaltyDays = this.roundRupee(dueDays) <= 5 ? 0 : dueDays;
     if (penaltyDays <= 0) return 0;
-    // Overdue penalty uses a constant 30-day divisor as it is a daily accrual.
+    // Overdue interest uses a constant 30-day divisor as it is a daily accrual.
     return Number(((principal * (penaltyRate / 100) * penaltyDays) / 30).toFixed(2));
   },
 
@@ -185,7 +199,7 @@ export const financeCalculationService = {
     renewalInterestDue: number,
     principal: number,
     actionType: string,
-    periodDays: number = 10,
+    periodDays: number = 30,
     dueDays: number = 0
   ) {
     const pAmt = Number(paymentAmount) || 0;
@@ -193,99 +207,61 @@ export const financeCalculationService = {
     const intDue = Number(interestDue) || 0;
     const renDue = Number(renewalInterestDue) || 0;
     const prin = Number(principal) || 0;
-    const days = Number(periodDays) || 10;
+    const days = Number(periodDays) || 30;
 
-    if (actionType === 'Partial') {
-      const totalOutstanding = penDue + intDue;
-      if (pAmt >= totalOutstanding) {
-        // Payment clears all dues; remainder reduces principal.
-        // Round penalty and interest to whole rupees (Banker's Rounding) before saving.
-        // Principal = total - rounded splits, so the sum is always exact and paise never land in principal.
-        const penaltyPaid  = this.roundRupee(penDue);
-        const interestPaid = this.roundRupee(intDue);
-        const principalPaid = Number(Math.max(0, pAmt - penaltyPaid - interestPaid).toFixed(2));
+    const totalDues = penDue + intDue;
+    const isClosing = actionType === 'Close' || pAmt >= (totalDues + prin);
 
-        return {
-          penaltyPaid,
-          overdueInterestPaid: interestPaid,
-          renewalInterestPaid: 0,
-          interestPaid,
-          principalPaid,
-          renewedDays: dueDays,
-          remaining: 0
-        };
+    let penaltyPaid = 0;
+    let interestPaid = 0;
+    let principalPaid = 0;
+    let renewedDays = 0;
+
+    if (isClosing) {
+      penaltyPaid = this.roundRupee(penDue);
+      interestPaid = this.roundRupee(intDue);
+      principalPaid = Number(Math.max(0, pAmt - penaltyPaid - interestPaid).toFixed(2));
+      renewedDays = 0;
+    } else if (pAmt >= totalDues && actionType === 'Partial') {
+      // Partial payment that clears all outstanding dues
+      penaltyPaid = this.roundRupee(penDue);
+      interestPaid = this.roundRupee(intDue);
+      principalPaid = Number(Math.max(0, pAmt - penaltyPaid - interestPaid).toFixed(2));
+      renewedDays = dueDays; // next due date becomes the payment date
+    } else {
+      // Renewal or under-paying Partial payment: 80/20 bucket allocation
+      // Buckets are rounded to nearest whole rupee using Banker's Rounding
+      const penaltyBucket = this.roundRupee(pAmt * 0.20);
+      const interestBucket = pAmt - penaltyBucket;
+
+      if (penDue > 0) {
+        if (penDue < penaltyBucket) {
+          penaltyPaid = this.roundRupee(penDue);
+          interestPaid = pAmt - penaltyPaid;
+        } else {
+          penaltyPaid = penaltyBucket;
+          interestPaid = interestBucket;
+        }
       } else {
-        // 20% Penalty / 80% Interest — round to whole rupees.
-        let penaltyPaid = this.roundRupee(pAmt * 0.20);
-        if (penaltyPaid > penDue) penaltyPaid = this.roundRupee(penDue);
-        const interestPaid = pAmt - penaltyPaid; // exact remainder, no paise in principal
-
-        return {
-          penaltyPaid,
-          overdueInterestPaid: interestPaid,
-          renewalInterestPaid: 0,
-          interestPaid,
-          principalPaid: 0,
-          renewedDays: 0,
-          remaining: 0
-        };
+        penaltyPaid = 0;
+        interestPaid = pAmt;
       }
+      principalPaid = 0;
+
+      // dailyInterest = Principal * interestRate / 100 / 30
+      const dailyInterestValue = renDue / days;
+      renewedDays = dailyInterestValue > 0 ? Number((interestPaid / dailyInterestValue).toFixed(2)) : 0;
     }
 
-    if (actionType === 'Close') {
-      const totalDues = penDue + intDue;
-      let penaltyPaid: number;
-      let overdueInterestPaid: number;
-      let remaining: number;
-
-      if (pAmt >= totalDues) {
-        // Exact dues settled; remainder goes to principal.
-        // Round both splits — principal absorbs any sub-rupee rounding residual.
-        penaltyPaid = this.roundRupee(penDue);
-        overdueInterestPaid = this.roundRupee(intDue);
-        remaining = Number(Math.max(0, pAmt - penaltyPaid - overdueInterestPaid).toFixed(2));
-      } else {
-        // Under-payment: 20% Penalty / 80% Interest, rounded.
-        penaltyPaid = this.roundRupee(pAmt * 0.20);
-        if (penaltyPaid > penDue) penaltyPaid = this.roundRupee(penDue);
-        overdueInterestPaid = pAmt - penaltyPaid;
-        remaining = 0;
-      }
-
-      const principalPaid = Number(Math.min(remaining, prin).toFixed(2));
-      remaining = Number((remaining - principalPaid).toFixed(2));
-
-      return {
-        penaltyPaid,
-        overdueInterestPaid,
-        renewalInterestPaid: 0,
-        interestPaid: overdueInterestPaid,
-        principalPaid,
-        renewedDays: 0,
-        remaining
-      };
-    }
-
-    // Renew action: 20% Penalty / 80% Interest, whole-rupee rounded.
-    // renewedDays = interest portion ÷ daily interest rate.
-    {
-      let penaltyPaid = this.roundRupee(pAmt * 0.20);
-      if (penaltyPaid > penDue) penaltyPaid = this.roundRupee(penDue);
-      const interestPaid = pAmt - penaltyPaid; // exact remainder
-
-      const dailyInterestValue = days > 0 ? (renDue / days) : (renDue / 10);
-      const renewedDays = dailyInterestValue > 0 ? Math.floor(interestPaid / dailyInterestValue) : 0;
-
-      return {
-        penaltyPaid,
-        overdueInterestPaid: 0,
-        renewalInterestPaid: interestPaid,
-        interestPaid,
-        principalPaid: 0,
-        renewedDays,
-        remaining: 0
-      };
-    }
+    return {
+      penaltyPaid,
+      overdueInterestPaid: isClosing || (pAmt >= totalDues && actionType === 'Partial') ? interestPaid : 0,
+      renewalInterestPaid: !(isClosing || (pAmt >= totalDues && actionType === 'Partial')) ? interestPaid : 0,
+      interestPaid,
+      principalPaid,
+      renewedDays,
+      remaining: 0
+    };
   },
 
   applyPaymentSplit(

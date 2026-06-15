@@ -45,6 +45,12 @@ interface PartnerOutstandingRow {
   status: string;
 }
 
+const startOfDay = (d: string | Date | number) => {
+  const date = new Date(d);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+};
+
 const BusinessReport: React.FC = () => {
   const navigate = useNavigate();
   
@@ -207,7 +213,9 @@ const BusinessReport: React.FC = () => {
         const duePaid = Number(due.paid_amount) || 0;
         const duePending = dueAmt - duePaid;
 
-        const overdueDays = Math.max(0, Math.floor((today.getTime() - new Date(due.due_date).getTime()) / (1000 * 60 * 60 * 24)));
+        const todayMs = startOfDay(today);
+        const dueMs = startOfDay(due.due_date);
+        const overdueDays = todayMs > dueMs ? Math.round((todayMs - dueMs) / (1000 * 60 * 60 * 24)) : 0;
         let penalty = Number(due.penalty_amount) || 0;
 
         if (duePending > 0 && overdueDays > 0) {

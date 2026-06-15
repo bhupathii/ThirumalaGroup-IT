@@ -29,6 +29,12 @@ interface OverdueDueItem {
 
 type ReportType = 'OUTSTANDING' | 'TOTAL DUE LIST' | 'CD DUE LIST' | 'A -> B DUE LIST' | 'NPA LIST';
 
+const startOfDay = (d: string | Date | number) => {
+  const date = new Date(d);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+};
+
 const DuesLedger: React.FC = () => {
   const navigate = useNavigate();
   
@@ -90,9 +96,9 @@ const DuesLedger: React.FC = () => {
         const paid = Number(d.paid_amount) || 0;
         const pending = amt - paid;
         
-        const dueDate = new Date(d.due_date);
-        const diffTime = today.getTime() - dueDate.getTime();
-        const overdueDays = diffTime > 0 ? Math.floor(diffTime / (1000 * 60 * 60 * 24)) : 0;
+        const todayMs = startOfDay(today);
+        const dueMs = startOfDay(d.due_date);
+        const overdueDays = todayMs > dueMs ? Math.round((todayMs - dueMs) / (1000 * 60 * 60 * 24)) : 0;
         
         // NPA Definition: > 90 days overdue and still pending
         const isPending = d.status === 'Pending' || d.status === 'Partially Paid';

@@ -5,22 +5,24 @@ import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { supabaseFinance, FinanceLoan, FinanceCustomer, FinanceTransaction, FinanceDue, FinanceDocument } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
+import { cdLedgerRebuildService } from '../../services/cdLedgerRebuildService';
 import { useAuth } from '../../contexts/AuthContext';
 import { financeCalculationService } from '../../services/financeCalculationService';
-import { 
-  Printer, 
-  Download, 
-  RefreshCw, 
-  Search, 
-  Edit2, 
-  Save, 
-  X, 
-  User, 
-  File as FileIcon, 
+import {
+  Printer,
+  Download,
+  RefreshCw,
+  Search,
+  Edit2,
+  Save,
+  X,
+  User,
+  File as FileIcon,
   ShieldAlert,
   CreditCard,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ArrowLeft,
   List
 } from 'lucide-react';
@@ -32,6 +34,16 @@ const startOfDay = (d: Date | string | number) => {
   const date = new Date(d);
   date.setHours(0, 0, 0, 0);
   return date.getTime();
+};
+
+const mapAccountName = (name: string): string => {
+  const cleanName = (name || '').trim().toUpperCase();
+  if (cleanName === 'CD A/C') return 'CD Principal';
+  if (cleanName === 'CD COMMISSION A/C') return 'CD Interest';
+  if (cleanName === 'PENALTY A/C') return 'CD Penalty';
+  if (cleanName === 'CD DOCUMENT CHARGES A/C') return 'CD Document Charges';
+  if (cleanName === 'CD AMOUNT PAID') return 'CD Amount Paid';
+  return name || 'CD Principal';
 };
 
 const CDLedger: React.FC = () => {
@@ -56,7 +68,7 @@ const CDLedger: React.FC = () => {
       return true;
     });
   }, [loansList, statusFilter]);
-  
+
   // Custom Autocomplete Search State
   const [searchNameQuery, setSearchNameQuery] = useState('');
   const [searchAcQuery, setSearchAcQuery] = useState('');
@@ -65,9 +77,9 @@ const CDLedger: React.FC = () => {
   const [listSearchQuery, setListSearchQuery] = useState('');
 
   const [selectedLoan, setSelectedLoan] = useState<(FinanceLoan & { customer: FinanceCustomer; transactions: FinanceTransaction[]; photos: any[]; dues: FinanceDue[]; documents: FinanceDocument[] }) | null>(null);
-  
+
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split('T')[0]);
-  
+
   // Edit mode details
   const [isEditing, setIsEditing] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
@@ -80,7 +92,7 @@ const CDLedger: React.FC = () => {
   const [editCustAadhaar, setEditCustAadhaar] = useState('');
   const [editCustFatherName, setEditCustFatherName] = useState('');
   const [editCustPartnerName, setEditCustPartnerName] = useState('');
-  
+
   // Edit fields: Surety details
   const [editSuretyName, setEditSuretyName] = useState('');
   const [editSuretyPhone, setEditSuretyPhone] = useState('');
@@ -112,7 +124,25 @@ const CDLedger: React.FC = () => {
   // Action Panel State
   const [totalAmountPaying, setTotalAmountPaying] = useState('');
   const [receiptNo, setReceiptNo] = useState('');
-  const [activeLogTab, setActiveLogTab] = useState<'statement' | 'interest'>('statement');
+  const [activeLogTab, setActiveLogTab] = useState<'statement' | 'interest' | 'payment'>('statement');
+  const [loanTransactions, setLoanTransactions] = useState<any[]>([]);
+  const [showEditTxModal, setShowEditTxModal] = useState(false);
+  const [editingTx, setEditingTx] = useState<any | null>(null);
+  const [editTxReceiptNo, setEditTxReceiptNo] = useState('');
+  const [editTxDate, setEditTxDate] = useState('');
+  const [editTxAmount, setEditTxAmount] = useState('');
+  const [editTxReason, setEditTxReason] = useState('');
+  const [isSavingTx, setIsSavingTx] = useState(false);
+  const [expandedTxIds, setExpandedTxIds] = useState<Set<string>>(new Set());
+  const toggleExpandTx = (txId: string) => {
+    const newSet = new Set(expandedTxIds);
+    if (newSet.has(txId)) {
+      newSet.delete(txId);
+    } else {
+      newSet.add(txId);
+    }
+    setExpandedTxIds(newSet);
+  };
 
   // NPA Modal State
   const [showNpaModal, setShowNpaModal] = useState(false);
@@ -175,7 +205,7 @@ const CDLedger: React.FC = () => {
       const fullDetails = await supabaseFinance.getLoanById(loanId);
       if (fullDetails) {
         setSelectedLoan(fullDetails);
-        
+
         // Map edit fields
         setEditCustName(fullDetails.customer?.name || '');
         setEditCustPhone(fullDetails.customer?.phone || '');
@@ -191,11 +221,11 @@ const CDLedger: React.FC = () => {
         setEditSuretyAddress(fullDetails.surety_present_address || '');
         setEditSuretyRelation(fullDetails.surety_relation || '');
         setEditLoanRemarks(fullDetails.remarks || '');
-        
+
         // Fetch explicit CD entries and interest rows
         const entries = await supabaseFinance.getCDLedgerEntries(loanId);
         const interests = await supabaseFinance.getCDInterestDetails(loanId);
-        
+
         // Normalize legacy/native entries to prevent commission/charges from reducing dues.
         // KEY RULE: Never reclassify a row whose entry_type is already interest_payment or penalty_payment.
         // Only mark as opening_commission when: (a) DB type is opening_commission/Commission/document_charge,
@@ -240,9 +270,10 @@ const CDLedger: React.FC = () => {
 
           return { ...entry, entry_type: entryType, particulars };
         });
-        
+
         setCdLedgerEntries(normalizedEntries);
         setCdInterestDetails(interests);
+        setLoanTransactions(fullDetails.transactions || []);
 
         // Fetch Guarantors if present from finance_customers
         if (fullDetails.guarantor_1_id) {
@@ -251,7 +282,7 @@ const CDLedger: React.FC = () => {
         } else {
           setGuarantor1(null);
         }
-        
+
         if (fullDetails.guarantor_2_id) {
           const { data: g2 } = await supabase.from('finance_customers').select('*').eq('id', fullDetails.guarantor_2_id).single();
           setGuarantor2(g2 || null);
@@ -313,6 +344,182 @@ const CDLedger: React.FC = () => {
     }
   };
 
+  const handleOpenEditTxModal = (tx: any) => {
+    setEditingTx(tx);
+    setEditTxReceiptNo(tx.receipt_no || '');
+    setEditTxDate(tx.date ? new Date(tx.date).toISOString().split('T')[0] : '');
+    
+    setEditTxAmount(String(tx.amount || ''));
+    setEditTxReason('');
+    setShowEditTxModal(true);
+  };
+
+  const handleSaveEditTx = async () => {
+    if (!editingTx || !selectedLoan) return;
+    if (!editTxReceiptNo.trim() || !editTxDate || !editTxAmount || !editTxReason.trim()) {
+      toast.error('All required fields must be filled.');
+      return;
+    }
+    const amt = parseFloat(editTxAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error('Amount must be greater than 0.');
+      return;
+    }
+
+    setIsSavingTx(true);
+    try {
+      // 1. Check for duplicate receipt numbers for same loan (excluding current transaction)
+      const { data: dupTx, error: dupError } = await supabase
+        .from('finance_transactions')
+        .select('id')
+        .eq('loan_id', selectedLoan.id)
+        .eq('receipt_no', editTxReceiptNo.trim())
+        .neq('id', editingTx.id)
+        .maybeSingle();
+
+      if (dupError) throw dupError;
+      if (dupTx) {
+        toast.error(`Receipt number ${editTxReceiptNo.trim()} is already used for another transaction on this loan.`);
+        setIsSavingTx(false);
+        return;
+      }
+
+      // Prepare old and new data for audit log
+      const oldData = {
+        receipt_no: editingTx.receipt_no,
+        date: editingTx.date,
+        amount: editingTx.amount,
+        remarks: editingTx.remarks,
+        type: editingTx.type
+      };
+
+      const newData = {
+        receipt_no: editTxReceiptNo.trim(),
+        date: editTxDate,
+        amount: amt,
+        remarks: editingTx.remarks || '',
+        type: 'Collection'
+      };
+
+      // 2. Update transaction record
+      const { error: txUpdateError } = await supabase
+        .from('finance_transactions')
+        .update({
+          receipt_no: newData.receipt_no,
+          date: new Date(newData.date).toISOString(),
+          amount: newData.amount,
+          remarks: newData.remarks,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingTx.id);
+
+      if (txUpdateError) throw txUpdateError;
+
+      // 3. Log the edit audit
+      try {
+        const username = user?.username || 'Staff';
+        await supabase
+          .from('finance_cd_transaction_edit_logs')
+          .insert({
+            loan_id: selectedLoan.id,
+            transaction_id: editingTx.id,
+            old_data: oldData,
+            new_data: newData,
+            edited_by: username,
+            reason: editTxReason.trim()
+          });
+      } catch (logErr) {
+        console.error('Failed to write audit log:', logErr);
+      }
+
+      // 4. Run rebuild
+      const rebuildResult = await cdLedgerRebuildService.rebuildCDLoanLifecycle(selectedLoan.id);
+      if (!rebuildResult.success) {
+        throw new Error(rebuildResult.error || 'Rebuild failed');
+      }
+
+      toast.success('Transaction updated and loan rebuilt successfully');
+      setShowEditTxModal(false);
+      setEditingTx(null);
+      
+      // Refresh details
+      await loadLedgerDetails(selectedLoan.id);
+    } catch (err: any) {
+      console.error('Error saving transaction edit:', err);
+      toast.error(err.message || 'Failed to edit transaction');
+    } finally {
+      setIsSavingTx(false);
+    }
+  };
+
+  const handleDeleteTx = async (tx: any) => {
+    if (!selectedLoan) return;
+    if (!user?.is_admin) {
+      toast.error('Only administrators can delete transactions.');
+      return;
+    }
+
+    const confirmDelete = window.confirm(`Are you sure you want to delete transaction ${tx.receipt_no || ''} of ₹${Number(tx.amount).toLocaleString('en-IN')}? This will completely rebuild the loan lifecycle.`);
+    if (!confirmDelete) return;
+
+    const reason = window.prompt('Please enter the reason for deleting this transaction (Mandatory):');
+    if (reason === null) return; // User cancelled prompt
+    if (!reason.trim()) {
+      toast.error('Delete reason is mandatory.');
+      return;
+    }
+
+    try {
+      // 1. Prepare log snapshot
+      const oldData = {
+        receipt_no: tx.receipt_no,
+        date: tx.date,
+        amount: tx.amount,
+        remarks: tx.remarks,
+        type: tx.type
+      };
+
+      // 2. Log audit log first (before deleting)
+      try {
+        const username = user?.username || 'Admin';
+        await supabase
+          .from('finance_cd_transaction_edit_logs')
+          .insert({
+            loan_id: selectedLoan.id,
+            transaction_id: tx.id,
+            old_data: oldData,
+            new_data: { status: 'Deleted' },
+            edited_by: username,
+            reason: reason.trim()
+          });
+      } catch (logErr) {
+        console.error('Failed to log delete audit:', logErr);
+      }
+
+      // 3. Delete transaction record
+      const { error: deleteError } = await supabase
+        .from('finance_transactions')
+        .delete()
+        .eq('id', tx.id);
+
+      if (deleteError) throw deleteError;
+
+      // 4. Run rebuild
+      const rebuildResult = await cdLedgerRebuildService.rebuildCDLoanLifecycle(selectedLoan.id);
+      if (!rebuildResult.success) {
+        throw new Error(rebuildResult.error || 'Rebuild failed');
+      }
+
+      toast.success('Transaction deleted and loan rebuilt successfully');
+      
+      // Refresh details
+      await loadLedgerDetails(selectedLoan.id);
+    } catch (err: any) {
+      console.error('Error deleting transaction:', err);
+      toast.error(err.message || 'Failed to delete transaction');
+    }
+  };
+
   const handleToggleEdit = () => {
     setIsEditing(!isEditing);
   };
@@ -322,7 +529,7 @@ const CDLedger: React.FC = () => {
     setSavingDetails(true);
     try {
       const staffName = user?.username || 'Staff';
-      
+
       const customerPayload: Partial<FinanceCustomer> = {
         name: editCustName,
         phone: editCustPhone || null,
@@ -387,7 +594,7 @@ const CDLedger: React.FC = () => {
     setUploadingDoc(true);
     try {
       const fileObj = new File([file], `doc-${selectedLoan.loan_id}-${Date.now()}-${file.name}`, { type: file.type });
-      
+
       const { data, error } = await supabase.storage
         .from('finance-photos')
         .upload(`documents/${fileObj.name}`, fileObj);
@@ -574,7 +781,7 @@ const CDLedger: React.FC = () => {
     }
 
     const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
-    
+
     // Calculate base due date from original disbursement date
     const baseDueDate = new Date(originalLoanDateMs + (periodDays - 1) * 24 * 60 * 60 * 1000);
 
@@ -595,20 +802,20 @@ const CDLedger: React.FC = () => {
     console.log('loan_date:', selectedLoan.date);
     console.log('due_date:', dueDate.toISOString().split('T')[0]);
     console.log('calculated_cycle_days:', Math.round((dueDate.getTime() - originalLoanDate.getTime()) / (1000 * 60 * 60 * 24)));
-    
-    // Due Days = Payment Date - Due Date (Clamped to 0)
-    const rawDueDays = Math.round((startOfDay(today) - startOfDay(dueDate)) / (1000 * 60 * 60 * 24));
+
+    // Due Days = Payment Date - Due Date (Clamped to 0) as fractional float
+    const rawDueDays = (startOfDay(today) - dueDate.getTime()) / (1000 * 60 * 60 * 24);
     const dueDays = Math.max(0, rawDueDays);
     const daysRemaining = rawDueDays < 0 ? Math.abs(rawDueDays) : 0;
-    
+
     const interestRate = Number(selectedLoan.interest_rate) || 3;
     const principalBalance = currentPrincipalBalance;
 
     // Interest = principal × rate × dueDays ÷ 30 ÷ 100 (0 if dueDays <= 0)
     // Penalty  = principal × penaltyRate% × dueDays ÷ 30 (0 if dueDays <= 5, calculated on full dueDays count if > 5)
     const grossInterest = dueDays <= 0 ? 0 : Number(((principalBalance * interestRate * dueDays) / 30 / 100).toFixed(2));
-    const penaltyDays = dueDays <= 5 ? 0 : dueDays;
-    const grossPenalty  = penaltyDays <= 0 ? 0 : Number(((principalBalance * penaltyRate * penaltyDays) / 30 / 100).toFixed(2));
+    const penaltyDays = financeCalculationService.roundRupee(dueDays) <= 5 ? 0 : dueDays;
+    const grossPenalty = penaltyDays <= 0 ? 0 : Number(((principalBalance * penaltyRate * penaltyDays) / 30 / 100).toFixed(2));
 
     // Daily interest / renewal day value:
     // Derived from the Renewal Due divided by Period Days (cancels out to principal * rate / 100 / 30)
@@ -647,15 +854,15 @@ const CDLedger: React.FC = () => {
     // When gross is negative but there are payments in cycle, effectiveGross
     // must be at least the paid amount so pending doesn't go negative.
     const effectiveGrossInterest = grossInterest;
-    const effectiveGrossPenalty  = grossPenalty;
+    const effectiveGrossPenalty = grossPenalty;
 
     // Outstanding dues for PAYMENT purposes (never negative)
     const outstandingInterest = Math.max(0, Number(grossInterest.toFixed(2)));
-    const outstandingPenalty  = Math.max(0, Number(grossPenalty.toFixed(2)));
+    const outstandingPenalty = Math.max(0, Number(grossPenalty.toFixed(2)));
 
     // Display interest/penalty: show the raw formula value (never negative)
     const displayInterest = dueDays <= 0 ? 0 : outstandingInterest;
-    const displayPenalty  = dueDays <= 0 ? 0 : outstandingPenalty;
+    const displayPenalty = dueDays <= 0 ? 0 : outstandingPenalty;
 
     // CD067 / CD070 debugging trace
     console.log('=== CD LEDGER MIGRATION AUDIT TRACE ===', {
@@ -719,26 +926,26 @@ const CDLedger: React.FC = () => {
   // Statement ledger builder containing native logs + fallbacks (interest, document charges etc.)
   const displayedStatementEntries = useMemo(() => {
     if (!selectedLoan || !renewCalculations) return [];
-    
+
     const list: any[] = [];
     const sortedDbEntries = [...cdLedgerEntries].sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime());
-    
+
     // Find original loan start date
     const disb = sortedDbEntries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
     const originalLoanStart = startOfDay(disb ? disb.entry_date : selectedLoan.date);
-    
+
     // Find all renewal dates
     const cycleEnds = sortedDbEntries
-      .filter(e => 
-        e.entry_type === 'Renewal' || 
-        e.entry_type === 'Renew' || 
-        (e.particulars || '').toLowerCase().includes('renewal') || 
+      .filter(e =>
+        e.entry_type === 'Renewal' ||
+        e.entry_type === 'Renew' ||
+        (e.particulars || '').toLowerCase().includes('renewal') ||
         (e.particulars || '').toLowerCase().includes('renew')
       )
       .map(e => startOfDay(e.entry_date));
-    
+
     const uniqueCycleEnds = Array.from(new Set(cycleEnds)).sort((a, b) => a - b);
-    
+
     // Build the list of cycles
     const cycles: { start: number; end: number; isCurrent: boolean }[] = [];
     let currentStart = originalLoanStart;
@@ -753,13 +960,13 @@ const CDLedger: React.FC = () => {
     // Step-by-step simulation of cycles to determine running principal and split payments
     const principalPaidTotalDb = sortedDbEntries
       .filter(e => {
-        const isPrincipalPaid = (e.particulars || '').toLowerCase().includes('principal paid') || 
-                                (e.particulars || '').toLowerCase().includes('principal adjusted') ||
-                                e.entry_type === 'principal_payment';
+        const isPrincipalPaid = (e.particulars || '').toLowerCase().includes('principal paid') ||
+          (e.particulars || '').toLowerCase().includes('principal adjusted') ||
+          e.entry_type === 'principal_payment';
         return e.account_name === 'CD A/C' && isPrincipalPaid;
       })
       .reduce((sum, e) => sum + Number(e.credit || 0), 0);
-    
+
     const originalAmount = Number(selectedLoan.amount) + principalPaidTotalDb;
     let runningPrincipal = originalAmount;
 
@@ -838,18 +1045,19 @@ const CDLedger: React.FC = () => {
         const isNonPaymentEntry =
           entry.entry_type === 'original_loan' || entry.entry_type === 'Disbursement' ||
           entry.entry_type === 'Document Charges' || entry.entry_type === 'document_charge' ||
-          entry.entry_type === 'Commission' || entry.entry_type === 'opening_commission';
+          entry.entry_type === 'Commission' || entry.entry_type === 'opening_commission' ||
+          entry.entry_type === 'amount_paid';
         if (isNonPaymentEntry) {
           return false;
         }
         const isPayment = entry.credit > 0 &&
-                          !isNonPaymentEntry &&
-                          !entry.id.toString().startsWith('fallback-comm-') &&
-                          !entry.id.toString().startsWith('fallback-doc-');
+          !isNonPaymentEntry &&
+          !entry.id.toString().startsWith('fallback-comm-') &&
+          !entry.id.toString().startsWith('fallback-doc-');
         if (!isPayment) return false;
-        
+
         const d = startOfDay(entry.entry_date);
-        
+
         const isFirstCycle = cycle.start === originalLoanStart;
         if (isFirstCycle) {
           return d >= cycle.start && d <= cycle.end;
@@ -863,23 +1071,23 @@ const CDLedger: React.FC = () => {
       const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
       const cycleDueDate = new Date(cycle.start + (periodDays - 1) * 24 * 60 * 60 * 1000);
       const cycleDueDays = Math.max(0, Math.round((cycle.end - startOfDay(cycleDueDate)) / (1000 * 60 * 60 * 24)));
-      
+
       const interestRate = Number(selectedLoan.interest_rate) || 3;
       const penaltyRate = selectedLoan.penalty_percent !== undefined && selectedLoan.penalty_percent !== null ? Number(selectedLoan.penalty_percent) : 0.75;
-      
+
       const cycleGrossInterest = cycleDueDays <= 0 ? 0 : Number(((runningPrincipal * interestRate * cycleDueDays) / 30 / 100).toFixed(2));
       const cycleGrossPenalty = cycleDueDays <= 0 ? 0 : Number(((runningPrincipal * penaltyRate * cycleDueDays) / 30 / 100).toFixed(2));
 
       // Check if some payments inside this cycle are ALREADY split
       const alreadySplitSum = cyclePayments.filter(e => {
-        const isPrincipalPaid = (e.particulars || '').toLowerCase().includes('principal paid') || 
-                                (e.particulars || '').toLowerCase().includes('principal adjusted') ||
-                                e.entry_type === 'principal_payment';
-        const isAlreadySplit = ['penalty a/c', 'cd commission a/c'].includes((e.account_name || '').toLowerCase()) || 
-                               e.entry_type === 'penalty_payment' ||
-                               e.entry_type === 'interest_payment' ||
-                               e.entry_type === 'principal_payment' ||
-                               ((e.account_name || '').toLowerCase() === 'cd a/c' && isPrincipalPaid);
+        const isPrincipalPaid = (e.particulars || '').toLowerCase().includes('principal paid') ||
+          (e.particulars || '').toLowerCase().includes('principal adjusted') ||
+          e.entry_type === 'principal_payment';
+        const isAlreadySplit = ['penalty a/c', 'cd commission a/c'].includes((e.account_name || '').toLowerCase()) ||
+          e.entry_type === 'penalty_payment' ||
+          e.entry_type === 'interest_payment' ||
+          e.entry_type === 'principal_payment' ||
+          ((e.account_name || '').toLowerCase() === 'cd a/c' && isPrincipalPaid);
         return isAlreadySplit;
       }).reduce((sum, e) => sum + Number(e.credit), 0);
 
@@ -887,14 +1095,14 @@ const CDLedger: React.FC = () => {
 
       // Now map each payment entry in the cycle
       cyclePayments.forEach(entry => {
-        const isPrincipalPaid = (entry.particulars || '').toLowerCase().includes('principal paid') || 
-                               (entry.particulars || '').toLowerCase().includes('principal adjusted') ||
-                               entry.entry_type === 'principal_payment';
-        const isAlreadySplit = ['penalty a/c', 'cd commission a/c'].includes((entry.account_name || '').toLowerCase()) || 
-                               entry.entry_type === 'penalty_payment' ||
-                               entry.entry_type === 'interest_payment' ||
-                               entry.entry_type === 'principal_payment' ||
-                               ((entry.account_name || '').toLowerCase() === 'cd a/c' && isPrincipalPaid);
+        const isPrincipalPaid = (entry.particulars || '').toLowerCase().includes('principal paid') ||
+          (entry.particulars || '').toLowerCase().includes('principal adjusted') ||
+          entry.entry_type === 'principal_payment';
+        const isAlreadySplit = ['penalty a/c', 'cd commission a/c'].includes((entry.account_name || '').toLowerCase()) ||
+          entry.entry_type === 'penalty_payment' ||
+          entry.entry_type === 'interest_payment' ||
+          entry.entry_type === 'principal_payment' ||
+          ((entry.account_name || '').toLowerCase() === 'cd a/c' && isPrincipalPaid);
 
         if (isAlreadySplit) {
           list.push({ ...entry, account_name: entry.account_name || 'CD A/C' });
@@ -904,9 +1112,9 @@ const CDLedger: React.FC = () => {
           return;
         }
 
-        const isRenewal = entry.entry_type === 'Renewal' || entry.entry_type === 'Renew' || 
-                          (entry.particulars || '').toLowerCase().includes('renewal') || 
-                          (entry.particulars || '').toLowerCase().includes('renew');
+        const isRenewal = entry.entry_type === 'Renewal' || entry.entry_type === 'Renew' ||
+          (entry.particulars || '').toLowerCase().includes('renewal') ||
+          (entry.particulars || '').toLowerCase().includes('renew');
         const isCloseAction = entry.entry_type === 'Close' || entry.entry_type === 'Settlement';
         const actionType = isCloseAction ? 'Close' : (isRenewal ? 'Renew' : 'Partial');
         const creditAmt = Number(entry.credit || 0);
@@ -980,13 +1188,25 @@ const CDLedger: React.FC = () => {
         entry.entry_type === 'original_loan' || entry.entry_type === 'Disbursement' ||
         entry.entry_type === 'Document Charges' || entry.entry_type === 'document_charge' ||
         entry.entry_type === 'Commission' || entry.entry_type === 'opening_commission' ||
-        entry.entry_type === 'NPA_CLOSE' || entry.entry_type === 'NPA_CLOSED';
+        entry.entry_type === 'NPA_CLOSE' || entry.entry_type === 'NPA_CLOSED' ||
+        entry.entry_type === 'amount_paid';
       if (isNonPayment) {
         list.push({ ...entry, account_name: entry.account_name || 'CD A/C' });
       }
     });
 
-    return list.sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime());
+    return list.sort((a, b) => {
+      const dateA = new Date(a.entry_date).getTime();
+      const dateB = new Date(b.entry_date).getTime();
+      if (dateA !== dateB) return dateA - dateB;
+
+      const isAmtA = a.entry_type === 'amount_paid';
+      const isAmtB = b.entry_type === 'amount_paid';
+      if (isAmtA && !isAmtB) return -1;
+      if (!isAmtA && isAmtB) return 1;
+
+      return 0;
+    });
   }, [selectedLoan, cdLedgerEntries, paymentDate]);
 
   // Original Loan Amount calculations
@@ -1006,9 +1226,9 @@ const CDLedger: React.FC = () => {
   // Principal Paid calculations
   const principalPaidTotal = useMemo(() => {
     return displayedStatementEntries
-      .filter(e => 
+      .filter(e =>
         e.entry_type === 'principal_payment' ||
-        (e.particulars || '').toLowerCase().includes('principal paid') || 
+        (e.particulars || '').toLowerCase().includes('principal paid') ||
         (e.particulars || '').toLowerCase().includes('principal adjusted')
       )
       .reduce((sum, e) => sum + Number(e.credit), 0);
@@ -1021,10 +1241,10 @@ const CDLedger: React.FC = () => {
     displayedStatementEntries.forEach(entry => {
       const isInterestOrPenalty = ['penalty a/c', 'cd commission a/c'].includes((entry.account_name || '').toLowerCase());
       if (isInterestOrPenalty && entry.credit > 0 && entry.entry_type !== 'opening_commission' && entry.entry_type !== 'Commission' && !entry.id.toString().startsWith('fallback-comm-')) {
-        
+
         // Find matching interest detail row from Supabase table
-        const matchingDetail = cdInterestDetails.find(d => 
-          d.entry_id === entry.id || 
+        const matchingDetail = cdInterestDetails.find(d =>
+          d.entry_id === entry.id ||
           d.ledger_entry_id === entry.id ||
           (d.receipt_no === entry.receipt_no && d.row_type === (entry.account_name === 'PENALTY A/C' ? 'penalty_payment' : 'interest_payment'))
         );
@@ -1137,7 +1357,7 @@ const CDLedger: React.FC = () => {
 
     // totalCredit = only real cash collected (interest, penalty, principal payments)
     // Must NOT include opening_commission or document_charge rows (not real collections)
-    const NON_COLLECTION_TYPES = new Set(['original_loan', 'Disbursement', 'opening_commission', 'Commission', 'Document Charges', 'document_charge']);
+    const NON_COLLECTION_TYPES = new Set(['original_loan', 'Disbursement', 'opening_commission', 'Commission', 'Document Charges', 'document_charge', 'amount_paid']);
     const totalCredit = displayedStatementEntries
       .filter(e => !NON_COLLECTION_TYPES.has(e.entry_type) && Number(e.credit) > 0)
       .reduce((sum, e) => sum + Number(e.credit || 0), 0);
@@ -1169,8 +1389,12 @@ const CDLedger: React.FC = () => {
 
   // Calculation bottom totals
   const bottomTotals = useMemo(() => {
-    const totalCredit = displayedStatementEntries.reduce((sum, e) => sum + Number(e.credit || 0), 0);
-    const totalDebit = displayedStatementEntries.reduce((sum, e) => sum + Number(e.debit || 0), 0);
+    const totalCredit = displayedStatementEntries
+      .filter(e => e.entry_type !== 'amount_paid')
+      .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+    const totalDebit = displayedStatementEntries
+      .filter(e => e.entry_type !== 'amount_paid')
+      .reduce((sum, e) => sum + Number(e.debit || 0), 0);
     return {
       totalCredit,
       totalDebit,
@@ -1203,7 +1427,7 @@ const CDLedger: React.FC = () => {
       const renewalInterestPaid = 0;
       const principalPaid = Number(Math.max(0, paymentAmount - penaltyPaid - overdueInterestPaid).toFixed(2));
       const principalAfter = Number(Math.max(0, principalBefore - principalPaid).toFixed(2));
-      
+
       const details = {
         penaltyPaid,
         overdueInterestPaid,
@@ -1238,8 +1462,8 @@ const CDLedger: React.FC = () => {
     const renewBaseDateMs = renewCalculations?.dueDate
       ? Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate))
       : startOfDay(paymentDate);
-    const renewNextDueDate = renewSplit.renewedDays > 0 
-      ? new Date(renewBaseDateMs + renewSplit.renewedDays * 24 * 60 * 60 * 1000) 
+    const renewNextDueDate = renewSplit.renewedDays > 0
+      ? new Date(renewBaseDateMs + renewSplit.renewedDays * 24 * 60 * 60 * 1000)
       : null;
 
     const renewDetails = {
@@ -1268,8 +1492,8 @@ const CDLedger: React.FC = () => {
     const partialBaseDateMs = renewCalculations?.dueDate
       ? Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate))
       : startOfDay(paymentDate);
-    const partialNextDueDate = partialSplit.renewedDays > 0 
-      ? new Date(partialBaseDateMs + partialSplit.renewedDays * 24 * 60 * 60 * 1000) 
+    const partialNextDueDate = partialSplit.renewedDays > 0
+      ? new Date(partialBaseDateMs + partialSplit.renewedDays * 24 * 60 * 60 * 1000)
       : null;
 
     const partialDetails = {
@@ -1423,13 +1647,13 @@ const CDLedger: React.FC = () => {
   const handleActionSubmit = async (actionType: 'Renew' | 'Partial' | 'Close') => {
     if (isRenewing) return;
     if (!selectedLoan || !renewCalculations) return;
-    
+
     // Block if payment date is before loan date
     if (renewCalculations.isDateInvalid) {
       toast.error('Payment date cannot be before loan date.');
       return;
     }
-    
+
     const amount = Number(totalAmountPaying) || 0;
     if (actionType !== 'Close' && (amount <= 0 || isNaN(amount))) {
       toast.error('Enter a valid payment amount.');
@@ -1461,7 +1685,7 @@ const CDLedger: React.FC = () => {
       const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
       const interestRate = Number(selectedLoan?.interest_rate) || 3;
       const monthlyInterest = Number(((principalBefore * (interestRate / 100) * periodDays) / 30).toFixed(2));
-      
+
       const split = financeCalculationService.computeCDPaymentSplit(
         amount,
         outstandingPenalty,
@@ -1512,12 +1736,12 @@ const CDLedger: React.FC = () => {
       if (isClosingPayment) {
         // Close: clear all remaining dues, excess reduces principal.
         // Banker's-round penalty and interest so paise never land in principal balance.
-        penaltyPaid         = financeCalculationService.roundRupee(outstandingPenalty);
+        penaltyPaid = financeCalculationService.roundRupee(outstandingPenalty);
         overdueInterestPaid = financeCalculationService.roundRupee(outstandingInterest);
         renewalInterestPaid = 0;
-        interestPaid        = overdueInterestPaid;
-        principalPaid       = Number(Math.max(0, paymentAmount - penaltyPaid - overdueInterestPaid).toFixed(2));
-        renewedDays         = 0;
+        interestPaid = overdueInterestPaid;
+        principalPaid = Number(Math.max(0, paymentAmount - penaltyPaid - overdueInterestPaid).toFixed(2));
+        renewedDays = 0;
       } else {
         const split = financeCalculationService.computeCDPaymentSplit(
           paymentAmount,
@@ -1529,12 +1753,12 @@ const CDLedger: React.FC = () => {
           periodDays,
           dueDays
         );
-        penaltyPaid   = split.penaltyPaid;
+        penaltyPaid = split.penaltyPaid;
         overdueInterestPaid = split.overdueInterestPaid;
         renewalInterestPaid = split.renewalInterestPaid;
-        interestPaid  = split.interestPaid;
+        interestPaid = split.interestPaid;
         principalPaid = split.principalPaid;
-        renewedDays   = split.renewedDays;
+        renewedDays = split.renewedDays;
       }
 
       let renewedTillDate: string | null = null;
@@ -1555,14 +1779,14 @@ const CDLedger: React.FC = () => {
       console.log('dueDays:', dueDays);
       console.log('renewedDays:', renewedDays);
       console.log('renewedTillDate:', renewedTillDate);
-       console.log('penaltyPaid:', penaltyPaid);
-       console.log('interestPaid:', interestPaid);
-       console.log('overdueInterestPaid:', overdueInterestPaid);
-       console.log('renewalInterestPaid:', renewalInterestPaid);
-       console.log('principalPaid:', principalPaid);
+      console.log('penaltyPaid:', penaltyPaid);
+      console.log('interestPaid:', interestPaid);
+      console.log('overdueInterestPaid:', overdueInterestPaid);
+      console.log('renewalInterestPaid:', renewalInterestPaid);
+      console.log('principalPaid:', principalPaid);
       console.log('principalBefore:', principalBefore);
       console.log('principalAfter:', Number((principalBefore - principalPaid).toFixed(2)));
-      
+
       const res = await supabaseFinance.postCdLedgerPayment({
         loanId: selectedLoan.id,
         customerId: selectedLoan.customer_id,
@@ -1577,22 +1801,22 @@ const CDLedger: React.FC = () => {
         receiptNo,
         renewedTillDate
       });
-      
+
       if (!res.success) {
         throw new Error(res.error || 'Failed to post ledger entries');
       }
-      
+
       const totalForClose = ledgerMetrics.totalClose;
 
       if (actionType === 'Close' || paymentAmount >= totalForClose) {
-        const { error: closeError } = await supabase.from('finance_loans').update({ 
+        const { error: closeError } = await supabase.from('finance_loans').update({
           status: 'Closed',
           amount: Math.max(0, Number((principalBefore - principalPaid).toFixed(2)))
         }).eq('id', selectedLoan.id);
         if (closeError) throw closeError;
       } else {
         const updates: any = {};
-        
+
         // For renewal/partial: set loan date based on next_due_date = base_date + renewed_days
         // Loan start date = next_due_date - periodDays
         // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate
@@ -1601,7 +1825,7 @@ const CDLedger: React.FC = () => {
             ? Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate))
             : startOfDay(paymentDate);
           const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
-          
+
           console.log('=== RENEWAL DUE DATE ADVANCEMENT DEBUG ===');
           console.log('old_current_due_date:', renewCalculations.dueDate);
           console.log('payment_date:', paymentDate);
@@ -1614,10 +1838,10 @@ const CDLedger: React.FC = () => {
           const newCycleStart = new Date(nextDueDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
           const tzoffset = newCycleStart.getTimezoneOffset() * 60000;
           updates.date = new Date(newCycleStart.getTime() - tzoffset).toISOString().split('T')[0];
-          
+
           console.log('new_loan_date (updates.date):', updates.date);
         }
-        
+
         if (principalPaid > 0) {
           updates.amount = Math.max(0, Number((principalBefore - principalPaid).toFixed(2)));
         }
@@ -1627,7 +1851,7 @@ const CDLedger: React.FC = () => {
           if (updateError) throw updateError;
         }
       }
-      
+
       setTotalAmountPaying('');
       await fetchLedgerData();
       await loadLedgerDetails(selectedLoan.id);
@@ -1637,7 +1861,7 @@ const CDLedger: React.FC = () => {
       } else {
         toast.success(`Payment applied — ${renewedDays} days renewed`);
       }
-    } catch(e: any) {
+    } catch (e: any) {
       console.error(e);
       toast.error(e?.message || 'Error applying payment');
     } finally {
@@ -1654,13 +1878,13 @@ const CDLedger: React.FC = () => {
       const closedBy = (user?.username || 'Staff').toUpperCase();
       const npaReceiptNo = await supabaseFinance.getNextReceiptNumber();
       const cleanNpaReason = npaReason.trim().toUpperCase();
-      
+
       const updatedRemarks = `${selectedLoan.remarks || ''}\n[NPA CLOSED AT ${npaClosedDate} BY ${closedBy} WITH SETTLEMENT AMOUNT: ${npaClosedAmount}]`.trim().toUpperCase();
-      
+
       const { error: loanError } = await supabase.from('finance_loans')
-        .update({ 
-          status: 'NPA_CLOSED', 
-          npa_closed: true, 
+        .update({
+          status: 'NPA_CLOSED',
+          npa_closed: true,
           amount: selectedLoan.amount,
           remarks: updatedRemarks
         })
@@ -1718,7 +1942,7 @@ const CDLedger: React.FC = () => {
       await loadLedgerDetails(selectedLoan.id);
       toast.success('NPA Account closed and settlement recorded.');
       setShowNpaModal(false);
-    } catch(e) {
+    } catch (e) {
       console.error(e);
       toast.error('Error settling NPA account');
     } finally {
@@ -1769,7 +1993,7 @@ const CDLedger: React.FC = () => {
       await loadLedgerDetails(selectedLoan.id);
       toast.success('Documents returned successfully.');
       setShowReturnDocModal(false);
-    } catch(e) {
+    } catch (e) {
       console.error(e);
       toast.error('Error recording document return');
     } finally {
@@ -1821,15 +2045,15 @@ const CDLedger: React.FC = () => {
   return (
     <>
       <div className={`space-y-6 p-6 max-w-7xl mx-auto ${showPrintPreview ? 'print:hidden' : 'print:p-0'}`}>
-        
+
         {/* Top row: unified search and metadata header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm print:hidden">
-          
+
           {/* Top Left: Today's date and navigation */}
           <div className="flex flex-wrap items-center gap-3">
             <div>
               <label className="finance-caption uppercase block mb-1">Today's Date / Payment Date</label>
-              <input 
+              <input
                 type="date"
                 value={paymentDate}
                 onChange={(e) => setPaymentDate(e.target.value)}
@@ -1837,7 +2061,7 @@ const CDLedger: React.FC = () => {
                 className={`bg-white border rounded-xl p-2 text-gray-800 focus:ring-2 focus:outline-none finance-input h-[42px] ${renewCalculations?.isDateInvalid ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-green-500'} disabled:opacity-50 disabled:cursor-not-allowed`}
               />
             </div>
-            
+
             <div>
               <label className="finance-caption uppercase block mb-1">Status Filter</label>
               <select
@@ -1884,7 +2108,7 @@ const CDLedger: React.FC = () => {
                 />
                 <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
               </div>
-              
+
               {showNameDropdown && nameSuggestions.length > 0 && (
                 <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
                   {nameSuggestions.map(loan => (
@@ -1926,7 +2150,7 @@ const CDLedger: React.FC = () => {
                 />
                 <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
               </div>
-              
+
               {showAcDropdown && acSuggestions.length > 0 && (
                 <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
                   {acSuggestions.map(loan => (
@@ -1986,11 +2210,11 @@ const CDLedger: React.FC = () => {
               const q = listSearchQuery.toLowerCase().trim();
               const filtered = q
                 ? filteredLoansList.filter(loan =>
-                    loan.loan_id.toLowerCase().includes(q) ||
-                    (loan.customer?.name || '').toLowerCase().includes(q) ||
-                    (loan.customer?.phone || '').includes(q) ||
-                    (loan.customer?.aadhaar || '').includes(q)
-                  )
+                  loan.loan_id.toLowerCase().includes(q) ||
+                  (loan.customer?.name || '').toLowerCase().includes(q) ||
+                  (loan.customer?.phone || '').includes(q) ||
+                  (loan.customer?.aadhaar || '').includes(q)
+                )
                 : filteredLoansList;
 
               if (filtered.length === 0) {
@@ -2039,12 +2263,11 @@ const CDLedger: React.FC = () => {
                           <td className="px-6 py-3.5 text-gray-600">{loan.interest_rate}%</td>
                           <td className="px-6 py-3.5 text-gray-500 text-xs">{loan.date ? new Date(loan.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '-'}</td>
                           <td className="px-6 py-3.5">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                              loan.status === 'Active' ? 'bg-green-100 text-green-700'
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${loan.status === 'Active' ? 'bg-green-100 text-green-700'
                               : loan.status === 'Closed' ? 'bg-gray-100 text-gray-500'
-                              : loan.status === 'NPA_CLOSED' ? 'bg-orange-100 text-orange-700'
-                              : 'bg-yellow-100 text-yellow-700'
-                            }`}>
+                                : loan.status === 'NPA_CLOSED' ? 'bg-orange-100 text-orange-700'
+                                  : 'bg-yellow-100 text-yellow-700'
+                              }`}>
                               {(loan.status || 'Active').toUpperCase()}
                             </span>
                           </td>
@@ -2078,12 +2301,11 @@ const CDLedger: React.FC = () => {
                     <span className="text-sm font-mono text-slate-900 font-black bg-slate-100 px-2.5 py-0.5 rounded-lg">A/C: {selectedLoan.loan_id}</span>
                   </h2>
                 </div>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                  selectedLoan.status === 'Active' ? 'bg-green-100 text-green-700'
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${selectedLoan.status === 'Active' ? 'bg-green-100 text-green-700'
                   : selectedLoan.status === 'Closed' ? 'bg-gray-100 text-gray-500'
-                  : selectedLoan.status === 'NPA_CLOSED' ? 'bg-orange-100 text-orange-700'
-                  : 'bg-yellow-100 text-yellow-700'
-                }`}>
+                    : selectedLoan.status === 'NPA_CLOSED' ? 'bg-orange-100 text-orange-700'
+                      : 'bg-yellow-100 text-yellow-700'
+                  }`}>
                   {(selectedLoan.status || 'Active').toUpperCase()}
                 </span>
               </div>
@@ -2124,8 +2346,8 @@ const CDLedger: React.FC = () => {
                       <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Customer Details</span>
                       <span className="text-[10px] text-slate-500 font-bold block">Borrower Info</span>
                     </div>
-                    <Button 
-                      onClick={isEditing ? handleSaveDetails : handleToggleEdit} 
+                    <Button
+                      onClick={isEditing ? handleSaveDetails : handleToggleEdit}
                       variant={isEditing ? "success" : "secondary"}
                       size="xs"
                       icon={isEditing ? Save : Edit2}
@@ -2305,9 +2527,8 @@ const CDLedger: React.FC = () => {
                       </div>
                       <div className="flex justify-between items-center border-b border-gray-50 pb-1.5">
                         <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Returned Status:</span>
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black ${
-                          documentReturned ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
-                        }`}>
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black ${documentReturned ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
+                          }`}>
                           {documentReturned ? 'Yes (Returned)' : 'No (Submitted)'}
                         </span>
                       </div>
@@ -2328,13 +2549,13 @@ const CDLedger: React.FC = () => {
 
             {/* Unified Operator Workspace - 2 Column Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
+
               {/* LEFT COLUMN (2/3 Width): Action Hub & Statements */}
               <div className="lg:col-span-2 space-y-6">
-                
+
                 {/* Operator calculations panel */}
-                <Card 
-                  title="Operator Action & Calculations" 
+                <Card
+                  title="Operator Action & Calculations"
                   subtitle="Configure transactions and calculations details"
                   className="shadow-sm border-gray-100 rounded-3xl"
                 >
@@ -2348,12 +2569,12 @@ const CDLedger: React.FC = () => {
                   {/* Active Interactive Fields */}
                   <div className="grid grid-cols-2 gap-4 mb-6">
                     <Input label="Receipt No" value={receiptNo} readOnly className="bg-gray-50 text-gray-700 font-mono" />
-                    <Input 
-                      label="Total Amount Paying" 
-                      value={totalAmountPaying} 
-                      onChange={setTotalAmountPaying} 
-                      className="font-bold text-green-700 text-lg" 
-                      placeholder="Enter ₹" 
+                    <Input
+                      label="Total Amount Paying"
+                      value={totalAmountPaying}
+                      onChange={setTotalAmountPaying}
+                      className="font-bold text-green-700 text-lg"
+                      placeholder="Enter ₹"
                       type="text"
                       inputMode="decimal"
                       disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
@@ -2519,11 +2740,11 @@ const CDLedger: React.FC = () => {
                     <Button
                       onClick={() => handleActionSubmit('Renew')}
                       disabled={
-                        isRenewing || 
-                        selectedLoan.status === 'Closed' || 
-                        selectedLoan.status === 'NPA_CLOSED' || 
+                        isRenewing ||
+                        selectedLoan.status === 'Closed' ||
+                        selectedLoan.status === 'NPA_CLOSED' ||
                         !!renewCalculations?.isDateInvalid ||
-                        !totalAmountPaying || 
+                        !totalAmountPaying ||
                         Number(totalAmountPaying) <= 0
                       }
                       className="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0"
@@ -2531,17 +2752,17 @@ const CDLedger: React.FC = () => {
                       <RefreshCw className="w-3.5 h-3.5" />
                       Renewal
                     </Button>
-                    
+
                     <Button
                       onClick={() => handleActionSubmit('Partial')}
                       disabled={
-                        isRenewing || 
-                        !totalAmountPaying || 
+                        isRenewing ||
+                        !totalAmountPaying ||
                         Number(totalAmountPaying) <= 0 ||
                         Number(totalAmountPaying) < ledgerMetrics.totalToRegularize ||
                         Number(totalAmountPaying) >= ledgerMetrics.totalClose ||
-                        selectedLoan.status === 'Closed' || 
-                        selectedLoan.status === 'NPA_CLOSED' || 
+                        selectedLoan.status === 'Closed' ||
+                        selectedLoan.status === 'NPA_CLOSED' ||
                         !!renewCalculations?.isDateInvalid
                       }
                       className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0"
@@ -2549,13 +2770,13 @@ const CDLedger: React.FC = () => {
                       <CreditCard className="w-3.5 h-3.5" />
                       Partial Payment
                     </Button>
-                    
+
                     <Button
                       onClick={() => handleActionSubmit('Close')}
                       disabled={
-                        isRenewing || 
-                        selectedLoan.status === 'Closed' || 
-                        selectedLoan.status === 'NPA_CLOSED' || 
+                        isRenewing ||
+                        selectedLoan.status === 'Closed' ||
+                        selectedLoan.status === 'NPA_CLOSED' ||
                         !totalAmountPaying ||
                         Number(totalAmountPaying) < ledgerMetrics.totalClose ||
                         !!renewCalculations?.isDateInvalid
@@ -2569,7 +2790,7 @@ const CDLedger: React.FC = () => {
                 </Card>
 
                 {/* Statements & Logs unified tabbed card */}
-                <Card 
+                <Card
                   title={
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
                       <div>
@@ -2579,30 +2800,37 @@ const CDLedger: React.FC = () => {
                       <div className="flex gap-1.5 bg-gray-100 border border-gray-200 p-1 rounded-xl self-start sm:self-auto font-sans">
                         <button
                           onClick={() => setActiveLogTab('statement')}
-                          className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${
-                            activeLogTab === 'statement' 
-                              ? 'bg-white text-green-800 shadow-sm border border-gray-150' 
-                              : 'text-slate-900 hover:text-black'
-                          }`}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${activeLogTab === 'statement'
+                            ? 'bg-white text-green-800 shadow-sm border border-gray-150'
+                            : 'text-slate-900 hover:text-black'
+                            }`}
                         >
                           Ledger Statement
                         </button>
                         <button
                           onClick={() => setActiveLogTab('interest')}
-                          className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${
-                            activeLogTab === 'interest' 
-                              ? 'bg-white text-green-800 shadow-sm border border-gray-150' 
-                              : 'text-slate-900 hover:text-black'
-                          }`}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${activeLogTab === 'interest'
+                            ? 'bg-white text-green-800 shadow-sm border border-gray-150'
+                            : 'text-slate-900 hover:text-black'
+                            }`}
                         >
                           Interest History
+                        </button>
+                        <button
+                          onClick={() => setActiveLogTab('payment')}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${activeLogTab === 'payment'
+                            ? 'bg-white text-green-800 shadow-sm border border-gray-150'
+                            : 'text-slate-900 hover:text-black'
+                            }`}
+                        >
+                          Payment History
                         </button>
                       </div>
                     </div>
                   }
                   className="shadow-sm border-gray-100 rounded-3xl w-full font-sans"
                 >
-                  {activeLogTab === 'statement' ? (
+                  {activeLogTab === 'statement' && (
                     <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
                       <table className="w-full text-[13px] text-left min-w-[1000px]">
                         <thead>
@@ -2620,7 +2848,7 @@ const CDLedger: React.FC = () => {
                           {displayedStatementEntries.map((entry) => (
                             <tr key={entry.id} className="hover:bg-gray-50/60 transition-colors">
                               <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(entry.entry_date)}</td>
-                              <td className="px-4 py-3.5 font-black text-slate-950">{entry.account_name || 'CD A/C'}</td>
+                              <td className="px-4 py-3.5 font-black text-slate-950">{mapAccountName(entry.account_name)}</td>
                               <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
                                 {entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
                               </td>
@@ -2635,7 +2863,9 @@ const CDLedger: React.FC = () => {
                         </tbody>
                       </table>
                     </div>
-                  ) : (
+                  )}
+
+                  {activeLogTab === 'interest' && (
                     <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
                       <table className="w-full text-[13px] text-left min-w-[1000px]">
                         <thead>
@@ -2666,6 +2896,134 @@ const CDLedger: React.FC = () => {
                           {displayedInterestDetails.length === 0 ? (
                             <tr>
                               <td colSpan={7} className="text-center py-8 text-slate-500 font-bold italic">No interest details found for this loan</td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {activeLogTab === 'payment' && (
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
+                      <table className="w-full text-[13px] text-left min-w-[1000px]">
+                        <thead>
+                          <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
+                            <th className="w-10 px-4 py-3.5"></th>
+                            <th className="px-4 py-3.5">Date</th>
+                            <th className="px-4 py-3.5">Receipt No</th>
+                            <th className="px-4 py-3.5">Transaction Type</th>
+                            <th className="px-4 py-3.5 text-right">Amount Paid</th>
+                            <th className="px-4 py-3.5">User</th>
+                            <th className="px-4 py-3.5 text-center">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-150 bg-white">
+                          {loanTransactions
+                            .filter((tx: any) => tx.type === 'Collection')
+                            .map((tx: any) => {
+                              const isTxEditable = user?.is_admin || (() => {
+                                const txCreatedAt = new Date(tx.created_at || tx.date).getTime();
+                                const now = Date.now();
+                                const diffHours = (now - txCreatedAt) / (1000 * 60 * 60);
+                                return diffHours <= 24;
+                              })();
+                              
+                              const isExpanded = expandedTxIds.has(tx.id);
+                              
+                              // Allocation details from cdLedgerEntries:
+                              const txAllocations = cdLedgerEntries.filter(
+                                (entry) => entry.receipt_no === tx.receipt_no
+                              );
+                              const principalAllocation = txAllocations
+                                .filter((e) => (e.account_name || '').toUpperCase() === 'CD A/C' || e.entry_type === 'principal_payment')
+                                .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+                              const interestAllocation = txAllocations
+                                .filter((e) => (e.account_name || '').toUpperCase() === 'CD COMMISSION A/C' || e.entry_type === 'interest_payment')
+                                .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+                              const penaltyAllocation = txAllocations
+                                .filter((e) => (e.account_name || '').toUpperCase() === 'PENALTY A/C' || e.entry_type === 'penalty_payment')
+                                .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+                              
+                              return (
+                                <React.Fragment key={tx.id}>
+                                  <tr className="hover:bg-gray-50/60 transition-colors">
+                                    <td className="px-4 py-3.5 text-center">
+                                      <button 
+                                        onClick={() => toggleExpandTx(tx.id)}
+                                        className="p-1 hover:bg-gray-100 rounded transition-colors text-slate-500 hover:text-slate-900 focus:outline-none"
+                                      >
+                                        {isExpanded ? (
+                                          <ChevronDown className="w-4 h-4" />
+                                        ) : (
+                                          <ChevronRight className="w-4 h-4" />
+                                        )}
+                                      </button>
+                                    </td>
+                                    <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(tx.date)}</td>
+                                    <td className="px-4 py-3.5 font-mono text-slate-900 font-black">{tx.receipt_no || '-'}</td>
+                                    <td className="px-4 py-3.5 font-black text-slate-950">CD Amount Paid</td>
+                                    <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
+                                      ₹{Number(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="px-4 py-3.5 text-slate-800 font-bold">{tx.collected_by || 'Staff'}</td>
+                                    <td className="px-4 py-3.5">
+                                      <div className="flex items-center justify-center gap-2">
+                                        {isTxEditable ? (
+                                          <button
+                                            onClick={() => handleOpenEditTxModal(tx)}
+                                            className="p-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 rounded-lg transition-colors border border-indigo-200"
+                                            title="Edit Transaction"
+                                          >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        ) : (
+                                          <span className="text-gray-400 text-xs italic bg-gray-50 px-2 py-0.5 rounded border border-gray-150" title="Editable only within 24 hours">ReadOnly</span>
+                                        )}
+                                        {user?.is_admin && (
+                                          <button
+                                            onClick={() => handleDeleteTx(tx)}
+                                            className="p-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-900 rounded-lg transition-colors border border-rose-200"
+                                            title="Delete Transaction"
+                                          >
+                                            <X className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {isExpanded && (
+                                    <tr className="bg-slate-50/60">
+                                      <td colSpan={7} className="px-12 py-3.5 text-xs text-slate-600 border-t border-gray-100">
+                                        <div className="font-bold text-slate-850 mb-2">Allocation:</div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pl-4 font-bold">
+                                          <div>
+                                            <span className="text-slate-500 uppercase font-black tracking-wider text-[10px] block mb-0.5">CD Interest</span>
+                                            <span className="text-sm font-black text-slate-900">
+                                              ₹{interestAllocation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <span className="text-slate-500 uppercase font-black tracking-wider text-[10px] block mb-0.5">CD Penalty</span>
+                                            <span className="text-sm font-black text-slate-900">
+                                              ₹{penaltyAllocation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <span className="text-slate-500 uppercase font-black tracking-wider text-[10px] block mb-0.5">CD Principal</span>
+                                            <span className="text-sm font-black text-slate-900">
+                                              ₹{principalAllocation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                          {loanTransactions.filter((tx: any) => tx.type === 'Collection').length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="text-center py-8 text-slate-500 font-bold italic">No collection transactions found for this loan</td>
                             </tr>
                           ) : null}
                         </tbody>
@@ -2748,9 +3106,9 @@ const CDLedger: React.FC = () => {
                   <div className="space-y-2.5">
                     {/* Document Upload selector */}
                     <div className="flex gap-2 p-2 bg-gray-50 border border-gray-150 rounded-xl items-center">
-                      <select 
-                        value={docType} 
-                        onChange={(e) => setDocType(e.target.value)} 
+                      <select
+                        value={docType}
+                        onChange={(e) => setDocType(e.target.value)}
                         disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
                         className="flex-1 text-xs bg-white border border-gray-250 p-1.5 rounded-lg focus:outline-none font-sans font-bold text-slate-900"
                       >
@@ -2760,15 +3118,14 @@ const CDLedger: React.FC = () => {
                         <option value="Land Registry Copy">Land Registry Copy</option>
                         <option value="Other Attachment">Other Attachment</option>
                       </select>
-                      <label className={`bg-green-600 hover:bg-green-700 text-white px-2 py-1.5 rounded-lg text-xs font-semibold cursor-pointer select-none ${
-                        (selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED') ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''
-                      }`}>
+                      <label className={`bg-green-600 hover:bg-green-700 text-white px-2 py-1.5 rounded-lg text-xs font-semibold cursor-pointer select-none ${(selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED') ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''
+                        }`}>
                         {uploadingDoc ? 'Uploading...' : 'Upload'}
-                        <input 
-                          type="file" 
-                          onChange={handleUploadDocument} 
-                          disabled={uploadingDoc || selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'} 
-                          className="hidden" 
+                        <input
+                          type="file"
+                          onChange={handleUploadDocument}
+                          disabled={uploadingDoc || selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
+                          className="hidden"
                         />
                       </label>
                     </div>
@@ -2781,9 +3138,8 @@ const CDLedger: React.FC = () => {
                             <span className="text-[10px] text-gray-400 truncate">{doc.remarks}</span>
                           </div>
                           <div className="flex items-center gap-2 font-sans">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                              doc.returnedStatus === 'Returned' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'
-                            }`}>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${doc.returnedStatus === 'Returned' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'
+                              }`}>
                               {doc.returnedStatus}
                             </span>
                             {doc.fileUrl ? (
@@ -2792,8 +3148,8 @@ const CDLedger: React.FC = () => {
                               </a>
                             ) : null}
                             {doc.allowDelete ? (
-                              <button 
-                                onClick={() => handleDeleteDocument(doc.id)} 
+                              <button
+                                onClick={() => handleDeleteDocument(doc.id)}
                                 disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
                                 className="text-red-500 hover:text-red-700 font-bold ml-1 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
@@ -2845,11 +3201,10 @@ const CDLedger: React.FC = () => {
                 {/* Present Balance */}
                 <div className="flex flex-col min-w-[90px]">
                   <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Present Bal.</span>
-                  <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${
-                    bottomTotals.presentBalance <= 0 ? 'text-slate-300'
+                  <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${bottomTotals.presentBalance <= 0 ? 'text-slate-300'
                     : bottomTotals.presentBalance < bottomTotals.totalDebit * 0.25 ? 'text-emerald-600'
-                    : 'text-amber-700'
-                  }`}>
+                      : 'text-amber-700'
+                    }`}>
                     ₹{bottomTotals.presentBalance.toLocaleString('en-IN')}
                   </span>
                 </div>
@@ -2889,11 +3244,10 @@ const CDLedger: React.FC = () => {
                       </span>
                     )}
                   </span>
-                  <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${
-                    bottomTotals.paidDues <= 0 ? 'text-slate-300'
+                  <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${bottomTotals.paidDues <= 0 ? 'text-slate-300'
                     : bottomTotals.pendingDues <= 0 ? 'text-emerald-600'
-                    : 'text-emerald-700'
-                  }`}>
+                      : 'text-emerald-700'
+                    }`}>
                     ₹{bottomTotals.paidDues.toLocaleString('en-IN')}
                   </span>
                 </div>
@@ -2945,16 +3299,16 @@ const CDLedger: React.FC = () => {
                   NPA Close
                 </Button>
 
-                <Button 
-                  onClick={handleRefresh} 
-                  variant="secondary" 
-                  size="sm" 
+                <Button
+                  onClick={handleRefresh}
+                  variant="secondary"
+                  size="sm"
                   icon={RefreshCw}
                   className="rounded-xl border-gray-200 text-xs py-2 px-4"
                 >
                   Refresh
                 </Button>
-                
+
                 <Button
                   onClick={() => handleExport('xlsx')}
                   variant="secondary"
@@ -3163,7 +3517,7 @@ const CDLedger: React.FC = () => {
                   {displayedStatementEntries.map((tx) => (
                     <tr key={tx.id}>
                       <td className="p-2 border-r font-sans">{formatDateOld(tx.entry_date)}</td>
-                      <td className="p-2 border-r font-sans font-bold text-gray-900">{tx.account_name || 'CD A/C'}</td>
+                      <td className="p-2 border-r font-sans font-bold text-gray-900">{mapAccountName(tx.account_name)}</td>
                       <td className="p-2 border-r text-right text-green-705 font-bold">{tx.credit > 0 ? `₹${Number(tx.credit).toLocaleString('en-IN')}` : '-'}</td>
                       <td className="p-2 border-r text-right text-red-705 font-bold">{tx.debit > 0 ? `₹${Number(tx.debit).toLocaleString('en-IN')}` : '-'}</td>
                       <td className="p-2 border-r font-sans text-gray-700">{tx.user_name || 'Staff'}</td>
@@ -3206,20 +3560,20 @@ const CDLedger: React.FC = () => {
                 <p>Are you sure you want to close this account under NPA? This will mark the loan status as Closed with NPA designation and permanently record the settlement and waived amounts.</p>
               </div>
               <div>
-                <Input 
-                  label="Settlement Amount Collected" 
+                <Input
+                  label="Settlement Amount Collected"
                   type="number"
-                  value={npaSettlementAmount} 
-                  onChange={setNpaSettlementAmount} 
+                  value={npaSettlementAmount}
+                  onChange={setNpaSettlementAmount}
                   placeholder="Enter settlement amount collected"
                   required
                 />
               </div>
               <div>
-                <Input 
-                  label="Reason / Remarks" 
-                  value={npaReason} 
-                  onChange={v => setNpaReason(v.toUpperCase())} 
+                <Input
+                  label="Reason / Remarks"
+                  value={npaReason}
+                  onChange={v => setNpaReason(v.toUpperCase())}
                   placeholder="Enter reason/remarks for NPA closure"
                   required
                 />
@@ -3251,7 +3605,7 @@ const CDLedger: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="finance-caption uppercase mb-2 block">Return Date</label>
-                <input 
+                <input
                   type="date"
                   value={returnDate}
                   onChange={(e) => setReturnDate(e.target.value)}
@@ -3259,16 +3613,16 @@ const CDLedger: React.FC = () => {
                 />
               </div>
               <div>
-                <Input 
-                  label="Returned To (Name)" 
-                  value={returnedTo} 
-                  onChange={setReturnedTo} 
+                <Input
+                  label="Returned To (Name)"
+                  value={returnedTo}
+                  onChange={setReturnedTo}
                   placeholder="Person receiving documents"
                 />
               </div>
               <div>
                 <label className="finance-caption uppercase mb-2 block">Receiver Signature / Photo</label>
-                <input 
+                <input
                   type="file"
                   onChange={(e) => setReturnSignature(e.target.files?.[0] || null)}
                   className="w-full bg-white border border-gray-200 rounded-xl p-2 text-sm text-gray-800"
@@ -3283,6 +3637,75 @@ const CDLedger: React.FC = () => {
                 </Button>
                 <Button onClick={handleReturnDocSubmit} variant="primary" className="flex-1 bg-blue-600 hover:bg-blue-700 border-0 text-white rounded-xl" disabled={isReturningDoc || !returnedTo.trim()}>
                   {isReturningDoc ? 'Saving...' : 'Confirm Return'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Transaction Modal */}
+      {showEditTxModal && editingTx && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-xl relative">
+            <button onClick={() => setShowEditTxModal(false)} className="absolute right-4 top-4 text-gray-400 hover:text-gray-600">
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <CreditCard className="w-6 h-6 text-indigo-600" />
+              Edit Payment Transaction
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <Input 
+                  label="Receipt Number" 
+                  value={editTxReceiptNo} 
+                  onChange={setEditTxReceiptNo} 
+                  placeholder="Receipt number (e.g. RC150)"
+                  required
+                />
+              </div>
+              <div>
+                <label className="finance-caption uppercase mb-2 block font-sans">Payment Date</label>
+                <input 
+                  type="date"
+                  value={editTxDate}
+                  onChange={(e) => setEditTxDate(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <Input 
+                  label="Payment Amount (₹)" 
+                  value={editTxAmount} 
+                  onChange={setEditTxAmount} 
+                  placeholder="Amount paid"
+                  type="number"
+                  required
+                />
+              </div>
+
+              <div>
+                <Input 
+                  label="Reason for Edit (Mandatory)" 
+                  value={editTxReason} 
+                  onChange={setEditTxReason} 
+                  placeholder="e.g. Wrong amount entered, Cash correction"
+                  required
+                />
+              </div>
+              <div className="pt-4 flex gap-3">
+                <Button onClick={() => setShowEditTxModal(false)} variant="secondary" className="flex-1 rounded-xl">
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleSaveEditTx} 
+                  variant="primary" 
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 border-0 text-white rounded-xl" 
+                  disabled={isSavingTx || !editTxReceiptNo.trim() || !editTxDate || !editTxAmount || !editTxReason.trim()}
+                >
+                  {isSavingTx ? 'Saving...' : 'Save Changes'}
                 </Button>
               </div>
             </div>

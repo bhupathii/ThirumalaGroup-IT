@@ -281,6 +281,7 @@ export interface FinanceCDLedgerEntry {
   user_name: string | null;
   entry_type: string | null;
   created_at: string;
+  book_id?: string | null;
 }
 
 export interface FinanceCDInterestDetail {
@@ -730,6 +731,20 @@ class SupabaseFinance {
         remarks: remarks,
         collected_by: params.userName,
         receipt_no: receiptNo
+      });
+
+      // 1.5. Post CD Amount Paid (Audit Row)
+      await this.addCDLedgerEntry({
+        loan_id: params.loanId,
+        customer_id: params.customerId,
+        account_name: 'CD Amount Paid',
+        entry_date: entryDate,
+        credit: totalAmount,
+        debit: 0,
+        receipt_no: receiptNo,
+        particulars: `CD Amount Paid - ${receiptNo}`,
+        user_name: params.userName,
+        entry_type: 'amount_paid'
       });
 
       let mainEntryId: string | null = null;
@@ -1953,6 +1968,34 @@ class SupabaseFinance {
       return true;
     } catch (error) {
       console.error('Error deleting finance transaction:', error);
+      return false;
+    }
+  }
+
+  async logCDTransactionEdit(params: {
+    loanId: string;
+    transactionId: string;
+    oldData: any;
+    newData: any;
+    editedBy: string;
+    reason: string;
+  }): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('finance_cd_transaction_edit_logs')
+        .insert({
+          loan_id: params.loanId,
+          transaction_id: params.transactionId,
+          old_data: params.oldData,
+          new_data: params.newData,
+          edited_by: params.editedBy,
+          reason: params.reason
+        });
+
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('Error logging CD transaction edit:', err);
       return false;
     }
   }

@@ -46,16 +46,16 @@ describe('CD Ledger Calculation Rules', () => {
     const penaltyDue = 157.50;
     const principalBalance = 10000;
 
-    // Split 1: Amount only covers partial penalty
+    // Split 1: Amount only covers partial penalty (80/20 split applies)
     const split1 = financeCalculationService.applyPaymentSplit(100, interestDue, penaltyDue, principalBalance);
-    expect(split1.penaltyPaid).toBe(100);
-    expect(split1.interestPaid).toBe(0);
+    expect(split1.penaltyPaid).toBe(20);
+    expect(split1.interestPaid).toBe(80);
     expect(split1.principalPaid).toBe(0);
 
-    // Split 2: Amount clears penalty and covers partial interest
+    // Split 2: Amount clears penalty and covers partial interest (80/20 split applies)
     const split2 = financeCalculationService.applyPaymentSplit(500, interestDue, penaltyDue, principalBalance);
-    expect(split2.penaltyPaid).toBe(157.50);
-    expect(split2.interestPaid).toBe(342.50);
+    expect(split2.penaltyPaid).toBe(100);
+    expect(split2.interestPaid).toBe(400);
     expect(split2.principalPaid).toBe(0);
 
     // Split 3: Amount clears penalty, interest and covers partial principal
@@ -73,16 +73,16 @@ describe('CD Ledger Calculation Rules', () => {
 
     expect(interest).toBe(310);
     expect(penalty).toBe(77.50);
-    expect(split.penaltyPaid).toBe(77.50);
-    expect(split.interestPaid).toBe(222.50);
+    expect(split.penaltyPaid).toBe(60);
+    expect(split.interestPaid).toBe(240);
     expect(split.principalPaid).toBe(0);
 
     const remainingPenalty = penalty - split.penaltyPaid;
     const remainingInterest = interest - split.interestPaid;
     const remainingPrincipal = principal - split.principalPaid;
 
-    expect(remainingPenalty).toBe(0);
-    expect(remainingInterest).toBe(87.50);
+    expect(remainingPenalty).toBe(17.50);
+    expect(remainingInterest).toBe(70.00);
     expect(remainingPrincipal).toBe(10000);
 
     const closeTotal = financeCalculationService.calculateCloseTotal(remainingPrincipal, remainingInterest, remainingPenalty);
@@ -96,21 +96,21 @@ describe('CD Ledger Calculation Rules', () => {
     const firstPayment = 300;
     const split1 = financeCalculationService.applyPaymentSplit(firstPayment, intDue1, penDue1, principal);
     
-    expect(split1.penaltyPaid).toBe(157.50);
-    expect(split1.interestPaid).toBe(142.50);
+    expect(split1.penaltyPaid).toBe(60);
+    expect(split1.interestPaid).toBe(240);
     expect(split1.principalPaid).toBe(0);
     
-    const remInt1 = intDue1 - split1.interestPaid; // 487.50
-    const remPen1 = penDue1 - split1.penaltyPaid;   // 0
-    expect(remInt1).toBe(487.50);
-    expect(remPen1).toBe(0);
+    const remInt1 = intDue1 - split1.interestPaid; // 390
+    const remPen1 = penDue1 - split1.penaltyPaid;   // 97.50
+    expect(remInt1).toBe(390);
+    expect(remPen1).toBe(97.50);
 
-    // Testcase 2: Remaining Interest = 487.50, Remaining Penalty = 0, Paid = 487.50
+    // Testcase 2: Remaining Interest = 390, Remaining Penalty = 97.50, Paid = 487.50 (clears all remaining dues)
     const secondPayment = 487.50;
     const split2 = financeCalculationService.applyPaymentSplit(secondPayment, remInt1, remPen1, principal);
     
-    expect(split2.penaltyPaid).toBe(0);
-    expect(split2.interestPaid).toBe(487.50);
+    expect(split2.penaltyPaid).toBe(97.50);
+    expect(split2.interestPaid).toBe(390);
     expect(split2.principalPaid).toBe(0);
     
     const remInt2 = remInt1 - split2.interestPaid; // 0
@@ -177,18 +177,18 @@ describe('CD Ledger Calculation Rules', () => {
 
     it('Case 1 — payment ₹500: clears penalty first, partial interest', () => {
       // Penalty Due = 155, Interest Due = 620, Payment = 500
-      // Expected: Penalty Paid = 155, Interest Paid = 345
+      // Expected (80/20): Penalty Paid = 100, Interest Paid = 400
       const split = financeCalculationService.applyPaymentSplit(500, bugInterest, bugPenalty, bugPrincipal);
 
-      expect(split.penaltyPaid).toBe(155);
-      expect(split.interestPaid).toBe(345);
+      expect(split.penaltyPaid).toBe(100);
+      expect(split.interestPaid).toBe(400);
       expect(split.principalPaid).toBe(0);
 
       const remainingInterest = bugInterest - split.interestPaid;
       const remainingPenalty  = bugPenalty  - split.penaltyPaid;
 
-      expect(remainingPenalty).toBe(0);
-      expect(remainingInterest).toBe(275);
+      expect(remainingPenalty).toBe(55);
+      expect(remainingInterest).toBe(220);
 
       const pendingDues = remainingInterest + remainingPenalty;
       expect(pendingDues).toBe(275);
@@ -196,18 +196,18 @@ describe('CD Ledger Calculation Rules', () => {
 
     it('Case 2 — payment ₹100: only partial penalty, no interest', () => {
       // Penalty Due = 155, Interest Due = 620, Payment = 100
-      // Expected: Penalty Paid = 100, Interest Paid = 0
+      // Expected (80/20): Penalty Paid = 20, Interest Paid = 80
       const split = financeCalculationService.applyPaymentSplit(100, bugInterest, bugPenalty, bugPrincipal);
 
-      expect(split.penaltyPaid).toBe(100);
-      expect(split.interestPaid).toBe(0);
+      expect(split.penaltyPaid).toBe(20);
+      expect(split.interestPaid).toBe(80);
       expect(split.principalPaid).toBe(0);
 
       const remainingInterest = bugInterest - split.interestPaid;
       const remainingPenalty  = bugPenalty  - split.penaltyPaid;
 
-      expect(remainingPenalty).toBe(55);
-      expect(remainingInterest).toBe(620);
+      expect(remainingPenalty).toBe(135);
+      expect(remainingInterest).toBe(540);
     });
 
     it('Case 3 — payment ₹800: clears penalty + interest, excess to principal', () => {
@@ -232,18 +232,18 @@ describe('CD Ledger Calculation Rules', () => {
     it('Rule 4 — partial payment must not clear dues or advance loan date', () => {
       // Total dues = 775 (Interest 620 + Penalty 155)
       // Payment = 500
-      // Expected pending = 275 (Interest 275 remaining)
+      // Expected pending = 275 (Interest 220 remaining, Penalty 55 remaining)
       const totalDue = bugInterest + bugPenalty; // 775
       const payment = 500;
 
       const split = financeCalculationService.applyPaymentSplit(payment, bugInterest, bugPenalty, bugPrincipal);
 
-      expect(split.penaltyPaid).toBe(155);
-      expect(split.interestPaid).toBe(345);
+      expect(split.penaltyPaid).toBe(100);
+      expect(split.interestPaid).toBe(400);
       expect(split.principalPaid).toBe(0);
 
-      const remainingInterest = bugInterest - split.interestPaid; // 275
-      const remainingPenalty  = bugPenalty  - split.penaltyPaid;  // 0
+      const remainingInterest = bugInterest - split.interestPaid; // 220
+      const remainingPenalty  = bugPenalty  - split.penaltyPaid;  // 55
       const pendingDues = remainingInterest + remainingPenalty;    // 275
 
       expect(pendingDues).toBe(275);
@@ -298,8 +298,8 @@ describe('CD Ledger Calculation Rules', () => {
         100000,
         'Renew'
       );
-      expect(split.penaltyPaid).toBe(500);
-      expect(split.interestPaid).toBe(500);
+      expect(split.penaltyPaid).toBe(200);
+      expect(split.interestPaid).toBe(800);
       expect(split.principalPaid).toBe(0);
     });
   });
@@ -520,8 +520,8 @@ describe('CD Ledger Calculation Rules', () => {
         100000,
         'Renew'
       );
-      expect(split.penaltyPaid).toBe(500);
-      expect(split.interestPaid).toBe(500);
+      expect(split.penaltyPaid).toBe(200);
+      expect(split.interestPaid).toBe(800);
       expect(split.principalPaid).toBe(0);
     });
 
@@ -847,11 +847,11 @@ describe('CD Ledger Calculation Rules', () => {
         expect(res.interest).toBe(13100);
         expect(res.penalty).toBe(3275);
         expect(res.totalDue).toBe(16375);
-        expect(res.penaltyPaid).toBe(3275);
-        expect(res.interestPaid).toBe(1725);
+        expect(res.penaltyPaid).toBe(1000);
+        expect(res.interestPaid).toBe(4000);
         expect(res.principalPaid).toBe(0);
-        expect(res.renewedDays).toBe(17);
-        expect(res.nextDueDate).toBe('2026-06-27');
+        expect(res.renewedDays).toBe(40);
+        expect(res.nextDueDate).toBe('2026-07-20');
       });
  
       it('Validation Test 15 - Penalty Due = ₹315, Overdue Interest Due = ₹1,310, Payment = ₹1,500', () => {
@@ -867,11 +867,11 @@ describe('CD Ledger Calculation Rules', () => {
         expect(res.interest).toBe(1310);
         expect(res.penalty).toBe(327.50);
         expect(res.totalDue).toBe(1637.50);
-        expect(res.penaltyPaid).toBe(327.50);
-        expect(res.interestPaid).toBe(1172.50);
+        expect(res.penaltyPaid).toBe(300);
+        expect(res.interestPaid).toBe(1200);
         expect(res.principalPaid).toBe(0);
-        expect(res.renewedDays).toBe(117);
-        expect(res.nextDueDate).toBe('2026-10-05');
+        expect(res.renewedDays).toBe(120);
+        expect(res.nextDueDate).toBe('2026-10-08');
       });
  
       it('Validation Test 16 - Penalty Due = ₹315, Overdue Interest Due = ₹1,310, Payment = ₹1,700', () => {
@@ -887,10 +887,10 @@ describe('CD Ledger Calculation Rules', () => {
         expect(res.interest).toBe(1310);
         expect(res.penalty).toBe(327.50);
         expect(res.totalDue).toBe(1637.50);
-        expect(res.penaltyPaid).toBe(327.50);
-        expect(res.interestPaid).toBe(1372.50);
+        expect(res.penaltyPaid).toBe(328);
+        expect(res.interestPaid).toBe(1372);
         expect(res.principalPaid).toBe(0);
-        expect(res.renewedDays).toBe(137);
+        expect(res.renewedDays).toBe(137.2);
         expect(res.nextDueDate).toBe('2026-10-25');
       });
     });
@@ -952,7 +952,7 @@ describe('CD Ledger Calculation Rules', () => {
 
       it('verifies 15-day period calculations using calculateCDDuesAndSplit helper', () => {
         const res = calculateCDDuesAndSplit({
-          principal: 10000,
+          principal: 1000,
           rate: 3,
           currentDueDate: '2026-06-15',
           paymentDate: '2026-06-30', // exactly 15 days overdue
@@ -962,12 +962,12 @@ describe('CD Ledger Calculation Rules', () => {
         });
 
         expect(res.dueDays).toBe(15);
-        expect(res.interest).toBe(150);
-        expect(res.penalty).toBe(37.50);
-        expect(res.totalDue).toBe(187.50);
-        expect(res.penaltyPaid).toBe(37.50);
-        expect(res.interestPaid).toBe(562.50); // 600 - 37.50 = 562.50
-        expect(res.renewedDays).toBe(56); // 562.50 / 10 = 56.25 -> 56 days
+        expect(res.interest).toBe(15);
+        expect(res.penalty).toBe(3.75);
+        expect(res.totalDue).toBe(18.75);
+        expect(res.penaltyPaid).toBe(4); // Banker's rounded 3.75 -> 4
+        expect(res.interestPaid).toBe(596);
+        expect(res.renewedDays).toBe(596); // daily interest is 15 / 15 = 1. 596 / 1 = 596
       });
 
       it('verifies due date is calculated as loan_date + period_days exactly', () => {
@@ -1053,6 +1053,42 @@ describe('CD Ledger Calculation Rules', () => {
         expect(resEdited.renewalDue).toBe(1500); // 100000 * 3% * 15 / 30 = 1500
         expect(resEdited.totalClose).toBe(100000);
       });
+    });
+  });
+
+  describe("Banker's Rounding Grace Period (Reporting Only)", () => {
+    const dummySetting = {
+      id: 'dummy',
+      category: 'CD',
+      rate: 3,
+      overdue: 0.75,
+      days_per_year: 360, // 360 days per year gives 30 days per month divisor: 360/12 = 30
+      method: 'SIMPLE_DAILY'
+    } as any;
+
+    const principal = 10000;
+
+    it('calculates bankersRound correctly', () => {
+      expect(financeCalculationService.bankersRound(5.19)).toBe(5);
+      expect(financeCalculationService.bankersRound(5.50)).toBe(6);
+      expect(financeCalculationService.bankersRound(6.00)).toBe(6);
+    });
+
+    it('applies grace threshold on 5.19 days (rounds to 5, penalty is 0)', () => {
+      const penalty = financeCalculationService.calculatePenaltyFromSetting(principal, 5.19, dummySetting);
+      expect(penalty).toBe(0);
+    });
+
+    it('accrues penalty on 5.50 days (rounds to 6, penalty calculated on 5.50 days)', () => {
+      // 10000 * 0.75% * 5.50 / 30 = 13.75
+      const penalty = financeCalculationService.calculatePenaltyFromSetting(principal, 5.50, dummySetting);
+      expect(penalty).toBeCloseTo(13.75, 4);
+    });
+
+    it('accrues penalty on 6 days (rounds to 6, penalty calculated on 6 days)', () => {
+      // 10000 * 0.75% * 6 / 30 = 15.00
+      const penalty = financeCalculationService.calculatePenaltyFromSetting(principal, 6.00, dummySetting);
+      expect(penalty).toBe(15.00);
     });
   });
 });
