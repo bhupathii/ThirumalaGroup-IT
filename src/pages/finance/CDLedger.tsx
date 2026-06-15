@@ -1510,13 +1510,14 @@ const CDLedger: React.FC = () => {
       let renewalInterestPaid = 0;
 
       if (isClosingPayment) {
-        // Close: clear all remaining dues, excess reduces principal
-        penaltyPaid   = outstandingPenalty;
-        overdueInterestPaid = outstandingInterest;
+        // Close: clear all remaining dues, excess reduces principal.
+        // Banker's-round penalty and interest so paise never land in principal balance.
+        penaltyPaid         = financeCalculationService.roundRupee(outstandingPenalty);
+        overdueInterestPaid = financeCalculationService.roundRupee(outstandingInterest);
         renewalInterestPaid = 0;
-        interestPaid  = outstandingInterest;
-        principalPaid = Number(Math.max(0, paymentAmount - penaltyPaid - overdueInterestPaid).toFixed(2));
-        renewedDays   = 0;
+        interestPaid        = overdueInterestPaid;
+        principalPaid       = Number(Math.max(0, paymentAmount - penaltyPaid - overdueInterestPaid).toFixed(2));
+        renewedDays         = 0;
       } else {
         const split = financeCalculationService.computeCDPaymentSplit(
           paymentAmount,
