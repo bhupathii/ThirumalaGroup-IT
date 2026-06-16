@@ -816,11 +816,7 @@ class SupabaseFinance {
             const renewedTillDate = params.renewedTillDate !== undefined
               ? params.renewedTillDate
               : (params.renewedDays > 0 
-                  ? (() => {
-                      const dateObj = new Date(new Date(entryDate).getTime() + params.renewedDays * 24 * 60 * 60 * 1000);
-                      const tzoffset = dateObj.getTimezoneOffset() * 60000;
-                      return new Date(dateObj.getTime() - tzoffset).toISOString().split('T')[0];
-                    })()
+                  ? new Date(new Date(entryDate).getTime() + params.renewedDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
                   : null);
 
             await this.addCDInterestDetail({

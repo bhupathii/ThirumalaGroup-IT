@@ -32,8 +32,7 @@ import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 const startOfDay = (d: Date | string | number) => {
   const date = new Date(d);
-  date.setHours(0, 0, 0, 0);
-  return date.getTime();
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 };
 
 const mapAccountName = (name: string): string => {
@@ -1460,7 +1459,7 @@ const CDLedger: React.FC = () => {
     );
     // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate, not payment date
     const renewBaseDateMs = renewCalculations?.dueDate
-      ? Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate))
+      ? renewCalculations.dueDate.getTime()
       : startOfDay(paymentDate);
     const renewNextDueDate = renewSplit.renewedDays > 0
       ? new Date(renewBaseDateMs + renewSplit.renewedDays * 24 * 60 * 60 * 1000)
@@ -1490,7 +1489,7 @@ const CDLedger: React.FC = () => {
       renewCalculations.daysPastDue || 0
     );
     const partialBaseDateMs = renewCalculations?.dueDate
-      ? Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate))
+      ? renewCalculations.dueDate.getTime()
       : startOfDay(paymentDate);
     const partialNextDueDate = partialSplit.renewedDays > 0
       ? new Date(partialBaseDateMs + partialSplit.renewedDays * 24 * 60 * 60 * 1000)
@@ -1765,11 +1764,10 @@ const CDLedger: React.FC = () => {
       if (renewedDays > 0) {
         // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate
         const baseDateMs = renewCalculations?.dueDate
-          ? Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate))
+          ? renewCalculations.dueDate.getTime()
           : startOfDay(paymentDate);
         const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
-        const tzoffset = nextDueDate.getTimezoneOffset() * 60000;
-        renewedTillDate = new Date(nextDueDate.getTime() - tzoffset).toISOString().split('T')[0];
+        renewedTillDate = nextDueDate.toISOString().split('T')[0];
       }
 
       // Console logs for debugging
@@ -1822,7 +1820,7 @@ const CDLedger: React.FC = () => {
         // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate
         if (renewedDays > 0) {
           const baseDateMs = renewCalculations?.dueDate
-            ? Math.max(startOfDay(renewCalculations.dueDate), startOfDay(paymentDate))
+            ? renewCalculations.dueDate.getTime()
             : startOfDay(paymentDate);
           const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
 
@@ -1836,8 +1834,7 @@ const CDLedger: React.FC = () => {
           console.log('next_due_date:', nextDueDate);
 
           const newCycleStart = new Date(nextDueDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
-          const tzoffset = newCycleStart.getTimezoneOffset() * 60000;
-          updates.date = new Date(newCycleStart.getTime() - tzoffset).toISOString().split('T')[0];
+          updates.date = newCycleStart.toISOString().split('T')[0];
 
           console.log('new_loan_date (updates.date):', updates.date);
         }

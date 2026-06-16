@@ -178,8 +178,7 @@ export const cdLedgerRebuildService = {
         if (renewedDays > 0) {
           const baseDateMs = dueDate.getTime();
           const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
-          const tzoffset = nextDueDate.getTimezoneOffset() * 60000;
-          renewedTillDate = new Date(nextDueDate.getTime() - tzoffset).toISOString().split('T')[0];
+          renewedTillDate = nextDueDate.toISOString().split('T')[0];
         }
 
         console.log(`[Rebuild-Tx ${receiptNo}] Amt: ₹${paymentAmount}, Split: Pen=₹${penaltyPaid}, Int=₹${interestPaid}, Prin=₹${principalPaid}, RenewDays=${renewedDays}`);
@@ -347,8 +346,7 @@ export const cdLedgerRebuildService = {
       // 6. Update loan final state in the database
       const finalDueDate = new Date(baseDueDate.getTime() + totalRenewedDays * 24 * 60 * 60 * 1000);
       const finalCycleStart = new Date(finalDueDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
-      const tzoffset = finalCycleStart.getTimezoneOffset() * 60000;
-      const finalLoanDate = new Date(finalCycleStart.getTime() - tzoffset).toISOString().split('T')[0];
+      const finalLoanDate = finalCycleStart.toISOString().split('T')[0];
 
       let finalStatus = currentPrincipal <= 0 ? 'Closed' : 'Active';
       if (loan.status === 'NPA_CLOSED') {
