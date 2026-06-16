@@ -45,6 +45,17 @@ const mapAccountName = (name: string): string => {
   return name || 'CD Principal';
 };
 
+const isPaymentCollectionEntry = (entry: any): boolean => {
+  const cleanName = (entry.account_name || '').trim().toUpperCase();
+  const cleanType = (entry.entry_type || '').trim().toUpperCase();
+  return (
+    cleanType === 'AMOUNT_PAID' ||
+    cleanName === 'CD AMOUNT PAID' ||
+    cleanName === 'CUSTOMER PAYMENT' ||
+    cleanName === 'AMOUNT RECEIVED'
+  );
+};
+
 const CDLedger: React.FC = () => {
   const { user } = useAuth();
 
@@ -802,31 +813,33 @@ const CDLedger: React.FC = () => {
     console.log('due_date:', dueDate.toISOString().split('T')[0]);
     console.log('calculated_cycle_days:', Math.round((dueDate.getTime() - originalLoanDate.getTime()) / (1000 * 60 * 60 * 24)));
 
-    // Due Days = Payment Date - Due Date (Clamped to 0) as fractional float
+    // Due Days = Payment Date - Due Date as fractional float
     const rawDueDays = (startOfDay(today) - dueDate.getTime()) / (1000 * 60 * 60 * 24);
-    const dueDays = Math.max(0, rawDueDays);
+    const dueDays = rawDueDays;
     const daysRemaining = rawDueDays < 0 ? Math.abs(rawDueDays) : 0;
 
     const interestRate = Number(selectedLoan.interest_rate) || 3;
     const principalBalance = currentPrincipalBalance;
 
-    // Interest = principal × rate × dueDays ÷ 30 ÷ 100 (0 if dueDays <= 0)
-    // Penalty  = principal × penaltyRate% × dueDays ÷ 30 (0 if dueDays <= 5, calculated on full dueDays count if > 5)
-    const grossInterest = dueDays <= 0 ? 0 : Number(((principalBalance * interestRate * dueDays) / 30 / 100).toFixed(2));
-    const penaltyDays = financeCalculationService.roundRupee(dueDays) <= 5 ? 0 : dueDays;
-    const grossPenalty = penaltyDays <= 0 ? 0 : Number(((principalBalance * penaltyRate * penaltyDays) / 30 / 100).toFixed(2));
+    // Interest = principal × rate × rawDueDays ÷ periodDays ÷ 100 (may be negative)
+    const grossInterest = Number(((principalBalance * interestRate * rawDueDays) / periodDays / 100).toFixed(2));
+    const graceDays = selectedLoan.grace_days !== undefined && selectedLoan.grace_days !== null ? Number(selectedLoan.grace_days) : 5;
+    const grossPenalty = rawDueDays > graceDays
+      ? Number(((principalBalance * penaltyRate * (rawDueDays - graceDays)) / periodDays / 100).toFixed(2))
+      : 0;
+    const penaltyDays = rawDueDays > graceDays ? rawDueDays - graceDays : 0;
 
     // Daily interest / renewal day value:
-    // Derived from the Renewal Due divided by Period Days (cancels out to principal * rate / 100 / 30)
-    const renewalInterest = (principalBalance * (interestRate / 100) * periodDays) / 30;
+    // Derived from the Renewal Due divided by Period Days (cancels out to principal * rate / 100 / periodDays)
+    const renewalInterest = (principalBalance * (interestRate / 100) * periodDays) / periodDays;
     const baseDailyInterest = Number((renewalInterest / periodDays).toFixed(5));
 
-    const renewalPenalty = (principalBalance * (penaltyRate / 100) * periodDays) / 30;
+    const renewalPenalty = (principalBalance * (penaltyRate / 100) * periodDays) / periodDays;
     const baseDailyPenalty = Number((renewalPenalty / periodDays).toFixed(5));
 
     let dailyInterest = baseDailyInterest;
     let dailyPenalty = 0;
-    if (dueDays > 5) {
+    if (dueDays > graceDays) {
       dailyInterest = Number((baseDailyInterest + baseDailyPenalty).toFixed(5));
       dailyPenalty = baseDailyPenalty;
     }
@@ -859,9 +872,9 @@ const CDLedger: React.FC = () => {
     const outstandingInterest = Math.max(0, Number(grossInterest.toFixed(2)));
     const outstandingPenalty = Math.max(0, Number(grossPenalty.toFixed(2)));
 
-    // Display interest/penalty: show the raw formula value (never negative)
-    const displayInterest = dueDays <= 0 ? 0 : outstandingInterest;
-    const displayPenalty = dueDays <= 0 ? 0 : outstandingPenalty;
+    // Display interest/penalty: show the raw formula value (interest can be negative)
+    const displayInterest = grossInterest;
+    const displayPenalty = grossPenalty;
 
     // CD067 / CD070 debugging trace
     console.log('=== CD LEDGER MIGRATION AUDIT TRACE ===', {
@@ -881,6 +894,7 @@ const CDLedger: React.FC = () => {
       loanDate: entryDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       dueDate: dueDate,
       daysPastDue: dueDays,            // raw due days (can be negative)
+      displayDays: Math.round(dueDays),
       daysRemaining,                    // absolute days remaining (when not yet due)
       nextDueDate: null,                // Computed dynamically based on renewedDays
       penaltyDays,
@@ -1069,13 +1083,16 @@ const CDLedger: React.FC = () => {
       // VBA: DueDate = Date + Period − 1
       const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
       const cycleDueDate = new Date(cycle.start + (periodDays - 1) * 24 * 60 * 60 * 1000);
-      const cycleDueDays = Math.max(0, Math.round((cycle.end - startOfDay(cycleDueDate)) / (1000 * 60 * 60 * 24)));
+      const cycleDueDays = Math.round((cycle.end - startOfDay(cycleDueDate)) / (1000 * 60 * 60 * 24));
 
       const interestRate = Number(selectedLoan.interest_rate) || 3;
       const penaltyRate = selectedLoan.penalty_percent !== undefined && selectedLoan.penalty_percent !== null ? Number(selectedLoan.penalty_percent) : 0.75;
 
-      const cycleGrossInterest = cycleDueDays <= 0 ? 0 : Number(((runningPrincipal * interestRate * cycleDueDays) / 30 / 100).toFixed(2));
-      const cycleGrossPenalty = cycleDueDays <= 0 ? 0 : Number(((runningPrincipal * penaltyRate * cycleDueDays) / 30 / 100).toFixed(2));
+      const graceDays = selectedLoan.grace_days !== undefined && selectedLoan.grace_days !== null ? Number(selectedLoan.grace_days) : 5;
+      const cycleGrossInterest = Number(((runningPrincipal * interestRate * cycleDueDays) / (periodDays * 100)).toFixed(2));
+      const cycleGrossPenalty = cycleDueDays > graceDays
+        ? Number(((runningPrincipal * penaltyRate * (cycleDueDays - graceDays)) / (periodDays * 100)).toFixed(2))
+        : 0;
 
       // Check if some payments inside this cycle are ALREADY split
       const alreadySplitSum = cyclePayments.filter(e => {
@@ -1351,8 +1368,8 @@ const CDLedger: React.FC = () => {
       : Number((paidInterest + paidPenalty).toFixed(2));
     const currentPendingDues = Math.max(0, Number((currentTotalDues - currentPaidDues).toFixed(2)));
 
-    // Close Amount = Principal + Interest + Penalty (only when interest and penalty are non-negative)
-    const totalClose = Number((principalBalance + Math.max(0, pendingInterest) + Math.max(0, pendingPenalty)).toFixed(2));
+    // Close Amount = Principal + Interest + Penalty
+    const totalClose = Number((principalBalance + pendingInterest + pendingPenalty).toFixed(2));
 
     // totalCredit = only real cash collected (interest, penalty, principal payments)
     // Must NOT include opening_commission or document_charge rows (not real collections)
@@ -2004,15 +2021,19 @@ const CDLedger: React.FC = () => {
       return;
     }
 
-    const exportData = displayedStatementEntries.map((tx: any) => ({
-      Date: formatDateOld(tx.entry_date),
-      Account: tx.account_name || 'CD A/C',
-      Credit: tx.credit,
-      Debit: tx.debit,
-      Particulars: tx.particulars || '',
-      User: tx.user_name || '',
-      'Receipt No': tx.receipt_no || '-'
-    }));
+    const exportData = displayedStatementEntries.map((tx: any) => {
+      const isPayment = isPaymentCollectionEntry(tx);
+      return {
+        Date: formatDateOld(tx.entry_date),
+        Account: tx.account_name || 'CD A/C',
+        'CR Amount': isPayment ? tx.credit : 0,
+        Credit: isPayment ? 0 : tx.credit,
+        Debit: isPayment ? 0 : tx.debit,
+        Particulars: tx.particulars || '',
+        User: tx.user_name || '',
+        'Receipt No': tx.receipt_no || '-'
+      };
+    });
 
     const filename = `${selectedLoan.loan_id}_CD_Ledger_${new Date().toISOString().split('T')[0]}`;
 
@@ -2295,7 +2316,7 @@ const CDLedger: React.FC = () => {
                 <div>
                   <h2 className="text-lg font-extrabold text-slate-950 flex items-center gap-2">
                     {selectedLoan.customer?.name}
-                    <span className="text-sm font-mono text-slate-900 font-black bg-slate-100 px-2.5 py-0.5 rounded-lg">A/C: {selectedLoan.loan_id}</span>
+                    <span className="text-base font-mono text-slate-900 font-black bg-slate-100 px-3 py-1 rounded-lg">A/C: {selectedLoan.loan_id}</span>
                   </h2>
                 </div>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${selectedLoan.status === 'Active' ? 'bg-green-100 text-green-700'
@@ -2366,34 +2387,34 @@ const CDLedger: React.FC = () => {
                         <Input label="Partner" value={editCustPartnerName} onChange={setEditCustPartnerName} className="scale-90 origin-top-left" />
                       </div>
                     ) : (
-                      <div className="space-y-2 text-xs text-gray-700">
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Name:</span>
-                          <span className="text-xs font-black text-black">{selectedLoan.customer?.name}</span>
+                      <div className="space-y-2 text-sm text-gray-750">
+                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Name:</span>
+                          <span className="text-sm font-black text-slate-950">{selectedLoan.customer?.name}</span>
                         </div>
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">S/o W/o:</span>
-                          <span className="text-xs font-black text-black">{selectedLoan.customer?.father_husband_name || 'N/A'}</span>
+                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">S/o W/o:</span>
+                          <span className="text-sm font-black text-slate-950">{selectedLoan.customer?.father_husband_name || 'N/A'}</span>
                         </div>
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Phone 1:</span>
-                          <span className="text-xs font-black text-black">{selectedLoan.customer?.phone || 'N/A'}</span>
+                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Phone 1:</span>
+                          <span className="text-sm font-black text-slate-950">{selectedLoan.customer?.phone || 'N/A'}</span>
                         </div>
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Phone 2:</span>
-                          <span className="text-xs font-black text-black">{selectedLoan.customer?.phone2 || 'N/A'}</span>
+                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Phone 2:</span>
+                          <span className="text-sm font-black text-slate-950">{selectedLoan.customer?.phone2 || 'N/A'}</span>
                         </div>
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Aadhaar:</span>
-                          <span className="text-xs font-black text-black font-mono">{selectedLoan.customer?.aadhaar || 'N/A'}</span>
+                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Aadhaar:</span>
+                          <span className="text-sm font-black text-slate-955 font-mono">{selectedLoan.customer?.aadhaar || 'N/A'}</span>
                         </div>
-                        <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Partner:</span>
-                          <span className="text-xs font-black text-black">{selectedLoan.customer?.partner_name || 'N/A'}</span>
+                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Partner:</span>
+                          <span className="text-sm font-black text-slate-955">{selectedLoan.customer?.partner_name || 'N/A'}</span>
                         </div>
-                        <div className="flex flex-col border-b border-gray-50 pb-1.5">
-                          <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Address:</span>
-                          <span className="text-xs font-black text-black leading-tight mt-1">{selectedLoan.customer?.address || 'N/A'}</span>
+                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Address:</span>
+                          <span className="text-sm font-black text-slate-955 leading-tight">{selectedLoan.customer?.address || 'N/A'}</span>
                         </div>
                       </div>
                     )}
@@ -2408,18 +2429,18 @@ const CDLedger: React.FC = () => {
                       <span className="text-[10px] text-slate-500 font-bold block">Surety Profile</span>
                     </div>
                   </div>
-                  <div className="flex-1 space-y-2 text-xs text-gray-700">
-                    <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                      <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Name:</span>
-                      <span className="text-xs font-black text-black">{guarantor1?.name || 'N/A'}</span>
+                  <div className="flex-1 space-y-2 text-sm text-gray-755">
+                    <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Name:</span>
+                      <span className="text-sm font-black text-slate-955">{guarantor1?.name || 'N/A'}</span>
                     </div>
-                    <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                      <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Phone No:</span>
-                      <span className="text-xs font-black text-black">{guarantor1?.phone || 'N/A'}</span>
+                    <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Phone No:</span>
+                      <span className="text-sm font-black text-slate-955">{guarantor1?.phone || 'N/A'}</span>
                     </div>
-                    <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                      <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Aadhaar:</span>
-                      <span className="text-xs font-black text-black font-mono">{guarantor1?.aadhaar || 'N/A'}</span>
+                    <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Aadhaar:</span>
+                      <span className="text-sm font-black text-slate-955 font-mono">{guarantor1?.aadhaar || 'N/A'}</span>
                     </div>
                   </div>
                 </div>
@@ -2432,18 +2453,18 @@ const CDLedger: React.FC = () => {
                       <span className="text-[10px] text-slate-500 font-bold block">Secondary Surety</span>
                     </div>
                   </div>
-                  <div className="flex-1 space-y-2 text-xs text-gray-700">
-                    <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                      <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Name:</span>
-                      <span className="text-xs font-black text-black">{guarantor2?.name || 'N/A'}</span>
+                  <div className="flex-1 space-y-2 text-sm text-gray-755">
+                    <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Name:</span>
+                      <span className="text-sm font-black text-slate-955">{guarantor2?.name || 'N/A'}</span>
                     </div>
-                    <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                      <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Phone No:</span>
-                      <span className="text-xs font-black text-black">{guarantor2?.phone || 'N/A'}</span>
+                    <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Phone No:</span>
+                      <span className="text-sm font-black text-slate-955">{guarantor2?.phone || 'N/A'}</span>
                     </div>
-                    <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                      <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Aadhaar:</span>
-                      <span className="text-xs font-black text-black font-mono">{guarantor2?.aadhaar || 'N/A'}</span>
+                    <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Aadhaar:</span>
+                      <span className="text-sm font-black text-slate-955 font-mono">{guarantor2?.aadhaar || 'N/A'}</span>
                     </div>
                   </div>
                 </div>
@@ -2514,19 +2535,21 @@ const CDLedger: React.FC = () => {
                       <span className="text-[10px] text-slate-500 font-bold block">Pledged Files</span>
                     </div>
                   </div>
-                  <div className="flex-1 flex flex-col justify-between gap-3 text-xs">
-                    <div className="space-y-2 text-gray-700">
-                      <div className="flex justify-between border-b border-gray-50 pb-1.5">
-                        <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Doc Type:</span>
-                        <span className="text-xs font-black text-black text-right" title={loanDocuments.map(d => d.document_name).join(', ')}>
+                  <div className="flex-1 flex flex-col justify-between gap-3 text-sm">
+                    <div className="space-y-2 text-gray-755">
+                      <div className="grid grid-cols-[130px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
+                        <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Doc Type:</span>
+                        <span className="text-sm font-black text-slate-955 text-left" title={loanDocuments.map(d => d.document_name).join(', ')}>
                           {loanDocuments.map(d => d.document_name).join(', ') || 'N/A'}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center border-b border-gray-50 pb-1.5">
-                        <span className="text-[11px] uppercase font-extrabold text-slate-900 tracking-wider">Returned Status:</span>
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black ${documentReturned ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
-                          }`}>
-                          {documentReturned ? 'Yes (Returned)' : 'No (Submitted)'}
+                      <div className="grid grid-cols-[130px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-center">
+                        <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Returned Status:</span>
+                        <span className="flex text-left">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-black ${documentReturned ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
+                            }`}>
+                            {documentReturned ? 'Yes (Returned)' : 'No (Submitted)'}
+                          </span>
                         </span>
                       </div>
                     </div>
@@ -2581,14 +2604,14 @@ const CDLedger: React.FC = () => {
                   {/* Signature Element: Interactive Payment Allocation Visualizer */}
                   {paymentPreview && (
                     <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 mb-6 space-y-4 shadow-sm">
-                      <h4 className="text-xs text-slate-800 font-bold uppercase tracking-wider border-b border-slate-200/60 pb-1.5 flex items-center gap-1.5">
-                        <CreditCard className="w-3.5 h-3.5 text-slate-500" />
+                      <h4 className="text-sm text-slate-800 font-extrabold uppercase tracking-wider border-b border-slate-200/60 pb-1.5 flex items-center gap-1.5">
+                        <CreditCard className="w-4 h-4 text-slate-500" />
                         Real-Time Payment Allocation Visualizer
                       </h4>
 
                       {paymentPreview.isClosingPayment ? (
                         <div className="space-y-3">
-                          <span className="text-xs font-bold text-slate-600 uppercase block">Closing Allocation Preview</span>
+                          <span className="text-xs font-black text-slate-700 uppercase block">Closing Allocation Preview</span>
                           {(() => {
                             const total = paymentPreview.paymentAmount;
                             const pPaid = paymentPreview.renew.penaltyPaid;
@@ -2601,15 +2624,15 @@ const CDLedger: React.FC = () => {
 
                             return (
                               <div className="space-y-2.5">
-                                <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+                                <div className="h-5 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/20">
                                   {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
                                   {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
                                   {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
                                 </div>
-                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-600 font-sans">
-                                  {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
-                                  {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
-                                  {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-indigo-650"></span>Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
+                                <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm font-black text-slate-800 font-sans">
+                                  {pPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
+                                  {oPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
+                                  {prPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-indigo-650"></span>Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
                                 </div>
                               </div>
                             );
@@ -2619,7 +2642,7 @@ const CDLedger: React.FC = () => {
                         <div className="space-y-4">
                           {/* Option 1 Bar */}
                           <div className="space-y-2">
-                            <span className="text-[11px] font-bold text-emerald-800 uppercase block">Option 1: Renewal Account Allocation</span>
+                            <span className="text-xs font-black text-emerald-800 uppercase block">Option 1: Renewal Account Allocation</span>
                             {(() => {
                               const total = paymentPreview.paymentAmount;
                               const pPaid = paymentPreview.renew.penaltyPaid;
@@ -2634,17 +2657,17 @@ const CDLedger: React.FC = () => {
 
                               return (
                                 <div className="space-y-2">
-                                  <div className="h-3.5 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/40">
+                                  <div className="h-5 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/40">
                                     {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
                                     {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
                                     {pctR > 0 && <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pctR}%` }} title={`Renewal Interest: ₹${rPaid}`} />}
                                     {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
                                   </div>
-                                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-600 font-sans">
-                                    {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500"></span>Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
-                                    {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span>Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
-                                    {rPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span>Renewal Int: ₹{rPaid.toLocaleString('en-IN')}</span>}
-                                    {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650"></span>Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
+                                  <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm font-black text-slate-800 font-sans">
+                                    {pPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
+                                    {oPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
+                                    {rPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>Renewal Int: ₹{rPaid.toLocaleString('en-IN')}</span>}
+                                    {prPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-indigo-650"></span>Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
                                   </div>
                                 </div>
                               );
@@ -2654,7 +2677,7 @@ const CDLedger: React.FC = () => {
                           {/* Option 2 Bar */}
                           {paymentPreview.partial.principalPaid > 0 && (
                             <div className="space-y-2 border-t border-slate-200/50 pt-3">
-                              <span className="text-[11px] font-bold text-indigo-800 uppercase block">Option 2: Partial Payment Allocation (Principal Only)</span>
+                              <span className="text-xs font-black text-indigo-800 uppercase block">Option 2: Partial Payment Allocation (Principal Only)</span>
                               {(() => {
                                 const total = paymentPreview.paymentAmount;
                                 const pPaid = paymentPreview.partial.penaltyPaid;
@@ -2669,17 +2692,17 @@ const CDLedger: React.FC = () => {
 
                                 return (
                                   <div className="space-y-2">
-                                    <div className="h-3.5 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/40">
+                                    <div className="h-5 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/40">
                                       {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
                                       {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
                                       {pctR > 0 && <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pctR}%` }} title={`Renewal Interest: ₹${rPaid}`} />}
                                       {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
                                     </div>
-                                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-600 font-sans">
-                                      {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500"></span>Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
-                                      {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span>Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
-                                      {rPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span>Renewal Int: ₹{rPaid.toLocaleString('en-IN')}</span>}
-                                      {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650"></span>Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
+                                    <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm font-black text-slate-800 font-sans">
+                                      {pPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
+                                      {oPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
+                                      {rPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>Renewal Int: ₹{rPaid.toLocaleString('en-IN')}</span>}
+                                      {prPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-indigo-650"></span>Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
                                     </div>
                                   </div>
                                 );
@@ -2720,9 +2743,9 @@ const CDLedger: React.FC = () => {
                     <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
                       <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Due Days:</span>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-base font-black text-black">{renewCalculations?.daysPastDue !== undefined ? renewCalculations.daysPastDue : 0}</span>
-                        {renewCalculations && renewCalculations.daysRemaining !== undefined && renewCalculations.daysRemaining > 0 && (
-                          <span className="inline-flex px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-black text-[10px] uppercase tracking-wider">{renewCalculations.daysRemaining} Left</span>
+                        <span className="text-base font-black text-black">{renewCalculations?.displayDays !== undefined ? renewCalculations.displayDays : 0}</span>
+                        {renewCalculations && renewCalculations.displayDays !== undefined && renewCalculations.displayDays < 0 && (
+                          <span className="inline-flex px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-black text-[10px] uppercase tracking-wider">{Math.abs(renewCalculations.displayDays)} Left</span>
                         )}
                       </div>
                     </div>
@@ -2834,6 +2857,7 @@ const CDLedger: React.FC = () => {
                           <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
                             <th className="px-4 py-3.5">Date</th>
                             <th className="px-4 py-3.5">A/C Name</th>
+                            <th className="px-4 py-3.5 text-left">CR Amount</th>
                             <th className="px-4 py-3.5 text-right">Credit</th>
                             <th className="px-4 py-3.5 text-right">Debit</th>
                             <th className="px-4 py-3.5">User</th>
@@ -2846,11 +2870,14 @@ const CDLedger: React.FC = () => {
                             <tr key={entry.id} className="hover:bg-gray-50/60 transition-colors">
                               <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(entry.entry_date)}</td>
                               <td className="px-4 py-3.5 font-black text-slate-950">{mapAccountName(entry.account_name)}</td>
+                              <td className="px-4 py-3.5 text-right text-indigo-700 font-black text-sm">
+                                {isPaymentCollectionEntry(entry) && entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
+                              </td>
                               <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
-                                {entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
+                                {!isPaymentCollectionEntry(entry) && entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
                               </td>
                               <td className="px-4 py-3.5 text-right text-red-700 font-black text-sm">
-                                {entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN')}` : '-'}
+                                {!isPaymentCollectionEntry(entry) && entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN')}` : '-'}
                               </td>
                               <td className="px-4 py-3.5 text-slate-800 font-bold">{entry.user_name || 'Staff'}</td>
                               <td className="px-4 py-3.5 font-mono text-slate-900 font-black">{entry.receipt_no || '-'}</td>
@@ -3503,6 +3530,7 @@ const CDLedger: React.FC = () => {
                   <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase text-[9px] font-bold">
                     <th className="p-2 border-r">Date</th>
                     <th className="p-2 border-r">A/C Name</th>
+                    <th className="p-2 border-r text-left">CR Amount</th>
                     <th className="p-2 border-r text-right">Credit</th>
                     <th className="p-2 border-r text-right">Debit</th>
                     <th className="p-2 border-r">User</th>
@@ -3515,8 +3543,9 @@ const CDLedger: React.FC = () => {
                     <tr key={tx.id}>
                       <td className="p-2 border-r font-sans">{formatDateOld(tx.entry_date)}</td>
                       <td className="p-2 border-r font-sans font-bold text-gray-900">{mapAccountName(tx.account_name)}</td>
-                      <td className="p-2 border-r text-right text-green-705 font-bold">{tx.credit > 0 ? `₹${Number(tx.credit).toLocaleString('en-IN')}` : '-'}</td>
-                      <td className="p-2 border-r text-right text-red-705 font-bold">{tx.debit > 0 ? `₹${Number(tx.debit).toLocaleString('en-IN')}` : '-'}</td>
+                      <td className="p-2 border-r text-right text-indigo-700 font-bold">{isPaymentCollectionEntry(tx) && tx.credit > 0 ? `₹${Number(tx.credit).toLocaleString('en-IN')}` : '-'}</td>
+                      <td className="p-2 border-r text-right text-green-705 font-bold">{!isPaymentCollectionEntry(tx) && tx.credit > 0 ? `₹${Number(tx.credit).toLocaleString('en-IN')}` : '-'}</td>
+                      <td className="p-2 border-r text-right text-red-705 font-bold">{!isPaymentCollectionEntry(tx) && tx.debit > 0 ? `₹${Number(tx.debit).toLocaleString('en-IN')}` : '-'}</td>
                       <td className="p-2 border-r font-sans text-gray-700">{tx.user_name || 'Staff'}</td>
                       <td className="p-2 border-r text-gray-500">{tx.receipt_no || '-'}</td>
                       <td className="p-2 text-gray-500 font-sans">{tx.particulars || '-'}</td>

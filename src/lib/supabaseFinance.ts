@@ -137,6 +137,7 @@ export interface FinanceLoan {
   guarantor_1_id?: string | null;
   guarantor_2_id?: string | null;
   period_days?: number | null;
+  grace_days?: number | null;
 }
 
 export interface FinanceLoanDocument {

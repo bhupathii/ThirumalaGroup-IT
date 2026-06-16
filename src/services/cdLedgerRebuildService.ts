@@ -112,12 +112,15 @@ export const cdLedgerRebuildService = {
         
         // Calculate due days as fractional float
         const rawDueDays = (txDateMs - dueDate.getTime()) / (1000 * 60 * 60 * 24);
-        const dueDays = Math.max(0, rawDueDays);
-        const penaltyDays = financeCalculationService.roundRupee(dueDays) <= 5 ? 0 : dueDays;
+        const dueDays = rawDueDays;
 
         // Calculate dues
-        const interestDue = dueDays <= 0 ? 0 : Number(((currentPrincipal * interestRate * dueDays) / 3000).toFixed(2));
-        let penaltyDue = penaltyDays <= 0 ? 0 : Number(((currentPrincipal * penaltyPercent * penaltyDays) / 3000).toFixed(2));
+        const interestDue = Number(((currentPrincipal * interestRate * dueDays) / (periodDays * 100)).toFixed(2));
+        const graceDays = loan.grace_days !== undefined && loan.grace_days !== null ? Number(loan.grace_days) : 5;
+        let penaltyDue = 0;
+        if (dueDays > graceDays) {
+          penaltyDue = Number(((currentPrincipal * penaltyPercent * (dueDays - graceDays)) / (periodDays * 100)).toFixed(2));
+        }
 
         // Manual override for CD091 on 31-Oct-24 (Receipt RC236) to match historical legacy Access math (5.00 days penalty)
         if (loan.loan_id === 'CD091' && receiptNo === 'RC236') {
@@ -130,7 +133,6 @@ export const cdLedgerRebuildService = {
 
         let penaltyPaid = 0;
         let overdueInterestPaid = 0;
-        let renewalInterestPaid = 0;
         let interestPaid = 0;
         let principalPaid = 0;
         let renewedDays = 0;
@@ -155,7 +157,6 @@ export const cdLedgerRebuildService = {
           );
           penaltyPaid = split.penaltyPaid;
           overdueInterestPaid = split.overdueInterestPaid;
-          renewalInterestPaid = split.renewalInterestPaid;
           interestPaid = split.interestPaid;
           principalPaid = split.principalPaid;
           renewedDays = split.renewedDays;
@@ -165,7 +166,6 @@ export const cdLedgerRebuildService = {
             const dailyInterestRate = monthlyInterest / periodDays;
             interestPaid = financeCalculationService.roundRupee(dailyInterestRate * renewedDays);
             penaltyPaid = paymentAmount - interestPaid;
-            renewalInterestPaid = interestPaid;
             overdueInterestPaid = 0;
           }
           
