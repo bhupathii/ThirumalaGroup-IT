@@ -22,10 +22,11 @@ describe('CD Ledger Calculation Rules', () => {
   });
 
   it('calculates penalty on full due days once grace period is exceeded', () => {
-    // Penalty is calculated only on overdue days exceeding graceDays if dueDays > 5
+    // Business rule: grace period only determines WHETHER penalty applies.
+    // Once dueDays > 5, penalty is charged on the FULL overdue period (not dueDays - graceDays).
     const penaltyCrossed = financeCalculationService.calculatePenalty(principal, penaltyRate, 6);
-    // 10000 * 0.75% * (6 - 5) / 30 = 2.50
-    expect(penaltyCrossed).toBe(2.50);
+    // 10000 * 0.75% * 6 / 30 = 15.00  (full 6 days, NOT 1 day)
+    expect(penaltyCrossed).toBe(15.00);
   });
 
   it('matches the screenshot validation test case', () => {
@@ -36,9 +37,10 @@ describe('CD Ledger Calculation Rules', () => {
     const closeTotal = financeCalculationService.calculateCloseTotal(principal, interest, penalty);
 
     expect(interest).toBe(630);
-    expect(penalty).toBe(145.00);
-    expect(renewalTotal).toBe(775.00);
-    expect(closeTotal).toBe(10775.00);
+    // 10000 * 0.75% * 63 / 30 = 157.50  (full 63 days)
+    expect(penalty).toBe(157.50);
+    expect(renewalTotal).toBe(787.50);
+    expect(closeTotal).toBe(10787.50);
   });
 
   it('applies payment splits in correct order: penalty first, interest second, principal last', () => {
@@ -72,7 +74,8 @@ describe('CD Ledger Calculation Rules', () => {
     const split = financeCalculationService.applyPaymentSplit(300, interest, penalty, principal);
 
     expect(interest).toBe(310);
-    expect(penalty).toBe(65.00);
+    // 10000 * 0.75% * 31 / 30 = 77.50  (full 31 days)
+    expect(penalty).toBe(77.50);
     expect(split.penaltyPaid).toBe(60);
     expect(split.interestPaid).toBe(240);
     expect(split.principalPaid).toBe(0);
@@ -81,12 +84,12 @@ describe('CD Ledger Calculation Rules', () => {
     const remainingInterest = interest - split.interestPaid;
     const remainingPrincipal = principal - split.principalPaid;
 
-    expect(remainingPenalty).toBe(5.00);
+    expect(remainingPenalty).toBe(17.50);
     expect(remainingInterest).toBe(70.00);
     expect(remainingPrincipal).toBe(10000);
 
     const closeTotal = financeCalculationService.calculateCloseTotal(remainingPrincipal, remainingInterest, remainingPenalty);
-    expect(closeTotal).toBe(10075.00);
+    expect(closeTotal).toBe(10087.50);
   });
 
   it('matches sequence of Testcase 1 and Testcase 2 for renewal payment allocation', () => {
@@ -341,8 +344,10 @@ describe('CD Ledger Calculation Rules', () => {
       // Overdue/daily interest and penalty use periodDays divisor
       const grossInterest = Number(((principal * rate * dueDays) / periodDays / 100).toFixed(2));
       const graceDays = 5;
+      // Grace period only determines WHETHER penalty applies.
+      // Once dueDays > graceDays, penalty is on the FULL overdue period (not dueDays - graceDays).
       const grossPenalty = dueDays > graceDays
-        ? Number(((principal * 0.75 * (dueDays - graceDays)) / periodDays / 100).toFixed(2))
+        ? Number(((principal * 0.75 * dueDays) / periodDays / 100).toFixed(2))
         : 0;
 
       const outstandingInterest = Math.max(0, Number(grossInterest.toFixed(2)));
@@ -506,10 +511,11 @@ describe('CD Ledger Calculation Rules', () => {
       });
       expect(res.dueDays).toBe(10);
       expect(res.interest).toBe(1000);
-      expect(res.penalty).toBe(125);
-      expect(res.totalDue).toBe(1125);
-      expect(res.totalToRegularize).toBe(4125);
-      expect(res.totalClose).toBe(101125);
+      // 100000 * 0.75% * 10 / 30 = 250  (full 10 days, NOT 10-5=5 days)
+      expect(res.penalty).toBe(250);
+      expect(res.totalDue).toBe(1250);
+      expect(res.totalToRegularize).toBe(4250);
+      expect(res.totalClose).toBe(101250);
     });
 
     it('Test Case 6 - Penalty Split Logic', () => {
@@ -601,8 +607,9 @@ describe('CD Ledger Calculation Rules', () => {
       });
       expect(res.principal).toBe(100000);
       expect(res.interest).toBe(1000);
-      expect(res.penalty).toBe(125);
-      expect(res.totalClose).toBe(101125);
+      // 100000 * 0.75% * 10 / 30 = 250  (full 10 days)
+      expect(res.penalty).toBe(250);
+      expect(res.totalClose).toBe(101250);
     });
 
     it('Test Case 13 - Close Account Validation', () => {
@@ -831,8 +838,9 @@ describe('CD Ledger Calculation Rules', () => {
         });
         expect(resOverdue.dueDays).toBe(7);
         expect(resOverdue.interest).toBe(687.40); // 98200 * 0.03 * 7 / 30
-        expect(resOverdue.penalty).toBe(49.10);   // 98200 * 0.0075 * (7 - 5) / 30
-        expect(resOverdue.totalDue).toBe(687.40 + 49.10);
+        // 98200 * 0.0075 * 7 / 30 = 171.85 (full 7 days)
+        expect(resOverdue.penalty).toBe(171.85);
+        expect(resOverdue.totalDue).toBe(687.40 + 171.85);
       });
  
       it('Test 6 - CD Ledger Renewal Bug scenario (131 days overdue, ₹5,000 renewal payment)', () => {
@@ -846,8 +854,9 @@ describe('CD Ledger Calculation Rules', () => {
         });
         expect(res.dueDays).toBe(131);
         expect(res.interest).toBe(13100);
-        expect(res.penalty).toBe(3150);
-        expect(res.totalDue).toBe(16250);
+        // 100000 * 0.75% * 131 / 30 = 3275.00  (full 131 days)
+        expect(res.penalty).toBe(3275);
+        expect(res.totalDue).toBe(16375);
         expect(res.penaltyPaid).toBe(1000);
         expect(res.interestPaid).toBe(4000);
         expect(res.principalPaid).toBe(0);
@@ -866,8 +875,9 @@ describe('CD Ledger Calculation Rules', () => {
         });
         expect(res.dueDays).toBe(131);
         expect(res.interest).toBe(1310);
-        expect(res.penalty).toBe(315.00);
-        expect(res.totalDue).toBe(1625.00);
+        // 10000 * 0.75% * 131 / 30 = 327.50  (full 131 days)
+        expect(res.penalty).toBe(327.50);
+        expect(res.totalDue).toBe(1637.50);
         expect(res.penaltyPaid).toBe(300);
         expect(res.interestPaid).toBe(1200);
         expect(res.principalPaid).toBe(0);
@@ -886,13 +896,18 @@ describe('CD Ledger Calculation Rules', () => {
         });
         expect(res.dueDays).toBe(131);
         expect(res.interest).toBe(1310);
-        expect(res.penalty).toBe(315.00);
-        expect(res.totalDue).toBe(1625.00);
-        expect(res.penaltyPaid).toBe(315);
-        expect(res.interestPaid).toBe(1385);
+        // 10000 * 0.75% * 131 / 30 = 327.50  (full 131 days)
+        expect(res.penalty).toBe(327.50);
+        expect(res.totalDue).toBe(1637.50);
+        // 20% of 1700 = 340 > penalty(327.50) → penaltyPaid = 327.50 (Banker's round → 328)
+        // interestPaid = 1700 - 328 = 1372
+        expect(res.penaltyPaid).toBe(328);
+        expect(res.interestPaid).toBe(1372);
         expect(res.principalPaid).toBe(0);
-        expect(res.renewedDays).toBe(138.5);
-        expect(res.nextDueDate).toBe('2026-06-17');
+        // dailyInterest = 300/30 = 10; renewedDays = 1372/10 = 137.2
+        expect(res.renewedDays).toBe(137.2);
+        // 2026-01-30 + 137 days = 2026-06-16
+        expect(res.nextDueDate).toBe('2026-06-16');
       });
     });
 
@@ -940,9 +955,10 @@ describe('CD Ledger Calculation Rules', () => {
         const penaltyRate = 0.75;
         const periodDays = 15;
 
-        // penalty for 15 days elapsed (divided by periodDays, subtracting 5 days grace)
+        // penalty for 15 days elapsed (divided by periodDays, full 15 days since > 5 grace)
+        // 10000 * 0.75% * 15 / 15 = 75.00  (full 15 days)
         const penalty = financeCalculationService.calculatePenalty(principal, penaltyRate, 15, periodDays);
-        expect(penalty).toBe(50.00);
+        expect(penalty).toBe(75.00);
 
         // daily penalty value: (principal * 0.75 / 100)
         const renewalPenalty = Number(((principal * (penaltyRate / 100) * periodDays) / periodDays).toFixed(2));
@@ -964,11 +980,14 @@ describe('CD Ledger Calculation Rules', () => {
 
         expect(res.dueDays).toBe(15);
         expect(res.interest).toBe(30);
-        expect(res.penalty).toBe(5.00);
-        expect(res.totalDue).toBe(35.00);
-        expect(res.penaltyPaid).toBe(5); // Banker's rounded 5.00 -> 5
-        expect(res.interestPaid).toBe(595);
-        expect(res.renewedDays).toBe(297.5); // daily interest is 30 / 15 = 2. 595 / 2 = 297.5
+        // 1000 * 0.75% * 15 / 15 = 7.50 (full 15 days)
+        expect(res.penalty).toBe(7.50);
+        expect(res.totalDue).toBe(37.50);
+        // 20% of 600 = 120 > penalty(7.50) → penaltyPaid = 7.50 (Banker's round → 8)
+        // interestPaid = 600 - 8 = 592
+        expect(res.penaltyPaid).toBe(8);
+        expect(res.interestPaid).toBe(592);
+        expect(res.renewedDays).toBe(296); // daily interest is 30 / 15 = 2. 592 / 2 = 296
       });
 
       it('verifies due date is calculated as loan_date + period_days exactly', () => {
@@ -1092,5 +1111,52 @@ describe('CD Ledger Calculation Rules', () => {
       expect(penalty).toBe(15.00);
     });
   });
-});
 
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // CLIENT-CONFIRMED PENALTY RULE (2026-06-17)
+  // Grace period only determines WHETHER penalty applies — it does NOT reduce days.
+  // Once dueDays > 5: penalty = dailyPenalty × dueDays  (FULL period)
+  // ═══════════════════════════════════════════════════════════════════════════════
+  describe('Client-Confirmed Penalty Rule: Full Due Days (not net-of-grace)', () => {
+    const principal400k = 400000;
+    const principal1m = 1000000;
+    const penaltyRate075 = 0.75;
+    const periodDays30 = 30;
+
+    // dailyPenalty = 400000 * 0.75% / 30 = ₹100
+
+    it('TC-1: DueDays=1 → Penalty = ₹0 (within grace)', () => {
+      const penalty = financeCalculationService.calculatePenalty(principal400k, penaltyRate075, 1, periodDays30);
+      expect(penalty).toBe(0);
+    });
+
+    it('TC-2: DueDays=5 → Penalty = ₹0 (at grace limit, not exceeded)', () => {
+      const penalty = financeCalculationService.calculatePenalty(principal400k, penaltyRate075, 5, periodDays30);
+      expect(penalty).toBe(0);
+    });
+
+    it('TC-3: DueDays=6 → Penalty = ₹600 (100 × 6, NOT 100 × 1)', () => {
+      // dailyPenalty = 400000 * 0.75% / 30 = ₹100
+      // penalty = 100 × 6 = ₹600
+      const penalty = financeCalculationService.calculatePenalty(principal400k, penaltyRate075, 6, periodDays30);
+      expect(penalty).toBe(600);
+    });
+
+    it('TC-4: DueDays=10 → Penalty = ₹1000 (100 × 10, NOT 100 × 5)', () => {
+      const penalty = financeCalculationService.calculatePenalty(principal400k, penaltyRate075, 10, periodDays30);
+      expect(penalty).toBe(1000);
+    });
+
+    it('TC-5: DueDays=30 → Penalty = ₹3000 (100 × 30)', () => {
+      const penalty = financeCalculationService.calculatePenalty(principal400k, penaltyRate075, 30, periodDays30);
+      expect(penalty).toBe(3000);
+    });
+
+    it('TC-6: Principal=₹10,00,000, DueDays=6 → Penalty = ₹1500 (250 × 6)', () => {
+      // dailyPenalty = 1000000 * 0.75% / 30 = ₹250
+      // penalty = 250 × 6 = ₹1500
+      const penalty = financeCalculationService.calculatePenalty(principal1m, penaltyRate075, 6, periodDays30);
+      expect(penalty).toBe(1500);
+    });
+  });
+});

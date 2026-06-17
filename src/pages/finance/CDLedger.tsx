@@ -824,10 +824,12 @@ const CDLedger: React.FC = () => {
     // Interest = principal × rate × rawDueDays ÷ periodDays ÷ 100 (may be negative)
     const grossInterest = Number(((principalBalance * interestRate * rawDueDays) / periodDays / 100).toFixed(2));
     const graceDays = selectedLoan.grace_days !== undefined && selectedLoan.grace_days !== null ? Number(selectedLoan.grace_days) : 5;
+    // Grace period only determines WHETHER penalty applies.
+    // Once rawDueDays > graceDays, penalty is on the FULL overdue period (not rawDueDays - graceDays).
     const grossPenalty = rawDueDays > graceDays
-      ? Number(((principalBalance * penaltyRate * (rawDueDays - graceDays)) / periodDays / 100).toFixed(2))
+      ? Number(((principalBalance * penaltyRate * rawDueDays) / periodDays / 100).toFixed(2))
       : 0;
-    const penaltyDays = rawDueDays > graceDays ? rawDueDays - graceDays : 0;
+    const penaltyDays = rawDueDays > graceDays ? rawDueDays : 0;
 
     // Daily interest / renewal day value:
     // Derived from the Renewal Due divided by Period Days (cancels out to principal * rate / 100 / periodDays)
@@ -1090,8 +1092,10 @@ const CDLedger: React.FC = () => {
 
       const graceDays = selectedLoan.grace_days !== undefined && selectedLoan.grace_days !== null ? Number(selectedLoan.grace_days) : 5;
       const cycleGrossInterest = Number(((runningPrincipal * interestRate * cycleDueDays) / (periodDays * 100)).toFixed(2));
+      // Grace period only determines WHETHER penalty applies.
+      // Once cycleDueDays > graceDays, penalty is on the FULL overdue period (not cycleDueDays - graceDays).
       const cycleGrossPenalty = cycleDueDays > graceDays
-        ? Number(((runningPrincipal * penaltyRate * (cycleDueDays - graceDays)) / (periodDays * 100)).toFixed(2))
+        ? Number(((runningPrincipal * penaltyRate * cycleDueDays) / (periodDays * 100)).toFixed(2))
         : 0;
 
       // Check if some payments inside this cycle are ALREADY split

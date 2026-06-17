@@ -162,8 +162,9 @@ export const financeCalculationService = {
 
   calculatePenalty(principal: number, penaltyRate: number, dueDays: number, periodDays: number = 30, graceDays: number = 5): number {
     if (dueDays > graceDays) {
-      // Overdue interest uses periodDays divisor as it is a daily accrual.
-      return Number(((principal * (penaltyRate / 100) * (dueDays - graceDays)) / periodDays).toFixed(2));
+      // Grace period only determines WHETHER penalty applies.
+      // Once dueDays > graceDays, penalty is calculated on the FULL overdue period (not dueDays - graceDays).
+      return Number(((principal * (penaltyRate / 100) * dueDays) / periodDays).toFixed(2));
     }
     return 0;
   },

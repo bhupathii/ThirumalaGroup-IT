@@ -119,7 +119,9 @@ export const cdLedgerRebuildService = {
         const graceDays = loan.grace_days !== undefined && loan.grace_days !== null ? Number(loan.grace_days) : 5;
         let penaltyDue = 0;
         if (dueDays > graceDays) {
-          penaltyDue = Number(((currentPrincipal * penaltyPercent * (dueDays - graceDays)) / (periodDays * 100)).toFixed(2));
+          // Grace period only determines WHETHER penalty applies.
+          // Once dueDays > graceDays, penalty is on the FULL overdue period (not dueDays - graceDays).
+          penaltyDue = Number(((currentPrincipal * penaltyPercent * dueDays) / (periodDays * 100)).toFixed(2));
         }
 
         // Manual override for CD091 on 31-Oct-24 (Receipt RC236) to match historical legacy Access math (5.00 days penalty)
