@@ -172,7 +172,7 @@ const FinanceDashboard: React.FC = () => {
         <div>
           <h1 className="finance-h1">DASHBOARD</h1>
           <p className="finance-small-label uppercase">
-            OVERVIEW OF TODAY'S CHITFUND OPERATIONS
+            OVERVIEW OF TODAY'S CD LEDGER OPERATIONS
           </p>
         </div>
         <div className="flex items-center gap-2.5">

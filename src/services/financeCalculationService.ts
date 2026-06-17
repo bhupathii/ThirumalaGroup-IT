@@ -307,6 +307,128 @@ export const financeCalculationService = {
     };
   },
 
+  /**
+   * Calculates STBD penalty per installment.
+   * Rate is 0.2% per day of delay on the entire monthly installment amount for each installment late by more than 6 days.
+   */
+  calculateSTBDPenalty(
+    installmentAmount: number,
+    ipaid: number,
+    startDateStr: string | Date,
+    currentDateStr: string | Date,
+    payingInsts: number
+  ): number {
+    let penalty = 0;
+    const startDate = new Date(startDateStr);
+    const currentDate = new Date(currentDateStr);
+    
+    for (let i = 1; i <= payingInsts; i++) {
+      const monthsToAdd = i + this.bankersRound(ipaid);
+      const dueDate = new Date(startDate);
+      dueDate.setMonth(startDate.getMonth() + monthsToAdd);
+      
+      const diffTime = currentDate.getTime() - dueDate.getTime();
+      const dueDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (dueDays > 6) {
+        penalty += this.roundRupee(installmentAmount * 0.002 * dueDays);
+      }
+    }
+    return penalty;
+  },
+
+  /**
+   * Calculates HP penalty per installment.
+   * Rate is 0.2% per day of delay on the entire monthly installment amount for each installment late by more than 5 days.
+   */
+  calculateHPPenalty(
+    installmentAmount: number,
+    ipaid: number,
+    startDateStr: string | Date,
+    currentDateStr: string | Date,
+    payingInsts: number
+  ): number {
+    let penalty = 0;
+    const startDate = new Date(startDateStr);
+    const currentDate = new Date(currentDateStr);
+    
+    for (let i = 1; i <= payingInsts; i++) {
+      const monthsToAdd = i + this.bankersRound(ipaid);
+      const dueDate = new Date(startDate);
+      dueDate.setMonth(startDate.getMonth() + monthsToAdd);
+      
+      const diffTime = currentDate.getTime() - dueDate.getTime();
+      const dueDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (dueDays > 5) {
+        penalty += this.roundRupee(installmentAmount * 0.002 * dueDays);
+      }
+    }
+    return penalty;
+  },
+
+  /**
+   * Compute STBD payment split credit allocations.
+   */
+  computeSTBDPaymentSplit(
+    principal: number,
+    period: number,
+    payingInsts: number,
+    discount: number = 0,
+    penaltyPaid: number = 0
+  ) {
+    const principalPaid = this.roundRupee((principal / period) * payingInsts);
+    const commissionPaid = this.roundRupee((principal * 0.03) * payingInsts) - discount;
+    
+    return {
+      principalPaid,
+      commissionPaid,
+      penaltyPaid
+    };
+  },
+
+  /**
+   * Compute HP payment split credit allocations.
+   */
+  computeHPPaymentSplit(
+    principal: number,
+    _period: number,
+    payingInsts: number,
+    installmentAmount: number,
+    discount: number = 0,
+    penaltyPaid: number = 0
+  ) {
+    const commissionPaid = this.roundRupee((principal * 0.02) * payingInsts) - discount;
+    const principalPaid = this.roundRupee(installmentAmount * payingInsts) - commissionPaid;
+    
+    return {
+      principalPaid,
+      commissionPaid,
+      penaltyPaid
+    };
+  },
+
+  /**
+   * Compute TBD payment split credit allocations.
+   */
+  computeTBDPaymentSplit(
+    principal: number,
+    _period: number,
+    payingInsts: number,
+    installmentAmount: number,
+    discount: number = 0,
+    penaltyPaid: number = 0
+  ) {
+    const commissionPaid = this.roundRupee((principal * 0.03) * payingInsts) - discount;
+    const principalPaid = this.roundRupee(installmentAmount * payingInsts) - commissionPaid;
+    
+    return {
+      principalPaid,
+      commissionPaid,
+      penaltyPaid
+    };
+  },
+
   calculateNextDueDate(paymentDate: string | Date, periodDays: number = 10): string {
     const dateObj = new Date(paymentDate);
     const nextDueDate = new Date(dateObj.getTime() + periodDays * 24 * 60 * 60 * 1000);

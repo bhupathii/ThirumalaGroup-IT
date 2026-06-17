@@ -1,4 +1,5 @@
 import { supabase } from './supabaseDatabase';
+import { financeCalculationService } from '../services/financeCalculationService';
 
 // TypeScript Interfaces for Finance Mode
 export interface FinancePartner {
@@ -138,6 +139,11 @@ export interface FinanceLoan {
   guarantor_2_id?: string | null;
   period_days?: number | null;
   grace_days?: number | null;
+  balance_with_interest?: number | null;
+  balance_without_interest?: number | null;
+  installments_paid?: number | null;
+  installments_due?: number | null;
+  dc_status?: string | null;
 }
 
 export interface FinanceLoanDocument {
@@ -331,6 +337,21 @@ export interface FinanceDocumentReturned {
   remarks: string | null;
   created_by: string | null;
   created_at: string;
+  receipt_no?: string | null;
+}
+
+export interface FinanceWaiverAudit {
+  id: string;
+  loan_id: string;
+  waived_date: string;
+  waived_by: string;
+  waiver_reason: string | null;
+  waived_interest: number;
+  waived_penalty: number;
+  waived_commission: number;
+  receipt_no: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // --------------------------------------------------
@@ -902,6 +923,404 @@ class SupabaseFinance {
     }
   }
 
+  async postStbdLedgerPayment(params: {
+    loanId: string;
+    customerId: string;
+    customerName: string;
+    loanIdStr: string;
+    userName: string;
+    payingInsts: number;
+    principalPaid: number;
+    commissionPaid: number;
+    penaltyPaid: number;
+    discount: number;
+    waivedPenalty?: number;
+    paymentDate: string;
+    receiptNo: string;
+    waiverReason?: string;
+    waivedBy?: string;
+    waivedDate?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const entryDate = params.paymentDate;
+      const totalAmount = params.principalPaid + params.commissionPaid + params.penaltyPaid;
+
+      // 1. Post to finance_transactions (Daybook)
+      await this.addTransaction({
+        loan_id: params.loanId,
+        type: 'Collection',
+        amount: totalAmount,
+        date: entryDate,
+        remarks: `STBD Collection - ${params.receiptNo} (Inst: ${params.payingInsts}, Prin: ${params.principalPaid}, Comm: ${params.commissionPaid}, Pen: ${params.penaltyPaid})`,
+        collected_by: params.userName,
+        receipt_no: params.receiptNo
+      });
+
+      // 2. Post splits to finance_cashbook_entries
+      await this.createCashbookEntry({
+        entry_date: entryDate,
+        account_number: params.loanIdStr,
+        head_of_account: 'STBD A/c',
+        particulars: `${params.customerName} - Installment Payment ${params.receiptNo}`,
+        credit: params.principalPaid,
+        debit: 0,
+        created_by: params.userName
+      });
+
+      await this.createCashbookEntry({
+        entry_date: entryDate,
+        account_number: params.loanIdStr,
+        head_of_account: 'STBD Commission A/c',
+        particulars: `${params.customerName} - Commission Payment ${params.receiptNo}`,
+        credit: params.commissionPaid,
+        debit: 0,
+        created_by: params.userName
+      });
+
+      if (params.penaltyPaid > 0) {
+        await this.createCashbookEntry({
+          entry_date: entryDate,
+          account_number: params.loanIdStr,
+          head_of_account: 'STBD PENALTY A/c',
+          particulars: `${params.customerName} - Penalty Payment ${params.receiptNo}`,
+          credit: params.penaltyPaid,
+          debit: 0,
+          created_by: params.userName
+        });
+      }
+
+      // 3. Update Loan account metrics
+      const { data: loan } = await supabase
+        .from('finance_loans')
+        .select('*')
+        .eq('id', params.loanId)
+        .single();
+
+      if (!loan) throw new Error('Loan not found');
+
+      const amount = Number(loan.amount);
+      const period = Number(loan.duration_months);
+      const installmentAmount = Number(loan.due_amount);
+      const interestRate = Number(loan.interest_rate);
+
+      // Capitalized interest
+      const interestAmount = amount * (interestRate / 100) * period;
+      const totalLoan = amount + interestAmount;
+
+      const currentBalanceWithout = Number(loan.balance_without_interest ?? amount);
+      const currentOnlyPremiumPaid = amount - currentBalanceWithout;
+
+      const newOnlyPremiumPaid = currentOnlyPremiumPaid + params.principalPaid;
+      const newIpaid = newOnlyPremiumPaid / (amount / period);
+      const newPaidAmount = Math.min(totalLoan, financeCalculationService.roundRupee(newIpaid * installmentAmount));
+
+      const newBalanceWithout = Math.max(0, amount - newOnlyPremiumPaid);
+      const newBalanceWith = Math.max(0, totalLoan - newPaidAmount);
+
+      const isClosed = newBalanceWithout <= 2 || newBalanceWith <= 2;
+
+      const { error: updateError } = await supabase
+        .from('finance_loans')
+        .update({
+          installments_paid: newIpaid,
+          balance_without_interest: isClosed ? 0 : newBalanceWithout,
+          balance_with_interest: isClosed ? 0 : newBalanceWith,
+          status: isClosed ? 'Closed' : 'Active',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', params.loanId);
+
+      if (updateError) throw updateError;
+
+      // Log waiver if any discount or penalty is waived
+      if (params.discount > 0 || (params.waivedPenalty && params.waivedPenalty > 0)) {
+        await this.addWaiverAudit({
+          loan_id: params.loanId,
+          waived_date: params.waivedDate || params.paymentDate,
+          waived_by: params.waivedBy || params.userName,
+          waiver_reason: params.waiverReason || 'Payment waiver adjustment',
+          waived_interest: 0,
+          waived_penalty: params.waivedPenalty || 0,
+          waived_commission: params.discount,
+          receipt_no: params.receiptNo
+        });
+      }
+
+      return { success: true };
+    } catch (e: any) {
+      console.error('Error posting STBD payment:', e);
+      return { success: false, error: e?.message || String(e) };
+    }
+  }
+
+  async postHpLedgerPayment(params: {
+    loanId: string;
+    customerId: string;
+    customerName: string;
+    loanIdStr: string;
+    userName: string;
+    payingInsts: number;
+    principalPaid: number;
+    commissionPaid: number;
+    penaltyPaid: number;
+    discount: number;
+    waivedPenalty?: number;
+    paymentDate: string;
+    receiptNo: string;
+    waiverReason?: string;
+    waivedBy?: string;
+    waivedDate?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const entryDate = params.paymentDate;
+      const totalAmount = params.principalPaid + params.commissionPaid + params.penaltyPaid;
+
+      // 1. Post to finance_transactions (Daybook)
+      await this.addTransaction({
+        loan_id: params.loanId,
+        type: 'Collection',
+        amount: totalAmount,
+        date: entryDate,
+        remarks: `HP Collection - ${params.receiptNo} (Inst: ${params.payingInsts}, Prin: ${params.principalPaid}, Comm: ${params.commissionPaid}, Pen: ${params.penaltyPaid})`,
+        collected_by: params.userName,
+        receipt_no: params.receiptNo
+      });
+
+      // 2. Post splits to finance_cashbook_entries
+      await this.createCashbookEntry({
+        entry_date: entryDate,
+        account_number: params.loanIdStr,
+        head_of_account: 'HP A/c',
+        particulars: `${params.customerName} - Installment Payment ${params.receiptNo}`,
+        credit: params.principalPaid,
+        debit: 0,
+        created_by: params.userName
+      });
+
+      await this.createCashbookEntry({
+        entry_date: entryDate,
+        account_number: params.loanIdStr,
+        head_of_account: 'HP COMMISSION A/C',
+        particulars: `${params.customerName} - Commission Payment ${params.receiptNo}`,
+        credit: params.commissionPaid,
+        debit: 0,
+        created_by: params.userName
+      });
+
+      if (params.penaltyPaid > 0) {
+        await this.createCashbookEntry({
+          entry_date: entryDate,
+          account_number: params.loanIdStr,
+          head_of_account: 'HP PENALTY A/C',
+          particulars: `${params.customerName} - Penalty Payment ${params.receiptNo}`,
+          credit: params.penaltyPaid,
+          debit: 0,
+          created_by: params.userName
+        });
+      }
+
+      // 3. Update Loan account metrics
+      const { data: loan } = await supabase
+        .from('finance_loans')
+        .select('*')
+        .eq('id', params.loanId)
+        .single();
+
+      if (!loan) throw new Error('Loan not found');
+
+      const amount = Number(loan.amount);
+      const period = Number(loan.duration_months);
+      const installmentAmount = Number(loan.due_amount);
+
+      // Capitalized interest HP uses 2% monthly
+      const interestAmount = amount * 0.02 * period;
+      const totalLoan = amount + interestAmount;
+
+      const currentBalanceWithout = Number(loan.balance_without_interest ?? amount);
+      const currentOnlyPremiumPaid = amount - currentBalanceWithout;
+
+      const newOnlyPremiumPaid = currentOnlyPremiumPaid + params.principalPaid;
+      const newIpaid = newOnlyPremiumPaid / (amount / period);
+      const newPaidAmount = Math.min(totalLoan, financeCalculationService.roundRupee(newIpaid * installmentAmount));
+
+      const newBalanceWithout = Math.max(0, amount - newOnlyPremiumPaid);
+      const newBalanceWith = Math.max(0, totalLoan - newPaidAmount);
+
+      const isClosed = newBalanceWithout <= 2 || newBalanceWith <= 2;
+
+      const { error: updateError } = await supabase
+        .from('finance_loans')
+        .update({
+          installments_paid: newIpaid,
+          balance_without_interest: isClosed ? 0 : newBalanceWithout,
+          balance_with_interest: isClosed ? 0 : newBalanceWith,
+          status: isClosed ? 'Closed' : 'Active',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', params.loanId);
+
+      if (updateError) throw updateError;
+
+      // Log waiver if any discount or penalty is waived
+      if (params.discount > 0 || (params.waivedPenalty && params.waivedPenalty > 0)) {
+        await this.addWaiverAudit({
+          loan_id: params.loanId,
+          waived_date: params.waivedDate || params.paymentDate,
+          waived_by: params.waivedBy || params.userName,
+          waiver_reason: params.waiverReason || 'Payment waiver adjustment',
+          waived_interest: 0,
+          waived_penalty: params.waivedPenalty || 0,
+          waived_commission: params.discount,
+          receipt_no: params.receiptNo
+        });
+      }
+
+      return { success: true };
+    } catch (e: any) {
+      console.error('Error posting HP payment:', e);
+      return { success: false, error: e?.message || String(e) };
+    }
+  }
+
+  async postTbdLedgerPayment(params: {
+    loanId: string;
+    customerId: string;
+    customerName: string;
+    loanIdStr: string;
+    userName: string;
+    payingInsts: number;
+    principalPaid: number;
+    commissionPaid: number;
+    penaltyPaid: number;
+    discount: number;
+    waivedPenalty?: number;
+    paymentDate: string;
+    receiptNo: string;
+    isDirectDaysPayment?: boolean;
+    waiverReason?: string;
+    waivedBy?: string;
+    waivedDate?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const entryDate = params.paymentDate;
+      const totalAmount = params.principalPaid + params.commissionPaid + params.penaltyPaid;
+
+      // 1. Post to finance_transactions (Daybook)
+      await this.addTransaction({
+        loan_id: params.loanId,
+        type: 'Collection',
+        amount: totalAmount,
+        date: entryDate,
+        remarks: params.isDirectDaysPayment 
+          ? `TBD Collection - ${params.receiptNo} (Direct Days Payment)`
+          : `TBD Collection - ${params.receiptNo} (Days: ${params.payingInsts}, Prin: ${params.principalPaid}, Comm: ${params.commissionPaid}, Pen: ${params.penaltyPaid})`,
+        collected_by: params.userName,
+        receipt_no: params.receiptNo
+      });
+
+      if (params.isDirectDaysPayment) {
+        // Direct days payment credits TBD A/c directly with full amount
+        await this.createCashbookEntry({
+          entry_date: entryDate,
+          account_number: params.loanIdStr,
+          head_of_account: 'TBD A/c',
+          particulars: `${params.customerName} - Days Payment ${params.receiptNo}`,
+          credit: totalAmount,
+          debit: 0,
+          created_by: params.userName
+        });
+      } else {
+        // 2. Post splits to finance_cashbook_entries
+        await this.createCashbookEntry({
+          entry_date: entryDate,
+          account_number: params.loanIdStr,
+          head_of_account: 'TBD A/c',
+          particulars: `${params.customerName} - Installment Payment ${params.receiptNo}`,
+          credit: params.principalPaid,
+          debit: 0,
+          created_by: params.userName
+        });
+
+        await this.createCashbookEntry({
+          entry_date: entryDate,
+          account_number: params.loanIdStr,
+          head_of_account: 'COMMISSION A/C',
+          particulars: `${params.customerName} - Commission Payment ${params.receiptNo}`,
+          credit: params.commissionPaid,
+          debit: 0,
+          created_by: params.userName
+        });
+
+        if (params.penaltyPaid > 0) {
+          await this.createCashbookEntry({
+            entry_date: entryDate,
+            account_number: params.loanIdStr,
+            head_of_account: 'Penalty A/c',
+            particulars: `${params.customerName} - Penalty Payment ${params.receiptNo}`,
+            credit: params.penaltyPaid,
+            debit: 0,
+            created_by: params.userName
+          });
+        }
+      }
+
+      // 3. Update Loan account metrics
+      const { data: loan } = await supabase
+        .from('finance_loans')
+        .select('*')
+        .eq('id', params.loanId)
+        .single();
+
+      if (!loan) throw new Error('Loan not found');
+
+      const amount = Number(loan.amount);
+      const period = Number(loan.period_days || 100);
+
+      const currentBalanceWithout = Number(loan.balance_without_interest ?? amount);
+      const currentOnlyPremiumPaid = amount - currentBalanceWithout;
+
+      const newOnlyPremiumPaid = currentOnlyPremiumPaid + params.principalPaid;
+      const newIpaid = newOnlyPremiumPaid / (amount / period);
+
+      const newBalanceWithout = Math.max(0, amount - newOnlyPremiumPaid);
+      const newBalanceWith = newBalanceWithout; // TBD has no capitalized interest
+
+      const isClosed = newBalanceWithout <= 2;
+
+      const { error: updateError } = await supabase
+        .from('finance_loans')
+        .update({
+          installments_paid: newIpaid,
+          balance_without_interest: isClosed ? 0 : newBalanceWithout,
+          balance_with_interest: isClosed ? 0 : newBalanceWith,
+          status: isClosed ? 'Closed' : 'Active',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', params.loanId);
+
+      if (updateError) throw updateError;
+
+      // Log waiver if any discount or penalty is waived
+      if (params.discount > 0 || (params.waivedPenalty && params.waivedPenalty > 0)) {
+        await this.addWaiverAudit({
+          loan_id: params.loanId,
+          waived_date: params.waivedDate || params.paymentDate,
+          waived_by: params.waivedBy || params.userName,
+          waiver_reason: params.waiverReason || 'Payment waiver adjustment',
+          waived_interest: 0,
+          waived_penalty: params.waivedPenalty || 0,
+          waived_commission: params.discount,
+          receipt_no: params.receiptNo
+        });
+      }
+
+      return { success: true };
+    } catch (e: any) {
+      console.error('Error posting TBD payment:', e);
+      return { success: false, error: e?.message || String(e) };
+    }
+  }
+
   async getCDLedgerEntries(loanId: string): Promise<FinanceCDLedgerEntry[]> {
     try {
       const [{ data: nativeEntries, error: nativeError }, { data: legacyTransactions, error: legacyError }, { data: loanData }] = await Promise.all([
@@ -1024,6 +1443,28 @@ class SupabaseFinance {
     } catch (err) {
       console.error('Error adding NPA record:', err);
       return null;
+    }
+  }
+
+  async addWaiverAudit(payload: Partial<FinanceWaiverAudit>): Promise<FinanceWaiverAudit | null> {
+    try {
+      const { data, error } = await supabase.from('finance_loan_waiver_audits').insert(payload).select().single();
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('Error adding waiver audit:', err);
+      return null;
+    }
+  }
+
+  async getWaiverAudits(loanId: string): Promise<FinanceWaiverAudit[]> {
+    try {
+      const { data, error } = await supabase.from('finance_loan_waiver_audits').select('*').eq('loan_id', loanId).order('created_at', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error('Error fetching waiver audits:', err);
+      return [];
     }
   }
 

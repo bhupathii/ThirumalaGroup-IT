@@ -888,7 +888,7 @@ const EditLoanEntry: React.FC = () => {
                     style={{ fontFamily: 'Times New Roman', fontSize: '15px', fontWeight: 'bold' }}
                   >
                     <option value="L">Regular Loan (L)</option>
-                    <option value="CD">Chit Fund (CD)</option>
+                    <option value="CD">CD Ledger (CD)</option>
                     <option value="STBD">Short Term Business Deposit (STBD)</option>
                     <option value="HP">Hire Purchase (HP)</option>
                     <option value="TBD">Term Business Deposit (TBD)</option>

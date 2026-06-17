@@ -1383,7 +1383,7 @@ const LoanEntry: React.FC = () => {
                   style={{ fontFamily: 'Times New Roman', fontSize: '15px', fontWeight: 'bold' }}
                   required
                 >
-                  <option value="CD">CHIT FUND (CD)</option>
+                  <option value="CD">CD LEDGER</option>
                   <option value="STBD">STBD LEDGER</option>
                   <option value="HP">HP LEDGER</option>
                   <option value="TBD">TBD LEDGER</option>
