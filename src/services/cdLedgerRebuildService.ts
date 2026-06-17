@@ -60,7 +60,10 @@ export const cdLedgerRebuildService = {
       const periodDays = (loan.period_days && Number(loan.period_days) > 0) ? Number(loan.period_days) : 30;
       const interestRate = Number(loan.interest_rate) || 3;
       const penaltyPercent = loan.penalty_percent !== undefined && loan.penalty_percent !== null ? Number(loan.penalty_percent) : 0.75;
-      const baseDueDate = new Date(originalLoanDateMs + (periodDays - 1) * 24 * 60 * 60 * 1000);
+      // BUG FIX: baseDueDate = loanDate + periodDays (not periodDays - 1).
+      // The legacy VBA formula "Date + Period − 1" was off by one day,
+      // causing a 5-day grace payment to appear as 6 days overdue.
+      const baseDueDate = new Date(originalLoanDateMs + periodDays * 24 * 60 * 60 * 1000);
 
       console.log(`[Rebuild] Original Principal: ₹${originalPrincipal}, Date: ${originalLoanDateStr}, Period Days: ${periodDays}`);
 

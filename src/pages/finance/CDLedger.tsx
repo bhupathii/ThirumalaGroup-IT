@@ -792,8 +792,10 @@ const CDLedger: React.FC = () => {
 
     const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
 
-    // Calculate base due date from original disbursement date
-    const baseDueDate = new Date(originalLoanDateMs + (periodDays - 1) * 24 * 60 * 60 * 1000);
+    // BUG FIX: baseDueDate = loanDate + periodDays (not periodDays - 1).
+    // The legacy VBA formula "Date + Period − 1" was off by one day,
+    // causing a 5-day grace payment to appear as 6 days overdue.
+    const baseDueDate = new Date(originalLoanDateMs + periodDays * 24 * 60 * 60 * 1000);
 
     // Sum total renewed days from cdInterestDetails note rows (credit === 0)
     const totalRenewedDays = cdInterestDetails
@@ -1082,9 +1084,10 @@ const CDLedger: React.FC = () => {
       });
 
       // Dues calculation for this cycle
-      // VBA: DueDate = Date + Period − 1
+      // BUG FIX: cycleDueDate = cycleStart + periodDays (not periodDays - 1).
+      // The VBA "Date + Period − 1" formula was off by one day.
       const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
-      const cycleDueDate = new Date(cycle.start + (periodDays - 1) * 24 * 60 * 60 * 1000);
+      const cycleDueDate = new Date(cycle.start + periodDays * 24 * 60 * 60 * 1000);
       const cycleDueDays = Math.round((cycle.end - startOfDay(cycleDueDate)) / (1000 * 60 * 60 * 24));
 
       const interestRate = Number(selectedLoan.interest_rate) || 3;
