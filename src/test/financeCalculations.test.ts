@@ -1159,4 +1159,53 @@ describe('CD Ledger Calculation Rules', () => {
       expect(penalty).toBe(1500);
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // DUE-DATE OFF-BY-ONE REGRESSION (2026-06-17)
+  // Bug: baseDueDate used (periodDays - 1) instead of periodDays, pushing the
+  // due date 1 day earlier than correct. A 5-day grace payment was treated as 6
+  // days overdue, triggering a ₹600 penalty instead of ₹0.
+  //
+  // Scenario (from live data):
+  //   Loan Date = 05-Oct-23, Period = 30 days
+  //   First renewal 08-Nov-23 → dueDate was 03-Nov-23 (off-by-one) → now 04-Nov-23
+  //   After 30-day renewal → next dueDate was 03-Dec-23 → now 04-Dec-23
+  //   Payment on 09-Dec-23: old dueDays = 6 (penalty!), correct dueDays = 5 (no penalty)
+  // ═══════════════════════════════════════════════════════════════════════════════
+  describe('Due-Date Off-By-One Regression: baseDueDate = loanDate + periodDays', () => {
+    it('loanDate + periodDays gives correct first due date', () => {
+      const loanDate = new Date('2023-10-05T00:00:00Z');
+      const periodDays = 30;
+      // Correct: dueDate = loanDate + 30 days = 04-Nov-23
+      const dueDate = new Date(loanDate.getTime() + periodDays * 24 * 60 * 60 * 1000);
+      expect(dueDate.toISOString().split('T')[0]).toBe('2023-11-04');
+    });
+
+    it('after 30-day renewal, next due date = 04-Dec-23', () => {
+      const loanDate = new Date('2023-10-05T00:00:00Z');
+      const periodDays = 30;
+      const baseDueDate = new Date(loanDate.getTime() + periodDays * 24 * 60 * 60 * 1000);
+      // Renewal payment on 08-Nov-23 for full ₹12,000 interest → 30 renewed days
+      const renewedDays = 30;
+      const nextDueDate = new Date(baseDueDate.getTime() + renewedDays * 24 * 60 * 60 * 1000);
+      expect(nextDueDate.toISOString().split('T')[0]).toBe('2023-12-04');
+    });
+
+    it('payment on 09-Dec-23 is exactly 5 days overdue → Penalty = ₹0', () => {
+      const loanDate = new Date('2023-10-05T00:00:00Z');
+      const periodDays = 30;
+      const baseDueDate = new Date(loanDate.getTime() + periodDays * 24 * 60 * 60 * 1000);
+      const renewedDays = 30;
+      const nextDueDate = new Date(baseDueDate.getTime() + renewedDays * 24 * 60 * 60 * 1000);
+
+      const paymentDate = new Date('2023-12-09T00:00:00Z');
+      const dueDays = Math.round((paymentDate.getTime() - nextDueDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      expect(dueDays).toBe(5); // exactly at grace limit
+
+      // dueDays <= 5 → Penalty = ₹0
+      const penalty = financeCalculationService.calculatePenalty(400000, 0.75, dueDays, 30);
+      expect(penalty).toBe(0);
+    });
+  });
 });
