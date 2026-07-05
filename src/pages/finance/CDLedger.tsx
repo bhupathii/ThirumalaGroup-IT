@@ -31,8 +31,8 @@ import { exportToExcel, exportToCSV } from '../../utils/excel';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 const startOfDay = (d: Date | string | number) => {
-  const date = new Date(d);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  const { year, month, day } = financeCalculationService.parseDateParts(d);
+  return Date.UTC(year, month - 1, day);
 };
 
 const mapAccountName = (name: string): string => {
@@ -791,11 +791,13 @@ const CDLedger: React.FC = () => {
     }
 
     const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
+    const originalLoanDateStr = (disbEntry ? disbEntry.entry_date : selectedLoan.date).split('T')[0];
 
-    // BUG FIX: baseDueDate = loanDate + periodDays (not periodDays - 1).
-    // The legacy VBA formula "Date + Period − 1" was off by one day,
-    // causing a 5-day grace payment to appear as 6 days overdue.
-    const baseDueDate = new Date(originalLoanDateMs + periodDays * 24 * 60 * 60 * 1000);
+    // The legacy CD business logic treats the loan-given date as Day 1 of the interest cycle.
+    // CycleEndDate = LoanDate + (PeriodDays - 1)
+    // InitialDueDate = LoanDate + PeriodDays
+    const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays);
+    const baseDueDate = new Date(baseDueDateStr);
 
     // Sum total renewed days from cdInterestDetails note rows (credit === 0)
     const totalRenewedDays = cdInterestDetails
@@ -803,7 +805,8 @@ const CDLedger: React.FC = () => {
       .reduce((sum, d) => sum + (Number(d.renewed_days) || 0), 0);
 
     // Extended Due Date = Base Due Date + Total Renewed Days
-    const dueDate = new Date(baseDueDate.getTime() + totalRenewedDays * 24 * 60 * 60 * 1000);
+    const dueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, totalRenewedDays);
+    const dueDate = new Date(dueDateStr);
 
     // Dynamic Penalty Rate Lookup
     const penaltyRate = selectedLoan.penalty_percent !== undefined && selectedLoan.penalty_percent !== null ? Number(selectedLoan.penalty_percent) : 0.75;
@@ -812,13 +815,13 @@ const CDLedger: React.FC = () => {
     console.log('=== CD LEDGER RENEW CALCULATIONS DEBUG ===');
     console.log('period_days:', periodDays);
     console.log('loan_date:', selectedLoan.date);
-    console.log('due_date:', dueDate.toISOString().split('T')[0]);
-    console.log('calculated_cycle_days:', Math.round((dueDate.getTime() - originalLoanDate.getTime()) / (1000 * 60 * 60 * 24)));
+    console.log('due_date:', dueDateStr);
+    console.log('calculated_cycle_days:', financeCalculationService.differenceInCalendarDays(dueDateStr, originalLoanDateStr));
 
-    // Due Days = Payment Date - Due Date as fractional float
-    const rawDueDays = (startOfDay(today) - dueDate.getTime()) / (1000 * 60 * 60 * 24);
-    const dueDays = rawDueDays;
-    const daysRemaining = rawDueDays < 0 ? Math.abs(rawDueDays) : 0;
+    // Due Days = Payment Date - Due Date as calendar day difference
+    const dueDays = financeCalculationService.differenceInCalendarDays(paymentDate, dueDateStr);
+    const rawDueDays = dueDays;
+    const daysRemaining = dueDays < 0 ? Math.abs(dueDays) : 0;
 
     const interestRate = Number(selectedLoan.interest_rate) || 3;
     const principalBalance = currentPrincipalBalance;
@@ -897,6 +900,7 @@ const CDLedger: React.FC = () => {
       daysCount: dueDays,
       loanDate: entryDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       dueDate: dueDate,
+      dueDateStr,
       daysPastDue: dueDays,            // raw due days (can be negative)
       displayDays: Math.round(dueDays),
       daysRemaining,                    // absolute days remaining (when not yet due)
@@ -947,11 +951,11 @@ const CDLedger: React.FC = () => {
     const list: any[] = [];
     const sortedDbEntries = [...cdLedgerEntries].sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime());
 
-    // Find original loan start date
+    // Find original loan start date as YYYY-MM-DD string
     const disb = sortedDbEntries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
-    const originalLoanStart = startOfDay(disb ? disb.entry_date : selectedLoan.date);
+    const originalLoanStartStr = (disb ? disb.entry_date : selectedLoan.date).split('T')[0];
 
-    // Find all renewal dates
+    // Find all renewal dates as YYYY-MM-DD strings
     const cycleEnds = sortedDbEntries
       .filter(e =>
         e.entry_type === 'Renewal' ||
@@ -959,20 +963,20 @@ const CDLedger: React.FC = () => {
         (e.particulars || '').toLowerCase().includes('renewal') ||
         (e.particulars || '').toLowerCase().includes('renew')
       )
-      .map(e => startOfDay(e.entry_date));
+      .map(e => (e.entry_date || '').split('T')[0]);
 
-    const uniqueCycleEnds = Array.from(new Set(cycleEnds)).sort((a, b) => a - b);
+    const uniqueCycleEnds = Array.from(new Set(cycleEnds)).sort();
 
     // Build the list of cycles
-    const cycles: { start: number; end: number; isCurrent: boolean }[] = [];
-    let currentStart = originalLoanStart;
+    const cycles: { start: string; end: string; isCurrent: boolean }[] = [];
+    let currentStart = originalLoanStartStr;
     for (const end of uniqueCycleEnds) {
       if (end > currentStart) {
         cycles.push({ start: currentStart, end, isCurrent: false });
         currentStart = end;
       }
     }
-    cycles.push({ start: currentStart, end: startOfDay(paymentDate), isCurrent: true });
+    cycles.push({ start: currentStart, end: paymentDate, isCurrent: true });
 
     // Step-by-step simulation of cycles to determine running principal and split payments
     const principalPaidTotalDb = sortedDbEntries
@@ -1073,9 +1077,9 @@ const CDLedger: React.FC = () => {
           !entry.id.toString().startsWith('fallback-doc-');
         if (!isPayment) return false;
 
-        const d = startOfDay(entry.entry_date);
+        const d = (entry.entry_date || '').split('T')[0];
 
-        const isFirstCycle = cycle.start === originalLoanStart;
+        const isFirstCycle = cycle.start === originalLoanStartStr;
         if (isFirstCycle) {
           return d >= cycle.start && d <= cycle.end;
         } else {
@@ -1084,11 +1088,9 @@ const CDLedger: React.FC = () => {
       });
 
       // Dues calculation for this cycle
-      // BUG FIX: cycleDueDate = cycleStart + periodDays (not periodDays - 1).
-      // The VBA "Date + Period − 1" formula was off by one day.
       const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
-      const cycleDueDate = new Date(cycle.start + periodDays * 24 * 60 * 60 * 1000);
-      const cycleDueDays = Math.round((cycle.end - startOfDay(cycleDueDate)) / (1000 * 60 * 60 * 24));
+      const cycleDueDateStr = financeCalculationService.addCalendarDays(cycle.start, periodDays);
+      const cycleDueDays = financeCalculationService.differenceInCalendarDays(cycle.end, cycleDueDateStr);
 
       const interestRate = Number(selectedLoan.interest_rate) || 3;
       const penaltyRate = selectedLoan.penalty_percent !== undefined && selectedLoan.penalty_percent !== null ? Number(selectedLoan.penalty_percent) : 0.75;
@@ -1482,12 +1484,11 @@ const CDLedger: React.FC = () => {
       periodDays
     );
     // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate, not payment date
-    const renewBaseDateMs = renewCalculations?.dueDate
-      ? renewCalculations.dueDate.getTime()
-      : startOfDay(paymentDate);
-    const renewNextDueDate = renewSplit.renewedDays > 0
-      ? new Date(renewBaseDateMs + renewSplit.renewedDays * 24 * 60 * 60 * 1000)
+    const renewBaseDateStr = renewCalculations?.dueDateStr || paymentDate;
+    const renewNextDueDateStr = renewSplit.renewedDays > 0
+      ? financeCalculationService.addCalendarDays(renewBaseDateStr, renewSplit.renewedDays)
       : null;
+    const renewNextDueDate = renewNextDueDateStr ? new Date(renewNextDueDateStr) : null;
 
     const renewDetails = {
       penaltyPaid: renewSplit.penaltyPaid,
@@ -1512,12 +1513,11 @@ const CDLedger: React.FC = () => {
       periodDays,
       renewCalculations.daysPastDue || 0
     );
-    const partialBaseDateMs = renewCalculations?.dueDate
-      ? renewCalculations.dueDate.getTime()
-      : startOfDay(paymentDate);
-    const partialNextDueDate = partialSplit.renewedDays > 0
-      ? new Date(partialBaseDateMs + partialSplit.renewedDays * 24 * 60 * 60 * 1000)
+    const partialBaseDateStr = renewCalculations?.dueDateStr || paymentDate;
+    const partialNextDueDateStr = partialSplit.renewedDays > 0
+      ? financeCalculationService.addCalendarDays(partialBaseDateStr, partialSplit.renewedDays)
       : null;
+    const partialNextDueDate = partialNextDueDateStr ? new Date(partialNextDueDateStr) : null;
 
     const partialDetails = {
       penaltyPaid: partialSplit.penaltyPaid,
@@ -1787,11 +1787,8 @@ const CDLedger: React.FC = () => {
       let renewedTillDate: string | null = null;
       if (renewedDays > 0) {
         // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate
-        const baseDateMs = renewCalculations?.dueDate
-          ? renewCalculations.dueDate.getTime()
-          : startOfDay(paymentDate);
-        const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
-        renewedTillDate = nextDueDate.toISOString().split('T')[0];
+        const baseDateStr = renewCalculations?.dueDateStr || paymentDate;
+        renewedTillDate = financeCalculationService.addCalendarDays(baseDateStr, renewedDays);
       }
 
       // Console logs for debugging
@@ -1843,22 +1840,20 @@ const CDLedger: React.FC = () => {
         // Loan start date = next_due_date - periodDays
         // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate
         if (renewedDays > 0) {
-          const baseDateMs = renewCalculations?.dueDate
-            ? renewCalculations.dueDate.getTime()
-            : startOfDay(paymentDate);
-          const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
+          const baseDateStr = renewCalculations?.dueDateStr || paymentDate;
+          const nextDueDateStr = financeCalculationService.addCalendarDays(baseDateStr, renewedDays);
 
           console.log('=== RENEWAL DUE DATE ADVANCEMENT DEBUG ===');
-          console.log('old_current_due_date:', renewCalculations.dueDate);
+          console.log('old_current_due_date:', baseDateStr);
           console.log('payment_date:', paymentDate);
-          console.log('base_date:', new Date(baseDateMs));
+          console.log('base_date:', baseDateStr);
           console.log('interest_paid:', interestPaid);
           console.log('monthly_interest:', monthlyInterest);
           console.log('renewed_days:', renewedDays);
-          console.log('next_due_date:', nextDueDate);
+          console.log('next_due_date:', nextDueDateStr);
 
-          const newCycleStart = new Date(nextDueDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
-          updates.date = newCycleStart.toISOString().split('T')[0];
+          const newCycleStartStr = financeCalculationService.addCalendarDays(nextDueDateStr, -periodDays);
+          updates.date = newCycleStartStr;
 
           console.log('new_loan_date (updates.date):', updates.date);
         }

@@ -1207,5 +1207,53 @@ describe('CD Ledger Calculation Rules', () => {
       const penalty = financeCalculationService.calculatePenalty(400000, 0.75, dueDays, 30);
       expect(penalty).toBe(0);
     });
+
+    it('exact CD100 regression rules using new timezone-independent date helpers', () => {
+      // 1. Core Loan Dates
+      const loanDate = '2023-10-05';
+      const periodDays = 30;
+      
+      const cycleEndDate = financeCalculationService.addCalendarDays(loanDate, periodDays - 1);
+      const initialDueDate = financeCalculationService.addCalendarDays(loanDate, periodDays);
+      
+      expect(cycleEndDate).toBe('2023-11-03');
+      expect(initialDueDate).toBe('2023-11-04');
+
+      // 2. RC368: Payment on 08-Nov-2023 for ₹12,000 (30 days renewal)
+      const currentDueDate1 = initialDueDate; // 2023-11-04
+      const renewedDays1 = 30;
+      const nextDueDate1 = financeCalculationService.addCalendarDays(currentDueDate1, renewedDays1);
+      expect(nextDueDate1).toBe('2023-12-04');
+
+      // 3. RC369: Payment on 09-Dec-2023
+      const currentDueDate2 = nextDueDate1; // 2023-12-04
+      const paymentDate = '2023-12-09';
+      const dueDays = financeCalculationService.differenceInCalendarDays(paymentDate, currentDueDate2);
+      expect(dueDays).toBe(5);
+
+      const penaltyDue = financeCalculationService.calculatePenalty(400000, 0.75, dueDays, 30);
+      expect(penaltyDue).toBe(0);
+
+      // 4. Overdue Day 6 rule: Payment on 10-Dec-2023
+      const paymentDate6 = '2023-12-10';
+      const dueDays6 = financeCalculationService.differenceInCalendarDays(paymentDate6, currentDueDate2);
+      expect(dueDays6).toBe(6);
+
+      const penaltyDue6 = financeCalculationService.calculatePenalty(400000, 0.75, dueDays6, 30);
+      // 400000 * 0.75% * 6 / 30 = 600
+      expect(penaltyDue6).toBe(600);
+
+      // 5. Early Payment: due date 04-Dec-2023, paid on 01-Dec-2023, renewed by 30 days
+      const nextDueDateEarly = financeCalculationService.addCalendarDays(currentDueDate2, 30);
+      expect(nextDueDateEarly).toBe('2024-01-03');
+
+      // 6. Partial Interest Payment: due date 04-Dec-2023, renewed by 15 days
+      const nextDueDatePartial = financeCalculationService.addCalendarDays(currentDueDate2, 15);
+      expect(nextDueDatePartial).toBe('2023-12-19');
+
+      // 7. Timezone-independent calendar difference check
+      const diff = financeCalculationService.differenceInCalendarDays('2023-12-09', '2023-12-04');
+      expect(diff).toBe(5);
+    });
   });
 });

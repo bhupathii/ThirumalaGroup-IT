@@ -56,14 +56,14 @@ export const cdLedgerRebuildService = {
         throw new Error('Could not determine original loan disbursement date');
       }
 
-      const originalLoanDateMs = new Date(originalLoanDateStr).getTime();
       const periodDays = (loan.period_days && Number(loan.period_days) > 0) ? Number(loan.period_days) : 30;
       const interestRate = Number(loan.interest_rate) || 3;
       const penaltyPercent = loan.penalty_percent !== undefined && loan.penalty_percent !== null ? Number(loan.penalty_percent) : 0.75;
-      // BUG FIX: baseDueDate = loanDate + periodDays (not periodDays - 1).
-      // The legacy VBA formula "Date + Period − 1" was off by one day,
-      // causing a 5-day grace payment to appear as 6 days overdue.
-      const baseDueDate = new Date(originalLoanDateMs + periodDays * 24 * 60 * 60 * 1000);
+      
+      // The legacy CD business logic treats the loan-given date as Day 1 of the interest cycle.
+      // CycleEndDate = LoanDate + (PeriodDays - 1)
+      // InitialDueDate = LoanDate + PeriodDays
+      const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays);
 
       console.log(`[Rebuild] Original Principal: ₹${originalPrincipal}, Date: ${originalLoanDateStr}, Period Days: ${periodDays}`);
 
@@ -99,7 +99,6 @@ export const cdLedgerRebuildService = {
         const paymentAmount = Number(tx.amount) || 0;
         const receiptNo = tx.receipt_no || '';
         const txDateStr = tx.date;
-        const txDateMs = new Date(txDateStr).getTime();
 
         // Deduce action type from transaction remarks
         let actionType: 'Renew' | 'Partial' | 'Close' = 'Partial';
@@ -110,12 +109,11 @@ export const cdLedgerRebuildService = {
           actionType = 'Close';
         }
 
-        // Calculate due date before this payment
-        const dueDate = new Date(baseDueDate.getTime() + totalRenewedDays * 24 * 60 * 60 * 1000);
+        // Calculate due date before this payment using calendar math
+        const dueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, totalRenewedDays);
         
-        // Calculate due days as fractional float
-        const rawDueDays = (txDateMs - dueDate.getTime()) / (1000 * 60 * 60 * 24);
-        const dueDays = rawDueDays;
+        // Calculate due days as calendar day difference
+        const dueDays = financeCalculationService.differenceInCalendarDays(txDateStr, dueDateStr);
 
         // Calculate dues
         const interestDue = Number(((currentPrincipal * interestRate * dueDays) / (periodDays * 100)).toFixed(2));
@@ -181,9 +179,7 @@ export const cdLedgerRebuildService = {
 
         let renewedTillDate: string | null = null;
         if (renewedDays > 0) {
-          const baseDateMs = dueDate.getTime();
-          const nextDueDate = new Date(baseDateMs + renewedDays * 24 * 60 * 60 * 1000);
-          renewedTillDate = nextDueDate.toISOString().split('T')[0];
+          renewedTillDate = financeCalculationService.addCalendarDays(dueDateStr, renewedDays);
         }
 
         console.log(`[Rebuild-Tx ${receiptNo}] Amt: ₹${paymentAmount}, Split: Pen=₹${penaltyPaid}, Int=₹${interestPaid}, Prin=₹${principalPaid}, RenewDays=${renewedDays}`);
@@ -349,9 +345,8 @@ export const cdLedgerRebuildService = {
       }
 
       // 6. Update loan final state in the database
-      const finalDueDate = new Date(baseDueDate.getTime() + totalRenewedDays * 24 * 60 * 60 * 1000);
-      const finalCycleStart = new Date(finalDueDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
-      const finalLoanDate = finalCycleStart.toISOString().split('T')[0];
+      const finalDueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, totalRenewedDays);
+      const finalLoanDate = financeCalculationService.addCalendarDays(finalDueDateStr, -periodDays);
 
       let finalStatus = currentPrincipal <= 0 ? 'Closed' : 'Active';
       if (loan.status === 'NPA_CLOSED') {

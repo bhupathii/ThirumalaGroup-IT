@@ -2,6 +2,95 @@ import { FinanceLedgerSetting } from '../lib/supabaseFinance';
 import { financeLedgerSettingsService } from './financeLedgerSettingsService';
 
 export const financeCalculationService = {
+  parseDateParts(d: string | Date | number): { year: number; month: number; day: number } {
+    if (d instanceof Date) {
+      const isUTCMidnight = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
+      if (isUTCMidnight) {
+        return {
+          year: d.getUTCFullYear(),
+          month: d.getUTCMonth() + 1,
+          day: d.getUTCDate()
+        };
+      } else {
+        return {
+          year: d.getFullYear(),
+          month: d.getMonth() + 1,
+          day: d.getDate()
+        };
+      }
+    }
+    if (typeof d === 'number') {
+      const date = new Date(d);
+      const isUTCMidnight = date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0;
+      if (isUTCMidnight) {
+        return {
+          year: date.getUTCFullYear(),
+          month: date.getUTCMonth() + 1,
+          day: date.getUTCDate()
+        };
+      } else {
+        return {
+          year: date.getFullYear(),
+          month: date.getMonth() + 1,
+          day: date.getDate()
+        };
+      }
+    }
+    if (typeof d === 'string') {
+      const isoPart = d.split('T')[0];
+      const parts = isoPart.split('-');
+      if (parts.length === 3) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const day = parseInt(parts[2], 10);
+        if (!isNaN(y) && !isNaN(m) && !isNaN(day)) {
+          return { year: y, month: m, day };
+        }
+      }
+      const date = new Date(d);
+      const isUTCMidnight = date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0 && date.getUTCMilliseconds() === 0;
+      if (isUTCMidnight) {
+        return {
+          year: date.getUTCFullYear(),
+          month: date.getUTCMonth() + 1,
+          day: date.getUTCDate()
+        };
+      } else {
+        return {
+          year: date.getFullYear(),
+          month: date.getMonth() + 1,
+          day: date.getDate()
+        };
+      }
+    }
+    const date = new Date();
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      day: date.getDate()
+    };
+  },
+
+  getCalendarMidnightUTC(d: string | Date | number): number {
+    const { year, month, day } = this.parseDateParts(d);
+    return Date.UTC(year, month - 1, day);
+  },
+
+  differenceInCalendarDays(d1: string | Date | number, d2: string | Date | number): number {
+    const utc1 = this.getCalendarMidnightUTC(d1);
+    const utc2 = this.getCalendarMidnightUTC(d2);
+    return Math.round((utc1 - utc2) / (24 * 60 * 60 * 1000));
+  },
+
+  addCalendarDays(d: string | Date | number, days: number): string {
+    const { year, month, day } = this.parseDateParts(d);
+    const date = new Date(Date.UTC(year, month - 1, day + days));
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(date.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  },
+
   /**
    * Banker's Rounding (round-half-to-even) to whole rupees.
    * Matches MS Access VBA Int() / Round() behaviour for CD ledger entries.
