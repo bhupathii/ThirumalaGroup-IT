@@ -136,6 +136,7 @@ const CDLedger: React.FC = () => {
   const [receiptNo, setReceiptNo] = useState('');
   const [activeLogTab, setActiveLogTab] = useState<'statement' | 'interest' | 'payment' | 'editHistory'>('statement');
   const [editLogs, setEditLogs] = useState<any[]>([]);
+  const [pendingReviews, setPendingReviews] = useState<any[]>([]);
   const [loanTransactions, setLoanTransactions] = useState<any[]>([]);
   const [showEditTxModal, setShowEditTxModal] = useState(false);
   const [editingTx, setEditingTx] = useState<any | null>(null);
@@ -196,6 +197,12 @@ const CDLedger: React.FC = () => {
     setLoading(true);
     try {
       const allLoans = await supabaseFinance.getCDLoansList();
+      try {
+        const pending = await supabaseFinance.getTransactionReviews({ status: 'PENDING' });
+        setPendingReviews(pending || []);
+      } catch (err) {
+        console.error('Failed to fetch pending reviews:', err);
+      }
 
       // Show ONLY CD loans in CD Ledger
       const cdLoans = allLoans.filter((l: any) => l.loan_category === 'CD');
@@ -1438,8 +1445,8 @@ const CDLedger: React.FC = () => {
 
     cdInterestDetails.forEach(detail => {
       if ((detail.particulars || '').toLowerCase().includes('note:')) {
-        let renewed_days = Number(detail.renewed_days) || 0;
-        let renewed_till_date = detail.renewed_till_date;
+        const renewed_days = Number(detail.renewed_days) || 0;
+        const renewed_till_date = detail.renewed_till_date;
 
         list.push({
           ...detail,
@@ -2202,7 +2209,7 @@ const CDLedger: React.FC = () => {
 
   return (
     <>
-      <div className={`space-y-6 p-6 max-w-7xl mx-auto ${showPrintPreview ? 'print:hidden' : 'print:p-0'}`}>
+      <div className={`space-y-3.5 p-3.5 pt-2 max-w-7xl mx-auto ${showPrintPreview ? 'print:hidden' : 'print:p-0'}`}>
 
         {/* Top row: unified search and metadata header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm print:hidden">
@@ -2443,7 +2450,7 @@ const CDLedger: React.FC = () => {
         ) : (
           <>
             {/* Workspace Header Hub */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm print:hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm print:hidden">
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   onClick={() => { setSelectedLoan(null); setListSearchQuery(''); }}
@@ -2454,12 +2461,12 @@ const CDLedger: React.FC = () => {
                 </button>
                 <div className="h-6 w-px bg-gray-200 hidden sm:block"></div>
                 <div>
-                  <h2 className="text-lg font-extrabold text-slate-950 flex items-center gap-2">
+                  <h2 className="text-xl font-black text-slate-955 flex items-center gap-2">
                     {selectedLoan.customer?.name}
-                    <span className="text-base font-mono text-slate-900 font-black bg-slate-100 px-3 py-1 rounded-lg">A/C: {selectedLoan.loan_id}</span>
+                    <span className="text-[17px] font-mono text-slate-900 font-bold bg-slate-100 px-3 py-1 rounded-lg">A/C: {selectedLoan.loan_id}</span>
                   </h2>
                 </div>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${selectedLoan.status === 'Active' ? 'bg-green-100 text-green-700'
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[13px] font-bold ${selectedLoan.status === 'Active' ? 'bg-green-100 text-green-700'
                   : selectedLoan.status === 'Closed' ? 'bg-gray-100 text-gray-500'
                     : selectedLoan.status === 'NPA_CLOSED' ? 'bg-orange-100 text-orange-700'
                       : 'bg-yellow-100 text-yellow-700'
@@ -2469,8 +2476,8 @@ const CDLedger: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-3 self-end sm:self-auto font-sans">
-                <span className="text-xs text-slate-800 uppercase tracking-wider font-extrabold">
-                  Record: <span className="text-gray-750 font-black">{currentIndex + 1}</span> of <span className="text-gray-750 font-black">{filteredLoansList.length}</span>
+                <span className="text-[14px] text-slate-800 uppercase tracking-wider font-bold">
+                  Record: <span className="text-slate-955 font-black">{currentIndex + 1}</span> of <span className="text-slate-955 font-black">{filteredLoansList.length}</span>
                 </span>
                 <div className="flex gap-1">
                   <button
@@ -2500,857 +2507,808 @@ const CDLedger: React.FC = () => {
               const guarantor2PhotoUrl = guarantor2?.photo_url || guarantor2?.customer_photo_url;
 
               return (
-                <div className="space-y-6 print:hidden">
-                  {/* Row 1: Borrower and Guarantor Details (3 Columns with Photos) */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Card 1: Borrower Details + Photo */}
-                    <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 min-h-[220px] flex flex-col justify-between">
-                      <div className="flex justify-between items-center border-b pb-2 mb-3">
-                        <div>
-                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Customer Details</span>
-                          <span className="text-[10px] text-slate-500 font-bold block">Borrower Info</span>
-                        </div>
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm print:hidden overflow-hidden">
+                  <div className="grid grid-cols-3 divide-x divide-gray-100">
+
+                    {/* BORROWER column */}
+                    <div className="p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[13px] font-bold uppercase text-slate-500 tracking-wider">Borrower</span>
                         <Button
                           onClick={isEditing ? handleSaveDetails : handleToggleEdit}
                           variant={isEditing ? "success" : "secondary"}
                           size="xs"
                           icon={isEditing ? Save : Edit2}
                           disabled={savingDetails || selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
-                          className="scale-90 border-0"
+                          className="!py-0.5 !px-2 !text-[11px] border-0 shadow-none"
                         >
                           {isEditing ? 'Save' : 'Edit'}
                         </Button>
                       </div>
-                      <div className="flex gap-4 items-start">
-                        <div className="flex-1">
-                          {isEditing ? (
-                            <div className="space-y-2 text-xs">
-                              <Input label="Name" value={editCustName} onChange={setEditCustName} className="scale-90 origin-top-left" />
-                              <Input label="S/o W/o" value={editCustFatherName} onChange={setEditCustFatherName} className="scale-90 origin-top-left" />
-                              <Input label="Address" value={editCustAddress} onChange={setEditCustAddress} className="scale-90 origin-top-left" />
-                              <Input label="Phone 1" value={editCustPhone} onChange={setEditCustPhone} className="scale-90 origin-top-left" />
-                              <Input label="Phone 2" value={editCustPhone2} onChange={setEditCustPhone2} className="scale-90 origin-top-left" />
-                              <Input label="Aadhaar" value={editCustAadhaar} onChange={setEditCustAadhaar} className="scale-90 origin-top-left" />
-                              <Input label="Partner" value={editCustPartnerName} onChange={setEditCustPartnerName} className="scale-90 origin-top-left" />
-                            </div>
-                          ) : (
-                            <div className="space-y-1.5 text-xs text-gray-750 font-sans">
-                              <div className="flex justify-between border-b border-gray-50 pb-1">
-                                <span className="text-gray-400">Name:</span>
-                                <span className="font-extrabold text-slate-900">{selectedLoan.customer?.name}</span>
-                              </div>
-                              <div className="flex justify-between border-b border-gray-50 pb-1">
-                                <span className="text-gray-400">S/o W/o:</span>
-                                <span className="font-bold text-slate-800">{selectedLoan.customer?.father_husband_name || 'N/A'}</span>
-                              </div>
-                              <div className="flex justify-between border-b border-gray-50 pb-1">
-                                <span className="text-gray-400">Phone:</span>
-                                <span className="font-bold text-slate-800">{selectedLoan.customer?.phone || 'N/A'}</span>
-                              </div>
-                              {selectedLoan.customer?.phone2 && (
-                                <div className="flex justify-between border-b border-gray-50 pb-1">
-                                  <span className="text-gray-400">Phone 2:</span>
-                                  <span className="font-bold text-slate-800">{selectedLoan.customer?.phone2}</span>
-                                </div>
-                              )}
-                              <div className="flex justify-between border-b border-gray-50 pb-1">
-                                <span className="text-gray-400">Aadhaar:</span>
-                                <span className="font-bold text-slate-800 font-mono">{selectedLoan.customer?.aadhaar || 'N/A'}</span>
-                              </div>
-                              <div className="flex justify-between border-b border-gray-50 pb-1">
-                                <span className="text-gray-400">Address:</span>
-                                <span className="font-bold text-slate-850 truncate max-w-[120px]" title={selectedLoan.customer?.address || undefined}>{selectedLoan.customer?.address || 'N/A'}</span>
-                              </div>
-                            </div>
-                          )}
+
+                      {isEditing ? (
+                        <div className="space-y-1.5">
+                          <Input label="Name" value={editCustName} onChange={setEditCustName} className="text-xs" />
+                          <Input label="S/o W/o" value={editCustFatherName} onChange={setEditCustFatherName} className="text-xs" />
+                          <Input label="Address" value={editCustAddress} onChange={setEditCustAddress} className="text-xs" />
+                          <Input label="Phone 1" value={editCustPhone} onChange={setEditCustPhone} className="text-xs" />
+                          <Input label="Phone 2" value={editCustPhone2} onChange={setEditCustPhone2} className="text-xs" />
+                          <Input label="Aadhaar" value={editCustAadhaar} onChange={setEditCustAadhaar} className="text-xs" />
+                          <Input label="Partner" value={editCustPartnerName} onChange={setEditCustPartnerName} className="text-xs" />
                         </div>
-                        {!isEditing && (
-                          <div className="w-20 h-24 shrink-0 rounded-xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center relative shadow-sm">
+                      ) : (
+                        <div className="flex gap-2.5 items-start">
+                          <div className="w-12 h-14 shrink-0 rounded-lg bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center shadow-sm">
                             {borrowerPhotoUrl ? (
                               <img src={borrowerPhotoUrl} alt="Borrower" className="w-full h-full object-cover" />
                             ) : (
-                              <User className="w-8 h-8 text-gray-300" />
+                              <User className="w-5 h-5 text-gray-300" />
                             )}
                           </div>
-                        )}
-                      </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-extrabold text-[16px] text-slate-900 leading-tight truncate">{selectedLoan.customer?.name}</div>
+                            <div className="text-[14px] text-slate-500 leading-tight truncate">{selectedLoan.customer?.father_husband_name || '—'}</div>
+                            <div className="text-[14px] font-semibold text-slate-700 mt-0.5">☎ {selectedLoan.customer?.phone || 'N/A'}{selectedLoan.customer?.phone2 ? ` / ${selectedLoan.customer.phone2}` : ''}</div>
+                            <div className="text-[14px] font-mono text-slate-600 mt-0.5">{selectedLoan.customer?.aadhaar || 'No Aadhaar'}</div>
+                            <div className="text-[14px] text-slate-500 truncate" title={selectedLoan.customer?.address || undefined}>{selectedLoan.customer?.address || 'No address'}</div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Card 2: Guarantor 1 Details + Photo */}
-                    <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 min-h-[220px] flex flex-col justify-between">
-                      <div className="flex justify-between items-center border-b pb-2 mb-3">
-                        <div>
-                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Guarantor 1</span>
-                          <span className="text-[10px] text-slate-500 font-bold block">Surety Profile</span>
-                        </div>
-                      </div>
-                      <div className="flex gap-4 items-start">
-                        <div className="flex-1 space-y-1.5 text-xs text-gray-755 font-sans">
-                          <div className="flex justify-between border-b border-gray-50 pb-1">
-                            <span className="text-gray-400">Name:</span>
-                            <span className="font-extrabold text-slate-900">{guarantor1?.name || 'N/A'}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-gray-50 pb-1">
-                            <span className="text-gray-400">Phone:</span>
-                            <span className="font-bold text-slate-800">{guarantor1?.phone || 'N/A'}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-gray-50 pb-1">
-                            <span className="text-gray-400">Aadhaar:</span>
-                            <span className="font-bold text-slate-800 font-mono">{guarantor1?.aadhaar || 'N/A'}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-gray-50 pb-1">
-                            <span className="text-gray-400">Address:</span>
-                            <span className="font-bold text-slate-850 truncate max-w-[120px]" title={guarantor1?.address || undefined}>{guarantor1?.address || 'N/A'}</span>
-                          </div>
-                        </div>
-                        {guarantor1 && (
-                          <div className="w-20 h-24 shrink-0 rounded-xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center relative shadow-sm">
+                    {/* GUARANTOR 1 column */}
+                    <div className="p-3">
+                      <div className="text-[13px] font-bold uppercase text-slate-500 tracking-wider mb-2">Guarantor 1</div>
+                      {guarantor1 ? (
+                        <div className="flex gap-2.5 items-start">
+                          <div className="w-12 h-14 shrink-0 rounded-lg bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center shadow-sm">
                             {guarantor1PhotoUrl ? (
                               <img src={guarantor1PhotoUrl} alt="Guarantor 1" className="w-full h-full object-cover" />
                             ) : (
-                              <User className="w-8 h-8 text-gray-300" />
+                              <User className="w-5 h-5 text-gray-300" />
                             )}
                           </div>
-                        )}
-                      </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-extrabold text-[16px] text-slate-900 leading-tight truncate">{guarantor1.name}</div>
+                            <div className="text-[14px] font-semibold text-slate-700 mt-0.5">☎ {guarantor1.phone || 'N/A'}</div>
+                            <div className="text-[14px] font-mono text-slate-600 mt-0.5">{guarantor1.aadhaar || 'No Aadhaar'}</div>
+                            <div className="text-[14px] text-slate-500 truncate" title={guarantor1.address || undefined}>{guarantor1.address || 'No address'}</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-14 text-[14px] text-slate-400 italic">No guarantor added</div>
+                      )}
                     </div>
 
-                    {/* Card 3: Guarantor 2 Details + Photo */}
-                    <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 min-h-[220px] flex flex-col justify-between">
-                      <div className="flex justify-between items-center border-b pb-2 mb-3">
-                        <div>
-                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Guarantor 2</span>
-                          <span className="text-[10px] text-slate-500 font-bold block">Secondary Surety</span>
-                        </div>
-                      </div>
-                      <div className="flex gap-4 items-start">
-                        <div className="flex-1 space-y-1.5 text-xs text-gray-755 font-sans">
-                          <div className="flex justify-between border-b border-gray-50 pb-1">
-                            <span className="text-gray-400">Name:</span>
-                            <span className="font-extrabold text-slate-900">{guarantor2?.name || 'N/A'}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-gray-50 pb-1">
-                            <span className="text-gray-400">Phone:</span>
-                            <span className="font-bold text-gray-800">{guarantor2?.phone || 'N/A'}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-gray-50 pb-1">
-                            <span className="text-gray-400">Aadhaar:</span>
-                            <span className="font-bold text-slate-800 font-mono">{guarantor2?.aadhaar || 'N/A'}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-gray-50 pb-1">
-                            <span className="text-gray-400">Address:</span>
-                            <span className="font-bold text-slate-850 truncate max-w-[120px]" title={guarantor2?.address || undefined}>{guarantor2?.address || 'N/A'}</span>
-                          </div>
-                        </div>
-                        {guarantor2 && (
-                          <div className="w-20 h-24 shrink-0 rounded-xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center relative shadow-sm">
+                    {/* GUARANTOR 2 column */}
+                    <div className="p-3">
+                      <div className="text-[13px] font-bold uppercase text-slate-500 tracking-wider mb-2">Guarantor 2</div>
+                      {guarantor2 ? (
+                        <div className="flex gap-2.5 items-start">
+                          <div className="w-12 h-14 shrink-0 rounded-lg bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center shadow-sm">
                             {guarantor2PhotoUrl ? (
                               <img src={guarantor2PhotoUrl} alt="Guarantor 2" className="w-full h-full object-cover" />
                             ) : (
-                              <User className="w-8 h-8 text-gray-300" />
+                              <User className="w-5 h-5 text-gray-300" />
                             )}
                           </div>
-                        )}
-                      </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-extrabold text-[16px] text-slate-900 leading-tight truncate">{guarantor2.name}</div>
+                            <div className="text-[14px] font-semibold text-slate-700 mt-0.5">☎ {guarantor2.phone || 'N/A'}</div>
+                            <div className="text-[14px] font-mono text-slate-600 mt-0.5">{guarantor2.aadhaar || 'No Aadhaar'}</div>
+                            <div className="text-[14px] text-slate-500 truncate" title={guarantor2.address || undefined}>{guarantor2.address || 'No address'}</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-14 text-[14px] text-slate-400 italic">No guarantor added</div>
+                      )}
                     </div>
+
                   </div>
                 </div>
               );
             })()}
 
-            {/* Unified Operator Workspace - 2 Column Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* ========== COMPACT OPERATOR WORKSPACE — FIRST VIEWPORT ========== */}
+            <div className="grid grid-cols-12 gap-3 print:hidden">
 
-              {/* LEFT COLUMN (2/3 Width): Action Hub & Statements */}
-              <div className="lg:col-span-2 space-y-6">
+              {/* LEFT BLOCK (8 cols): Inputs + Loan Details + Action Buttons */}
+              <div className="col-span-8">
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden h-full flex flex-col">
 
-                {/* Operator calculations panel */}
-                <Card
-                  title="Operator Action & Calculations"
-                  subtitle="Configure transactions and calculations details"
-                  className="shadow-sm border-gray-100 rounded-3xl"
-                >
-                  {renewCalculations?.isDateInvalid ? (
-                    <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-red-750 font-semibold mb-6">
-                      <ShieldAlert className="w-5 h-5 shrink-0 text-red-600" />
-                      <span>Payment date cannot be before loan date ({renewCalculations.loanDate}).</span>
-                    </div>
-                  ) : null}
-
-                  {/* Active Interactive Fields */}
-                  <div className="grid grid-cols-2 gap-4 mb-6">
-                    <Input label="Receipt No" value={receiptNo} readOnly className="bg-gray-50 text-gray-700 font-mono" />
-                    <Input
-                      label="Total Amount Paying"
-                      value={totalAmountPaying}
-                      onChange={setTotalAmountPaying}
-                      className="font-bold text-green-700 text-lg"
-                      placeholder="Enter ₹"
-                      type="text"
-                      inputMode="decimal"
-                      disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
-                    />
+                  {/* Card micro-header */}
+                  <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100">
+                    <span className="text-[14px] font-bold uppercase text-slate-800 tracking-wider">Operator Action &amp; Calculations</span>
+                    {renewCalculations?.isDateInvalid && (
+                      <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-2 py-1 text-red-700 font-semibold text-[12px]">
+                        <ShieldAlert className="w-3.5 h-3.5 shrink-0 text-red-600" />
+                        <span>Payment date before loan date ({renewCalculations.loanDate})</span>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Signature Element: Interactive Payment Allocation Visualizer */}
-                  {paymentPreview && (
-                    <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 mb-6 space-y-4 shadow-sm">
-                      <h4 className="text-sm text-slate-800 font-extrabold uppercase tracking-wider border-b border-slate-200/60 pb-1.5 flex items-center gap-1.5">
-                        <CreditCard className="w-4 h-4 text-slate-500" />
-                        Real-Time Payment Allocation Visualizer
-                      </h4>
+                  <div className="p-3 flex flex-col gap-3.5 flex-1">
 
-                      {paymentPreview.isClosingPayment ? (
-                        <div className="space-y-3">
-                          <span className="text-xs font-black text-slate-700 uppercase block">Closing Allocation Preview</span>
-                          {(() => {
-                            const total = paymentPreview.paymentAmount;
-                            const pPaid = paymentPreview.renew.penaltyPaid;
-                            const oPaid = paymentPreview.renew.overdueInterestPaid;
-                            const prPaid = paymentPreview.renew.principalPaid;
+                    {/* Receipt + Amount row */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[13px] font-bold text-slate-700 uppercase block mb-1">Receipt No</label>
+                        <Input value={receiptNo} readOnly className="bg-gray-50 text-slate-900 font-mono text-[17px] font-bold h-11" />
+                      </div>
+                      <div>
+                        <label className="text-[13px] font-bold text-slate-700 uppercase block mb-1">Total Amount Paying</label>
+                        <Input
+                          value={totalAmountPaying}
+                          onChange={setTotalAmountPaying}
+                          className="font-bold text-green-700 text-[18px] h-11"
+                          placeholder="Enter ₹"
+                          type="text"
+                          inputMode="decimal"
+                          disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
+                        />
+                      </div>
+                    </div>
 
-                            const pctP = total > 0 ? (pPaid / total) * 100 : 0;
-                            const pctO = total > 0 ? (oPaid / total) * 100 : 0;
-                            const pctPr = total > 0 ? (prPaid / total) * 100 : 0;
+                    {/* Payment Allocation Visualizer (shows only when amount entered) */}
+                    {paymentPreview && (
+                      <div className="bg-slate-50/50 border border-slate-100 rounded-xl px-3 py-2 space-y-2.5 shadow-sm">
+                        <h4 className="text-[12px] text-slate-800 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                          <CreditCard className="w-3.5 h-3.5 text-slate-500" />
+                          Real-Time Payment Allocation
+                        </h4>
 
-                            return (
-                              <div className="space-y-2.5">
-                                <div className="h-5 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/20">
-                                  {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
-                                  {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
-                                  {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
-                                </div>
-                                <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm font-black text-slate-800 font-sans">
-                                  {pPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
-                                  {oPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
-                                  {prPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-indigo-650"></span>Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {/* Option 1 Bar */}
-                          <div className="space-y-2">
-                            <span className="text-xs font-black text-emerald-800 uppercase block">Option 1: Renewal Account Allocation</span>
+                        {paymentPreview.isClosingPayment ? (
+                          <div className="space-y-1.5">
+                            <span className="text-[12px] font-bold text-slate-700 uppercase block">Closing Allocation Preview</span>
                             {(() => {
                               const total = paymentPreview.paymentAmount;
                               const pPaid = paymentPreview.renew.penaltyPaid;
                               const oPaid = paymentPreview.renew.overdueInterestPaid;
-                              const rPaid = paymentPreview.renew.renewalInterestPaid;
                               const prPaid = paymentPreview.renew.principalPaid;
-
                               const pctP = total > 0 ? (pPaid / total) * 100 : 0;
                               const pctO = total > 0 ? (oPaid / total) * 100 : 0;
-                              const pctR = total > 0 ? (rPaid / total) * 100 : 0;
                               const pctPr = total > 0 ? (prPaid / total) * 100 : 0;
-
                               return (
-                                <div className="space-y-2">
-                                  <div className="h-5 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/40">
+                                <div className="space-y-1.5">
+                                  <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/20">
                                     {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
                                     {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
-                                    {pctR > 0 && <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pctR}%` }} title={`Renewal Interest: ₹${rPaid}`} />}
                                     {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
                                   </div>
-                                  <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm font-black text-slate-800 font-sans">
-                                    {pPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
-                                    {oPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
-                                    {rPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>Renewal Int: ₹{rPaid.toLocaleString('en-IN')}</span>}
-                                    {prPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-indigo-650"></span>Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
+                                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-bold text-slate-800">
+                                    {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" />Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
+                                    {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
+                                    {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650" />Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
                                   </div>
                                 </div>
                               );
                             })()}
                           </div>
-
-                          {/* Option 2 Bar */}
-                          {paymentPreview.partial.principalPaid > 0 && (
-                            <div className="space-y-2 border-t border-slate-200/50 pt-3">
-                              <span className="text-xs font-black text-indigo-800 uppercase block">Option 2: Partial Payment Allocation (Principal Only)</span>
+                        ) : (
+                          <div className="space-y-2.5">
+                            {/* Option 1 Bar */}
+                            <div className="space-y-1">
+                              <span className="text-[12px] font-bold text-emerald-800 uppercase block">Option 1: Renewal Allocation</span>
                               {(() => {
                                 const total = paymentPreview.paymentAmount;
-                                const pPaid = paymentPreview.partial.penaltyPaid;
-                                const oPaid = paymentPreview.partial.overdueInterestPaid;
-                                const rPaid = paymentPreview.partial.renewalInterestPaid;
-                                const prPaid = paymentPreview.partial.principalPaid;
-
+                                const pPaid = paymentPreview.renew.penaltyPaid;
+                                const oPaid = paymentPreview.renew.overdueInterestPaid;
+                                const rPaid = paymentPreview.renew.renewalInterestPaid;
+                                const prPaid = paymentPreview.renew.principalPaid;
                                 const pctP = total > 0 ? (pPaid / total) * 100 : 0;
                                 const pctO = total > 0 ? (oPaid / total) * 100 : 0;
                                 const pctR = total > 0 ? (rPaid / total) * 100 : 0;
                                 const pctPr = total > 0 ? (prPaid / total) * 100 : 0;
-
                                 return (
-                                  <div className="space-y-2">
-                                    <div className="h-5 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/40">
+                                  <div className="space-y-1">
+                                    <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/40">
                                       {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
                                       {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
                                       {pctR > 0 && <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pctR}%` }} title={`Renewal Interest: ₹${rPaid}`} />}
                                       {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
                                     </div>
-                                    <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm font-black text-slate-800 font-sans">
-                                      {pPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
-                                      {oPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
-                                      {rPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>Renewal Int: ₹{rPaid.toLocaleString('en-IN')}</span>}
-                                      {prPaid > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-indigo-650"></span>Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
+                                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[13px] font-bold text-slate-800">
+                                      {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" />Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
+                                      {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
+                                      {rPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />Renewal Int: ₹{rPaid.toLocaleString('en-IN')}</span>}
+                                      {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650" />Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
                                     </div>
                                   </div>
                                 );
                               })()}
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Form variables display */}
-                  <div className="grid grid-cols-2 gap-3 mb-6 font-sans">
-                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
-                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Loan Amount:</span>
-                      <span className="text-base font-black text-black">₹{originalLoanAmount.toLocaleString('en-IN')}</span>
-                    </div>
-                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
-                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Rate / Penalty:</span>
-                      <span className="text-base font-black text-black">{Number(selectedLoan.interest_rate).toFixed(2)}% / {Number(selectedLoan.penalty_percent || 0.75).toFixed(2)}%</span>
-                    </div>
-                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
-                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Loan Date:</span>
-                      <span className="text-base font-black text-black">{formatDateOld(originalLoanDate)}</span>
-                    </div>
-                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
-                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Last Payment:</span>
-                      <span className="text-base font-black text-black">{formatDateOld(selectedLoan.date)}</span>
-                    </div>
-                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
-                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Current Due Date:</span>
-                      <span className="text-base font-black text-black">{formatDateOld(renewCalculations?.dueDate)}</span>
-                    </div>
-                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
-                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Next Due Date:</span>
-                      <span className="text-base font-black text-black">{totalAmountPaying && Number(totalAmountPaying) > 0 && paymentPreview?.renew?.nextDueDate ? formatDateOld(paymentPreview.renew.nextDueDate) : '—'}</span>
-                    </div>
-                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
-                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Due Days:</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-base font-black text-black">{renewCalculations?.displayDays !== undefined ? renewCalculations.displayDays : 0}</span>
-                        {renewCalculations && renewCalculations.displayDays !== undefined && renewCalculations.displayDays < 0 && (
-                          <span className="inline-flex px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-black text-[10px] uppercase tracking-wider">{Math.abs(renewCalculations.displayDays)} Left</span>
+                            {/* Option 2 Bar */}
+                            {paymentPreview.partial.principalPaid > 0 && (
+                              <div className="space-y-1 border-t border-slate-200/50 pt-2">
+                                <span className="text-[12px] font-bold text-indigo-800 uppercase block">Option 2: Partial Payment Allocation</span>
+                                {(() => {
+                                  const total = paymentPreview.paymentAmount;
+                                  const pPaid = paymentPreview.partial.penaltyPaid;
+                                  const oPaid = paymentPreview.partial.overdueInterestPaid;
+                                  const rPaid = paymentPreview.partial.renewalInterestPaid;
+                                  const prPaid = paymentPreview.partial.principalPaid;
+                                  const pctP = total > 0 ? (pPaid / total) * 100 : 0;
+                                  const pctO = total > 0 ? (oPaid / total) * 100 : 0;
+                                  const pctR = total > 0 ? (rPaid / total) * 100 : 0;
+                                  const pctPr = total > 0 ? (prPaid / total) * 100 : 0;
+                                  return (
+                                    <div className="space-y-1">
+                                      <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/40">
+                                        {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
+                                        {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
+                                        {pctR > 0 && <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pctR}%` }} title={`Renewal Interest: ₹${rPaid}`} />}
+                                        {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
+                                      </div>
+                                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[13px] font-bold text-slate-800">
+                                        {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" />Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
+                                        {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
+                                        {rPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />Renewal Int: ₹{rPaid.toLocaleString('en-IN')}</span>}
+                                        {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650" />Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
-                    </div>
-                    <div className="border border-slate-200 rounded-xl bg-slate-50/80 p-3 shadow-sm">
-                      <span className="text-xs text-slate-900 font-extrabold uppercase block tracking-wider mb-1">Doc Status:</span>
-                      <span className="text-base font-black text-black">{documentReturned ? 'Returned' : 'Submitted'}</span>
-                    </div>
-                  </div>
+                    )}
 
-                  {/* Actions buttons */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <Button
-                      onClick={() => handleActionSubmit('Renew')}
-                      disabled={
-                        isRenewing ||
-                        selectedLoan.status === 'Closed' ||
-                        selectedLoan.status === 'NPA_CLOSED' ||
-                        !!renewCalculations?.isDateInvalid ||
-                        !totalAmountPaying ||
-                        Number(totalAmountPaying) <= 0
-                      }
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      Renewal
-                    </Button>
-
-                    <Button
-                      onClick={() => handleActionSubmit('Partial')}
-                      disabled={
-                        isRenewing ||
-                        !totalAmountPaying ||
-                        Number(totalAmountPaying) <= 0 ||
-                        Number(totalAmountPaying) < ledgerMetrics.totalToRegularize ||
-                        Number(totalAmountPaying) >= ledgerMetrics.totalClose ||
-                        selectedLoan.status === 'Closed' ||
-                        selectedLoan.status === 'NPA_CLOSED' ||
-                        !!renewCalculations?.isDateInvalid
-                      }
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0"
-                    >
-                      <CreditCard className="w-3.5 h-3.5" />
-                      Partial Payment
-                    </Button>
-
-                    <Button
-                      onClick={() => handleActionSubmit('Close')}
-                      disabled={
-                        isRenewing ||
-                        selectedLoan.status === 'Closed' ||
-                        selectedLoan.status === 'NPA_CLOSED' ||
-                        !totalAmountPaying ||
-                        Number(totalAmountPaying) < ledgerMetrics.totalClose ||
-                        !!renewCalculations?.isDateInvalid
-                      }
-                      className="bg-rose-600 hover:bg-rose-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0"
-                    >
-                      <ShieldAlert className="w-3.5 h-3.5" />
-                      Close Account
-                    </Button>
-                  </div>
-                </Card>
-
-                {/* Statements & Logs unified tabbed card */}
-                <Card
-                  title={
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
-                      <div>
-                        <span className="text-base font-extrabold text-slate-950 block">Statements & Logs</span>
-                        <span className="text-xs text-slate-600 font-bold block mt-0.5">Track transaction history and interest accruals</span>
+                    {/* Compact 8-cell Loan Details grid (4 rows × 2 cols) */}
+                    <div className="grid grid-cols-4 gap-2 font-sans">
+                      <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Loan Amount</span>
+                        <span className="text-[16px] font-bold text-slate-900">₹{originalLoanAmount.toLocaleString('en-IN')}</span>
                       </div>
-                      <div className="flex gap-1.5 bg-gray-100 border border-gray-200 p-1 rounded-xl self-start sm:self-auto font-sans">
-                        <button
-                          onClick={() => setActiveLogTab('statement')}
-                          className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${activeLogTab === 'statement'
-                            ? 'bg-white text-green-800 shadow-sm border border-gray-150'
-                            : 'text-slate-900 hover:text-black'
-                            }`}
-                        >
-                          Ledger Statement
-                        </button>
-                        <button
-                          onClick={() => setActiveLogTab('interest')}
-                          className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${activeLogTab === 'interest'
-                            ? 'bg-white text-green-800 shadow-sm border border-gray-150'
-                            : 'text-slate-900 hover:text-black'
-                            }`}
-                        >
-                          Interest History
-                        </button>
-                        <button
-                          onClick={() => setActiveLogTab('payment')}
-                          className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${activeLogTab === 'payment'
-                            ? 'bg-white text-green-800 shadow-sm border border-gray-150'
-                            : 'text-slate-900 hover:text-black'
-                            }`}
-                        >
-                          Payment History
-                        </button>
-                        <button
-                          onClick={() => setActiveLogTab('editHistory')}
-                          className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${activeLogTab === 'editHistory'
-                            ? 'bg-white text-green-800 shadow-sm border border-gray-150'
-                            : 'text-slate-900 hover:text-black'
-                            }`}
-                        >
-                          Edit History
-                        </button>
+                      <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Rate / Penalty</span>
+                        <span className="text-[16px] font-bold text-slate-900">{Number(selectedLoan.interest_rate).toFixed(2)}% / {Number(selectedLoan.penalty_percent || 0.75).toFixed(2)}%</span>
+                      </div>
+                      <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Loan Date</span>
+                        <span className="text-[16px] font-bold text-slate-900">{formatDateOld(originalLoanDate)}</span>
+                      </div>
+                      <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Last Payment</span>
+                        <span className="text-[16px] font-bold text-slate-900">{formatDateOld(selectedLoan.date)}</span>
+                      </div>
+                      <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Current Due Date</span>
+                        <span className="text-[16px] font-bold text-slate-900">{formatDateOld(renewCalculations?.dueDate)}</span>
+                      </div>
+                      <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Next Due Date</span>
+                        <span className="text-[16px] font-bold text-slate-900">{totalAmountPaying && Number(totalAmountPaying) > 0 && paymentPreview?.renew?.nextDueDate ? formatDateOld(paymentPreview.renew.nextDueDate) : '—'}</span>
+                      </div>
+                      <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Due Days</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[16px] font-bold text-slate-900">{renewCalculations?.displayDays !== undefined ? renewCalculations.displayDays : 0}</span>
+                          {renewCalculations && renewCalculations.displayDays !== undefined && renewCalculations.displayDays < 0 && (
+                            <span className="inline-flex px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-black text-[10px] uppercase tracking-wider">{Math.abs(renewCalculations.displayDays)} Left</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Doc Status</span>
+                        <span className="text-[16px] font-bold text-slate-900">{documentReturned ? 'Returned' : 'Submitted'}</span>
                       </div>
                     </div>
-                  }
-                  className="shadow-sm border-gray-100 rounded-3xl w-full font-sans"
-                >
-                  {activeLogTab === 'statement' && (
-                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
-                      <table className="w-full text-[13px] text-left min-w-[1000px]">
-                        <thead>
-                          <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
-                            <th className="px-4 py-3.5">Date</th>
-                            <th className="px-4 py-3.5">A/C Name</th>
-                            <th className="px-4 py-3.5 text-left">CR Amount</th>
-                            <th className="px-4 py-3.5 text-right">Credit</th>
-                            <th className="px-4 py-3.5 text-right">Debit</th>
-                            <th className="px-4 py-3.5">User</th>
-                            <th className="px-4 py-3.5">Receipt No</th>
-                            <th className="px-4 py-3.5">Particulars</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-150 bg-white">
-                          {displayedStatementEntries.map((entry) => (
-                            <tr key={entry.id} className="hover:bg-gray-50/60 transition-colors">
-                              <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(entry.entry_date)}</td>
-                              <td className="px-4 py-3.5 font-black text-slate-950">{mapAccountName(entry.account_name)}</td>
-                              <td className="px-4 py-3.5 text-right text-indigo-700 font-black text-sm">
-                                {isPaymentCollectionEntry(entry) && entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
-                              </td>
-                              <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
-                                {!isPaymentCollectionEntry(entry) && entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
-                              </td>
-                              <td className="px-4 py-3.5 text-right text-red-700 font-black text-sm">
-                                {!isPaymentCollectionEntry(entry) && entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN')}` : '-'}
-                              </td>
-                              <td className="px-4 py-3.5 text-slate-800 font-bold">{entry.user_name || 'Staff'}</td>
-                              <td className="px-4 py-3.5 font-mono text-slate-900 font-black">{entry.receipt_no || '-'}</td>
-                              <td className="px-4 py-3.5 text-slate-700 font-bold" title={entry.particulars}>{entry.particulars || '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+
+                    {/* Action buttons — last row of the left block */}
+                    <div className="grid grid-cols-3 gap-2 mt-auto">
+                      <Button
+                        onClick={() => handleActionSubmit('Renew')}
+                        disabled={
+                          isRenewing ||
+                          selectedLoan.status === 'Closed' ||
+                          selectedLoan.status === 'NPA_CLOSED' ||
+                          !!renewCalculations?.isDateInvalid ||
+                          !totalAmountPaying ||
+                          Number(totalAmountPaying) <= 0
+                        }
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0 animate-none"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Renewal
+                      </Button>
+
+                      <Button
+                        onClick={() => handleActionSubmit('Partial')}
+                        disabled={
+                          isRenewing ||
+                          !totalAmountPaying ||
+                          Number(totalAmountPaying) <= 0 ||
+                          Number(totalAmountPaying) < ledgerMetrics.totalToRegularize ||
+                          Number(totalAmountPaying) >= ledgerMetrics.totalClose ||
+                          selectedLoan.status === 'Closed' ||
+                          selectedLoan.status === 'NPA_CLOSED' ||
+                          !!renewCalculations?.isDateInvalid
+                        }
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0 animate-none"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        Partial Payment
+                      </Button>
+
+                      <Button
+                        onClick={() => handleActionSubmit('Close')}
+                        disabled={
+                          isRenewing ||
+                          selectedLoan.status === 'Closed' ||
+                          selectedLoan.status === 'NPA_CLOSED' ||
+                          !totalAmountPaying ||
+                          Number(totalAmountPaying) < ledgerMetrics.totalClose ||
+                          !!renewCalculations?.isDateInvalid
+                        }
+                        className="bg-rose-600 hover:bg-rose-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0 animate-none"
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                        Close Account
+                      </Button>
                     </div>
-                  )}
 
-                  {activeLogTab === 'interest' && (
-                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
-                      <table className="w-full text-[13px] text-left min-w-[1000px]">
-                        <thead>
-                          <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
-                            <th className="px-4 py-3.5">Date</th>
-                            <th className="px-4 py-3.5 text-right">Credit</th>
-                            <th className="px-4 py-3.5">Receipt No</th>
-                            <th className="px-4 py-3.5">Type</th>
-                            <th className="px-4 py-3.5">Particulars</th>
-                            <th className="px-4 py-3.5 text-center">Days Renewed</th>
-                            <th className="px-4 py-3.5">Renewed Till</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-150 bg-white">
-                          {displayedInterestDetails.map((detail) => (
-                            <tr key={detail.id} className="hover:bg-gray-50/60 transition-colors">
-                              <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(detail.entry_date)}</td>
-                              <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
-                                ₹{Number(detail.credit).toLocaleString('en-IN')}
-                              </td>
-                              <td className="px-4 py-3.5 font-mono text-slate-900 font-black">{detail.receipt_no || '-'}</td>
-                              <td className="px-4 py-3.5 font-black text-slate-950">{detail.row_type || '-'}</td>
-                              <td className="px-4 py-3.5 text-slate-700 font-bold" title={detail.particulars}>{detail.particulars || '-'}</td>
-                              <td className="px-4 py-3.5 text-center font-black text-slate-900">{detail.renewed_days > 0 ? `${detail.renewed_days} Days` : '-'}</td>
-                              <td className="px-4 py-3.5 font-bold text-slate-800">{detail.renewed_till_date ? formatDateOld(detail.renewed_till_date) : '-'}</td>
-                            </tr>
-                          ))}
-                          {displayedInterestDetails.length === 0 ? (
-                            <tr>
-                              <td colSpan={7} className="text-center py-8 text-slate-500 font-bold italic">No interest details found for this loan</td>
-                            </tr>
-                          ) : null}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {activeLogTab === 'payment' && (
-                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
-                      <table className="w-full text-[13px] text-left min-w-[1000px]">
-                        <thead>
-                          <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
-                            <th className="w-10 px-4 py-3.5"></th>
-                            <th className="px-4 py-3.5">Date</th>
-                            <th className="px-4 py-3.5">Receipt No</th>
-                            <th className="px-4 py-3.5">Transaction Type</th>
-                            <th className="px-4 py-3.5 text-right">Amount Paid</th>
-                            <th className="px-4 py-3.5">User</th>
-                            <th className="px-4 py-3.5 text-center">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-150 bg-white">
-                          {loanTransactions
-                            .filter((tx: any) => tx.type === 'Collection')
-                            .map((tx: any) => {
-                              const isTxEditable = user?.is_admin || (() => {
-                                const txCreatedAt = new Date(tx.created_at || tx.date).getTime();
-                                const now = Date.now();
-                                const diffHours = (now - txCreatedAt) / (1000 * 60 * 60);
-                                return diffHours <= 24;
-                              })();
-                              
-                              const isExpanded = expandedTxIds.has(tx.id);
-                              
-                              // Allocation details from cdLedgerEntries:
-                              const txAllocations = cdLedgerEntries.filter(
-                                (entry) => entry.receipt_no === tx.receipt_no
-                              );
-                              const principalAllocation = txAllocations
-                                .filter((e) => (e.account_name || '').toUpperCase() === 'CD A/C' || e.entry_type === 'principal_payment')
-                                .reduce((sum, e) => sum + Number(e.credit || 0), 0);
-                              const interestAllocation = txAllocations
-                                .filter((e) => (e.account_name || '').toUpperCase() === 'CD COMMISSION A/C' || e.entry_type === 'interest_payment')
-                                .reduce((sum, e) => sum + Number(e.credit || 0), 0);
-                              const penaltyAllocation = txAllocations
-                                .filter((e) => (e.account_name || '').toUpperCase() === 'PENALTY A/C' || e.entry_type === 'penalty_payment')
-                                .reduce((sum, e) => sum + Number(e.credit || 0), 0);
-                              
-                              return (
-                                <React.Fragment key={tx.id}>
-                                  <tr className="hover:bg-gray-50/60 transition-colors">
-                                    <td className="px-4 py-3.5 text-center">
-                                      <button 
-                                        onClick={() => toggleExpandTx(tx.id)}
-                                        className="p-1 hover:bg-gray-100 rounded transition-colors text-slate-500 hover:text-slate-900 focus:outline-none"
-                                      >
-                                        {isExpanded ? (
-                                          <ChevronDown className="w-4 h-4" />
-                                        ) : (
-                                          <ChevronRight className="w-4 h-4" />
-                                        )}
-                                      </button>
-                                    </td>
-                                    <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(tx.date)}</td>
-                                    <td className="px-4 py-3.5 font-mono text-slate-900 font-black">{tx.receipt_no || '-'}</td>
-                                    <td className="px-4 py-3.5 font-black text-slate-950">CD Amount Paid</td>
-                                    <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
-                                      ₹{Number(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                    </td>
-                                    <td className="px-4 py-3.5 text-slate-800 font-bold">{tx.collected_by || 'Staff'}</td>
-                                    <td className="px-4 py-3.5">
-                                      <div className="flex items-center justify-center gap-2">
-                                        {isTxEditable ? (
-                                          <button
-                                            onClick={() => handleOpenEditTxModal(tx)}
-                                            className="p-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 rounded-lg transition-colors border border-indigo-200"
-                                            title="Edit Transaction"
-                                          >
-                                            <Edit2 className="w-3.5 h-3.5" />
-                                          </button>
-                                        ) : (
-                                          <span className="text-gray-400 text-xs italic bg-gray-50 px-2 py-0.5 rounded border border-gray-150" title="Editable only within 24 hours">ReadOnly</span>
-                                        )}
-                                        {user?.is_admin && (
-                                          <button
-                                            onClick={() => handleDeleteTx(tx)}
-                                            className="p-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-900 rounded-lg transition-colors border border-rose-200"
-                                            title="Delete Transaction"
-                                          >
-                                            <X className="w-3.5 h-3.5" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                  {isExpanded && (
-                                    <tr className="bg-slate-50/60">
-                                      <td colSpan={7} className="px-12 py-3.5 text-xs text-slate-600 border-t border-gray-100">
-                                        <div className="font-bold text-slate-850 mb-2">Allocation:</div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pl-4 font-bold">
-                                          <div>
-                                            <span className="text-slate-500 uppercase font-black tracking-wider text-[10px] block mb-0.5">CD Interest</span>
-                                            <span className="text-sm font-black text-slate-900">
-                                              ₹{interestAllocation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                            </span>
-                                          </div>
-                                          <div>
-                                            <span className="text-slate-500 uppercase font-black tracking-wider text-[10px] block mb-0.5">CD Penalty</span>
-                                            <span className="text-sm font-black text-slate-900">
-                                              ₹{penaltyAllocation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                            </span>
-                                          </div>
-                                          <div>
-                                            <span className="text-slate-500 uppercase font-black tracking-wider text-[10px] block mb-0.5">CD Principal</span>
-                                            <span className="text-sm font-black text-slate-900">
-                                              ₹{principalAllocation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  )}
-                                </React.Fragment>
-                              );
-                            })}
-                          {loanTransactions.filter((tx: any) => tx.type === 'Collection').length === 0 ? (
-                            <tr>
-                              <td colSpan={7} className="text-center py-8 text-slate-500 font-bold italic">No collection transactions found for this loan</td>
-                            </tr>
-                          ) : null}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {activeLogTab === 'editHistory' && (
-                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
-                      <table className="w-full text-[13px] text-left min-w-[1000px]">
-                        <thead>
-                          <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
-                            <th className="px-4 py-3.5">Edited At</th>
-                            <th className="px-4 py-3.5">Edited By</th>
-                            <th className="px-4 py-3.5">Receipt No</th>
-                            <th className="px-4 py-3.5 text-right">Original Date</th>
-                            <th className="px-4 py-3.5 text-right">New Date</th>
-                            <th className="px-4 py-3.5 text-right">Original Amt</th>
-                            <th className="px-4 py-3.5 text-right">New Amt</th>
-                            <th className="px-4 py-3.5">Reason</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-150 bg-white">
-                          {editLogs.map((log: any) => {
-                            const oldD = log.old_data || {};
-                            const newD = log.new_data || {};
-                            return (
-                              <tr key={log.id} className="hover:bg-gray-50/60 transition-colors">
-                                <td className="px-4 py-3.5 font-bold text-slate-800">
-                                  {new Date(log.edited_at).toLocaleString('en-IN')}
-                                </td>
-                                <td className="px-4 py-3.5 text-slate-800 font-bold">{log.edited_by}</td>
-                                <td className="px-4 py-3.5 font-mono text-slate-900 font-black">
-                                  {newD.receipt_no || oldD.receipt_no || '-'}
-                                </td>
-                                <td className="px-4 py-3.5 text-right font-bold text-slate-600">
-                                  {oldD.date ? oldD.date.split('T')[0].split('-').reverse().join('/') : '-'}
-                                </td>
-                                <td className="px-4 py-3.5 text-right font-bold text-slate-800">
-                                  {newD.date ? newD.date.split('T')[0].split('-').reverse().join('/') : '-'}
-                                </td>
-                                <td className="px-4 py-3.5 text-right text-slate-700">
-                                  {oldD.amount !== undefined ? `₹${Number(oldD.amount).toLocaleString('en-IN')}` : '-'}
-                                </td>
-                                <td className="px-4 py-3.5 text-right text-green-800 font-black">
-                                  {newD.amount !== undefined ? `₹${Number(newD.amount).toLocaleString('en-IN')}` : '-'}
-                                </td>
-                                <td className="px-4 py-3.5 text-slate-700 font-bold" title={log.reason}>
-                                  {log.reason || '-'}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                          {editLogs.length === 0 ? (
-                            <tr>
-                              <td colSpan={8} className="text-center py-8 text-slate-500 font-bold italic">
-                                No transaction edit logs found for this loan
-                              </td>
-                            </tr>
-                          ) : null}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Card>
-
-              </div>
-
-              {/* RIGHT COLUMN (1/3 Width): Summary & Files */}
-              <div className="lg:col-span-1 space-y-6">
-
-                {/* Bento Metrics Panel (Unified Summary Panel) */}
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Amount / Principal */}
-                  <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
-                    <span className="text-slate-800 text-xs uppercase font-extrabold tracking-wider block mb-1">Principal Bal.</span>
-                    <span className="text-xl font-black text-slate-950 block">₹{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  </div>
-
-                  {/* Today Due */}
-                  <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
-                    <span className="text-slate-800 text-xs uppercase font-extrabold tracking-wider block mb-1">Today Due</span>
-                    <span className={`text-xl font-black block ${(ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty) < 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                      ₹{(ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-
-                  {/* Interest */}
-                  <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
-                    <span className="text-slate-800 text-xs uppercase font-extrabold tracking-wider block mb-1">Accrued Interest</span>
-                    <span className={`text-lg font-black block ${ledgerMetrics.pendingInterest < 0 ? 'text-emerald-700' : 'text-slate-950'}`}>
-                      ₹{ledgerMetrics.pendingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-
-                  {/* Penalty */}
-                  <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
-                    <span className="text-slate-800 text-xs uppercase font-extrabold tracking-wider block mb-1">Accrued Penalty</span>
-                    <span className="text-lg font-black text-rose-700 block">₹{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  </div>
-
-                  {/* Total for Renewal */}
-                  <div className="col-span-2 bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex justify-between items-center shadow-sm">
-                    <div>
-                      <span className="text-emerald-900 text-xs uppercase font-black tracking-wider block">Total for Renewal</span>
-                      <span className="text-[11px] text-emerald-800 font-bold block mt-0.5">To extend standard cycle</span>
-                    </div>
-                    <span className="text-[22px] font-black text-emerald-800">
-                      ₹{ledgerMetrics.renewalDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-
-                  {/* Total to Regularize */}
-                  <div className="col-span-2 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex justify-between items-center shadow-sm">
-                    <div>
-                      <span className="text-amber-900 text-xs uppercase font-black tracking-wider block">Total to Regularize</span>
-                      <span className="text-[11px] text-amber-800 font-bold block mt-0.5">Overdue interest + penalty + renewal</span>
-                    </div>
-                    <span className="text-[22px] font-black text-amber-800">
-                      ₹{ledgerMetrics.totalToRegularize.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-
-                  {/* Payoff Close Card - Slate/Indigo theme */}
-                  <div className="col-span-2 bg-slate-950 border border-slate-900 rounded-2xl p-4 text-white flex justify-between items-center shadow-md hover:scale-[1.01] transition-transform">
-                    <div>
-                      <span className="text-white text-xs uppercase font-black tracking-wider block">Total for Close</span>
-                      <span className="text-[11px] text-slate-350 font-bold block mt-0.5">Full payoff principal & dues</span>
-                    </div>
-                    <span className="text-2xl font-black text-emerald-400">
-                      ₹{ledgerMetrics.totalClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </span>
                   </div>
                 </div>
+              </div>
 
-                {/* Submitted Files & Media Card */}
-                <Card title="Submitted Files & Media" className="shadow-sm border-gray-100 rounded-3xl max-h-[300px] overflow-y-auto">
-                  <div className="space-y-2.5">
-                    {/* Document Upload selector */}
-                    <div className="flex gap-2 p-2 bg-gray-50 border border-gray-150 rounded-xl items-center">
-                      <select
-                        value={docType}
-                        onChange={(e) => setDocType(e.target.value)}
-                        disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
-                        className="flex-1 text-xs bg-white border border-gray-250 p-1.5 rounded-lg focus:outline-none font-sans font-bold text-slate-900"
-                      >
-                        <option value="Pledge Document">Pledge Document</option>
-                        <option value="Aadhaar Card Copy">Aadhaar Card Copy</option>
-                        <option value="PAN Card Copy">PAN Card Copy</option>
-                        <option value="Land Registry Copy">Land Registry Copy</option>
-                        <option value="Other Attachment">Other Attachment</option>
-                      </select>
-                      <label className={`bg-green-600 hover:bg-green-700 text-white px-2 py-1.5 rounded-lg text-xs font-semibold cursor-pointer select-none ${(selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED') ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''
-                        }`}>
-                        {uploadingDoc ? 'Uploading...' : 'Upload'}
-                        <input
-                          type="file"
-                          onChange={handleUploadDocument}
-                          disabled={uploadingDoc || selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
+              {/* RIGHT BLOCK (4 cols): Account Position Metrics */}
+              <div className="col-span-4">
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden h-full flex flex-col">
 
-                    <div className="divide-y divide-gray-100">
-                      {aggregatedDocs.map((doc) => (
-                        <div key={doc.id} className="flex justify-between items-center py-2 text-xs">
-                          <div className="flex flex-col flex-1 min-w-0 pr-2">
-                            <span className="font-semibold text-gray-800 truncate">{doc.name}</span>
-                            <span className="text-[10px] text-gray-400 truncate">{doc.remarks}</span>
-                          </div>
-                          <div className="flex items-center gap-2 font-sans">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${doc.returnedStatus === 'Returned' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'
-                              }`}>
-                              {doc.returnedStatus}
-                            </span>
-                            {doc.fileUrl ? (
-                              <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="text-green-700 hover:underline font-bold">
-                                View
-                              </a>
-                            ) : null}
-                            {doc.allowDelete ? (
-                              <button
-                                onClick={() => handleDeleteDocument(doc.id)}
-                                disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
-                                className="text-red-500 hover:text-red-700 font-bold ml-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                      ))}
-                      {aggregatedDocs.length === 0 ? (
-                        <p className="text-center text-gray-400 italic py-4">No documents or files found</p>
-                      ) : null}
-                    </div>
+                  {/* Card micro-header */}
+                  <div className="px-3 py-2.5 border-b border-gray-100">
+                    <span className="text-[14px] font-bold uppercase text-slate-800 tracking-wider">Account Position</span>
                   </div>
-                </Card>
 
+                  <div className="p-3 flex flex-col gap-2.5 flex-1">
+
+                    {/* 2×2 Compact Metrics Grid */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Principal Bal.</span>
+                        <span className="text-[20px] font-bold text-slate-955 block leading-snug">₹{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Today Due</span>
+                        <span className={`text-[20px] font-bold block leading-snug ${(ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty) < 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                          ₹{(ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Accrued Interest</span>
+                        <span className={`text-[20px] font-bold block leading-snug ${ledgerMetrics.pendingInterest < 0 ? 'text-emerald-700' : 'text-slate-955'}`}>
+                          ₹{ledgerMetrics.pendingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Accrued Penalty</span>
+                        <span className="text-[20px] font-bold text-rose-700 block leading-snug">₹{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+
+                    {/* Total for Renewal */}
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 flex justify-between items-center shadow-sm">
+                      <div>
+                        <span className="text-emerald-900 text-[13px] uppercase font-bold tracking-wider block leading-none">Total for Renewal</span>
+                        <span className="text-[12px] text-emerald-700 font-semibold block mt-0.5">To extend standard cycle</span>
+                      </div>
+                      <span className="text-[22px] font-extrabold text-emerald-800">
+                        ₹{ledgerMetrics.renewalDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    {/* Total to Regularize */}
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex justify-between items-center shadow-sm">
+                      <div>
+                        <span className="text-amber-900 text-[13px] uppercase font-bold tracking-wider block leading-none">Total to Regularize</span>
+                        <span className="text-[12px] text-amber-700 font-semibold block mt-0.5">Overdue int + penalty + renewal</span>
+                      </div>
+                      <span className="text-[22px] font-extrabold text-amber-800">
+                        ₹{ledgerMetrics.totalToRegularize.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    {/* Total for Close */}
+                    <div className="bg-slate-950 border border-slate-900 rounded-xl px-3 py-2 flex justify-between items-center shadow-md">
+                      <div>
+                        <span className="text-white text-[13px] uppercase font-bold tracking-wider block leading-none">Total for Close</span>
+                        <span className="text-[12px] text-slate-400 font-semibold block mt-0.5">Full payoff principal &amp; dues</span>
+                      </div>
+                      <span className="text-[22px] font-extrabold text-emerald-400">
+                        ₹{ledgerMetrics.totalClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                  </div>
+                </div>
               </div>
 
             </div>
+
+            {/* ========== BELOW FOLD: Files & Statements ========== */}
+
+            {/* Statements & Logs unified tabbed card */}
+            <Card
+              title={
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+                  <div>
+                    <span className="text-base font-extrabold text-slate-950 block">Statements &amp; Logs</span>
+                    <span className="text-xs text-slate-600 font-bold block mt-0.5">Track transaction history and interest accruals</span>
+                  </div>
+                  <div className="flex gap-1.5 bg-gray-100 border border-gray-200 p-1 rounded-xl self-start sm:self-auto font-sans">
+                    <button
+                      onClick={() => setActiveLogTab('statement')}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${activeLogTab === 'statement' ? 'bg-white text-green-800 shadow-sm border border-gray-150' : 'text-slate-900 hover:text-black'}`}
+                    >
+                      Ledger Statement
+                    </button>
+                    <button
+                      onClick={() => setActiveLogTab('interest')}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${activeLogTab === 'interest' ? 'bg-white text-green-800 shadow-sm border border-gray-150' : 'text-slate-900 hover:text-black'}`}
+                    >
+                      Interest History
+                    </button>
+                    <button
+                      onClick={() => setActiveLogTab('payment')}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${activeLogTab === 'payment' ? 'bg-white text-green-800 shadow-sm border border-gray-150' : 'text-slate-900 hover:text-black'}`}
+                    >
+                      Payment History
+                    </button>
+                    <button
+                      onClick={() => setActiveLogTab('editHistory')}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${activeLogTab === 'editHistory' ? 'bg-white text-green-800 shadow-sm border border-gray-150' : 'text-slate-900 hover:text-black'}`}
+                    >
+                      Edit History
+                    </button>
+                  </div>
+                </div>
+              }
+              className="shadow-sm border-gray-100 rounded-3xl w-full font-sans print:hidden animate-none"
+            >
+              {activeLogTab === 'statement' && (
+                <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
+                  <table className="w-full text-[13px] text-left min-w-[1000px]">
+                    <thead>
+                      <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
+                        <th className="px-4 py-3.5">Date</th>
+                        <th className="px-4 py-3.5">A/C Name</th>
+                        <th className="px-4 py-3.5 text-left">CR Amount</th>
+                        <th className="px-4 py-3.5 text-right">Credit</th>
+                        <th className="px-4 py-3.5 text-right">Debit</th>
+                        <th className="px-4 py-3.5">User</th>
+                        <th className="px-4 py-3.5">Receipt No</th>
+                        <th className="px-4 py-3.5">Particulars</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-150 bg-white">
+                      {displayedStatementEntries.map((entry) => {
+                        const isPending = entry.receipt_no && entry.receipt_no !== '-' && pendingReviews?.some(r => r?.receipt_number === entry.receipt_no && r?.loan_id === selectedLoan?.id);
+                        return (
+                          <tr key={entry.id} className={`hover:bg-gray-50/60 transition-colors ${isPending ? 'bg-[#fff7ed]' : ''}`}>
+                            <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(entry.entry_date)}</td>
+                            <td className="px-4 py-3.5 font-black text-slate-955">{mapAccountName(entry.account_name)}</td>
+                            <td className="px-4 py-3.5 text-right text-indigo-700 font-black text-sm">
+                              {isPaymentCollectionEntry(entry) && entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
+                            </td>
+                            <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
+                              {!isPaymentCollectionEntry(entry) && entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
+                            </td>
+                            <td className="px-4 py-3.5 text-right text-red-650 font-black text-sm">
+                              {!isPaymentCollectionEntry(entry) && entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN')}` : '-'}
+                            </td>
+                            <td className="px-4 py-3.5 font-semibold text-slate-700">{entry.user_name || 'Staff'}</td>
+                            <td className="px-4 py-3.5 font-mono text-slate-800 font-bold">{entry.receipt_no || '-'}</td>
+                            <td className="px-4 py-3.5 text-slate-655 font-medium">{entry.particulars || '-'}</td>
+                          </tr>
+                        );
+                      })}
+                      {displayedStatementEntries.length === 0 && (
+                        <tr>
+                          <td colSpan={8} className="text-center py-8 text-gray-400 italic">No entries recorded in statement</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {activeLogTab === 'interest' && (
+                <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
+                  <table className="w-full text-[13px] text-left min-w-[1000px]">
+                    <thead>
+                      <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
+                        <th className="px-4 py-3.5">Date</th>
+                        <th className="px-4 py-3.5 text-right">Credit</th>
+                        <th className="px-4 py-3.5">Receipt No</th>
+                        <th className="px-4 py-3.5">Type</th>
+                        <th className="px-4 py-3.5">Particulars</th>
+                        <th className="px-4 py-3.5 text-center">Days Renewed</th>
+                        <th className="px-4 py-3.5 font-bold">Renewed Till</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-150 bg-white">
+                      {displayedInterestDetails.map((detail) => (
+                        <tr key={detail.id} className="hover:bg-gray-50/60 transition-colors">
+                          <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(detail.entry_date)}</td>
+                          <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
+                            ₹{Number(detail.credit).toLocaleString('en-IN')}
+                          </td>
+                          <td className="px-4 py-3.5 font-mono text-slate-900 font-black">{detail.receipt_no || '-'}</td>
+                          <td className="px-4 py-3.5 font-black text-slate-950">{detail.row_type || '-'}</td>
+                          <td className="px-4 py-3.5 text-slate-700 font-bold" title={detail.particulars}>{detail.particulars || '-'}</td>
+                          <td className="px-4 py-3.5 text-center font-black text-slate-900">{detail.renewed_days > 0 ? `${detail.renewed_days} Days` : '-'}</td>
+                          <td className="px-4 py-3.5 font-bold text-slate-800">{detail.renewed_till_date ? formatDateOld(detail.renewed_till_date) : '-'}</td>
+                        </tr>
+                      ))}
+                      {displayedInterestDetails.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="text-center py-8 text-gray-400 italic">No interest details found for this loan</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {activeLogTab === 'payment' && (
+                <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
+                  <table className="w-full text-[13px] text-left min-w-[1000px]">
+                    <thead>
+                      <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
+                        <th className="w-10 px-4 py-3.5"></th>
+                        <th className="px-4 py-3.5">Date</th>
+                        <th className="px-4 py-3.5">Receipt No</th>
+                        <th className="px-4 py-3.5">Transaction Type</th>
+                        <th className="px-4 py-3.5 text-right">Amount Paid</th>
+                        <th className="px-4 py-3.5">User</th>
+                        <th className="px-4 py-3.5 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-150 bg-white">
+                      {loanTransactions
+                        .filter((tx: any) => tx.type === 'Collection')
+                        .map((tx: any) => {
+                          const isTxEditable = user?.is_admin || (() => {
+                            const txCreatedAt = new Date(tx.created_at || tx.date).getTime();
+                            const now = Date.now();
+                            const diffHours = (now - txCreatedAt) / (1000 * 60 * 60);
+                            return diffHours <= 24;
+                          })();
+                          
+                          const isExpanded = expandedTxIds.has(tx.id);
+                          
+                          // Allocation details from cdLedgerEntries:
+                          const txAllocations = cdLedgerEntries.filter(
+                            (entry) => entry.receipt_no === tx.receipt_no
+                          );
+                          const principalAllocation = txAllocations
+                            .filter((e) => (e.account_name || '').toUpperCase() === 'CD A/C' || e.entry_type === 'principal_payment')
+                            .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+                          const interestAllocation = txAllocations
+                            .filter((e) => (e.account_name || '').toUpperCase() === 'CD COMMISSION A/C' || e.entry_type === 'interest_payment')
+                            .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+                          const penaltyAllocation = txAllocations
+                            .filter((e) => (e.account_name || '').toUpperCase() === 'PENALTY A/C' || e.entry_type === 'penalty_payment')
+                            .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
+                          const isPending = tx.receipt_no && tx.receipt_no !== '-' && pendingReviews?.some(r => r?.receipt_number === tx.receipt_no && r?.loan_id === selectedLoan?.id);
+                          
+                          return (
+                            <React.Fragment key={tx.id}>
+                              <tr className={`hover:bg-gray-50/60 transition-colors ${isPending ? 'bg-[#fff7ed]' : ''}`}>
+                                <td className="px-4 py-3.5 text-center">
+                                  <button 
+                                    onClick={() => toggleExpandTx(tx.id)}
+                                    className="p-1 hover:bg-gray-100 rounded transition-colors text-slate-500 hover:text-slate-900 focus:outline-none"
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronDown className="w-4 h-4" />
+                                    ) : (
+                                      <ChevronRight className="w-4 h-4" />
+                                    )}
+                                  </button>
+                                </td>
+                                <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(tx.date)}</td>
+                                <td className="px-4 py-3.5 font-mono text-slate-900 font-black">
+                                  {tx.receipt_no || '-'}
+                                  {isPending && (
+                                    <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold bg-orange-50 text-orange-700 border border-orange-200 uppercase tracking-wide">
+                                      Pending Approval
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3.5 font-black text-slate-950">CD Amount Paid</td>
+                                <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
+                                  ₹{Number(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-4 py-3.5 text-slate-800 font-bold">{tx.collected_by || 'Staff'}</td>
+                                <td className="px-4 py-3.5">
+                                  <div className="flex items-center justify-center gap-2">
+                                    {isTxEditable && !isPending ? (
+                                      <button
+                                        onClick={() => handleOpenEditTxModal(tx)}
+                                        className="p-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 rounded-lg transition-colors border border-indigo-200"
+                                        title="Edit Transaction"
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    ) : (
+                                      <span className="text-gray-400 text-xs italic bg-gray-50 px-2 py-0.5 rounded border border-gray-150" title={isPending ? "Pending approval review" : "Editable only within 24 hours"}>
+                                        {isPending ? 'Pending' : 'ReadOnly'}
+                                      </span>
+                                    )}
+                                    {user?.is_admin && (
+                                      <button
+                                        onClick={() => handleDeleteTx(tx)}
+                                        className="p-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-900 rounded-lg transition-colors border border-rose-200"
+                                        title="Delete Transaction"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr className="bg-slate-50/60">
+                                  <td colSpan={7} className="px-12 py-3.5 text-xs text-slate-600 border-t border-gray-100">
+                                    <div className="font-bold text-slate-850 mb-2">Allocation:</div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pl-4 font-bold">
+                                      <div>
+                                        <span className="text-slate-500 uppercase font-black tracking-wider text-[10px] block mb-0.5">CD Interest</span>
+                                        <span className="text-sm font-black text-slate-900">
+                                          ₹{interestAllocation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-slate-500 uppercase font-black tracking-wider text-[10px] block mb-0.5">CD Penalty</span>
+                                        <span className="text-sm font-black text-slate-900">
+                                          ₹{penaltyAllocation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-slate-500 uppercase font-black tracking-wider text-[10px] block mb-0.5">CD Principal</span>
+                                        <span className="text-sm font-black text-slate-900">
+                                          ₹{principalAllocation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      {loanTransactions.filter((tx: any) => tx.type === 'Collection').length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="text-center py-8 text-slate-500 font-bold italic">No collection transactions found for this loan</td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {activeLogTab === 'editHistory' && (
+                <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
+                  <table className="w-full text-[13px] text-left min-w-[1000px]">
+                    <thead>
+                      <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
+                        <th className="px-4 py-3.5">Edited At</th>
+                        <th className="px-4 py-3.5">Edited By</th>
+                        <th className="px-4 py-3.5">Receipt No</th>
+                        <th className="px-4 py-3.5 text-right">Original Date</th>
+                        <th className="px-4 py-3.5 text-right">New Date</th>
+                        <th className="px-4 py-3.5 text-right">Original Amt</th>
+                        <th className="px-4 py-3.5 text-right">New Amt</th>
+                        <th className="px-4 py-3.5">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-150 bg-white">
+                      {editLogs.map((log: any) => {
+                        const oldD = log.old_data || {};
+                        const newD = log.new_data || {};
+                        return (
+                          <tr key={log.id} className="hover:bg-gray-50/60 transition-colors">
+                            <td className="px-4 py-3.5 font-bold text-slate-800">
+                              {new Date(log.edited_at).toLocaleString('en-IN')}
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-800 font-bold">{log.edited_by}</td>
+                            <td className="px-4 py-3.5 font-mono text-slate-900 font-black">
+                              {newD.receipt_no || oldD.receipt_no || '-'}
+                            </td>
+                            <td className="px-4 py-3.5 text-right font-bold text-slate-600">
+                              {oldD.date ? oldD.date.split('T')[0].split('-').reverse().join('/') : '-'}
+                            </td>
+                            <td className="px-4 py-3.5 text-right font-bold text-slate-800">
+                              {newD.date ? newD.date.split('T')[0].split('-').reverse().join('/') : '-'}
+                            </td>
+                            <td className="px-4 py-3.5 text-right text-slate-700">
+                              {oldD.amount !== undefined ? `₹${Number(oldD.amount).toLocaleString('en-IN')}` : '-'}
+                            </td>
+                            <td className="px-4 py-3.5 text-right text-green-800 font-black">
+                              {newD.amount !== undefined ? `₹${Number(newD.amount).toLocaleString('en-IN')}` : '-'}
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-700 font-bold" title={log.reason}>
+                              {log.reason || '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {editLogs.length === 0 && (
+                        <tr>
+                          <td colSpan={8} className="text-center py-8 text-gray-400 italic">No transaction edit history found</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+            
+            {/* Submitted Files & Media */}
+            <Card
+              title={<span className="text-base font-extrabold text-slate-955 block">Submitted Files &amp; Media</span>}
+              className="shadow-sm border-gray-100 rounded-3xl print:hidden animate-none"
+            >
+              <div className="space-y-2.5">
+                <div className="flex gap-2 p-2 bg-gray-50 border border-gray-150 rounded-xl items-center">
+                  <select
+                    value={docType}
+                    onChange={(e) => setDocType(e.target.value)}
+                    disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
+                    className="flex-1 text-[13px] bg-white border border-gray-250 p-1.5 rounded-lg focus:outline-none font-sans font-bold text-slate-900"
+                  >
+                    <option value="Pledge Document">Pledge Document</option>
+                    <option value="Aadhaar Card Copy">Aadhaar Card Copy</option>
+                    <option value="PAN Card Copy">PAN Card Copy</option>
+                    <option value="Land Registry Copy">Land Registry Copy</option>
+                    <option value="Other Attachment">Other Attachment</option>
+                  </select>
+                  <label className={`bg-green-600 hover:bg-green-700 text-white px-2.5 py-1.5 rounded-lg text-[13px] font-bold cursor-pointer select-none ${(selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED') ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}>
+                    {uploadingDoc ? 'Uploading...' : 'Upload'}
+                    <input
+                      type="file"
+                      onChange={handleUploadDocument}
+                      disabled={uploadingDoc || selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {aggregatedDocs.map((doc) => (
+                    <div key={doc.id} className="flex justify-between items-center py-2.5 text-[13px] font-semibold text-slate-800">
+                      <div className="flex flex-col flex-1 min-w-0 pr-2">
+                        <span className="font-extrabold text-slate-900 truncate">{doc.name}</span>
+                        <span className="text-[12px] font-medium text-gray-500 truncate">{doc.remarks}</span>
+                      </div>
+                      <div className="flex items-center gap-3.5 font-sans">
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold ${doc.returnedStatus === 'Returned' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
+                          {doc.returnedStatus}
+                        </span>
+                        {doc.fileUrl ? (
+                          <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="text-green-700 hover:underline font-extrabold text-[13px]">View</a>
+                        ) : null}
+                        {doc.allowDelete ? (
+                          <button
+                            onClick={() => handleDeleteDocument(doc.id)}
+                            disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
+                            className="text-red-500 hover:text-red-700 font-bold ml-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                  {aggregatedDocs.length === 0 ? (
+                    <p className="text-center text-gray-400 italic py-4">No documents or files found</p>
+                  ) : null}
+                </div>
+              </div>
+            </Card>
 
             {/* Totals Summary Footer Card & Buttons */}
             <div className="bg-white px-5 py-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col gap-3">

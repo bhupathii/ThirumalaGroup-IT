@@ -1,17 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Button from '../../components/UI/Button';
-import Card from '../../components/UI/Card';
-import Input from '../../components/UI/Input';
 import { supabaseFinance, FinanceLoanPaymentFollowup } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { 
   ArrowLeft, 
   Calendar, 
   User, 
-  Clock, 
-  AlertTriangle, 
-  ClipboardList, 
   Printer, 
   Search,
   MessageSquare,
@@ -50,6 +44,21 @@ interface ActiveDueLoan {
 }
 
 type FollowUpTab = 'ACTIVE_QUEUE' | 'TODAYS' | 'UPCOMING' | 'MISSED' | 'HISTORY';
+
+// Simple Close Icon mapping
+const XIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    fill="none" 
+    viewBox="0 0 24 24" 
+    strokeWidth={2} 
+    stroke="currentColor" 
+    className="w-5 h-5"
+    {...props}
+  >
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
 
 const PaymentFollowUp: React.FC = () => {
   const navigate = useNavigate();
@@ -428,302 +437,346 @@ const PaymentFollowUp: React.FC = () => {
   }, [selectedLoan, followUps]);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-6 print:p-0 select-none">
+    <div className="flex flex-col gap-2 w-full max-w-[100%] mx-auto px-4 pt-3 pb-4 print:p-0 select-none">
       
-      {/* Top Header Actions */}
-      <div className="flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm print:hidden">
+      {/* ── ROW 1: Header ───────────────────────────────────────────────────── */}
+      <div className="flex justify-between items-center print:hidden">
         <div>
-          <h1 className="finance-h1">Collection Follow-up Dashboard</h1>
-          <p className="finance-small-label uppercase">
-            Active overdue callbacks, next scheduled actions & staff accountability
-          </p>
+          <h1 className="text-[15px] font-black uppercase text-slate-900 tracking-wide leading-none">Collection Follow-up Dashboard</h1>
+          <p className="text-[11px] text-slate-500 uppercase font-semibold mt-0.5">Active overdue callbacks, next scheduled actions &amp; staff accountability</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 finance-header-time uppercase">
-            Back
-          </Button>
-          <Button onClick={() => setShowPrintModal(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white finance-header-time uppercase">
-            Print Landscape
-          </Button>
+          <button
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 text-[12px] font-bold uppercase shadow-sm"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back
+          </button>
+          <button
+            onClick={() => setShowPrintModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0b1329] text-white rounded-lg hover:bg-slate-800 text-[12px] font-bold uppercase shadow-sm"
+          >
+            <Printer className="w-3.5 h-3.5" /> Print Landscape
+          </button>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 print:hidden">
-        <div 
-          onClick={() => setActiveTab('ACTIVE_QUEUE')}
-          className={`cursor-pointer bg-white p-4 rounded-xl border-2 transition-all flex flex-col justify-center ${activeTab === 'ACTIVE_QUEUE' ? 'border-[#0b1329] shadow-md' : 'border-slate-200 hover:border-slate-300'}`}
-        >
-          <span className="text-slate-405 block finance-small-label uppercase">Active Due Queue</span>
-          <span className="text-slate-900 mt-1 font-mono font-black text-xl">{categorizedLoans.ACTIVE_QUEUE.length} Accounts</span>
-        </div>
+      {/* ── ROW 2: Filters + KPI Status Counts (single horizontal bar) ───────── */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm px-3 py-2.5 print:hidden">
+        <div className="flex flex-wrap items-end gap-3">
+          
+          {/* Follow-up View Select */}
+          <div className="flex flex-col min-w-[170px]">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Follow-up View</label>
+            <select
+              value={activeTab}
+              onChange={(e) => setActiveTab(e.target.value as FollowUpTab)}
+              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 uppercase bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer h-[34px]"
+            >
+              <option value="ACTIVE_QUEUE">Active Due Queue</option>
+              <option value="TODAYS">Today's Schedules</option>
+              <option value="MISSED">Missed Schedules</option>
+              <option value="UPCOMING">Upcoming Schedules</option>
+              <option value="HISTORY">Staff Callback Reports</option>
+            </select>
+          </div>
 
-        <div 
-          onClick={() => setActiveTab('TODAYS')}
-          className={`cursor-pointer bg-white p-4 rounded-xl border-2 transition-all flex flex-col justify-center ${activeTab === 'TODAYS' ? 'border-green-600 shadow-md' : 'border-slate-200 hover:border-slate-300'}`}
-        >
-          <span className="text-slate-405 block finance-small-label uppercase">Today's Callback Schedules</span>
-          <span className="text-green-650 mt-1 font-mono font-black text-xl">{categorizedLoans.TODAYS.length} Accounts</span>
-        </div>
-
-        <div 
-          onClick={() => setActiveTab('MISSED')}
-          className={`cursor-pointer bg-white p-4 rounded-xl border-2 transition-all flex flex-col justify-center ${activeTab === 'MISSED' ? 'border-red-600 shadow-md' : 'border-slate-200 hover:border-slate-300'}`}
-        >
-          <span className="text-slate-405 block finance-small-label uppercase">Missed Callbacks (Overdue)</span>
-          <span className="text-red-655 mt-1 font-mono font-black text-xl">{categorizedLoans.MISSED.length} Accounts</span>
-        </div>
-
-        <div 
-          onClick={() => setActiveTab('UPCOMING')}
-          className={`cursor-pointer bg-white p-4 rounded-xl border-2 transition-all flex flex-col justify-center ${activeTab === 'UPCOMING' ? 'border-blue-600 shadow-md' : 'border-slate-200 hover:border-slate-300'}`}
-        >
-          <span className="text-slate-405 block finance-small-label uppercase">Upcoming Callbacks</span>
-          <span className="text-blue-650 mt-1 font-mono font-black text-xl">{categorizedLoans.UPCOMING.length} Accounts</span>
-        </div>
-      </div>
-
-      {/* Main Workspace Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 print:hidden">
-        
-        {/* Left Sidebar Menu */}
-        <div className="lg:col-span-1 space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 bg-slate-50">
-              <h3 className="text-slate-900 finance-sidebar-link uppercase font-bold text-xs">Navigation / Views</h3>
-            </div>
-            <div className="flex flex-col">
-              <button
-                onClick={() => setActiveTab('ACTIVE_QUEUE')}
-                className={`text-left px-4 py-3 border-b border-slate-100 transition-colors flex items-center gap-2 ${activeTab === 'ACTIVE_QUEUE' ? 'bg-[#0b1329] text-white font-bold' : 'text-slate-700 hover:bg-slate-50' } finance-header-time uppercase`}
-              >
-                <ClipboardList className="w-4 h-4" />
-                Active Due Queue
-              </button>
-              <button
-                onClick={() => setActiveTab('TODAYS')}
-                className={`text-left px-4 py-3 border-b border-slate-100 transition-colors flex items-center gap-2 ${activeTab === 'TODAYS' ? 'bg-[#0b1329] text-white font-bold' : 'text-slate-700 hover:bg-slate-50' } finance-header-time uppercase`}
-              >
-                <Clock className="w-4 h-4" />
-                Today's Schedules
-              </button>
-              <button
-                onClick={() => setActiveTab('MISSED')}
-                className={`text-left px-4 py-3 border-b border-slate-100 transition-colors flex items-center gap-2 ${activeTab === 'MISSED' ? 'bg-[#0b1329] text-white font-bold' : 'text-slate-700 hover:bg-slate-50' } finance-header-time uppercase`}
-              >
-                <AlertTriangle className="w-4 h-4" />
-                Missed Schedules
-              </button>
-              <button
-                onClick={() => setActiveTab('UPCOMING')}
-                className={`text-left px-4 py-3 border-b border-slate-100 transition-colors flex items-center gap-2 ${activeTab === 'UPCOMING' ? 'bg-[#0b1329] text-white font-bold' : 'text-slate-700 hover:bg-slate-50' } finance-header-time uppercase`}
-              >
-                <Calendar className="w-4 h-4" />
-                Upcoming Schedules
-              </button>
-              <button
-                onClick={() => setActiveTab('HISTORY')}
-                className={`text-left px-4 py-3 border-slate-100 last:border-none transition-colors flex items-center gap-2 ${activeTab === 'HISTORY' ? 'bg-[#0b1329] text-white font-bold' : 'text-slate-700 hover:bg-slate-50' } finance-header-time uppercase`}
-              >
-                <History className="w-4 h-4" />
-                Staff Callback Reports
-              </button>
+          {/* Search */}
+          <div className="flex flex-col flex-1 min-w-[200px]">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Search Account / Customer</label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="e.g. CD100, NARSIMULU"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-[13px] text-slate-800 font-semibold bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px]"
+              />
             </div>
           </div>
-        </div>
 
-        {/* Right Main Table Workspace */}
-        <div className="lg:col-span-3 space-y-4">
-          <Card
-            title={
-              <div className="flex justify-between items-center w-full">
-                <span className="finance-card-title uppercase">
-                  {activeTab === 'HISTORY' ? 'Staff Callbacks History Report' : `${activeTab.replace('_', ' ')} list`}
-                </span>
-              </div>
-            }
-            className="shadow-md border-slate-150 rounded-xl overflow-hidden"
-          >
-            {/* Filter Panel Row */}
-            <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4 border-b border-slate-100 bg-slate-50/50">
-              <div className="md:col-span-2">
-                <Input
-                  label="Search Account / Customer Name"
-                  placeholder="e.g. CD100, NARSIMULU"
-                  value={searchQuery}
-                  onChange={setSearchQuery}
-                  icon={Search}
-                />
-              </div>
+          {/* Loan Type */}
+          <div className="flex flex-col min-w-[135px]">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Loan Type</label>
+            <select
+              value={loanTypeFilter}
+              onChange={(e) => setLoanTypeFilter(e.target.value as any)}
+              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 uppercase bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer h-[34px]"
+            >
+              <option value="ALL">ALL TYPES</option>
+              <option value="CD">CD LOANS</option>
+              <option value="HP">HP LOANS</option>
+              <option value="STBD">STBD LOANS</option>
+              <option value="TBD">TBD LOANS</option>
+            </select>
+          </div>
 
-              <div className="md:col-span-1">
-                <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Loan Type</span>
+          {/* Conditional Date & Staff filters for History report */}
+          {activeTab === 'HISTORY' && (
+            <>
+              {/* Staff Member */}
+              <div className="flex flex-col min-w-[140px]">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Staff Member</label>
                 <select
-                  value={loanTypeFilter}
-                  onChange={(e) => setLoanTypeFilter(e.target.value as any)}
-                  className="w-full text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-xs uppercase"
+                  value={staffFilter}
+                  onChange={(e) => setStaffFilter(e.target.value)}
+                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 uppercase bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer h-[34px]"
                 >
-                  <option value="ALL">ALL TYPES</option>
-                  <option value="CD">CD Loans</option>
-                  <option value="HP">HP Loans</option>
-                  <option value="STBD">STBD Loans</option>
-                  <option value="TBD">TBD Loans</option>
+                  <option value="ALL STAFF">ALL STAFF</option>
+                  {staffList.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
                 </select>
               </div>
 
-              {activeTab === 'HISTORY' && (
-                <>
-                  <div className="md:col-span-1">
-                    <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Staff Member</span>
-                    <select
-                      value={staffFilter}
-                      onChange={(e) => setStaffFilter(e.target.value)}
-                      className="w-full text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-xs uppercase"
-                    >
-                      <option value="ALL STAFF">ALL STAFF</option>
-                      {staffList.map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="md:col-span-1">
-                    <Input
-                      label="Follow-up Date"
-                      type="date"
-                      value={dateFilter}
-                      onChange={setDateFilter}
-                      icon={Calendar}
-                    />
-                  </div>
-                </>
-              )}
+              {/* Follow-up Date */}
+              <div className="flex flex-col min-w-[130px]">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Follow-up Date</label>
+                <input
+                  type="date"
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px]"
+                />
+              </div>
+            </>
+          )}
+
+          {/* ── KPI Metrics (right side) ───────────────────────────────────── */}
+          <div className="flex items-center gap-1.5 ml-auto flex-wrap">
+            {/* Active */}
+            <div 
+              onClick={() => setActiveTab('ACTIVE_QUEUE')}
+              className={`cursor-pointer px-3 py-1 flex flex-col justify-center text-center rounded-lg border transition-all min-w-[85px] h-[38px] ${
+                activeTab === 'ACTIVE_QUEUE' 
+                  ? 'bg-[#0b1329] text-white border-[#0b1329] shadow-sm' 
+                  : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+              }`}
+            >
+              <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${activeTab === 'ACTIVE_QUEUE' ? 'text-slate-300' : 'text-slate-500'}`}>Active</span>
+              <span className="text-[16px] font-black font-mono mt-0.5 leading-none">{categorizedLoans.ACTIVE_QUEUE.length}</span>
             </div>
 
-            {loading ? (
-              <div className="flex justify-center py-16">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-slate-900"></div>
+            {/* Today */}
+            <div 
+              onClick={() => setActiveTab('TODAYS')}
+              className={`cursor-pointer px-3 py-1 flex flex-col justify-center text-center rounded-lg border transition-all min-w-[85px] h-[38px] ${
+                activeTab === 'TODAYS' 
+                  ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm' 
+                  : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+              }`}
+            >
+              <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${activeTab === 'TODAYS' ? 'text-emerald-200' : 'text-slate-500'}`}>Today</span>
+              <span className="text-[16px] font-black font-mono mt-0.5 leading-none">{categorizedLoans.TODAYS.length}</span>
+            </div>
+
+            {/* Missed */}
+            <div 
+              onClick={() => setActiveTab('MISSED')}
+              className={`cursor-pointer px-3 py-1 flex flex-col justify-center text-center rounded-lg border transition-all min-w-[85px] h-[38px] ${
+                activeTab === 'MISSED' 
+                  ? 'bg-rose-700 text-white border-rose-700 shadow-sm' 
+                  : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+              }`}
+            >
+              <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${activeTab === 'MISSED' ? 'text-rose-200' : 'text-slate-500'}`}>Missed</span>
+              <span className="text-[16px] font-black font-mono mt-0.5 leading-none">{categorizedLoans.MISSED.length}</span>
+            </div>
+
+            {/* Upcoming */}
+            <div 
+              onClick={() => setActiveTab('UPCOMING')}
+              className={`cursor-pointer px-3 py-1 flex flex-col justify-center text-center rounded-lg border transition-all min-w-[85px] h-[38px] ${
+                activeTab === 'UPCOMING' 
+                  ? 'bg-blue-650 text-white border-blue-650 shadow-sm' 
+                  : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+              }`}
+            >
+              <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${activeTab === 'UPCOMING' ? 'text-blue-200' : 'text-slate-500'}`}>Upcoming</span>
+              <span className="text-[16px] font-black font-mono mt-0.5 leading-none">{categorizedLoans.UPCOMING.length}</span>
+            </div>
+          </div>{/* end KPI bar */}
+        </div>{/* end filter flex row */}
+      </div>{/* end filter card container */}
+
+        {/* ── ROW 3: Follow-up Queue / History Table ──────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden print:hidden">
+        {/* Compact section header */}
+        <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+          <span className="text-[12px] font-black uppercase text-slate-700 tracking-wide">
+            {activeTab === 'HISTORY' ? 'Staff Callbacks History Report' : `${activeTab.replace('_', ' ')} list`}
+          </span>
+          <span className="text-[12px] text-slate-500 font-extrabold uppercase">
+            {activeTab === 'HISTORY' ? filteredHistory.length : filteredList.length} records
+          </span>
+        </div>
+
+        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 210px)' }}>
+          {activeTab === 'HISTORY' ? (
+            // HISTORY / REPORT LIST
+            !loading && filteredHistory.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center h-[200px]">
+                <span className="text-[13px] font-black uppercase text-slate-400 tracking-wide">NO CALLBACK RECORDS FOUND</span>
+                <p className="text-[11px] text-slate-450 uppercase mt-1">There are currently no staff callback reports to display.</p>
               </div>
-            ) : activeTab === 'HISTORY' ? (
-              // HISTORY / REPORT LIST
-              filteredHistory.length === 0 ? (
-                <div className="text-center py-16 border-t border-slate-100">
-                  <p className="text-slate-400 finance-sidebar-link uppercase">No Callback Records Found</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-150 text-[11px] finance-caption">
-                    <thead>
-                      <tr className="bg-slate-50">
-                        <th className="p-2 border-r finance-small-label uppercase w-8">Sl No</th>
-                        <th className="p-2 border-r finance-small-label uppercase w-20">Loan No</th>
-                        <th className="p-2 border-r finance-small-label uppercase">Party Name</th>
-                        <th className="p-2 border-r finance-small-label uppercase w-24">Follow-up Date</th>
-                        <th className="p-2 border-r finance-small-label uppercase w-20">Staff</th>
-                        <th className="p-2 border-r finance-small-label uppercase w-28">Contacted</th>
-                        <th className="p-2 border-r finance-small-label uppercase w-28">Result</th>
-                        <th className="p-2 border-r finance-small-label uppercase">Narration</th>
-                        <th className="p-2 finance-small-label uppercase w-24">Next Follow Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-slate-100 font-mono">
-                      {filteredHistory.map((item, idx) => {
-                        return (
-                          <tr key={item.id} className="hover:bg-slate-50/40">
-                            <td className="p-2 border-r text-slate-500 font-sans text-center">{idx + 1}</td>
-                            <td className="p-2 border-r font-bold text-blue-600">{item.loan?.loan_id || '—'}</td>
-                            <td className="p-2 border-r text-slate-900 font-sans font-bold">{item.loan?.customer?.name || 'N/A'}</td>
-                            <td className="p-2 border-r text-slate-600 font-sans whitespace-nowrap">{item.follow_up_date.split('-').reverse().join('/')}</td>
-                            <td className="p-2 border-r text-slate-700 font-sans font-semibold">{item.followed_up_by}</td>
-                            <td className="p-2 border-r text-slate-650 font-sans">{item.contacted_person}</td>
-                            <td className={`p-2 border-r font-sans font-bold text-center ${item.result === 'PROMISED_PAYMENT' ? 'text-green-600' : item.result === 'NO_ANSWER' ? 'text-red-500' : 'text-slate-700'}`}>
-                              {item.result.replace('_', ' ')}
-                            </td>
-                            <td className="p-2 border-r text-slate-600 font-sans leading-relaxed max-w-xs truncate" title={item.narration}>{item.narration}</td>
-                            <td className="p-2 text-blue-600 font-sans font-bold whitespace-nowrap">
-                              {item.next_follow_up_date ? item.next_follow_up_date.split('-').reverse().join('/') : '—'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )
             ) : (
-              // ACTIVE & SCHEDULED QUEUES
-              filteredList.length === 0 ? (
-                <div className="text-center py-16 border-t border-slate-100">
-                  <p className="text-slate-400 finance-sidebar-link uppercase">No outstanding accounts in this queue</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-150 text-[11px] finance-caption">
-                    <thead>
-                      <tr className="bg-slate-50">
-                        <th className="p-2 border-r finance-small-label uppercase w-8">Sl No</th>
-                        <th className="p-2 border-r finance-small-label uppercase w-20">Loan No</th>
-                        <th className="p-2 border-r finance-small-label uppercase">Party Name</th>
-                        <th className="p-2 border-r text-right finance-small-label uppercase w-20 font-black">Present Due</th>
-                        <th className="p-2 border-r text-center finance-small-label uppercase w-12">Due Days</th>
-                        <th className="p-2 border-r finance-small-label uppercase w-20">Current Due Date</th>
-                        <th className="p-2 border-r finance-small-label uppercase">Phones (B / G1 / G2)</th>
-                        <th className="p-2 border-r finance-small-label uppercase">Latest Callback Summary</th>
-                        <th className="p-2 finance-small-label uppercase text-center w-24">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-slate-100 font-mono">
-                      {filteredList.map((due, idx) => (
-                        <tr key={due.id} className="hover:bg-slate-50/40">
-                          <td className="p-2 border-r text-slate-500 font-sans text-center">{idx + 1}</td>
-                          <td className="p-2 border-r font-bold text-blue-600">{due.loanId}</td>
-                          <td className="p-2 border-r text-slate-900 font-sans font-bold">{due.customerName}</td>
-                          <td className="p-2 border-r text-right text-red-655 font-sans font-black">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
-                          <td className="p-2 border-r text-center text-red-655 font-bold">{due.dueDays}</td>
-                          <td className="p-2 border-r text-slate-600 font-sans whitespace-nowrap">{due.currentDueDate.split('-').reverse().join('/')}</td>
-                          <td className="p-2 border-r font-sans text-[10px] text-slate-600 space-y-0.5 whitespace-nowrap">
-                            <div><span className="font-semibold text-slate-900">B:</span> {due.phone || '—'}</div>
-                            {due.g1Phone && (
-                              <div><span className="font-semibold text-slate-900">G1:</span> {due.g1Name} ({due.g1Phone})</div>
-                            )}
-                            {due.g2Phone && (
-                              <div><span className="font-semibold text-slate-900">G2:</span> {due.g2Name} ({due.g2Phone})</div>
-                            )}
-                          </td>
-                          <td className="p-2 border-r text-slate-600 font-sans max-w-xs">
-                            {due.lastFollowUp ? (
-                              <div className="leading-tight">
-                                <div className="text-[9px] text-slate-400 font-semibold mb-0.5 flex gap-1 items-center">
-                                  <span>{due.lastFollowUp.follow_up_date.split('-').reverse().join('/')}</span>
-                                  <span>•</span>
-                                  <span>{due.lastFollowUp.followed_up_by}</span>
-                                  <span>•</span>
-                                  <span className="text-indigo-600 font-bold">{due.lastFollowUp.result}</span>
-                                </div>
-                                <div className="truncate max-w-[200px]" title={due.lastFollowUp.narration}>
-                                  {due.lastFollowUp.narration}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="italic text-gray-450">No callbacks logged</span>
-                            )}
-                          </td>
-                          <td className="p-2 text-center">
-                            <button
-                              onClick={() => handleOpenFollowUpModal(due)}
-                              className="px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 rounded border border-indigo-200 transition-colors font-sans font-black text-[10px] uppercase inline-flex items-center gap-1"
-                            >
-                              <MessageSquare className="w-3 h-3" />
-                              Log Call
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )
-            )}
-          </Card>
+              <table className="min-w-full divide-y divide-slate-150 finance-caption">
+                 <colgroup>
+                  <col style={{ width: '5%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '20%' }} />
+                  <col style={{ width: '10%' }} />
+                </colgroup>
+                <thead className="sticky top-0 z-10 bg-slate-50 shadow-[inset_0_-2px_0_rgba(0,0,0,0.1)]">
+                  <tr className="bg-slate-50">
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-center bg-slate-50 finance-small-label">Sl</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Loan No</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Party Name</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Follow Date</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Staff</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Contacted</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-center bg-slate-50 finance-small-label">Result</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Narration</th>
+                    <th className="px-2 py-2 text-slate-800 text-left bg-slate-50 finance-small-label">Next Date</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-slate-100 font-mono text-sm">
+                  {loading && Array.from({ length: 6 }).map((_, idx) => (
+                    <tr key={idx} className="animate-pulse">
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-6 mx-auto"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-16"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-28"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-20"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-20"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-16"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-20 mx-auto"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-48"></div></td>
+                      <td className="p-2"><div className="h-4 bg-slate-200 rounded w-20"></div></td>
+                    </tr>
+                  ))}
+                  {!loading && filteredHistory.map((item, idx) => (
+                    <tr key={item.id} className="hover:bg-slate-50/40">
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-500 font-sans text-center text-sm font-semibold">{idx + 1}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 font-bold text-blue-650 text-sm whitespace-nowrap">{item.loan?.loan_id || '—'}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-900 font-sans font-bold text-sm">{item.loan?.customer?.name || 'N/A'}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-660 font-sans whitespace-nowrap text-sm font-semibold">{item.follow_up_date.split('-').reverse().join('/')}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-700 font-sans font-bold text-sm">{item.followed_up_by}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-655 font-sans text-sm font-semibold whitespace-nowrap">{item.contacted_person}</td>
+                      <td className={`px-2 py-1.5 border-r border-slate-100 font-sans font-extrabold text-sm text-center whitespace-nowrap ${item.result === 'PROMISED_PAYMENT' ? 'text-green-700' : item.result === 'NO_ANSWER' ? 'text-red-655' : 'text-slate-700'}`}>
+                        {item.result.replace('_', ' ')}
+                      </td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-700 font-sans leading-relaxed text-sm font-semibold" title={item.narration}>{item.narration}</td>
+                      <td className="px-2 py-1.5 text-blue-650 font-sans font-bold whitespace-nowrap text-sm">
+                        {item.next_follow_up_date ? item.next_follow_up_date.split('-').reverse().join('/') : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : (
+            // ACTIVE & SCHEDULED QUEUES
+            !loading && filteredList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center h-[200px]">
+                <span className="text-[13px] font-black uppercase text-slate-400 tracking-wide">NO ACTIVE DUE ACCOUNTS</span>
+                <p className="text-[11px] text-slate-450 uppercase mt-1">There are currently no accounts requiring follow-up.</p>
+              </div>
+            ) : (
+              <table className="min-w-full divide-y divide-slate-150 text-base finance-caption">
+                <colgroup>
+                  <col style={{ width: '5%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '18%' }} />
+                  <col style={{ width: '10%' }} />
+                </colgroup>
+                <thead className="sticky top-0 z-10 bg-slate-50 shadow-[inset_0_-2px_0_rgba(0,0,0,0.1)]">
+                  <tr className="bg-slate-50">
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-center bg-slate-50 finance-small-label">Sl</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Loan No</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Party Name</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-right bg-slate-50 finance-small-label">Present Due</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-center bg-slate-50 finance-small-label">Due Days</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Due Date</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Phones (B / G1 / G2)</th>
+                    <th className="px-2 py-2 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Latest Callback Summary</th>
+                    <th className="px-2 py-2 text-slate-800 text-center bg-slate-50 finance-small-label">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-slate-100 font-mono text-sm">
+                  {loading && Array.from({ length: 6 }).map((_, idx) => (
+                    <tr key={idx} className="animate-pulse">
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-6 mx-auto"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-16 font-bold"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-28"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-20 ml-auto"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-10 mx-auto"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-20"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-32"></div></td>
+                      <td className="p-2 border-r border-slate-100"><div className="h-4 bg-slate-200 rounded w-48"></div></td>
+                      <td className="p-2"><div className="h-8 bg-slate-200 rounded w-full"></div></td>
+                    </tr>
+                  ))}
+                  {!loading && filteredList.map((due, idx) => (
+                    <tr key={due.id} className="hover:bg-slate-50/40">
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-500 font-sans text-center text-sm font-semibold">{idx + 1}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 font-bold text-blue-655 text-sm whitespace-nowrap">{due.loanId}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-905 font-sans font-bold text-sm">{due.customerName}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-sm font-black whitespace-nowrap">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-center text-red-655 text-sm font-bold whitespace-nowrap">{due.dueDays}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-sm font-semibold">{due.currentDueDate.split('-').reverse().join('/')}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 font-sans text-sm text-slate-600 space-y-0.5 whitespace-normal">
+                        <div><span className="font-bold text-slate-900">B:</span> {due.phone || '—'}</div>
+                        {due.g1Phone && (
+                          <div><span className="font-bold text-slate-900">G1:</span> {due.g1Name} ({due.g1Phone})</div>
+                        )}
+                        {due.g2Phone && (
+                          <div><span className="font-bold text-slate-900">G2:</span> {due.g2Name} ({due.g2Phone})</div>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-700 font-sans text-sm leading-relaxed whitespace-normal">
+                        {due.lastFollowUp ? (
+                          <div>
+                            <div className="text-[11px] text-slate-400 font-bold mb-0.5 flex gap-1 items-center font-sans">
+                              <span>{due.lastFollowUp.follow_up_date.split('-').reverse().join('/')}</span>
+                              <span>•</span>
+                              <span>{due.lastFollowUp.followed_up_by}</span>
+                              <span>•</span>
+                              <span className="text-indigo-650 font-extrabold">{due.lastFollowUp.result}</span>
+                            </div>
+                            <div className="font-semibold text-slate-800 text-sm leading-snug" title={due.lastFollowUp.narration}>
+                              {due.lastFollowUp.narration}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="italic text-gray-400 text-sm">No callbacks logged</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <button
+                          onClick={() => handleOpenFollowUpModal(due)}
+                          className="px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 rounded border border-indigo-200 transition-colors font-sans font-extrabold text-[13px] uppercase inline-flex items-center justify-center gap-1.5 min-h-[30px] w-full whitespace-nowrap"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          LOG CALL
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          )}
         </div>
       </div>
 
@@ -754,15 +807,15 @@ const PaymentFollowUp: React.FC = () => {
               <div className="grid grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                 <div className="flex flex-col">
                   <span className="text-[9px] text-slate-450 uppercase font-black">Present Dues</span>
-                  <span className="text-xs font-black text-red-655 mt-0.5 font-mono">₹{Math.round(selectedLoan.presentDue).toLocaleString('en-IN')}</span>
+                  <span className="text-sm font-black text-red-655 mt-0.5 font-mono">₹{Math.round(selectedLoan.presentDue).toLocaleString('en-IN')}</span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[9px] text-slate-450 uppercase font-black">Days Overdue</span>
-                  <span className="text-xs font-black text-red-655 mt-0.5 font-mono">{selectedLoan.dueDays} Days</span>
+                  <span className="text-sm font-black text-red-655 mt-0.5 font-mono">{selectedLoan.dueDays} Days</span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[9px] text-slate-450 uppercase font-black">Principal Balance</span>
-                  <span className="text-xs font-black text-slate-900 mt-0.5 font-mono">₹{Math.round(selectedLoan.currentPrincipal).toLocaleString('en-IN')}</span>
+                  <span className="text-sm font-black text-slate-900 mt-0.5 font-mono">₹{Math.round(selectedLoan.currentPrincipal).toLocaleString('en-IN')}</span>
                 </div>
               </div>
 
@@ -774,10 +827,10 @@ const PaymentFollowUp: React.FC = () => {
                 </span>
                 <div className="max-h-[140px] overflow-y-auto space-y-2 pr-1 scrollbar-thin">
                   {selectedLoanHistory.length === 0 ? (
-                    <p className="text-slate-400 italic text-xs py-2">No previous callbacks logged for this loan.</p>
+                    <p className="text-slate-400 italic text-sm py-2">No previous callbacks logged for this loan.</p>
                   ) : (
                     selectedLoanHistory.map((h) => (
-                      <div key={h.id} className="p-2.5 bg-slate-50 rounded-lg border border-slate-155 leading-relaxed text-xs">
+                      <div key={h.id} className="p-2.5 bg-slate-50 rounded-lg border border-slate-155 leading-relaxed text-sm">
                         <div className="flex justify-between items-center text-[10px] text-slate-500 font-bold mb-1 font-sans">
                           <span className="flex items-center gap-1">
                             <User className="w-3 h-3 text-slate-400" />
@@ -818,7 +871,7 @@ const PaymentFollowUp: React.FC = () => {
                     <select
                       value={contactedPerson}
                       onChange={(e) => setContactedPerson(e.target.value as any)}
-                      className="w-full text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-xs uppercase"
+                      className="w-full text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-sm uppercase"
                     >
                       <option value="CUSTOMER">Customer (Borrower)</option>
                       <option value="GUARANTOR_1">Guarantor 1</option>
@@ -833,7 +886,7 @@ const PaymentFollowUp: React.FC = () => {
                     <select
                       value={result}
                       onChange={(e) => setResult(e.target.value as any)}
-                      className="w-full text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-xs uppercase"
+                      className="w-full text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-sm uppercase"
                     >
                       <option value="ANSWERED">Answered</option>
                       <option value="NO_ANSWER">No Answer</option>
@@ -854,7 +907,7 @@ const PaymentFollowUp: React.FC = () => {
                     placeholder="e.g. Customer promised to pay ₹12,000 on Saturday morning."
                     value={narration}
                     onChange={(e) => setNarration(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg p-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-800 leading-relaxed"
+                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm text-slate-900 focus:outline-none focus:border-slate-800 leading-relaxed"
                   />
                 </div>
 
@@ -871,7 +924,7 @@ const PaymentFollowUp: React.FC = () => {
                       value={nextFollowUpDate}
                       min={new Date().toISOString().split('T')[0]}
                       onChange={(e) => setNextFollowUpDate(e.target.value)}
-                      className="text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-xs uppercase h-10 w-44"
+                      className="text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-sm uppercase h-10 w-44"
                     />
 
                     {/* Quick Selector Helpers */}
@@ -919,24 +972,20 @@ const PaymentFollowUp: React.FC = () => {
 
                 {/* Submit Buttons */}
                 <div className="flex justify-end gap-2.5 pt-3 border-t">
-                  <Button 
+                  <button 
                     type="button"
-                    variant="secondary" 
-                    size="sm"
                     onClick={() => setShowModal(false)}
-                    className="border border-slate-200 text-slate-700 hover:bg-slate-50 finance-header-time uppercase"
+                    className="px-3 py-1.5 border border-slate-200 text-slate-700 hover:bg-slate-50 text-[12px] font-bold uppercase rounded-lg shadow-sm"
                   >
                     Cancel
-                  </Button>
-                  <Button 
+                  </button>
+                  <button 
                     type="submit"
-                    variant="primary" 
-                    size="sm"
                     disabled={submitting}
-                    className="bg-[#0b1329] hover:bg-slate-800 text-white finance-header-time uppercase flex items-center gap-1.5"
+                    className="px-3 py-1.5 bg-[#0b1329] hover:bg-slate-800 text-white text-[12px] font-bold uppercase rounded-lg shadow-sm flex items-center gap-1.5"
                   >
                     {submitting ? 'Saving...' : 'Save Callback'}
-                  </Button>
+                  </button>
                 </div>
 
               </form>
@@ -960,41 +1009,53 @@ const PaymentFollowUp: React.FC = () => {
             <div className="flex justify-between items-end border-b border-slate-900 pb-2">
               <div>
                 <h2 className="text-xl font-bold uppercase text-slate-900">Thirumala Group Finance</h2>
-                <p className="text-xs uppercase text-slate-500">Collection Dues Follow-up Report ({activeTab.replace('_', ' ')} - {loanTypeFilter})</p>
+                <p className="text-[13px] uppercase text-slate-500">Collection Dues Follow-up Report ({activeTab.replace('_', ' ')} - {loanTypeFilter})</p>
               </div>
-              <div className="text-right text-xs text-slate-600">
+              <div className="text-right text-[13px] text-slate-600">
                 <p>Report Date: {new Date().toLocaleDateString('en-IN')}</p>
                 <p>Printed By: {user?.username || 'Staff'}</p>
               </div>
             </div>
 
             {activeTab === 'HISTORY' ? (
-              <table className="w-full border-collapse text-[9px]">
+              <table className="w-full border-collapse" style={{ tableLayout: 'auto', fontSize: '10pt' }}>
+                <colgroup>
+                  {/* Sl  Loan  Name  FollowDate  Staff  Contacted  Result  Narration  NextDate */}
+                  <col style={{ width: '3%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '36%' }} />
+                  <col style={{ width: '8%' }} />
+                </colgroup>
                 <thead>
                   <tr className="border-b-2 border-slate-850 bg-slate-100">
-                    <th className="p-1 border text-center font-bold">Sl No</th>
-                    <th className="p-1 border font-bold">Loan No</th>
-                    <th className="p-1 border font-bold">Party Name</th>
-                    <th className="p-1 border font-bold">Follow Date</th>
-                    <th className="p-1 border font-bold">Staff Member</th>
-                    <th className="p-1 border font-bold">Contacted Person</th>
-                    <th className="p-1 border font-bold">Call Result</th>
-                    <th className="p-1 border font-bold">Narration / Conversation</th>
-                    <th className="p-1 border font-bold">Next Schedule</th>
+                    <th className="p-1 border text-center font-bold print-nowrap">Sl No</th>
+                    <th className="p-1 border font-bold print-nowrap">Loan No</th>
+                    <th className="p-1 border font-bold print-wrap">Party Name</th>
+                    <th className="p-1 border font-bold print-nowrap">Follow Date</th>
+                    <th className="p-1 border font-bold print-wrap">Staff Member</th>
+                    <th className="p-1 border font-bold print-nowrap">Contacted</th>
+                    <th className="p-1 border font-bold print-nowrap">Call Result</th>
+                    <th className="p-1 border font-bold print-wrap">Narration / Conversation</th>
+                    <th className="p-1 border font-bold print-nowrap">Next Schedule</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredHistory.map((item, idx) => (
                     <tr key={item.id} className="border-b">
-                      <td className="p-1 border text-center">{idx + 1}</td>
-                      <td className="p-1 border font-bold text-blue-850">{item.loan?.loan_id || '—'}</td>
-                      <td className="p-1 border font-bold">{item.loan?.customer?.name || 'N/A'}</td>
-                      <td className="p-1 border">{item.follow_up_date.split('-').reverse().join('/')}</td>
-                      <td className="p-1 border font-bold">{item.followed_up_by}</td>
-                      <td className="p-1 border">{item.contacted_person}</td>
-                      <td className="p-1 border font-bold text-indigo-700">{item.result.replace('_', ' ')}</td>
-                      <td className="p-1 border max-w-xs truncate">{item.narration}</td>
-                      <td className="p-1 border font-bold">{item.next_follow_up_date ? item.next_follow_up_date.split('-').reverse().join('/') : '—'}</td>
+                      <td className="p-1 border text-center print-nowrap">{idx + 1}</td>
+                      <td className="p-1 border font-bold text-blue-850 print-nowrap">{item.loan?.loan_id || '—'}</td>
+                      <td className="p-1 border font-bold print-wrap">{item.loan?.customer?.name || 'N/A'}</td>
+                      <td className="p-1 border print-nowrap">{item.follow_up_date.split('-').reverse().join('/')}</td>
+                      <td className="p-1 border font-bold print-wrap">{item.followed_up_by}</td>
+                      <td className="p-1 border print-nowrap">{item.contacted_person}</td>
+                      <td className="p-1 border font-bold text-indigo-700 print-nowrap">{item.result.replace('_', ' ')}</td>
+                      <td className="p-1 border print-wrap">{item.narration}</td>
+                      <td className="p-1 border font-bold print-nowrap">{item.next_follow_up_date ? item.next_follow_up_date.split('-').reverse().join('/') : '—'}</td>
                     </tr>
                   ))}
                   {filteredHistory.length === 0 && (
@@ -1005,39 +1066,52 @@ const PaymentFollowUp: React.FC = () => {
                 </tbody>
               </table>
             ) : (
-              <table className="w-full border-collapse text-[9px]">
+              <table className="w-full border-collapse" style={{ tableLayout: 'auto', fontSize: '10pt' }}>
+                <colgroup>
+                  {/* Sl  Loan  Name  Due  Days  DueDate  Phone  G1G2  LastCall  NextCall */}
+                  <col style={{ width: '3%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '4%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '29%' }} />
+                  <col style={{ width: '8%' }} />
+                </colgroup>
                 <thead>
                   <tr className="border-b-2 border-slate-850 bg-slate-100">
-                    <th className="p-1 border text-center font-bold">Sl No</th>
-                    <th className="p-1 border font-bold">Loan No</th>
-                    <th className="p-1 border font-bold">Party Name</th>
-                    <th className="p-1 border text-right font-bold">Present Due</th>
-                    <th className="p-1 border text-center font-bold">Days</th>
-                    <th className="p-1 border font-bold">Due Date</th>
-                    <th className="p-1 border font-bold">Borrower Phone</th>
-                    <th className="p-1 border font-bold">Guarantor Phones (G1 / G2)</th>
-                    <th className="p-1 border font-bold">Last Callback Summary</th>
-                    <th className="p-1 border font-bold">Next Call Schedule</th>
+                    <th className="p-1 border text-center font-bold print-nowrap">Sl No</th>
+                    <th className="p-1 border font-bold print-nowrap">Loan No</th>
+                    <th className="p-1 border font-bold print-wrap">Party Name</th>
+                    <th className="p-1 border text-right font-bold print-nowrap">Present Due</th>
+                    <th className="p-1 border text-center font-bold print-nowrap">Days</th>
+                    <th className="p-1 border font-bold print-nowrap">Due Date</th>
+                    <th className="p-1 border font-bold print-nowrap">Borrower Phone</th>
+                    <th className="p-1 border font-bold print-wrap">Guarantor Phones (G1 / G2)</th>
+                    <th className="p-1 border font-bold print-wrap">Last Callback Summary</th>
+                    <th className="p-1 border font-bold print-nowrap">Next Call</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredList.map((due, idx) => (
                     <tr key={due.id} className="border-b">
-                      <td className="p-1 border text-center">{idx + 1}</td>
-                      <td className="p-1 border font-bold text-blue-855">{due.loanId}</td>
-                      <td className="p-1 border font-bold">{due.customerName}</td>
-                      <td className="p-1 border text-right text-red-700 font-bold">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
-                      <td className="p-1 border text-center font-bold">{due.dueDays}</td>
-                      <td className="p-1 border">{due.currentDueDate.split('-').reverse().join('/')}</td>
-                      <td className="p-1 border font-bold">{due.phone || '—'}</td>
-                      <td className="p-1 border leading-tight text-[8.5px]">
+                      <td className="p-1 border text-center print-nowrap">{idx + 1}</td>
+                      <td className="p-1 border font-bold text-blue-855 print-nowrap">{due.loanId}</td>
+                      <td className="p-1 border font-bold print-wrap">{due.customerName}</td>
+                      <td className="p-1 border text-right text-red-700 font-bold print-amount">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
+                      <td className="p-1 border text-center font-bold print-nowrap">{due.dueDays}</td>
+                      <td className="p-1 border print-nowrap">{due.currentDueDate.split('-').reverse().join('/')}</td>
+                      <td className="p-1 border font-bold print-nowrap">{due.phone || '—'}</td>
+                      <td className="p-1 border leading-tight print-wrap">
                         {due.g1Phone && <div>G1: {due.g1Name} ({due.g1Phone})</div>}
                         {due.g2Phone && <div>G2: {due.g2Name} ({due.g2Phone})</div>}
                       </td>
-                      <td className="p-1 border max-w-xs truncate">
+                      <td className="p-1 border print-wrap">
                         {due.lastFollowUp ? `[${due.lastFollowUp.follow_up_date.split('-').reverse().join('/')} - ${due.lastFollowUp.followed_up_by}] ${due.lastFollowUp.result}: ${due.lastFollowUp.narration}` : 'No previous log'}
                       </td>
-                      <td className="p-1 border font-bold text-indigo-700">
+                      <td className="p-1 border font-bold text-indigo-700 print-nowrap">
                         {due.nextFollowUpDate ? due.nextFollowUpDate.split('-').reverse().join('/') : '—'}
                       </td>
                     </tr>
@@ -1057,20 +1131,5 @@ const PaymentFollowUp: React.FC = () => {
     </div>
   );
 };
-
-// Simple Close Icon mapping
-const XIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    fill="none" 
-    viewBox="0 0 24 24" 
-    strokeWidth={2} 
-    stroke="currentColor" 
-    className="w-5 h-5"
-    {...props}
-  >
-    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-  </svg>
-);
 
 export default PaymentFollowUp;

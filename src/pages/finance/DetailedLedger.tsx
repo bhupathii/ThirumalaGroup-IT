@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
-import Button from '../../components/UI/Button';
 import { supabaseFinance, UnifiedLedgerEntry } from '../../lib/supabaseFinance';
 import { Printer, ArrowLeft, Calendar, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -256,7 +255,7 @@ const DetailedLedgerFinance: React.FC = () => {
                             {entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
                           <td className="px-3 py-3 text-slate-700 max-w-xs break-words finance-input">{entry.particulars}</td>
-                          <td className="px-3 py-3 text-slate-500 text-xs uppercase">{entry.user}</td>
+                          <td className="px-3 py-3 text-slate-500 finance-input uppercase">{entry.user}</td>
                         </tr>
                       ))
                     )}
@@ -292,9 +291,9 @@ const DetailedLedgerFinance: React.FC = () => {
             <div className="flex justify-between items-end border-b border-slate-900 pb-2">
               <div>
                 <h2 className="text-xl font-bold uppercase text-slate-900">Thirumala Group Finance</h2>
-                <p className="text-xs uppercase text-slate-500">Detailed Ledger Statement</p>
+                <p className="text-[13px] uppercase text-slate-500">Detailed Ledger Statement</p>
               </div>
-              <div className="text-right text-xs text-slate-650">
+              <div className="text-right text-[13px] text-slate-650">
                 <p>Period: {fromDate.split('-').reverse().join('/')} to {toDate.split('-').reverse().join('/')}</p>
                 <p>Category: {categoryFilter}</p>
               </div>
@@ -303,15 +302,15 @@ const DetailedLedgerFinance: React.FC = () => {
             {/* Print Summary */}
             <div className="grid grid-cols-3 gap-4 border p-3 rounded">
               <div>
-                <span className="text-[10px] text-slate-500 uppercase block">Total Debits</span>
+                <span className="text-[13px] text-slate-500 uppercase block">Total Debits</span>
                 <span className="text-sm font-bold text-red-700">₹{totals.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <div>
-                <span className="text-[10px] text-slate-500 uppercase block">Total Credits</span>
+                <span className="text-[13px] text-slate-500 uppercase block">Total Credits</span>
                 <span className="text-sm font-bold text-green-700">₹{totals.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <div>
-                <span className="text-[10px] text-slate-500 uppercase block">Net Balance</span>
+                <span className="text-[13px] text-slate-500 uppercase block">Net Balance</span>
                 <span className={`text-sm font-bold ${totals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
                   ₹{totals.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
@@ -319,36 +318,47 @@ const DetailedLedgerFinance: React.FC = () => {
             </div>
 
             {/* Print Table */}
-            <table className="w-full border-collapse text-[11px]">
+            <table className="w-full border-collapse" style={{ tableLayout: 'auto', fontSize: '10pt' }}>
+              <colgroup>
+                {/* Sl  Date  AcctNo  Head  Debit  Credit  Particulars  User */}
+                <col style={{ width: '3%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '38%' }} />
+                <col style={{ width: '7%' }} />
+              </colgroup>
               <thead>
                 <tr className="border-b-2 border-slate-800 bg-slate-100">
-                  <th className="p-1.5 text-left border">Sl No</th>
-                  <th className="p-1.5 text-left border">Date</th>
-                  <th className="p-1.5 text-left border">Account Number</th>
-                  <th className="p-1.5 text-left border">Head of Account</th>
-                  <th className="p-1.5 text-right border">Debit (Dr)</th>
-                  <th className="p-1.5 text-right border">Credit (Cr)</th>
-                  <th className="p-1.5 text-left border">Particulars</th>
-                  <th className="p-1.5 text-left border">User</th>
+                  <th className="p-1.5 text-left border print-nowrap">Sl No</th>
+                  <th className="p-1.5 text-left border print-nowrap">Date</th>
+                  <th className="p-1.5 text-left border print-nowrap">Account Number</th>
+                  <th className="p-1.5 text-left border print-wrap">Head of Account</th>
+                  <th className="p-1.5 text-right border print-nowrap">Debit (Dr)</th>
+                  <th className="p-1.5 text-right border print-nowrap">Credit (Cr)</th>
+                  <th className="p-1.5 text-left border print-wrap">Particulars</th>
+                  <th className="p-1.5 text-left border print-nowrap">User</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredEntries.map((entry, idx) => (
                   <tr key={entry.id} className="border-b">
-                    <td className="p-1.5 border">{idx + 1}</td>
-                    <td className="p-1.5 border whitespace-nowrap">{entry.date.split('-').reverse().join('/')}</td>
-                    <td className="p-1.5 border font-mono font-bold">{entry.account_number}</td>
-                    <td className="p-1.5 border uppercase">{entry.head_of_account}</td>
-                    <td className="p-1.5 border text-right text-red-650">{entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
-                    <td className="p-1.5 border text-right text-green-650">{entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
-                    <td className="p-1.5 border max-w-[180px] break-words">{entry.particulars}</td>
-                    <td className="p-1.5 border text-slate-500 uppercase">{entry.user}</td>
+                    <td className="p-1.5 border print-nowrap">{idx + 1}</td>
+                    <td className="p-1.5 border print-nowrap">{entry.date.split('-').reverse().join('/')}</td>
+                    <td className="p-1.5 border font-mono font-bold print-nowrap">{entry.account_number}</td>
+                    <td className="p-1.5 border uppercase print-wrap">{entry.head_of_account}</td>
+                    <td className="p-1.5 border text-right text-red-650 print-amount">{entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
+                    <td className="p-1.5 border text-right text-green-650 print-amount">{entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
+                    <td className="p-1.5 border print-wrap">{entry.particulars}</td>
+                    <td className="p-1.5 border text-slate-500 uppercase print-nowrap">{entry.user}</td>
                   </tr>
                 ))}
-                <tr className="font-bold bg-slate-50 border-t-2 border-slate-800">
-                  <td colSpan={4} className="p-1.5 text-right border uppercase">Grand Total:</td>
-                  <td className="p-1.5 text-right border text-red-700">₹{totals.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td className="p-1.5 text-right border text-green-700">₹{totals.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <tr className="font-bold bg-slate-50 border-t-2 border-slate-800 print-total">
+                  <td colSpan={4} className="p-1.5 text-right border uppercase print-wrap">Grand Total:</td>
+                  <td className="p-1.5 text-right border text-red-700 print-amount">₹{totals.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="p-1.5 text-right border text-green-700 print-amount">₹{totals.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td colSpan={2} className="border"></td>
                 </tr>
               </tbody>

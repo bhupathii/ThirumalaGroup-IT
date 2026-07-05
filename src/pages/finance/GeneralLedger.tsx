@@ -8,13 +8,6 @@ import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useNavigate } from 'react-router-dom';
 
-interface HeadSummary {
-  head: string;
-  debit: number;
-  credit: number;
-  balance: number;
-}
-
 const GeneralLedger: React.FC = () => {
   const navigate = useNavigate();
   const [startDate, setStartDate] = useState(() => {
@@ -360,7 +353,7 @@ const GeneralLedger: React.FC = () => {
                             {e.credit > 0 ? `₹${e.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
                           <td className="px-3 py-2.5 text-slate-700 max-w-xs break-words finance-input">{e.particulars}</td>
-                          <td className="px-3 py-2.5 text-slate-500 uppercase text-xs">{e.user}</td>
+                          <td className="px-3 py-2.5 text-slate-500 uppercase finance-input">{e.user}</td>
                         </tr>
                       ))
                     )}
@@ -384,14 +377,14 @@ const GeneralLedger: React.FC = () => {
             <div className="flex justify-between items-end border-b border-slate-900 pb-2">
               <div>
                 <h2 className="text-xl font-bold uppercase text-slate-900">Thirumala Group Finance</h2>
-                <p className="text-xs uppercase text-slate-500">General Ledger Summary Statement</p>
+                <p className="text-[13px] uppercase text-slate-500">General Ledger Summary Statement</p>
               </div>
-              <div className="text-right text-xs text-slate-600">
+              <div className="text-right text-[13px] text-slate-600">
                 <p>Period: {startDate.split('-').reverse().join('/')} to {endDate.split('-').reverse().join('/')}</p>
               </div>
             </div>
 
-            <table className="w-full border-collapse text-xs">
+            <table className="w-full border-collapse text-[11px]">
               <thead>
                 <tr className="border-b-2 border-slate-800 bg-slate-100">
                   <th className="p-2 text-left border">Head of Account</th>

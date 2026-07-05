@@ -40,6 +40,7 @@ const TBDLedger: React.FC = () => {
   // Waiver Auditing States
   const [waiverReason, setWaiverReason] = useState('');
   const [waivedBy, setWaivedBy] = useState('CASHIER');
+  const [pendingReviews, setPendingReviews] = useState<any[]>([]);
 
   useEffect(() => {
     fetchLedgerData();
@@ -64,11 +65,13 @@ const TBDLedger: React.FC = () => {
   const fetchLedgerData = async () => {
     setLoading(true);
     try {
-      const [loans, txs, settings] = await Promise.all([
+      const [loans, txs, settings, pending] = await Promise.all([
         supabaseFinance.getLoans(),
         supabaseFinance.getTransactions(),
-        financeLedgerSettingsService.getAllLedgerSettings()
+        financeLedgerSettingsService.getAllLedgerSettings(),
+        supabaseFinance.getTransactionReviews({ status: 'PENDING' })
       ]);
+      setPendingReviews(pending);
 
       const tbdLoans = loans.filter(l => 
         l.loan_category === 'TBD' || 
@@ -773,17 +776,27 @@ const TBDLedger: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-100">
-                        {selectedLoan.rawLoan.transactions.map((tx: any) => (
-                          <tr key={tx.id} className="hover:bg-slate-50">
-                            <td className="px-3 py-2 text-gray-500">
-                              {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                            </td>
-                            <td className="px-3 py-2 font-mono text-teal-800 font-medium">{tx.receipt_no || 'N/A'}</td>
-                            <td className="px-3 py-2 text-gray-600">{tx.collected_by || 'System'}</td>
-                            <td className="px-3 py-2 text-gray-400 italic max-w-xs truncate">{tx.remarks}</td>
-                            <td className="px-3 py-2 text-right font-semibold text-gray-950">₹{Number(tx.amount).toLocaleString('en-IN')}</td>
-                          </tr>
-                        ))}
+                        {selectedLoan.rawLoan.transactions.map((tx: any) => {
+                          const isPending = tx.receipt_no && tx.receipt_no !== '-' && pendingReviews.some(r => r.receipt_number === tx.receipt_no && r.loan_id === selectedLoan.id);
+                          return (
+                            <tr key={tx.id} className={`hover:bg-slate-50 ${isPending ? 'bg-[#fff7ed]' : ''}`}>
+                              <td className="px-3 py-2 text-gray-500">
+                                {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                              </td>
+                              <td className="px-3 py-2 font-mono text-teal-800 font-medium">
+                                {tx.receipt_no || 'N/A'}
+                                {isPending && (
+                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold bg-orange-50 text-orange-700 border border-orange-200 uppercase tracking-wide">
+                                    Pending Approval
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-gray-600">{tx.collected_by || 'System'}</td>
+                              <td className="px-3 py-2 text-gray-400 italic max-w-xs truncate">{tx.remarks}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-gray-950">₹{Number(tx.amount).toLocaleString('en-IN')}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

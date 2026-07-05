@@ -3257,10 +3257,9 @@ class SupabaseFinance {
     loanType?: string;
     accountNo?: string;
     receiptNo?: string;
-    financeMode?: 'REGULAR' | 'ITR';
   }): Promise<FinanceTransactionReview[]> {
     try {
-      let query = supabase.from('finance_transaction_reviews').select('*, finance_loans(loan_id)');
+      let query = supabase.from('finance_transaction_reviews').select('*, finance_loans(loan_id, loan_category, customer:finance_customers(name))');
       
       if (filters) {
         if (filters.status && filters.status !== 'ALL') {
@@ -3277,9 +3276,6 @@ class SupabaseFinance {
         }
         if (filters.loanType) {
           query = query.eq('transaction_type', filters.loanType);
-        }
-        if (filters.financeMode) {
-          query = query.eq('finance_mode', filters.financeMode);
         }
       }
       
@@ -3298,7 +3294,126 @@ class SupabaseFinance {
       return result as unknown as FinanceTransactionReview[];
     } catch (error) {
       console.error('Error fetching transaction reviews:', error);
-      throw error; // Rethrow to let UI catch and handle error
+      throw error;
+    }
+  }
+
+  async getPendingReviews(): Promise<FinanceTransactionReview[]> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_transaction_reviews')
+        .select('*')
+        .eq('review_status', 'PENDING');
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching pending reviews:', error);
+      return [];
+    }
+  }
+
+  async getPendingApprovalsCount(): Promise<number> {
+    try {
+      const { count, error } = await supabase
+        .from('finance_transaction_reviews')
+        .select('*', { count: 'exact', head: true })
+        .eq('review_status', 'PENDING');
+      if (error) throw error;
+      return count || 0;
+    } catch (error) {
+      console.error('Error fetching pending reviews count:', error);
+      return 0;
+    }
+  }
+
+  async getTransactionReviewDetails(reviewId: string): Promise<any[]> {
+    try {
+      const { data: review, error: fetchErr } = await supabase
+        .from('finance_transaction_reviews')
+        .select('*, finance_loans(*)')
+        .eq('id', reviewId)
+        .single();
+        
+      if (fetchErr || !review) throw fetchErr || new Error('Review record not found');
+      
+      const details: any[] = [];
+      const loanId = review.loan_id;
+      const loanIdStr = review.finance_loans?.loan_id || '';
+      const receiptNo = review.receipt_number;
+
+      if (loanId && (review.transaction_type.startsWith('CD') || review.source_type === 'Loan Payment')) {
+        const { data: cdEntries } = await supabase
+          .from('finance_cd_ledger_entries')
+          .select('*')
+          .eq('loan_id', loanId)
+          .eq('receipt_no', receiptNo);
+          
+        if (cdEntries && cdEntries.length > 0) {
+          cdEntries.forEach(entry => {
+            details.push({
+              date: entry.entry_date,
+              account_name: entry.account_name,
+              particulars: entry.particulars,
+              debit: Number(entry.debit || 0),
+              credit: Number(entry.credit || 0),
+              entered_by: entry.user_name || review.entered_by,
+              status: review.review_status
+            });
+          });
+        }
+      }
+
+      if (loanId) {
+        const { data: cbEntries } = await supabase
+          .from('finance_cashbook_entries')
+          .select('*')
+          .eq('account_number', loanIdStr);
+          
+        if (cbEntries && cbEntries.length > 0) {
+          const filtered = cbEntries.filter(entry => {
+            const hasReceipt = receiptNo && entry.particulars?.includes(receiptNo);
+            const hasDate = entry.entry_date === review.transaction_date;
+            return hasReceipt || hasDate;
+          });
+          
+          filtered.forEach(entry => {
+            if (!details.some(d => d.particulars === entry.particulars && d.credit === Number(entry.credit || 0) && d.debit === Number(entry.debit || 0))) {
+              details.push({
+                date: entry.entry_date,
+                account_name: entry.head_of_account,
+                particulars: entry.particulars,
+                debit: Number(entry.debit || 0),
+                credit: Number(entry.credit || 0),
+                entered_by: entry.created_by || review.entered_by,
+                status: review.review_status
+              });
+            }
+          });
+        }
+      } else if (review.source_type === 'Day Book Entry' || review.transaction_type === 'Day Book Entry') {
+        const { data: entry } = await supabase
+          .from('finance_cashbook_entries')
+          .select('*')
+          .eq('id', review.source_id)
+          .single();
+          
+        if (entry) {
+          details.push({
+            date: entry.entry_date,
+            account_name: entry.head_of_account,
+            particulars: entry.particulars,
+            debit: Number(entry.debit || 0),
+            credit: Number(entry.credit || 0),
+            entered_by: entry.created_by || review.entered_by,
+            status: review.review_status
+          });
+        }
+      }
+
+      return details;
+    } catch (e) {
+      console.error('Error fetching transaction review details:', e);
+      return [];
     }
   }
 
@@ -3354,6 +3469,62 @@ class SupabaseFinance {
       return true;
     } catch (error) {
       console.error('Error approving transaction review:', error);
+      return false;
+    }
+  }
+
+  async rejectTransactionReview(reviewId: string, rejectedBy: string): Promise<boolean> {
+    try {
+      const { data: review, error: fetchErr } = await supabase
+        .from('finance_transaction_reviews')
+        .select('*')
+        .eq('id', reviewId)
+        .single();
+        
+      if (fetchErr || !review) throw fetchErr || new Error('Review record not found');
+      
+      const now = new Date().toISOString();
+      
+      const { error: updateReviewErr } = await supabase
+        .from('finance_transaction_reviews')
+        .update({
+          review_status: 'REJECTED',
+          approved_by: rejectedBy,
+          approved_at: now,
+          updated_at: now
+        })
+        .eq('id', reviewId);
+        
+      if (updateReviewErr) throw updateReviewErr;
+      
+      if (review.source_type === 'Day Book Entry') {
+        const { error: updateCashbookErr } = await supabase
+          .from('finance_cashbook_entries')
+          .update({
+            status: 'REJECTED',
+            approved_by: rejectedBy,
+            approved_at: now,
+            updated_at: now
+          })
+          .eq('id', review.source_id);
+          
+        if (updateCashbookErr) {
+          await supabase
+            .from('finance_transaction_reviews')
+            .update({
+              review_status: 'PENDING',
+              approved_by: null,
+              approved_at: null,
+              updated_at: now
+            })
+            .eq('id', reviewId);
+          throw updateCashbookErr;
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error rejecting transaction review:', error);
       return false;
     }
   }

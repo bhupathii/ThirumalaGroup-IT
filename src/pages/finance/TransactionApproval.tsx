@@ -12,7 +12,9 @@ import {
   Loader2, 
   User, 
   Calendar, 
-  AlertCircle
+  AlertCircle,
+  Book,
+  X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -23,9 +25,6 @@ const TransactionApproval: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
-
-  // Mode State
-  const [financeMode, setFinanceMode] = useState<'REGULAR' | 'ITR'>('REGULAR');
 
   // Filter States
   const [statusTab, setStatusTab] = useState<'PENDING' | 'APPROVED' | 'ALL'>('PENDING');
@@ -44,8 +43,7 @@ const TransactionApproval: React.FC = () => {
       const { data, error } = await supabase
         .from('finance_transaction_reviews')
         .select('transaction_date')
-        .eq('review_status', 'PENDING')
-        .eq('finance_mode', financeMode);
+        .eq('review_status', 'PENDING');
       
       if (error) throw error;
       setPendingDates((data || []).map(r => ({ c_date: r.transaction_date })));
@@ -64,8 +62,7 @@ const TransactionApproval: React.FC = () => {
         enteredBy: filterOperator.trim() || undefined,
         loanType: filterLoanType !== 'ALL' ? filterLoanType : undefined,
         accountNo: filterAccountNo.trim() || undefined,
-        receiptNo: filterReceiptNo.trim() || undefined,
-        financeMode: financeMode
+        receiptNo: filterReceiptNo.trim() || undefined
       });
       setReviews(data);
     } catch (err: any) {
@@ -81,7 +78,7 @@ const TransactionApproval: React.FC = () => {
   useEffect(() => {
     fetchReviews();
     fetchPendingDates();
-  }, [statusTab, filterDate, filterLoanType, financeMode]);
+  }, [statusTab, filterDate, filterLoanType]);
 
   const handleApplyFilters = (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,6 +92,31 @@ const TransactionApproval: React.FC = () => {
     setFilterAccountNo('');
     setFilterReceiptNo('');
     fetchReviews();
+  };
+
+  const [expandedReviewIds, setExpandedReviewIds] = useState<Set<string>>(new Set());
+  const [reviewDetails, setReviewDetails] = useState<Record<string, any[]>>({});
+  const [loadingDetails, setLoadingDetails] = useState<Record<string, boolean>>({});
+
+  const toggleExpandReview = async (reviewId: string) => {
+    const next = new Set(expandedReviewIds);
+    if (next.has(reviewId)) {
+      next.delete(reviewId);
+    } else {
+      next.add(reviewId);
+      if (!reviewDetails[reviewId]) {
+        setLoadingDetails(prev => ({ ...prev, [reviewId]: true }));
+        try {
+          const details = await supabaseFinance.getTransactionReviewDetails(reviewId);
+          setReviewDetails(prev => ({ ...prev, [reviewId]: details }));
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingDetails(prev => ({ ...prev, [reviewId]: false }));
+        }
+      }
+    }
+    setExpandedReviewIds(next);
   };
 
   const handleApprove = async (reviewId: string) => {
@@ -121,6 +143,34 @@ const TransactionApproval: React.FC = () => {
     } catch (err) {
       console.error(err);
       toast.error('Error occurred during approval');
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleReject = async (reviewId: string) => {
+    if (!user?.is_admin) {
+      toast.error('Access Denied: Only administrators can reject transactions.');
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to REJECT this transaction?')) {
+      return;
+    }
+
+    try {
+      setActioningId(reviewId);
+      const success = await supabaseFinance.rejectTransactionReview(reviewId, user.username);
+      if (success) {
+        toast.success('Transaction review status marked as REJECTED');
+        fetchReviews();
+        fetchPendingDates();
+      } else {
+        toast.error('Failed to reject transaction');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Error occurred during rejection');
     } finally {
       setActioningId(null);
     }
@@ -157,8 +207,7 @@ const TransactionApproval: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto font-outfit select-none">
-      
-      {/* Header */}
+           {/* Header */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
         <div>
           <span className="text-slate-500 finance-caption uppercase">ADMIN PANEL</span>
@@ -169,27 +218,6 @@ const TransactionApproval: React.FC = () => {
           <p className="text-slate-400 finance-small-label uppercase mt-0.5">
             Verify and approve operator-entered financial transactions
           </p>
-        </div>
-
-        {/* Mode Selector Toggle */}
-        <div className="flex gap-2">
-          {(['REGULAR', 'ITR'] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => {
-                setFinanceMode(mode);
-                setFilterDate(''); // Clear date filter on mode switch to prevent mismatches
-              }}
-              className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase transition-all shadow-sm ${
-                financeMode === mode
-                  ? 'bg-[#0f172a] text-white'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              {mode} Finance
-            </button>
-          ))}
         </div>
       </div>
 
@@ -371,108 +399,219 @@ const TransactionApproval: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {reviews.map((item) => {
                   const hasSplits = (item.penalty_amount || 0) > 0 || (item.interest_amount || 0) > 0 || (item.principal_amount || 0) > 0;
+                  const isExpanded = expandedReviewIds.has(item.id);
+                  const details = reviewDetails[item.id] || [];
+                  const isDetailsLoading = loadingDetails[item.id];
                   
+                  const loanCategory = (item as any).finance_loans?.loan_category || '';
+                  const customerName = (item as any).finance_loans?.customer?.name || 'Manual Daybook Entry';
+
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                      
-                      {/* Date & Ref */}
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-slate-800 finance-header-time">
-                          {format(new Date(item.transaction_date), 'dd MMM yyyy')}
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-semibold tracking-wider mt-0.5">
-                          RC: {item.receipt_number || 'N/A'}
-                        </div>
-                      </td>
-
-                      {/* Transaction Details */}
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-slate-850 finance-input">
-                          {item.transaction_type.toUpperCase()}
-                        </div>
-                        <div className="text-slate-400 text-xs font-medium mt-0.5 truncate max-w-[200px]">
-                          {item.loan_id ? `Loan ID: ${(item as any).finance_loans?.loan_id || 'N/A'}` : 'Manual Account Entry'}
-                        </div>
-                      </td>
-
-                      {/* Source Type */}
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                          item.source_type === 'Loan Payment' 
-                            ? 'bg-blue-50 text-blue-600 border border-blue-100'
-                            : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
-                        }`}>
-                          {item.source_type}
-                        </span>
-                      </td>
-
-                      {/* Amount Breakdown */}
-                      <td className="px-6 py-4 text-right">
-                        <div className="font-bold text-slate-900 text-sm finance-header-time">
-                          {formatCurrency(item.amount)}
-                        </div>
-                        {hasSplits && (
-                          <div className="text-[10px] text-slate-400 font-semibold space-x-1.5 mt-0.5">
-                            {item.principal_amount ? <span>P: {formatCurrency(item.principal_amount)}</span> : null}
-                            {item.interest_amount ? <span>I: {formatCurrency(item.interest_amount)}</span> : null}
-                            {item.penalty_amount ? <span>Pen: {formatCurrency(item.penalty_amount)}</span> : null}
+                    <React.Fragment key={item.id}>
+                      <tr className="hover:bg-slate-50 transition-colors">
+                        
+                        {/* Date & Ref */}
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-slate-800 finance-header-time">
+                            {format(new Date(item.transaction_date), 'dd MMM yyyy')}
                           </div>
-                        )}
-                      </td>
+                          <div className="text-[10px] text-slate-400 font-semibold tracking-wider mt-0.5">
+                            RC: {item.receipt_number || 'N/A'}
+                          </div>
+                        </td>
 
-                      {/* Entered By */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-1.5 text-slate-650 finance-caption">
-                          <User className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="font-semibold">{item.entered_by.toUpperCase()}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-medium mt-0.5">
-                          {format(new Date(item.entered_at), 'hh:mm a')}
-                        </div>
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-6 py-4 text-center">
-                        {item.review_status === 'APPROVED' ? (
-                          <div className="inline-flex flex-col items-center">
-                            <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase">
-                              <Check className="w-3.5 h-3.5" />
-                              Approved
-                            </span>
-                            {item.approved_by && (
-                              <span className="text-[9px] text-slate-400 font-medium mt-1 uppercase">
-                                By {item.approved_by}
+                        {/* Transaction Details */}
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-slate-850 finance-input">
+                            {item.transaction_type.toUpperCase()}
+                          </div>
+                          <div className="text-slate-400 text-xs font-bold mt-0.5">
+                            {item.loan_id ? (
+                              <span className="space-x-1.5">
+                                <span className="text-slate-700">{(item as any).finance_loans?.loan_id}</span>
+                                <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">{loanCategory}</span>
+                                <span className="text-slate-900 font-black">{customerName}</span>
                               </span>
+                            ) : (
+                              <span className="text-slate-500 italic">Daybook Account Entry</span>
                             )}
                           </div>
-                        ) : (
-                          <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase">
-                            Pending
+                        </td>
+
+                        {/* Source Type */}
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                            item.source_type === 'Loan Payment' 
+                              ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                              : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                          }`}>
+                            {item.source_type}
                           </span>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Actions */}
-                      <td className="px-6 py-4 text-center">
-                        {item.review_status === 'PENDING' ? (
-                          <button
-                            onClick={() => handleApprove(item.id)}
-                            disabled={actioningId === item.id}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] tracking-wide uppercase px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-all disabled:opacity-50 mx-auto"
-                          >
-                            {actioningId === item.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        {/* Amount Breakdown */}
+                        <td className="px-6 py-4 text-right">
+                          <div className="font-bold text-slate-900 text-sm finance-header-time">
+                            {formatCurrency(item.amount)}
+                          </div>
+                          {hasSplits && (
+                            <div className="text-[10px] text-slate-400 font-semibold space-x-1.5 mt-0.5">
+                              {item.principal_amount ? <span>P: {formatCurrency(item.principal_amount)}</span> : null}
+                              {item.interest_amount ? <span>I: {formatCurrency(item.interest_amount)}</span> : null}
+                              {item.penalty_amount ? <span>Pen: {formatCurrency(item.penalty_amount)}</span> : null}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Entered By */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-1.5 text-slate-650 finance-caption">
+                            <User className="w-3.5 h-3.5 text-slate-400" />
+                            <span className="font-semibold">{item.entered_by.toUpperCase()}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                            {format(new Date(item.entered_at), 'hh:mm a')}
+                          </div>
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-6 py-4 text-center">
+                          {item.review_status === 'APPROVED' ? (
+                            <div className="inline-flex flex-col items-center">
+                              <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase">
+                                <Check className="w-3.5 h-3.5" />
+                                Approved
+                              </span>
+                              {item.approved_by && (
+                                <span className="text-[9px] text-slate-400 font-medium mt-1 uppercase">
+                                  By {item.approved_by}
+                                </span>
+                              )}
+                            </div>
+                          ) : item.review_status === 'REJECTED' ? (
+                            <div className="inline-flex flex-col items-center">
+                              <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase">
+                                <X className="w-3.5 h-3.5" />
+                                Rejected
+                              </span>
+                              {item.approved_by && (
+                                <span className="text-[9px] text-slate-400 font-medium mt-1 uppercase">
+                                  By {item.approved_by}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase">
+                              Pending
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            {item.review_status === 'PENDING' ? (
+                              <>
+                                <button
+                                  onClick={() => handleApprove(item.id)}
+                                  disabled={actioningId === item.id}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] tracking-wide uppercase px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-all disabled:opacity-50"
+                                >
+                                  {actioningId === item.id ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Check className="w-3 h-3" />
+                                  )}
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => handleReject(item.id)}
+                                  disabled={actioningId === item.id}
+                                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] tracking-wide uppercase px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-all disabled:opacity-50"
+                                >
+                                  {actioningId === item.id ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <X className="w-3 h-3" />
+                                  )}
+                                  Reject
+                                </button>
+                              </>
                             ) : (
-                              <Check className="w-3.5 h-3.5" />
+                              <span className="text-slate-350 text-xs font-semibold uppercase mr-2">Closed</span>
                             )}
-                            Approve
-                          </button>
-                        ) : (
-                          <span className="text-slate-350 text-xs font-semibold uppercase">Closed</span>
-                        )}
-                      </td>
+                            <button
+                              onClick={() => toggleExpandReview(item.id)}
+                              className="text-indigo-600 hover:text-indigo-850 text-[10px] font-bold uppercase tracking-wider px-2 py-1 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-150 transition-all focus:outline-none"
+                            >
+                              {isExpanded ? 'Hide Details' : 'View Details'}
+                            </button>
+                          </div>
+                        </td>
 
-                    </tr>
+                      </tr>
+
+                      {/* View Details Sub-table */}
+                      {isExpanded && (
+                        <tr className="bg-slate-50/50">
+                          <td colSpan={7} className="px-8 py-4 border-b border-slate-200">
+                            <div className="space-y-3">
+                              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <Book className="w-4 h-4 text-indigo-500" />
+                                Generated Ledger / Cashbook Journal Entries Splits
+                              </h4>
+                              {isDetailsLoading ? (
+                                <div className="flex items-center gap-2 py-4 justify-center text-slate-400">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  <span className="text-xs font-semibold uppercase tracking-wider">Loading journal details...</span>
+                                </div>
+                              ) : details.length === 0 ? (
+                                <p className="text-xs text-slate-500 italic py-2 pl-4">No detailed journal ledger records found for this transaction.</p>
+                              ) : (
+                                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-inner bg-white">
+                                  <table className="min-w-full divide-y divide-slate-100 text-xs">
+                                    <thead className="bg-slate-50">
+                                      <tr className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                        <th className="px-4 py-2.5 text-left">Date</th>
+                                        <th className="px-4 py-2.5 text-left">Account Name</th>
+                                        <th className="px-4 py-2.5 text-left">Particulars</th>
+                                        <th className="px-4 py-2.5 text-right">Debit</th>
+                                        <th className="px-4 py-2.5 text-right">Credit</th>
+                                        <th className="px-4 py-2.5 text-left">Entered By</th>
+                                        <th className="px-4 py-2.5 text-center">Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 text-slate-700 font-mono">
+                                      {details.map((detail: any, dIdx: number) => (
+                                        <tr key={dIdx} className="hover:bg-slate-50/50 transition-colors">
+                                          <td className="px-4 py-2 font-sans">{format(new Date(detail.date), 'dd/MM/yyyy')}</td>
+                                          <td className="px-4 py-2 font-sans font-black text-indigo-900">{detail.account_name}</td>
+                                          <td className="px-4 py-2 font-sans text-slate-500 font-bold">{detail.particulars}</td>
+                                          <td className="px-4 py-2 text-right font-bold text-slate-900">{detail.debit > 0 ? formatCurrency(detail.debit) : '-'}</td>
+                                          <td className="px-4 py-2 text-right font-bold text-slate-900">{detail.credit > 0 ? formatCurrency(detail.credit) : '-'}</td>
+                                          <td className="px-4 py-2 font-sans font-semibold uppercase text-[10px] text-slate-650">{detail.entered_by}</td>
+                                          <td className="px-4 py-2 text-center font-sans">
+                                            <span className={`inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${
+                                              detail.status === 'APPROVED'
+                                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                                : detail.status === 'REJECTED'
+                                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                            }`}>
+                                              {detail.status}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

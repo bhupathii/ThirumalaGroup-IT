@@ -1,10 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import Button from '../../components/UI/Button';
-import Card from '../../components/UI/Card';
-import Input from '../../components/UI/Input';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
-import { Printer, ArrowLeft, Calendar, Search } from 'lucide-react';
+import { Printer, ArrowLeft, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
@@ -310,212 +307,211 @@ const DuesLedger: React.FC = () => {
     return { principal, interest, penalty, presentDue };
   }, [filteredDues]);
 
-  const renderReportMenu = () => {
-    const options: ReportType[] = ['OUTSTANDING', 'TOTAL DUE LIST', 'CD DUE LIST', 'A -> B DUE LIST', 'NPA LIST'];
-    return (
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 bg-slate-50">
-          <h3 className="text-slate-900 finance-sidebar-link uppercase font-bold text-xs">REPORT OPTIONS</h3>
+  const options: ReportType[] = ['OUTSTANDING', 'TOTAL DUE LIST', 'CD DUE LIST', 'A -> B DUE LIST', 'NPA LIST'];
+
+  return (
+    <div className="flex flex-col gap-2 w-full max-w-[100%] mx-auto px-4 pt-3 pb-4 print:p-0">
+
+      {/* ── ROW 1: Header ───────────────────────────────────────────────────── */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-[15px] font-black uppercase text-slate-900 tracking-wide leading-none">Dues List</h1>
+          <p className="text-[11px] text-slate-500 uppercase font-semibold mt-0.5">Outstanding · NPA · Partner Collection</p>
         </div>
-        <div className="flex flex-col">
+        <div className="flex gap-2">
+          <button
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 text-[12px] font-bold uppercase shadow-sm"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back
+          </button>
+          <button
+            onClick={() => setShowPrintPreview(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0b1329] text-white rounded-lg hover:bg-slate-800 text-[12px] font-bold uppercase shadow-sm"
+          >
+            <Printer className="w-3.5 h-3.5" /> Print Landscape
+          </button>
+        </div>
+      </div>
+
+      {/* ── ROW 2: Filters + Summary (single horizontal bar) ────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm px-3 py-2.5">
+        <div className="flex flex-wrap items-end gap-3">
+
+          {/* Partner */}
+          <div className="flex flex-col min-w-[160px]">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Partner</label>
+            <select
+              value={selectedPartner}
+              onChange={(e) => setSelectedPartner(e.target.value)}
+              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 uppercase bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer h-[34px]"
+            >
+              <option value="ALL PARTNERS">ALL PARTNERS</option>
+              {partners.map(p => (
+                <option key={p.id} value={p.name}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Loan Type */}
+          <div className="flex flex-col min-w-[130px]">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Loan Type</label>
+            <select
+              value={loanTypeFilter}
+              onChange={(e) => setLoanTypeFilter(e.target.value as any)}
+              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 uppercase bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer h-[34px]"
+            >
+              <option value="ALL">ALL TYPES</option>
+              <option value="CD">CD LOANS</option>
+              <option value="HP">HP LOANS</option>
+              <option value="STBD">STBD LOANS</option>
+              <option value="TBD">TBD LOANS</option>
+            </select>
+          </div>
+
+          {/* Search */}
+          <div className="flex flex-col flex-1 min-w-[180px]">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Search Account / Name</label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="e.g. CD100, NARSIMULU"
+                value={searchName}
+                onChange={(e) => setSearchName(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-[13px] text-slate-800 font-semibold bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px]"
+              />
+            </div>
+          </div>
+
+          {/* A→B date filters — only shown when tab is active */}
+          {activeReport === 'A -> B DUE LIST' && (
+            <>
+              <div className="flex flex-col min-w-[130px]">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">From Date</label>
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px]" />
+              </div>
+              <div className="flex flex-col min-w-[130px]">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">To Date</label>
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
+                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px]" />
+              </div>
+            </>
+          )}
+
+          {/* ── Summary Metrics (right side) ───────────────────────────────── */}
+          <div className="flex items-stretch gap-2 ml-auto flex-wrap">
+            <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-1.5 flex flex-col justify-center min-w-[140px]">
+              <span className="text-[10px] font-black text-red-500 uppercase tracking-wider leading-none">Total Present Dues</span>
+              <span className="text-red-650 text-[17px] font-black font-mono tracking-tight leading-tight mt-0.5 whitespace-nowrap">
+                ₹{totals.presentDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex flex-col justify-center min-w-[100px]">
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider leading-none">Accounts</span>
+              <span className="text-slate-900 text-[22px] font-black font-mono tracking-tight leading-tight mt-0.5">
+                {filteredDues.length}
+              </span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* ── ROW 3: Report Type Tabs ──────────────────────────────────────────── */}
+      <div className="bg-slate-100 px-1.5 py-1 rounded-xl border border-slate-200">
+        <div className="flex flex-wrap gap-1.5">
           {options.map((opt) => (
             <button
               key={opt}
               onClick={() => setActiveReport(opt)}
-              className={`text-left px-4 py-3 border-b border-slate-100 last:border-0 transition-colors ${activeReport === opt ? 'bg-[#0b1329] text-white font-bold' : 'text-slate-700 hover:bg-slate-50' } finance-header-time uppercase`}
+              className={`flex-1 min-w-[130px] text-center px-3 py-2 rounded-lg text-[12px] font-extrabold tracking-wide uppercase transition-all duration-150 ${
+                activeReport === opt
+                  ? 'bg-[#0b1329] text-white shadow-md'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
             >
               {opt}
             </button>
           ))}
         </div>
       </div>
-    );
-  };
 
-  return (
-    <div className="space-y-6 max-w-7xl mx-auto p-6 print:p-0">
-      {/* Header */}
-      <div className="flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
-        <div>
-          <h1 className="finance-h1">Dues List</h1>
-          <p className="finance-small-label uppercase">
-            Outstanding, NPA, and Partner-wise collection lists
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 finance-header-time uppercase">
-            Back
-          </Button>
-          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white finance-header-time uppercase">
-            Print Landscape
-          </Button>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        {/* Partner Select Card */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-center p-4">
-          <span className="text-slate-400 block mb-1 finance-small-label uppercase">Partner</span>
-          <select
-            value={selectedPartner}
-            onChange={(e) => setSelectedPartner(e.target.value)}
-            className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase font-bold"
-          >
-            <option value="ALL PARTNERS">ALL PARTNERS</option>
-            {partners.map(p => (
-              <option key={p.id} value={p.name}>{p.name}</option>
-            ))}
-          </select>
+      {/* ── ROW 4: Dues Table ────────────────────────────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        {/* Compact section header */}
+        <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+          <span className="text-[12px] font-black uppercase text-slate-700 tracking-wide">{activeReport} — {loanTypeFilter}</span>
+          <span className="text-[11px] text-slate-400 font-semibold uppercase">{filteredDues.length} records</span>
         </div>
 
-        {/* Loan Type Select Card */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-center p-4">
-          <span className="text-slate-400 block mb-1 finance-small-label uppercase">Loan Type</span>
-          <select
-            value={loanTypeFilter}
-            onChange={(e) => setLoanTypeFilter(e.target.value as any)}
-            className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase font-bold"
-          >
-            <option value="ALL">ALL TYPES</option>
-            <option value="CD">CD LOANS</option>
-            <option value="HP">HP LOANS</option>
-            <option value="STBD">STBD LOANS</option>
-            <option value="TBD">TBD LOANS</option>
-          </select>
-        </div>
-
-        {/* Present Dues Total */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-slate-400 block finance-small-label uppercase">Total Present Dues</span>
-          <span className="text-red-600 mt-1 finance-money">₹{totals.presentDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-        </div>
-
-        {/* Records Count */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-slate-400 block finance-small-label uppercase">Eligible Accounts</span>
-          <span className="text-slate-900 mt-1 finance-money">{filteredDues.length}</span>
-        </div>
-      </div>
-
-      {/* Main Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        
-        {/* Left Sidebar Menu */}
-        <div className="lg:col-span-1">
-          {renderReportMenu()}
-        </div>
-
-        {/* Right Main Table */}
-        <div className="lg:col-span-3 space-y-4">
-          <Card
-            title={
-              <div className="flex justify-between items-center w-full">
-                <span className="finance-card-title uppercase">{activeReport} ({loanTypeFilter})</span>
-              </div>
-            }
-            className="shadow-md border-slate-150 rounded-xl overflow-hidden"
-          >
-            {/* Search Filters Row */}
-            <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-slate-100 bg-slate-50/50">
-              <div className="md:col-span-1">
-                <Input
-                  label="Search Account / Name"
-                  placeholder="e.g. CD100, NARSIMULU"
-                  value={searchName}
-                  onChange={setSearchName}
-                  icon={Search}
-                />
-              </div>
-
-              {activeReport === 'A -> B DUE LIST' && (
-                <>
-                  <Input
-                    label="From Date"
-                    type="date"
-                    value={startDate}
-                    onChange={setStartDate}
-                    icon={Calendar}
-                  />
-                  <Input
-                    label="To Date"
-                    type="date"
-                    value={endDate}
-                    onChange={setEndDate}
-                    icon={Calendar}
-                  />
-                </>
-              )}
-            </div>
-
-            {loading ? (
-              <div className="flex justify-center py-16">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-slate-900"></div>
-              </div>
-            ) : filteredDues.length === 0 ? (
-              <div className="text-center py-16 border-t border-slate-100">
-                <p className="text-slate-400 finance-sidebar-link uppercase">No Due Accounts Found</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-150 text-[11px] finance-caption">
-                  <thead>
-                    <tr className="bg-slate-50">
-                      <th className="p-2 border-r finance-small-label uppercase w-8">Sl No</th>
-                      <th className="p-2 border-r finance-small-label uppercase w-20">Loan No</th>
-                      <th className="p-2 border-r finance-small-label uppercase">Party Name</th>
-                      <th className="p-2 border-r finance-small-label uppercase w-14">Type</th>
-                      <th className="p-2 border-r text-right finance-small-label uppercase w-20">Principal</th>
-                      <th className="p-2 border-r text-right finance-small-label uppercase w-20">Int. Paid</th>
-                      <th className="p-2 border-r text-right finance-small-label uppercase w-20">Pend. Int</th>
-                      <th className="p-2 border-r text-right finance-small-label uppercase w-16">Penalty</th>
-                      <th className="p-2 border-r text-right finance-small-label uppercase w-20 font-black">Present Due</th>
-                      <th className="p-2 border-r finance-small-label uppercase w-20">Due Date</th>
-                      <th className="p-2 border-r text-center finance-small-label uppercase w-12">Days</th>
-                      <th className="p-2 finance-small-label uppercase">Contact (Borrower & Guarantors)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-100 font-mono">
-                    {filteredDues.map((due, idx) => (
-                      <tr key={due.id} className={`hover:bg-slate-50/40 ${due.isNPA ? 'bg-red-50/20' : ''}`}>
-                        <td className="p-2 border-r text-slate-500 font-sans text-center">{idx + 1}</td>
-                        <td className="p-2 border-r font-bold text-blue-600">{due.loanId}</td>
-                        <td className="p-2 border-r text-slate-900 font-sans font-bold">{due.customerName}</td>
-                        <td className="p-2 border-r text-slate-650 font-sans text-center">{due.loanType}</td>
-                        <td className="p-2 border-r text-right text-slate-700">₹{Math.round(due.currentPrincipal).toLocaleString('en-IN')}</td>
-                        <td className="p-2 border-r text-right text-emerald-650">₹{Math.round(due.interestPaid).toLocaleString('en-IN')}</td>
-                        <td className="p-2 border-r text-right text-orange-600">₹{Math.round(due.pendingInterest).toLocaleString('en-IN')}</td>
-                        <td className="p-2 border-r text-right text-red-500">₹{Math.round(due.penalty).toLocaleString('en-IN')}</td>
-                        <td className="p-2 border-r text-right text-red-650 font-sans font-black">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
-                        <td className="p-2 border-r text-slate-600 font-sans whitespace-nowrap">{due.currentDueDate.split('-').reverse().join('/')}</td>
-                        <td className="p-2 border-r text-center text-red-650 font-bold">{due.dueDays}</td>
-                        <td className="p-2 font-sans text-[10px] text-slate-600 space-y-0.5 whitespace-nowrap">
-                          <div><span className="font-semibold text-slate-900">B:</span> {due.phone || '—'}</div>
-                          {due.g1Name && (
-                            <div><span className="font-semibold text-slate-900">G1:</span> {due.g1Name} ({due.g1Phone || '—'})</div>
-                          )}
-                          {due.g2Name && (
-                            <div><span className="font-semibold text-slate-900">G2:</span> {due.g2Name} ({due.g2Phone || '—'})</div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {/* Overall Summary Row */}
-                    <tr className="bg-slate-50 font-sans font-extrabold border-t-2 border-slate-200 text-[10px]">
-                      <td colSpan={4} className="p-2 border-r text-right text-slate-800 uppercase">Grand Total:</td>
-                      <td className="p-2 border-r text-right text-slate-800">₹{Math.round(totals.principal).toLocaleString('en-IN')}</td>
-                      <td className="p-2 border-r text-right text-slate-800"></td>
-                      <td className="p-2 border-r text-right text-orange-700">₹{Math.round(totals.interest).toLocaleString('en-IN')}</td>
-                      <td className="p-2 border-r text-right text-red-600">₹{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
-                      <td className="p-2 border-r text-right text-red-700 font-black text-xs">₹{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
-                      <td colSpan={3}></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-        </div>
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-7 w-7 border-t-2 border-slate-900"></div>
+          </div>
+        ) : filteredDues.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-slate-400 font-bold uppercase text-[13px]">No Due Accounts Found</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 260px)' }}>
+            <table className="min-w-full divide-y divide-slate-150 finance-caption">
+              <thead className="sticky top-0 z-10 bg-slate-50 shadow-[inset_0_-2px_0_rgba(0,0,0,0.1)]">
+                <tr className="bg-slate-50">
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 text-center w-10 bg-slate-50 finance-small-label">Sl</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 text-left w-20 bg-slate-50 finance-small-label">Loan No</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Party Name</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 text-center w-14 bg-slate-50 finance-small-label">Type</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-32 bg-slate-50 finance-small-label">Principal</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Int. Paid</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Pend. Int</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-24 bg-slate-50 finance-small-label">Penalty</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-32 bg-slate-50 finance-small-label font-black">Present Due</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-28 bg-slate-50 finance-small-label">Due Date</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-16 bg-slate-50 finance-small-label">Days</th>
+                  <th className="px-2 py-1.5 text-slate-800 text-left bg-slate-50 finance-small-label">Contact (B / G1 / G2)</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-slate-100 font-mono text-[13px]">
+                {filteredDues.map((due, idx) => (
+                  <tr key={due.id} className={`hover:bg-slate-50/40 transition-colors ${due.isNPA ? 'bg-red-50/20' : ''}`}>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-500 font-sans text-center text-[13px] font-semibold">{idx + 1}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 font-bold text-blue-650 text-[13px] whitespace-nowrap">{due.loanId}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-905 font-sans font-bold text-[13px]">{due.customerName}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans text-center text-[13px] font-semibold">{due.loanType}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-700 text-[13px] font-semibold whitespace-nowrap">₹{Math.round(due.currentPrincipal).toLocaleString('en-IN')}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-emerald-700 text-[13px] font-semibold whitespace-nowrap">₹{Math.round(due.interestPaid).toLocaleString('en-IN')}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-orange-600 text-[13px] font-semibold whitespace-nowrap">₹{Math.round(due.pendingInterest).toLocaleString('en-IN')}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-red-650 text-[13px] font-semibold whitespace-nowrap">₹{Math.round(due.penalty).toLocaleString('en-IN')}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-[13px] font-bold whitespace-nowrap">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-[13px] font-semibold">{due.currentDueDate.split('-').reverse().join('/')}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-center text-red-650 text-[13px] font-bold whitespace-nowrap">{due.dueDays}</td>
+                    <td className="px-2 py-1.5 font-sans text-[13px] text-slate-600 space-y-0.5">
+                      <div><span className="font-semibold text-slate-900">B:</span> {due.phone || '—'}</div>
+                      {due.g1Name && (
+                        <div><span className="font-semibold text-slate-900">G1:</span> {due.g1Name} ({due.g1Phone || '—'})</div>
+                      )}
+                      {due.g2Name && (
+                        <div><span className="font-semibold text-slate-900">G2:</span> {due.g2Name} ({due.g2Phone || '—'})</div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {/* Grand Total Row */}
+                <tr className="bg-slate-50 font-sans font-extrabold border-t-2 border-slate-200 text-[13px]">
+                  <td colSpan={4} className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 uppercase">Grand Total:</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 font-bold text-[13px] whitespace-nowrap">₹{Math.round(totals.principal).toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 font-bold text-[13px]"></td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-orange-750 font-bold text-[13px] whitespace-nowrap">₹{Math.round(totals.interest).toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-red-650 font-bold text-[13px] whitespace-nowrap">₹{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-950 font-black text-[13px] whitespace-nowrap">₹{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
+                  <td colSpan={3}></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* PRINT PREVIEW */}
@@ -531,63 +527,78 @@ const DuesLedger: React.FC = () => {
             <div className="flex justify-between items-end border-b border-slate-900 pb-2">
               <div>
                 <h2 className="text-xl font-bold uppercase text-slate-900">Thirumala Group Finance</h2>
-                <p className="text-xs uppercase text-slate-500">Collection Dues Ledger ({activeReport} - {loanTypeFilter})</p>
+            <p className="text-[13px] uppercase text-slate-500">Collection Dues Ledger ({activeReport} - {loanTypeFilter})</p>
               </div>
-              <div className="text-right text-xs text-slate-600">
+              <div className="text-right text-[13px] text-slate-600">
                 <p>Date: {new Date().toLocaleDateString('en-IN')}</p>
                 <p>Partner: {selectedPartner}</p>
               </div>
             </div>
 
-            <table className="w-full border-collapse text-[10px]">
+            <table className="w-full border-collapse" style={{ tableLayout: 'auto', fontSize: '10pt' }}>
+              <colgroup>
+                {/* Sl   Loan    Name     Type   Principal IntPaid  PendInt  Penalty  PresentDue DueDate  Days   Phone */}
+                <col style={{ width: '3%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '4%' }} />
+                <col style={{ width: '9%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '5%' }} />
+                <col style={{ width: '19%' }} />
+              </colgroup>
               <thead>
                 <tr className="border-b-2 border-slate-850 bg-slate-100">
-                  <th className="p-1 border text-center font-bold">Sl No</th>
-                  <th className="p-1 border font-bold">Loan No</th>
-                  <th className="p-1 border font-bold">Party Name</th>
-                  <th className="p-1 border text-center font-bold">Type</th>
-                  <th className="p-1 border text-right font-bold">Principal</th>
-                  <th className="p-1 border text-right font-bold">Int. Paid</th>
-                  <th className="p-1 border text-right font-bold">Pend. Int</th>
-                  <th className="p-1 border text-right font-bold">Penalty</th>
-                  <th className="p-1 border text-right font-bold">Present Due</th>
-                  <th className="p-1 border font-bold">Due Date</th>
-                  <th className="p-1 border text-center font-bold">Days</th>
-                  <th className="p-1 border font-bold">Phone Details (Borrower & Guarantors)</th>
+                  <th className="p-1 border text-center font-bold print-nowrap">Sl No</th>
+                  <th className="p-1 border font-bold print-nowrap">Loan No</th>
+                  <th className="p-1 border font-bold print-wrap">Party Name</th>
+                  <th className="p-1 border text-center font-bold print-nowrap">Type</th>
+                  <th className="p-1 border text-right font-bold print-nowrap">Principal</th>
+                  <th className="p-1 border text-right font-bold print-nowrap">Int. Paid</th>
+                  <th className="p-1 border text-right font-bold print-nowrap">Pend. Int</th>
+                  <th className="p-1 border text-right font-bold print-nowrap">Penalty</th>
+                  <th className="p-1 border text-right font-bold print-nowrap">Present Due</th>
+                  <th className="p-1 border font-bold print-nowrap">Due Date</th>
+                  <th className="p-1 border text-center font-bold print-nowrap">Days</th>
+                  <th className="p-1 border font-bold print-wrap">Phone Details (Borrower &amp; Guarantors)</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredDues.map((due, idx) => (
                   <tr key={due.id} className="border-b">
-                    <td className="p-1 border text-center">{idx + 1}</td>
-                    <td className="p-1 border font-bold text-blue-800">{due.loanId}</td>
-                    <td className="p-1 border font-bold">{due.customerName}</td>
-                    <td className="p-1 border text-center">{due.loanType}</td>
-                    <td className="p-1 border text-right">₹{Math.round(due.currentPrincipal).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right text-green-700">₹{Math.round(due.interestPaid).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right text-orange-700">₹{Math.round(due.pendingInterest).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right text-red-600">₹{Math.round(due.penalty).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right font-bold text-red-700">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border whitespace-nowrap">{due.currentDueDate.split('-').reverse().join('/')}</td>
-                    <td className="p-1 border text-center text-red-600 font-bold">{due.dueDays}</td>
-                    <td className="p-1 border font-sans text-[9px] leading-tight whitespace-nowrap">
+                    <td className="p-1 border text-center print-nowrap">{idx + 1}</td>
+                    <td className="p-1 border font-bold text-blue-800 print-nowrap">{due.loanId}</td>
+                    <td className="p-1 border font-bold print-wrap">{due.customerName}</td>
+                    <td className="p-1 border text-center print-nowrap">{due.loanType}</td>
+                    <td className="p-1 border text-right print-amount">₹{Math.round(due.currentPrincipal).toLocaleString('en-IN')}</td>
+                    <td className="p-1 border text-right text-green-700 print-amount">₹{Math.round(due.interestPaid).toLocaleString('en-IN')}</td>
+                    <td className="p-1 border text-right text-orange-700 print-amount">₹{Math.round(due.pendingInterest).toLocaleString('en-IN')}</td>
+                    <td className="p-1 border text-right text-red-600 print-amount">₹{Math.round(due.penalty).toLocaleString('en-IN')}</td>
+                    <td className="p-1 border text-right font-bold text-red-700 print-amount">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
+                    <td className="p-1 border print-nowrap">{due.currentDueDate.split('-').reverse().join('/')}</td>
+                    <td className="p-1 border text-center text-red-600 font-bold print-nowrap">{due.dueDays}</td>
+                    <td className="p-1 border font-sans text-[9.5pt] leading-snug print-wrap">
                       <div><span className="font-semibold">B:</span> {due.phone || '—'}</div>
                       {due.g1Name && (
-                        <div><span className="font-semibold font-sans">G1:</span> {due.g1Name} ({due.g1Phone || '—'})</div>
+                        <div><span className="font-semibold">G1:</span> {due.g1Name} ({due.g1Phone || '—'})</div>
                       )}
                       {due.g2Name && (
-                        <div><span className="font-semibold font-sans">G2:</span> {due.g2Name} ({due.g2Phone || '—'})</div>
+                        <div><span className="font-semibold">G2:</span> {due.g2Name} ({due.g2Phone || '—'})</div>
                       )}
                     </td>
                   </tr>
                 ))}
-                <tr className="font-bold bg-slate-50 border-t-2 border-slate-800">
-                  <td colSpan={4} className="p-1 border text-right uppercase">Total:</td>
-                  <td className="p-1 border text-right">₹{Math.round(totals.principal).toLocaleString('en-IN')}</td>
-                  <td className="p-1 border"></td>
-                  <td className="p-1 border text-right">₹{Math.round(totals.interest).toLocaleString('en-IN')}</td>
-                  <td className="p-1 border text-right">₹{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
-                  <td className="p-1 border text-right text-red-700">₹{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
+                <tr className="font-bold bg-slate-50 border-t-2 border-slate-800 print-total">
+                  <td colSpan={4} className="p-1 border text-right uppercase print-wrap">Grand Total:</td>
+                  <td className="p-1 border text-right print-amount">₹{Math.round(totals.principal).toLocaleString('en-IN')}</td>
+                  <td className="p-1 border print-nowrap"></td>
+                  <td className="p-1 border text-right print-amount">₹{Math.round(totals.interest).toLocaleString('en-IN')}</td>
+                  <td className="p-1 border text-right print-amount">₹{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
+                  <td className="p-1 border text-right text-red-700 print-amount">₹{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
                   <td colSpan={3} className="border"></td>
                 </tr>
               </tbody>

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabaseFinance } from '../../lib/supabaseFinance';
 import {
   Home,
   PlusCircle,
@@ -40,6 +41,24 @@ interface MenuSection {
 
 const FinanceSidebar: React.FC = () => {
   const { user } = useAuth();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    if (!user?.is_admin) return;
+
+    const fetchCount = async () => {
+      try {
+        const count = await supabaseFinance.getPendingApprovalsCount();
+        setPendingCount(count);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchCount();
+    const interval = setInterval(fetchCount, 10000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   const sections: MenuSection[] = [
     {
@@ -156,10 +175,17 @@ const FinanceSidebar: React.FC = () => {
                       }
                     >
                       {({ isActive }) => (
-                        <>
-                          <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                          <span>{item.label}</span>
-                        </>
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-3">
+                            <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                            <span>{item.label}</span>
+                          </div>
+                          {item.label === 'Transaction Approval' && pendingCount > 0 && (
+                            <span className="bg-red-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full shadow-sm animate-pulse min-w-[18px] text-center leading-none">
+                              {pendingCount}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </NavLink>
                   </li>
