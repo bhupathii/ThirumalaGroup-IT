@@ -9,7 +9,7 @@ import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 interface DaybookItem {
   id: string;
-  source: 'Transaction' | 'Capital';
+  source: 'Transaction' | 'Capital' | 'Cashbook';
   particulars: string;
   type: string; // 'Collection', 'Disbursement', 'Capital Credit', etc.
   cashIn: number;
@@ -36,30 +36,15 @@ const Daybook: React.FC = () => {
   const fetchDaybookData = async () => {
     setLoading(true);
     try {
+      // Fetch all unified entries
+      const allUnified = await supabaseFinance.getUnifiedLedgerEntries();
+
       // 1. Calculate Opening Balance (Net flow before fromDate)
-      // Receipts: collections & capital credits before date
-      // Payments: disbursements & capital debits before date
-      const allTx = await supabaseFinance.getTransactions();
-      const allCapital = await supabaseFinance.getCapitalEntries();
-
       let opBal = 0;
-      allTx.forEach(tx => {
-        if (tx.date < fromDate) {
-          if (tx.type === 'Collection') {
-            opBal += Number(tx.amount);
-          } else if (tx.type === 'Disbursement') {
-            opBal -= Number(tx.amount);
-          }
-        }
-      });
-
-      allCapital.forEach(cap => {
-        if (cap.entry_date < fromDate) {
-          if (cap.credit > 0) {
-            opBal += Number(cap.credit);
-          } else {
-            opBal -= Number(cap.debit);
-          }
+      allUnified.forEach(entry => {
+        if (entry.date < fromDate) {
+          opBal += Number(entry.credit) || 0;
+          opBal -= Number(entry.debit) || 0;
         }
       });
 
@@ -70,44 +55,23 @@ const Daybook: React.FC = () => {
       let inSum = 0;
       let outSum = 0;
 
-      // Filter transactions for this date range
-      const rangeTx = allTx.filter(tx => tx.date >= fromDate && tx.date <= toDate);
-      rangeTx.forEach(tx => {
-        const amt = Number(tx.amount);
-        const isCollection = tx.type === 'Collection';
-        items.push({
-          id: tx.id,
-          source: 'Transaction',
-          particulars: isCollection 
-            ? `Collection Recd - ${tx.loan?.customer?.name || 'N/A'} (${tx.loan?.loan_id || 'N/A'})`
-            : `Loan Disbursed - ${tx.loan?.customer?.name || 'N/A'} (${tx.loan?.loan_id || 'N/A'})`,
-          type: tx.type,
-          cashIn: isCollection ? amt : 0,
-          cashOut: !isCollection ? amt : 0,
-          remarks: tx.remarks
-        });
-        if (isCollection) inSum += amt;
-        else outSum += amt;
-      });
+      const rangeEntries = allUnified.filter(e => e.date >= fromDate && e.date <= toDate);
+      rangeEntries.forEach(entry => {
+        const cashIn = Number(entry.credit) || 0;
+        const cashOut = Number(entry.debit) || 0;
 
-      // Filter capital entries for this date range
-      const rangeCap = allCapital.filter(cap => cap.entry_date >= fromDate && cap.entry_date <= toDate);
-      rangeCap.forEach(cap => {
-        const isCredit = cap.credit > 0;
-        const amt = isCredit ? Number(cap.credit) : Number(cap.debit);
         items.push({
-          id: cap.id,
-          source: 'Capital',
-          particulars: isCredit
-            ? `Capital Invested by Partner - ${cap.partner?.name || cap.partner_name || 'N/A'}`
-            : `Capital Withdrawn by Partner - ${cap.partner?.name || cap.partner_name || 'N/A'}`,
-          type: isCredit ? 'Capital Deposit' : 'Capital Withdraw',
-          cashIn: isCredit ? amt : 0,
-          cashOut: !isCredit ? amt : 0,
-          remarks: cap.particulars
+          id: entry.id,
+          source: (entry.category === 'CAPITAL') ? 'Capital' : (['CD', 'HP', 'STBD', 'TBD'].includes(entry.category)) ? 'Transaction' : 'Cashbook',
+          particulars: entry.particulars || `${cashIn > 0 ? 'Receipt' : 'Payment'} - ${entry.head_of_account} (${entry.account_number})`,
+          type: entry.head_of_account,
+          cashIn,
+          cashOut,
+          remarks: entry.particulars
         });
-        if (isCredit) inSum += amt;
-        else outSum += amt;
+
+        inSum += cashIn;
+        outSum += cashOut;
       });
 
       setDaybookItems(items);

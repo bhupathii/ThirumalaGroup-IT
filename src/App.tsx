@@ -51,6 +51,7 @@ import Camera from './pages/finance/Camera';
 import Daybook from './pages/finance/Daybook';
 import DailyReportFinance from './pages/finance/DailyReport';
 import GeneralLedger from './pages/finance/GeneralLedger';
+import DetailedLedgerFinance from './pages/finance/DetailedLedger';
 import CDLedger from './pages/finance/CDLedger';
 import STBDLedger from './pages/finance/STBDLedger';
 import HPLedger from './pages/finance/HPLedger';
@@ -73,6 +74,8 @@ import Guarantors from './pages/finance/Guarantors';
 import NewPartner from './pages/finance/NewPartner';
 import CashBook from './pages/finance/CashBook';
 import LedgerSettings from './pages/finance/LedgerSettings';
+import PaymentFollowUp from './pages/finance/PaymentFollowUp';
+import TransactionApproval from './pages/finance/TransactionApproval';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
@@ -275,11 +278,13 @@ const AppContent: React.FC = () => {
           <Route path='finance/daybook' element={<OfflineGuard><Daybook /></OfflineGuard>} />
           <Route path='finance/daily-report' element={<OfflineGuard><DailyReportFinance /></OfflineGuard>} />
           <Route path='finance/general-ledger' element={<OfflineGuard><GeneralLedger /></OfflineGuard>} />
+          <Route path='finance/detailed-ledger' element={<OfflineGuard><DetailedLedgerFinance /></OfflineGuard>} />
           <Route path='finance/cd-ledger' element={<OfflineGuard><CDLedger /></OfflineGuard>} />
           <Route path='finance/stbd-ledger' element={<OfflineGuard><STBDLedger /></OfflineGuard>} />
           <Route path='finance/hp-ledger' element={<OfflineGuard><HPLedger /></OfflineGuard>} />
           <Route path='finance/tbd-ledger' element={<OfflineGuard><TBDLedger /></OfflineGuard>} />
           <Route path='finance/dues-ledger' element={<OfflineGuard><DuesLedger /></OfflineGuard>} />
+          <Route path='finance/payment-followup' element={<OfflineGuard><PaymentFollowUp /></OfflineGuard>} />
           <Route path='finance/pl' element={<OfflineGuard><ProfitAndLoss /></OfflineGuard>} />
           <Route path='finance/final-statement' element={<OfflineGuard><FinalStatement /></OfflineGuard>} />
           <Route path='finance/business-report' element={<OfflineGuard><BusinessReport /></OfflineGuard>} />
@@ -297,6 +302,7 @@ const AppContent: React.FC = () => {
           <Route path='finance/new-partner' element={<OfflineGuard><NewPartner /></OfflineGuard>} />
           <Route path='finance/cash-book' element={<OfflineGuard><CashBook /></OfflineGuard>} />
           <Route path='finance/ledger-settings' element={<OfflineGuard><LedgerSettings /></OfflineGuard>} />
+          <Route path='finance/transaction-approval' element={<OfflineGuard><TransactionApproval /></OfflineGuard>} />
         </Route>
       </Routes>
     </Router>

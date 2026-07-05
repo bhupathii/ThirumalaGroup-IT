@@ -519,10 +519,8 @@ export const financeCalculationService = {
     };
   },
 
-  calculateNextDueDate(paymentDate: string | Date, periodDays: number = 10): string {
-    const dateObj = new Date(paymentDate);
-    const nextDueDate = new Date(dateObj.getTime() + periodDays * 24 * 60 * 60 * 1000);
-    return nextDueDate.toISOString().split('T')[0];
+  calculateNextDueDate(paymentDate: string | Date | number, periodDays: number = 10): string {
+    return this.addCalendarDays(paymentDate, periodDays);
   },
 
   getNextReceiptNumber(latestReceiptNo: string | null): string {

@@ -22,6 +22,7 @@ import {
   Shield,
   Settings,
   RefreshCw,
+  Phone,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -58,7 +59,7 @@ const FinanceSidebar: React.FC = () => {
         { icon: Users, label: 'Customers', path: '/finance/customers', key: 'new_customers' },
         { icon: UserPlus, label: 'New Partner', path: '/finance/new-partner', key: 'partners' },
         { icon: Users, label: 'Partners', path: '/finance/partners', key: 'partners' },
-        { icon: BookOpen, label: 'Cash Book', path: '/finance/cash-book', key: 'daybook' },
+        { icon: BookOpen, label: 'Day Book Entry', path: '/finance/cash-book', key: 'daybook' },
         { icon: DollarSign, label: 'Capital Entry', path: '/finance/capital-entry', key: 'capital_entry' },
         { icon: Calculator, label: 'Calculator', path: '/finance/calculator', key: 'calculator' },
         { icon: Search, label: 'Search', path: '/finance/search', key: 'search' },
@@ -78,8 +79,10 @@ const FinanceSidebar: React.FC = () => {
       items: [
         { icon: BookOpen, label: 'Day Book', path: '/finance/daybook', key: 'daybook' },
         { icon: FileText, label: 'Daily Report', path: '/finance/daily-report', key: 'daily_report' },
+        { icon: Book, label: 'Detailed Ledger', path: '/finance/detailed-ledger', key: 'detailed_ledger' },
         { icon: BookOpen, label: 'General Ledger', path: '/finance/general-ledger', key: 'general_ledger' },
         { icon: AlertCircle, label: 'Dues List', path: '/finance/dues-ledger', key: 'dues_ledger' },
+        { icon: Phone, label: 'Payment Follow-up', path: '/finance/payment-followup', key: 'payment_followup' },
         { icon: TrendingUp, label: 'Profit & Loss', path: '/finance/pl', key: 'pl' },
         { icon: FileCheck, label: 'Final Statement', path: '/finance/final-statement', key: 'final_statement' },
         { icon: Briefcase, label: 'Business Details', path: '/finance/business-report', key: 'business_report' },
@@ -94,6 +97,13 @@ const FinanceSidebar: React.FC = () => {
           icon: Shield,
           label: 'User Access Management',
           path: '/finance/user-access-management',
+          key: 'user_access_management',
+          adminOnly: true,
+        },
+        {
+          icon: FileCheck,
+          label: 'Transaction Approval',
+          path: '/finance/transaction-approval',
           key: 'user_access_management',
           adminOnly: true,
         },

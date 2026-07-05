@@ -102,7 +102,7 @@ const BusinessReport: React.FC = () => {
       // Fetch specific dues
       const { data: rawDues } = await supabase
         .from('finance_dues')
-        .select(`*, finance_loans(*, customer:finance_customers(*))`)
+        .select(`*, finance_loans(*, customer:finance_customers!customer_id(*))`)
         .gte('due_date', startDate)
         .lte('due_date', endDate);
 
@@ -206,8 +206,35 @@ const BusinessReport: React.FC = () => {
     const today = new Date();
     validDues.forEach(due => {
       if (due.status === 'Pending' || due.status === 'Partially Paid') {
-        const principal = Number(due.principal_amount) || 0;
-        const interest = Number(due.interest_amount) || 0;
+        let principal = 0;
+        let interest = 0;
+        const loan = due.finance_loans;
+        if (loan) {
+          const totalPrincipal = Number(loan.amount) || 0;
+          const cat = loan.loan_category?.trim().toUpperCase() || 'CD';
+          const setting = ledgerSettings[cat] || ledgerSettings['CD'];
+          const durationMonths = Number(loan.duration_months) || 12;
+          const interestRate = Number(loan.interest_rate) || 3;
+          
+          let totalInterest = 0;
+          if (setting) {
+            totalInterest = financeCalculationService.calculateInterestFromSetting(
+              totalPrincipal,
+              durationMonths * 30,
+              setting,
+              durationMonths
+            );
+          } else {
+            totalInterest = totalPrincipal * (interestRate / 100) * durationMonths;
+          }
+          
+          const totalLoanRepayable = totalPrincipal + totalInterest;
+          const interestRatio = totalLoanRepayable > 0 ? totalInterest / totalLoanRepayable : 0;
+          
+          const dueAmt = Number(due.amount) || 0;
+          interest = dueAmt * interestRatio;
+          principal = dueAmt * (1 - interestRatio);
+        }
         
         const dueAmt = Number(due.amount) || 0;
         const duePaid = Number(due.paid_amount) || 0;
@@ -269,7 +296,7 @@ const BusinessReport: React.FC = () => {
 
       const { data: rawDues } = await supabase
         .from('finance_dues')
-        .select(`*, finance_loans(*, customer:finance_customers(*))`)
+        .select(`*, finance_loans(*, customer:finance_customers!customer_id(*))`)
         .gte('due_date', startDate)
         .lte('due_date', endDate);
 

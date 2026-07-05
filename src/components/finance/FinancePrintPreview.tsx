@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Printer, X } from 'lucide-react';
 
 interface FinancePrintPreviewProps {
@@ -9,6 +10,7 @@ interface FinancePrintPreviewProps {
   documentTitle: string;
   printedDate?: string;
   children: React.ReactNode;
+  orientation?: 'portrait' | 'landscape';
 }
 
 const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
@@ -19,6 +21,7 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
   documentTitle,
   printedDate,
   children,
+  orientation = 'portrait',
 }) => {
   // Prevent scrolling on body when modal is open
   useEffect(() => {
@@ -34,11 +37,10 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <>
-      <div className="fixed inset-0 z-[100] overflow-y-auto print:static print:overflow-visible">
-        <div className="min-h-screen bg-slate-900/60 backdrop-blur-sm p-4 md:p-8 flex justify-center items-start print:bg-white print:block print:p-0 print:min-h-0">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-5xl w-full overflow-hidden print:max-w-none print:border-none print:shadow-none print:rounded-none">
+      <div className="fixed inset-0 z-[100] overflow-y-auto print:static print:overflow-visible print-preview-modal-root bg-slate-900/60 backdrop-blur-sm p-4 md:p-8 flex justify-center items-start print:bg-white print:block print:p-0 print:min-h-0">
+        <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-5xl w-full overflow-hidden print:max-w-none print:border-none print:shadow-none print:rounded-none">
           {/* Header Actions */}
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 print:hidden">
             <div>
@@ -81,17 +83,16 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
           </div>
         </div>
       </div>
-      </div>
 
       <style>{`
         @media print {
           @page {
-            size: portrait;
+            size: ${orientation};
             margin: 8mm;
           }
 
-          /* Hide app layout elements */
-          aside, header, nav, .hide-on-print {
+          /* Hide main app layout and standard elements completely */
+          #root, aside, header, nav, .hide-on-print {
             display: none !important;
           }
           
@@ -130,9 +131,23 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
+
+          tr {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          
+          thead {
+            display: table-header-group !important;
+          }
+          
+          tfoot {
+            display: table-footer-group !important;
+          }
         }
       `}</style>
-    </>
+    </>,
+    document.body
   );
 };
 

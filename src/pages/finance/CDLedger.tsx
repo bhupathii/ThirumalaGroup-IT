@@ -134,7 +134,8 @@ const CDLedger: React.FC = () => {
   // Action Panel State
   const [totalAmountPaying, setTotalAmountPaying] = useState('');
   const [receiptNo, setReceiptNo] = useState('');
-  const [activeLogTab, setActiveLogTab] = useState<'statement' | 'interest' | 'payment'>('statement');
+  const [activeLogTab, setActiveLogTab] = useState<'statement' | 'interest' | 'payment' | 'editHistory'>('statement');
+  const [editLogs, setEditLogs] = useState<any[]>([]);
   const [loanTransactions, setLoanTransactions] = useState<any[]>([]);
   const [showEditTxModal, setShowEditTxModal] = useState(false);
   const [editingTx, setEditingTx] = useState<any | null>(null);
@@ -329,6 +330,14 @@ const CDLedger: React.FC = () => {
           .order('created_at', { ascending: false })
           .limit(1);
         setDocumentReturned(retDocs && retDocs.length > 0 ? retDocs[0] : null);
+
+        // Fetch transaction edit logs
+        const { data: editLogsData } = await supabase
+          .from('finance_cd_transaction_edit_logs')
+          .select('*')
+          .eq('loan_id', loanId)
+          .order('edited_at', { ascending: false });
+        setEditLogs(editLogsData || []);
 
         // Set auto-generated receipt number (sequential)
         const nextReceipt = await supabaseFinance.getNextReceiptNumber();
@@ -1258,6 +1267,135 @@ const CDLedger: React.FC = () => {
       )
       .reduce((sum, e) => sum + Number(e.credit), 0);
   }, [displayedStatementEntries]);
+
+  // Grouped payment entries for receipt-centric statement reports (Change 6, 8, 9, 10, 11, 12, 13)
+  const groupedPayments = useMemo(() => {
+    if (!selectedLoan) return [];
+
+    const nonOpening = displayedStatementEntries.filter(e => 
+      e.entry_type !== 'original_loan' && 
+      e.entry_type !== 'opening_commission' && 
+      e.entry_type !== 'document_charge' &&
+      (e.account_name || '').toLowerCase() !== 'cd document charges a/c' &&
+      e.entry_type !== 'Disbursement' &&
+      e.entry_type !== 'Commission' &&
+      e.entry_type !== 'Document Charges'
+    );
+
+    const groups: { [key: string]: any[] } = {};
+    const noReceiptEntries: any[] = [];
+
+    nonOpening.forEach(entry => {
+      if (entry.receipt_no && entry.receipt_no !== '-') {
+        if (!groups[entry.receipt_no]) {
+          groups[entry.receipt_no] = [];
+        }
+        groups[entry.receipt_no].push(entry);
+      } else {
+        noReceiptEntries.push(entry);
+      }
+    });
+
+    const rows: any[] = [];
+
+    Object.keys(groups).forEach(receiptNo => {
+      const groupEntries = groups[receiptNo];
+      const firstEntry = groupEntries[0];
+
+      const amountPaidEntry = groupEntries.find(e => e.entry_type === 'amount_paid');
+      const totalAmountPaid = amountPaidEntry ? Number(amountPaidEntry.credit) : 
+        groupEntries.reduce((sum, e) => {
+          const isAllocation = ['PENALTY A/C', 'CD COMMISSION A/C', 'CD A/C'].includes((e.account_name || '').toUpperCase()) || 
+            ['penalty_payment', 'interest_payment', 'principal_payment'].includes(e.entry_type);
+          return sum + (isAllocation ? Number(e.credit || 0) : 0);
+        }, 0);
+
+      const interestPaid = groupEntries
+        .filter(e => (e.account_name || '').toUpperCase() === 'CD COMMISSION A/C' || e.entry_type === 'interest_payment')
+        .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
+      const penaltyPaid = groupEntries
+        .filter(e => (e.account_name || '').toUpperCase() === 'PENALTY A/C' || e.entry_type === 'penalty_payment')
+        .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
+      const principalPaid = groupEntries
+        .filter(e => (e.account_name || '').toUpperCase() === 'CD A/C' || e.entry_type === 'principal_payment')
+        .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
+      const matchingInt = cdInterestDetails.find(d => d.receipt_no === receiptNo && (Number(d.renewed_days) > 0 || d.renewed_till_date));
+      const renewedDays = matchingInt ? Number(matchingInt.renewed_days) : 0;
+      const renewedTill = matchingInt ? matchingInt.renewed_till_date : null;
+
+      const date = firstEntry.entry_date;
+      const user = firstEntry.user_name || 'Staff';
+
+      let particulars = 'Payment';
+      const isRenewal = groupEntries.some(e => 
+        e.entry_type === 'Renewal' || e.entry_type === 'Renew' || 
+        (e.particulars || '').toLowerCase().includes('renewal') ||
+        (e.particulars || '').toLowerCase().includes('renew')
+      );
+      const isClose = groupEntries.some(e => e.entry_type === 'Close' || e.entry_type === 'Settlement' || (e.particulars || '').toLowerCase().includes('close'));
+      if (isClose) {
+        particulars = 'Close Account';
+      } else if (isRenewal) {
+        particulars = 'Renewal Payment';
+      } else if (principalPaid > 0) {
+        particulars = 'Principal Payment';
+      } else {
+        particulars = 'Interest Payment';
+      }
+
+      rows.push({
+        receipt_no: receiptNo,
+        date,
+        amountPaid: totalAmountPaid,
+        interest: interestPaid,
+        penalty: penaltyPaid,
+        principal: principalPaid,
+        particulars,
+        daysRenewed: renewedDays,
+        renewedTill: renewedTill,
+        user
+      });
+    });
+
+    noReceiptEntries.forEach(entry => {
+      const isDebit = Number(entry.debit) > 0;
+      const amount = isDebit ? Number(entry.debit) : Number(entry.credit);
+      rows.push({
+        receipt_no: '-',
+        date: entry.entry_date,
+        amountPaid: isDebit ? 0 : amount,
+        interest: 0,
+        penalty: 0,
+        principal: isDebit ? amount : 0,
+        particulars: entry.particulars || (isDebit ? 'Debit Entry' : 'Credit Entry'),
+        daysRenewed: 0,
+        renewedTill: null,
+        user: entry.user_name || 'Staff'
+      });
+    });
+
+    return rows.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [displayedStatementEntries, cdInterestDetails, selectedLoan]);
+
+  const statementTotals = useMemo(() => {
+    const t = {
+      amountPaid: 0,
+      interest: 0,
+      penalty: 0,
+      principal: 0,
+      documentCharges: Number(selectedLoan?.document_charges) || 0
+    };
+    groupedPayments.forEach(row => {
+      t.amountPaid += row.amountPaid || 0;
+      t.interest += row.interest || 0;
+      t.penalty += row.penalty || 0;
+      t.principal += row.principal || 0;
+    });
+    return t;
+  }, [groupedPayments, selectedLoan]);
 
   const displayedInterestDetails = useMemo(() => {
     const list: any[] = [];
@@ -2349,225 +2487,176 @@ const CDLedger: React.FC = () => {
                     className="p-2 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
                     title="Next Record"
                   >
-                    <ChevronRight className="w-4 h-4 text-gray-655" />
+                    <ChevronRight className="w-4 h-4 text-gray-650" />
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Workspace Profile Cards Layout (Row 1: Borrower & Guarantors, Row 2: Photos & Documents) */}
-            <div className="space-y-6 print:hidden">
-              {/* Row 1: Borrower and Guarantor Details (3 Columns) */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Card 1: Customer Details */}
-                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 relative flex flex-col justify-between min-h-[220px]">
-                  <div className="flex justify-between items-center border-b pb-2 mb-3">
-                    <div>
-                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Customer Details</span>
-                      <span className="text-[10px] text-slate-500 font-bold block">Borrower Info</span>
-                    </div>
-                    <Button
-                      onClick={isEditing ? handleSaveDetails : handleToggleEdit}
-                      variant={isEditing ? "success" : "secondary"}
-                      size="xs"
-                      icon={isEditing ? Save : Edit2}
-                      disabled={savingDetails || selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
-                      className="scale-90 border-0"
-                    >
-                      {isEditing ? 'Save' : 'Edit'}
-                    </Button>
-                  </div>
-                  <div className="flex-1">
-                    {isEditing ? (
-                      <div className="space-y-2 text-xs">
-                        <Input label="Name" value={editCustName} onChange={setEditCustName} className="scale-90 origin-top-left" />
-                        <Input label="S/o W/o" value={editCustFatherName} onChange={setEditCustFatherName} className="scale-90 origin-top-left" />
-                        <Input label="Address" value={editCustAddress} onChange={setEditCustAddress} className="scale-90 origin-top-left" />
-                        <Input label="Phone 1" value={editCustPhone} onChange={setEditCustPhone} className="scale-90 origin-top-left" />
-                        <Input label="Phone 2" value={editCustPhone2} onChange={setEditCustPhone2} className="scale-90 origin-top-left" />
-                        <Input label="Aadhaar" value={editCustAadhaar} onChange={setEditCustAadhaar} className="scale-90 origin-top-left" />
-                        <Input label="Partner" value={editCustPartnerName} onChange={setEditCustPartnerName} className="scale-90 origin-top-left" />
+            {/* Workspace Profile Cards Layout (Compacted Profiles with Photos Side-by-Side) */}
+            {(() => {
+              const borrowerPhotoUrl = selectedLoan.customer?.customer_photo_url || selectedLoan.customer_photo_url;
+              const guarantor1PhotoUrl = guarantor1?.photo_url || guarantor1?.customer_photo_url || selectedLoan.surety_photo_url;
+              const guarantor2PhotoUrl = guarantor2?.photo_url || guarantor2?.customer_photo_url;
+
+              return (
+                <div className="space-y-6 print:hidden">
+                  {/* Row 1: Borrower and Guarantor Details (3 Columns with Photos) */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Card 1: Borrower Details + Photo */}
+                    <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 min-h-[220px] flex flex-col justify-between">
+                      <div className="flex justify-between items-center border-b pb-2 mb-3">
+                        <div>
+                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Customer Details</span>
+                          <span className="text-[10px] text-slate-500 font-bold block">Borrower Info</span>
+                        </div>
+                        <Button
+                          onClick={isEditing ? handleSaveDetails : handleToggleEdit}
+                          variant={isEditing ? "success" : "secondary"}
+                          size="xs"
+                          icon={isEditing ? Save : Edit2}
+                          disabled={savingDetails || selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
+                          className="scale-90 border-0"
+                        >
+                          {isEditing ? 'Save' : 'Edit'}
+                        </Button>
                       </div>
-                    ) : (
-                      <div className="space-y-2 text-sm text-gray-750">
-                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Name:</span>
-                          <span className="text-sm font-black text-slate-950">{selectedLoan.customer?.name}</span>
+                      <div className="flex gap-4 items-start">
+                        <div className="flex-1">
+                          {isEditing ? (
+                            <div className="space-y-2 text-xs">
+                              <Input label="Name" value={editCustName} onChange={setEditCustName} className="scale-90 origin-top-left" />
+                              <Input label="S/o W/o" value={editCustFatherName} onChange={setEditCustFatherName} className="scale-90 origin-top-left" />
+                              <Input label="Address" value={editCustAddress} onChange={setEditCustAddress} className="scale-90 origin-top-left" />
+                              <Input label="Phone 1" value={editCustPhone} onChange={setEditCustPhone} className="scale-90 origin-top-left" />
+                              <Input label="Phone 2" value={editCustPhone2} onChange={setEditCustPhone2} className="scale-90 origin-top-left" />
+                              <Input label="Aadhaar" value={editCustAadhaar} onChange={setEditCustAadhaar} className="scale-90 origin-top-left" />
+                              <Input label="Partner" value={editCustPartnerName} onChange={setEditCustPartnerName} className="scale-90 origin-top-left" />
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5 text-xs text-gray-750 font-sans">
+                              <div className="flex justify-between border-b border-gray-50 pb-1">
+                                <span className="text-gray-400">Name:</span>
+                                <span className="font-extrabold text-slate-900">{selectedLoan.customer?.name}</span>
+                              </div>
+                              <div className="flex justify-between border-b border-gray-50 pb-1">
+                                <span className="text-gray-400">S/o W/o:</span>
+                                <span className="font-bold text-slate-800">{selectedLoan.customer?.father_husband_name || 'N/A'}</span>
+                              </div>
+                              <div className="flex justify-between border-b border-gray-50 pb-1">
+                                <span className="text-gray-400">Phone:</span>
+                                <span className="font-bold text-slate-800">{selectedLoan.customer?.phone || 'N/A'}</span>
+                              </div>
+                              {selectedLoan.customer?.phone2 && (
+                                <div className="flex justify-between border-b border-gray-50 pb-1">
+                                  <span className="text-gray-400">Phone 2:</span>
+                                  <span className="font-bold text-slate-800">{selectedLoan.customer?.phone2}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between border-b border-gray-50 pb-1">
+                                <span className="text-gray-400">Aadhaar:</span>
+                                <span className="font-bold text-slate-800 font-mono">{selectedLoan.customer?.aadhaar || 'N/A'}</span>
+                              </div>
+                              <div className="flex justify-between border-b border-gray-50 pb-1">
+                                <span className="text-gray-400">Address:</span>
+                                <span className="font-bold text-slate-850 truncate max-w-[120px]" title={selectedLoan.customer?.address || undefined}>{selectedLoan.customer?.address || 'N/A'}</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">S/o W/o:</span>
-                          <span className="text-sm font-black text-slate-950">{selectedLoan.customer?.father_husband_name || 'N/A'}</span>
-                        </div>
-                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Phone 1:</span>
-                          <span className="text-sm font-black text-slate-950">{selectedLoan.customer?.phone || 'N/A'}</span>
-                        </div>
-                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Phone 2:</span>
-                          <span className="text-sm font-black text-slate-950">{selectedLoan.customer?.phone2 || 'N/A'}</span>
-                        </div>
-                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Aadhaar:</span>
-                          <span className="text-sm font-black text-slate-955 font-mono">{selectedLoan.customer?.aadhaar || 'N/A'}</span>
-                        </div>
-                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Partner:</span>
-                          <span className="text-sm font-black text-slate-955">{selectedLoan.customer?.partner_name || 'N/A'}</span>
-                        </div>
-                        <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Address:</span>
-                          <span className="text-sm font-black text-slate-955 leading-tight">{selectedLoan.customer?.address || 'N/A'}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Card 2: Guarantor 1 */}
-                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 relative flex flex-col justify-between min-h-[220px]">
-                  <div className="flex justify-between items-center border-b pb-2 mb-3">
-                    <div>
-                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Guarantor 1</span>
-                      <span className="text-[10px] text-slate-500 font-bold block">Surety Profile</span>
-                    </div>
-                  </div>
-                  <div className="flex-1 space-y-2 text-sm text-gray-755">
-                    <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Name:</span>
-                      <span className="text-sm font-black text-slate-955">{guarantor1?.name || 'N/A'}</span>
-                    </div>
-                    <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Phone No:</span>
-                      <span className="text-sm font-black text-slate-955">{guarantor1?.phone || 'N/A'}</span>
-                    </div>
-                    <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Aadhaar:</span>
-                      <span className="text-sm font-black text-slate-955 font-mono">{guarantor1?.aadhaar || 'N/A'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Card 3: Guarantor 2 */}
-                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 relative flex flex-col justify-between min-h-[220px]">
-                  <div className="flex justify-between items-center border-b pb-2 mb-3">
-                    <div>
-                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Guarantor 2</span>
-                      <span className="text-[10px] text-slate-500 font-bold block">Secondary Surety</span>
-                    </div>
-                  </div>
-                  <div className="flex-1 space-y-2 text-sm text-gray-755">
-                    <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Name:</span>
-                      <span className="text-sm font-black text-slate-955">{guarantor2?.name || 'N/A'}</span>
-                    </div>
-                    <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Phone No:</span>
-                      <span className="text-sm font-black text-slate-955">{guarantor2?.phone || 'N/A'}</span>
-                    </div>
-                    <div className="grid grid-cols-[110px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Aadhaar:</span>
-                      <span className="text-sm font-black text-slate-955 font-mono">{guarantor2?.aadhaar || 'N/A'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 2: Profile Photos and Document Status (2 Columns) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Card 4: Profile Photos */}
-                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 relative flex flex-col justify-between min-h-[220px]">
-                  <div className="flex justify-between items-center border-b pb-2 mb-3">
-                    <div>
-                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Profile Photos</span>
-                      <span className="text-[10px] text-slate-500 font-bold block">Biometric Images</span>
-                    </div>
-                  </div>
-                  <div className="flex-1 grid grid-cols-3 gap-4 mt-1">
-                    {/* Borrower Photo */}
-                    <div className="text-center">
-                      <div className="w-full aspect-[4/3] rounded-xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center relative group">
-                        {selectedLoan.customer?.customer_photo_url ? (
-                          <img src={selectedLoan.customer.customer_photo_url} alt="Borrower Person" className="w-full h-full object-cover" />
-                        ) : selectedLoan.customer_photo_url ? (
-                          <img src={selectedLoan.customer_photo_url} alt="Borrower Person" className="w-full h-full object-cover" />
-                        ) : (
-                          <User className="w-8 h-8 text-gray-300" />
+                        {!isEditing && (
+                          <div className="w-20 h-24 shrink-0 rounded-xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center relative shadow-sm">
+                            {borrowerPhotoUrl ? (
+                              <img src={borrowerPhotoUrl} alt="Borrower" className="w-full h-full object-cover" />
+                            ) : (
+                              <User className="w-8 h-8 text-gray-300" />
+                            )}
+                          </div>
                         )}
-                        <span className="absolute bottom-0 left-0 right-0 bg-slate-900/60 text-white text-[10px] py-1 text-center font-bold tracking-wider opacity-90">BORROWER</span>
                       </div>
                     </div>
 
-                    {/* Surety 1 Photo */}
-                    <div className="text-center">
-                      <div className="w-full aspect-[4/3] rounded-xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center relative group">
-                        {guarantor1?.photo_url ? (
-                          <img src={guarantor1.photo_url} alt="Surety 1 Person" className="w-full h-full object-cover" />
-                        ) : guarantor1?.customer_photo_url ? (
-                          <img src={guarantor1.customer_photo_url} alt="Surety 1 Person" className="w-full h-full object-cover" />
-                        ) : selectedLoan.surety_photo_url ? (
-                          <img src={selectedLoan.surety_photo_url} alt="Surety 1 Person" className="w-full h-full object-cover" />
-                        ) : (
-                          <User className="w-8 h-8 text-gray-300" />
+                    {/* Card 2: Guarantor 1 Details + Photo */}
+                    <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 min-h-[220px] flex flex-col justify-between">
+                      <div className="flex justify-between items-center border-b pb-2 mb-3">
+                        <div>
+                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Guarantor 1</span>
+                          <span className="text-[10px] text-slate-500 font-bold block">Surety Profile</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-4 items-start">
+                        <div className="flex-1 space-y-1.5 text-xs text-gray-755 font-sans">
+                          <div className="flex justify-between border-b border-gray-50 pb-1">
+                            <span className="text-gray-400">Name:</span>
+                            <span className="font-extrabold text-slate-900">{guarantor1?.name || 'N/A'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-gray-50 pb-1">
+                            <span className="text-gray-400">Phone:</span>
+                            <span className="font-bold text-slate-800">{guarantor1?.phone || 'N/A'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-gray-50 pb-1">
+                            <span className="text-gray-400">Aadhaar:</span>
+                            <span className="font-bold text-slate-800 font-mono">{guarantor1?.aadhaar || 'N/A'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-gray-50 pb-1">
+                            <span className="text-gray-400">Address:</span>
+                            <span className="font-bold text-slate-850 truncate max-w-[120px]" title={guarantor1?.address || undefined}>{guarantor1?.address || 'N/A'}</span>
+                          </div>
+                        </div>
+                        {guarantor1 && (
+                          <div className="w-20 h-24 shrink-0 rounded-xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center relative shadow-sm">
+                            {guarantor1PhotoUrl ? (
+                              <img src={guarantor1PhotoUrl} alt="Guarantor 1" className="w-full h-full object-cover" />
+                            ) : (
+                              <User className="w-8 h-8 text-gray-300" />
+                            )}
+                          </div>
                         )}
-                        <span className="absolute bottom-0 left-0 right-0 bg-slate-900/60 text-white text-[10px] py-1 text-center font-bold tracking-wider opacity-90">SURETY 1</span>
                       </div>
                     </div>
 
-                    {/* Surety 2 Photo */}
-                    <div className="text-center">
-                      <div className="w-full aspect-[4/3] rounded-xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center relative group">
-                        {guarantor2?.photo_url ? (
-                          <img src={guarantor2.photo_url} alt="Surety 2 Person" className="w-full h-full object-cover" />
-                        ) : guarantor2?.customer_photo_url ? (
-                          <img src={guarantor2.customer_photo_url} alt="Surety 2 Person" className="w-full h-full object-cover" />
-                        ) : (
-                          <User className="w-8 h-8 text-gray-300" />
+                    {/* Card 3: Guarantor 2 Details + Photo */}
+                    <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 min-h-[220px] flex flex-col justify-between">
+                      <div className="flex justify-between items-center border-b pb-2 mb-3">
+                        <div>
+                          <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Guarantor 2</span>
+                          <span className="text-[10px] text-slate-500 font-bold block">Secondary Surety</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-4 items-start">
+                        <div className="flex-1 space-y-1.5 text-xs text-gray-755 font-sans">
+                          <div className="flex justify-between border-b border-gray-50 pb-1">
+                            <span className="text-gray-400">Name:</span>
+                            <span className="font-extrabold text-slate-900">{guarantor2?.name || 'N/A'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-gray-50 pb-1">
+                            <span className="text-gray-400">Phone:</span>
+                            <span className="font-bold text-gray-800">{guarantor2?.phone || 'N/A'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-gray-50 pb-1">
+                            <span className="text-gray-400">Aadhaar:</span>
+                            <span className="font-bold text-slate-800 font-mono">{guarantor2?.aadhaar || 'N/A'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-gray-50 pb-1">
+                            <span className="text-gray-400">Address:</span>
+                            <span className="font-bold text-slate-850 truncate max-w-[120px]" title={guarantor2?.address || undefined}>{guarantor2?.address || 'N/A'}</span>
+                          </div>
+                        </div>
+                        {guarantor2 && (
+                          <div className="w-20 h-24 shrink-0 rounded-xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center relative shadow-sm">
+                            {guarantor2PhotoUrl ? (
+                              <img src={guarantor2PhotoUrl} alt="Guarantor 2" className="w-full h-full object-cover" />
+                            ) : (
+                              <User className="w-8 h-8 text-gray-300" />
+                            )}
+                          </div>
                         )}
-                        <span className="absolute bottom-0 left-0 right-0 bg-slate-900/60 text-white text-[10px] py-1 text-center font-bold tracking-wider opacity-90">SURETY 2</span>
                       </div>
                     </div>
                   </div>
                 </div>
-
-                {/* Card 5: Documents & Status */}
-                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 relative flex flex-col justify-between min-h-[220px]">
-                  <div className="flex justify-between items-center border-b pb-2 mb-3">
-                    <div>
-                      <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider block">Document Status</span>
-                      <span className="text-[10px] text-slate-500 font-bold block">Pledged Files</span>
-                    </div>
-                  </div>
-                  <div className="flex-1 flex flex-col justify-between gap-3 text-sm">
-                    <div className="space-y-2 text-gray-755">
-                      <div className="grid grid-cols-[130px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-start">
-                        <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Doc Type:</span>
-                        <span className="text-sm font-black text-slate-955 text-left" title={loanDocuments.map(d => d.document_name).join(', ')}>
-                          {loanDocuments.map(d => d.document_name).join(', ') || 'N/A'}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-[130px_1fr] gap-x-2 border-b border-gray-50 pb-1.5 items-center">
-                        <span className="text-xs uppercase font-extrabold text-slate-900 tracking-wider">Returned Status:</span>
-                        <span className="flex text-left">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-black ${documentReturned ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800'
-                            }`}>
-                            {documentReturned ? 'Yes (Returned)' : 'No (Submitted)'}
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-                    <Button
-                      onClick={() => setShowReturnDocModal(true)}
-                      disabled={(selectedLoan.status !== 'Closed' && selectedLoan.status !== 'NPA_CLOSED') || !!renewCalculations?.isDateInvalid}
-                      variant="primary"
-                      size="sm"
-                      className="w-full bg-green-600 hover:bg-green-700 border-0 text-xs py-2 uppercase font-bold tracking-wider mt-1 font-sans"
-                    >
-                      Document Returned
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Unified Operator Workspace - 2 Column Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -2847,6 +2936,15 @@ const CDLedger: React.FC = () => {
                         >
                           Payment History
                         </button>
+                        <button
+                          onClick={() => setActiveLogTab('editHistory')}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${activeLogTab === 'editHistory'
+                            ? 'bg-white text-green-800 shadow-sm border border-gray-150'
+                            : 'text-slate-900 hover:text-black'
+                            }`}
+                        >
+                          Edit History
+                        </button>
                       </div>
                     </div>
                   }
@@ -3050,6 +3148,64 @@ const CDLedger: React.FC = () => {
                           {loanTransactions.filter((tx: any) => tx.type === 'Collection').length === 0 ? (
                             <tr>
                               <td colSpan={7} className="text-center py-8 text-slate-500 font-bold italic">No collection transactions found for this loan</td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {activeLogTab === 'editHistory' && (
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
+                      <table className="w-full text-[13px] text-left min-w-[1000px]">
+                        <thead>
+                          <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
+                            <th className="px-4 py-3.5">Edited At</th>
+                            <th className="px-4 py-3.5">Edited By</th>
+                            <th className="px-4 py-3.5">Receipt No</th>
+                            <th className="px-4 py-3.5 text-right">Original Date</th>
+                            <th className="px-4 py-3.5 text-right">New Date</th>
+                            <th className="px-4 py-3.5 text-right">Original Amt</th>
+                            <th className="px-4 py-3.5 text-right">New Amt</th>
+                            <th className="px-4 py-3.5">Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-150 bg-white">
+                          {editLogs.map((log: any) => {
+                            const oldD = log.old_data || {};
+                            const newD = log.new_data || {};
+                            return (
+                              <tr key={log.id} className="hover:bg-gray-50/60 transition-colors">
+                                <td className="px-4 py-3.5 font-bold text-slate-800">
+                                  {new Date(log.edited_at).toLocaleString('en-IN')}
+                                </td>
+                                <td className="px-4 py-3.5 text-slate-800 font-bold">{log.edited_by}</td>
+                                <td className="px-4 py-3.5 font-mono text-slate-900 font-black">
+                                  {newD.receipt_no || oldD.receipt_no || '-'}
+                                </td>
+                                <td className="px-4 py-3.5 text-right font-bold text-slate-600">
+                                  {oldD.date ? oldD.date.split('T')[0].split('-').reverse().join('/') : '-'}
+                                </td>
+                                <td className="px-4 py-3.5 text-right font-bold text-slate-800">
+                                  {newD.date ? newD.date.split('T')[0].split('-').reverse().join('/') : '-'}
+                                </td>
+                                <td className="px-4 py-3.5 text-right text-slate-700">
+                                  {oldD.amount !== undefined ? `₹${Number(oldD.amount).toLocaleString('en-IN')}` : '-'}
+                                </td>
+                                <td className="px-4 py-3.5 text-right text-green-800 font-black">
+                                  {newD.amount !== undefined ? `₹${Number(newD.amount).toLocaleString('en-IN')}` : '-'}
+                                </td>
+                                <td className="px-4 py-3.5 text-slate-700 font-bold" title={log.reason}>
+                                  {log.reason || '-'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {editLogs.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} className="text-center py-8 text-slate-500 font-bold italic">
+                                No transaction edit logs found for this loan
+                              </td>
                             </tr>
                           ) : null}
                         </tbody>
@@ -3359,216 +3515,201 @@ const CDLedger: React.FC = () => {
         title="Print Preview (A4 Friendly Layout)"
         documentTitle="CD Daily Loan Ledger Report Card"
       >
-        {selectedLoan && renewCalculations && (
-          <div className="space-y-6 text-gray-800 font-sans text-xs">
-            <div className="text-center border-b-2 border-double border-gray-300 pb-4">
-              <h1 className="text-xl font-black text-gray-900 tracking-wide uppercase">Thirumala Finance Groups</h1>
-              <span className="text-xs text-gray-500 uppercase tracking-widest block font-medium">CD Daily Loan Ledger statement</span>
-              <div className="flex justify-between items-center text-gray-400 mt-4 font-mono text-[9px]">
-                <span>PRINTED: {new Date().toLocaleString('en-IN').replace(/\s/g, '')}</span>
-                <span>A/C ID: {selectedLoan.loan_id}</span>
-              </div>
-            </div>
+        {selectedLoan && renewCalculations && (() => {
+          const borrowerPhotoUrl = selectedLoan.customer?.customer_photo_url || selectedLoan.customer_photo_url;
+          const guarantor1PhotoUrl = guarantor1?.photo_url || guarantor1?.customer_photo_url || selectedLoan.surety_photo_url;
+          const guarantor2PhotoUrl = guarantor2?.photo_url || guarantor2?.customer_photo_url;
 
-            <div className="grid grid-cols-2 gap-6 border-b pb-6">
-              <div className="space-y-1.5">
-                <h4 className="text-green-800 border-b pb-1 text-[10px] font-bold uppercase tracking-wider">Borrower Details</h4>
-                <table className="w-full text-left text-xs leading-loose">
-                  <tbody>
-                    <tr>
-                      <td className="text-gray-400 w-24">Name:</td>
-                      <td className="text-gray-900 font-bold">{selectedLoan.customer?.name}</td>
+          return (
+            <div className="space-y-6 text-gray-850 font-sans text-xs p-1">
+              {/* Header: A/C Number & Customer Name prominent once */}
+              <div className="flex justify-between items-start border-b-2 border-double border-gray-300 pb-4">
+                <div>
+                  <h1 className="text-xl font-black text-gray-900 tracking-wide uppercase">Thirumala Finance Groups</h1>
+                  <span className="text-xs text-gray-500 uppercase tracking-widest block font-medium">CD Daily Loan Ledger statement</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-black text-green-700 bg-green-50 px-3 py-1.5 rounded-xl border border-green-200 inline-block font-mono">
+                    A/C: {selectedLoan.loan_id}
+                  </div>
+                  <div className="text-xs text-gray-500 font-extrabold uppercase mt-1">
+                    CUSTOMER: {selectedLoan.customer?.name}
+                  </div>
+                  <div className="text-[9px] text-gray-400 mt-0.5">
+                    OPERATOR: {user?.username || 'RAMESH'} | PRINTED: {new Date().toLocaleString('en-IN').replace(/\s/g, '')}
+                  </div>
+                </div>
+              </div>
+
+              {/* People Profiles: Borrower, Surety 1, Surety 2 with photos next to details */}
+              <div className="grid grid-cols-3 gap-4 border-b pb-4">
+                {/* Borrower details */}
+                <div className="p-3 bg-gray-50/50 rounded-2xl border border-gray-100 flex gap-3">
+                  <div className="flex-1 space-y-1 text-[10px] font-sans">
+                    <span className="text-[10px] font-black uppercase text-green-800 tracking-wider block border-b pb-0.5 mb-1.5">Borrower Details</span>
+                    <div className="flex justify-between"><span className="text-gray-400">Name:</span> <span className="font-extrabold text-gray-900">{selectedLoan.customer?.name}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">S/o W/o:</span> <span className="font-bold text-gray-800">{selectedLoan.customer?.father_husband_name || 'N/A'}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Phone:</span> <span className="font-bold text-gray-800">{selectedLoan.customer?.phone || 'N/A'}</span></div>
+                    {selectedLoan.customer?.phone2 && (
+                      <div className="flex justify-between"><span className="text-gray-400">Phone 2:</span> <span className="font-bold text-gray-800">{selectedLoan.customer?.phone2}</span></div>
+                    )}
+                    <div className="flex justify-between"><span className="text-gray-400">Aadhaar:</span> <span className="font-bold text-gray-800 font-mono">{selectedLoan.customer?.aadhaar || 'N/A'}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Address:</span> <span className="font-bold text-gray-800 truncate max-w-[80px]" title={selectedLoan.customer?.address || undefined}>{selectedLoan.customer?.address || 'N/A'}</span></div>
+                  </div>
+                  <div className="w-14 h-18 shrink-0 rounded-lg bg-white border border-gray-250 overflow-hidden flex items-center justify-center relative shadow-sm">
+                    {borrowerPhotoUrl ? (
+                      <img src={borrowerPhotoUrl} alt="Borrower" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-5 h-5 text-gray-300" />
+                    )}
+                  </div>
+                </div>
+
+                {/* Guarantor 1 details */}
+                <div className="p-3 bg-gray-50/50 rounded-2xl border border-gray-100 flex gap-3">
+                  <div className="flex-1 space-y-1 text-[10px] font-sans">
+                    <span className="text-[10px] font-black uppercase text-green-800 tracking-wider block border-b pb-0.5 mb-1.5">Guarantor 1 Details</span>
+                    {guarantor1 ? (
+                      <>
+                        <div className="flex justify-between"><span className="text-gray-400">Name:</span> <span className="font-extrabold text-gray-900">{guarantor1.name}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">Phone:</span> <span className="font-bold text-gray-800">{guarantor1.phone}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">Aadhaar:</span> <span className="font-bold text-gray-800 font-mono">{guarantor1.aadhaar}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">Address:</span> <span className="font-bold text-gray-800 truncate max-w-[80px]" title={guarantor1.address}>{guarantor1.address || 'N/A'}</span></div>
+                      </>
+                    ) : (
+                      <span className="text-gray-450 italic block py-2">No guarantor 1</span>
+                    )}
+                  </div>
+                  {guarantor1 && (
+                    <div className="w-14 h-18 shrink-0 rounded-lg bg-white border border-gray-250 overflow-hidden flex items-center justify-center relative shadow-sm">
+                      {guarantor1PhotoUrl ? (
+                        <img src={guarantor1PhotoUrl} alt="Guarantor 1" className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-5 h-5 text-gray-300" />
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Guarantor 2 details */}
+                <div className="p-3 bg-gray-50/50 rounded-2xl border border-gray-100 flex gap-3">
+                  <div className="flex-1 space-y-1 text-[10px] font-sans">
+                    <span className="text-[10px] font-black uppercase text-green-800 tracking-wider block border-b pb-0.5 mb-1.5">Guarantor 2 Details</span>
+                    {guarantor2 ? (
+                      <>
+                        <div className="flex justify-between"><span className="text-gray-400">Name:</span> <span className="font-extrabold text-gray-900">{guarantor2.name}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">Phone:</span> <span className="font-bold text-gray-800">{guarantor2.phone}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">Aadhaar:</span> <span className="font-bold text-gray-800 font-mono">{guarantor2.aadhaar}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">Address:</span> <span className="font-bold text-gray-800 truncate max-w-[80px]" title={guarantor2.address}>{guarantor2.address || 'N/A'}</span></div>
+                      </>
+                    ) : (
+                      <span className="text-gray-450 italic block py-2">No guarantor 2</span>
+                    )}
+                  </div>
+                  {guarantor2 && (
+                    <div className="w-14 h-18 shrink-0 rounded-lg bg-white border border-gray-250 overflow-hidden flex items-center justify-center relative shadow-sm">
+                      {guarantor2PhotoUrl ? (
+                        <img src={guarantor2PhotoUrl} alt="Guarantor 2" className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-5 h-5 text-gray-300" />
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Opening & Current Status separate details */}
+              <div className="grid grid-cols-2 gap-6 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+                <div className="space-y-1.5 text-[11px] font-sans">
+                  <span className="text-[10px] font-black uppercase text-slate-800 tracking-wider block border-b pb-1 mb-1.5">Opening Details</span>
+                  <div className="flex justify-between"><span className="text-slate-500">Loan Date (Inclusive):</span> <span className="font-extrabold text-slate-900">{formatDateOld(originalLoanDate || selectedLoan.date)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Opening Loan Principal:</span> <span className="font-extrabold text-slate-900">₹{originalLoanAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Opening Interest/Commission:</span> <span className="font-extrabold text-slate-900">₹{(displayedStatementEntries.filter(e => e.entry_type === 'opening_commission' || e.entry_type === 'Commission').reduce((s, e) => s + Number(e.credit || 0), 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Document Charges Paid:</span> <span className="font-extrabold text-slate-900">₹{statementTotals.documentCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                </div>
+                <div className="space-y-1.5 text-[11px] font-sans">
+                  <span className="text-[10px] font-black uppercase text-slate-800 tracking-wider block border-b pb-1 mb-1.5">Current Balance State</span>
+                  <div className="flex justify-between"><span className="text-slate-500">Current Principal Balance:</span> <span className="font-extrabold text-green-700">₹{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Pending Accrued Interest:</span> <span className="font-extrabold text-orange-600">₹{ledgerMetrics.pendingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Pending Accrued Penalty:</span> <span className="font-extrabold text-red-650">₹{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Current Next Due Date:</span> <span className="font-extrabold text-slate-900">{formatDateOld(renewCalculations?.dueDateStr)}</span></div>
+                </div>
+              </div>
+
+              {/* Grouped horizontal statement table */}
+              <div className="space-y-2">
+                <h4 className="text-green-800 border-b pb-1 text-[10px] font-bold uppercase tracking-wider">Statement Ledger Payments</h4>
+                <table className="w-full border border-gray-300 text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100 border-b border-gray-300 text-gray-700 uppercase text-[9px] font-bold">
+                      <th className="p-2 border-r text-center">Sl No</th>
+                      <th className="p-2 border-r">Date</th>
+                      <th className="p-2 border-r">Receipt No</th>
+                      <th className="p-2 border-r text-right">Amount Paid</th>
+                      <th className="p-2 border-r text-right">Interest</th>
+                      <th className="p-2 border-r text-right">Penalty</th>
+                      <th className="p-2 border-r text-right">Principal</th>
+                      <th className="p-2 border-r">Particulars</th>
+                      <th className="p-2 border-r text-center">Days Renewed</th>
+                      <th className="p-2">Renewed Till</th>
                     </tr>
-                    <tr>
-                      <td className="text-gray-400">S/o / W/o:</td>
-                      <td className="text-gray-800 font-medium">{selectedLoan.customer?.father_husband_name || 'N/A'}</td>
-                    </tr>
-                    <tr>
-                      <td className="text-gray-400">Phones:</td>
-                      <td className="text-gray-800 font-medium">
-                        {selectedLoan.customer?.phone || 'N/A'} {selectedLoan.customer?.phone2 ? `, ${selectedLoan.customer.phone2}` : ''}
+                  </thead>
+                  <tbody className="divide-y divide-gray-250 font-mono text-gray-700">
+                    {groupedPayments.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="p-2 border-r text-center font-sans text-slate-500">{idx + 1}</td>
+                        <td className="p-2 border-r font-sans">{formatDateOld(row.date)}</td>
+                        <td className="p-2 border-r font-black text-slate-900">{row.receipt_no || '-'}</td>
+                        <td className="p-2 border-r text-right font-black text-slate-950">
+                          {row.amountPaid > 0 ? `₹${row.amountPaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                        </td>
+                        <td className="p-2 border-r text-right text-green-800 font-bold">
+                          {row.interest > 0 ? `₹${row.interest.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                        </td>
+                        <td className="p-2 border-r text-right text-red-650 font-bold">
+                          {row.penalty > 0 ? `₹${row.penalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                        </td>
+                        <td className="p-2 border-r text-right text-indigo-750 font-bold">
+                          {row.principal > 0 ? `₹${row.principal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                        </td>
+                        <td className="p-2 border-r font-sans text-gray-600 font-bold">{row.particulars}</td>
+                        <td className="p-2 border-r text-center font-black text-slate-800">{row.daysRenewed > 0 ? `${row.daysRenewed} Days` : '-'}</td>
+                        <td className="p-2 font-sans font-bold">{row.renewedTill ? formatDateOld(row.renewedTill) : '-'}</td>
+                      </tr>
+                    ))}
+                    {groupedPayments.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="text-center py-6 font-sans text-gray-400 italic">No payments logged</td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-100 font-black border-t-2 border-slate-350 text-slate-900">
+                      <td colSpan={3} className="p-2 border-r text-right font-sans">GRAND TOTALS:</td>
+                      <td className="p-2 border-r text-right font-black">₹{statementTotals.amountPaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="p-2 border-r text-right text-green-800">₹{statementTotals.interest.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="p-2 border-r text-right text-red-650">₹{statementTotals.penalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="p-2 border-r text-right text-indigo-750">₹{statementTotals.principal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td colSpan={3} className="p-2 font-sans text-[10px] text-slate-600 font-bold">
+                        Pledged Document Status: {documentReturned ? 'Returned' : 'Submitted'}
                       </td>
                     </tr>
-                    <tr>
-                      <td className="text-gray-400">Aadhaar:</td>
-                      <td className="text-gray-800 font-medium">{selectedLoan.customer?.aadhaar || 'N/A'}</td>
-                    </tr>
-                    <tr>
-                      <td className="text-gray-400">Partner:</td>
-                      <td className="text-gray-800 font-medium">{selectedLoan.customer?.partner_name || 'N/A'}</td>
-                    </tr>
-                    <tr>
-                      <td className="text-gray-400">Address:</td>
-                      <td className="text-gray-750 font-medium text-[11px] leading-relaxed">{selectedLoan.customer?.address || 'N/A'}</td>
-                    </tr>
-                  </tbody>
+                  </tfoot>
                 </table>
               </div>
 
-              <div className="space-y-1.5">
-                <h4 className="text-green-800 border-b pb-1 text-[10px] font-bold uppercase tracking-wider">Loan terms</h4>
-                <table className="w-full text-left text-xs leading-loose">
-                  <tbody>
-                    <tr>
-                      <td className="text-gray-400 w-28">Original Loan:</td>
-                      <td className="text-gray-900 font-bold">₹{originalLoanAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    </tr>
-                    <tr>
-                      <td className="text-gray-400">Remaining Bal:</td>
-                      <td className="text-gray-900 font-bold">₹{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    </tr>
-                    <tr>
-                      <td className="text-gray-400">Rate / Penalty:</td>
-                      <td className="text-gray-800 font-medium">{selectedLoan.interest_rate || 3}% / {selectedLoan.penalty_percent || 0.75}%</td>
-                    </tr>
-                    <tr>
-                      <td className="text-gray-400">Present Interest:</td>
-                      <td className="text-gray-900 font-bold text-orange-600">₹{ledgerMetrics.pendingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    </tr>
-                    <tr>
-                      <td className="text-gray-400">Present Penalty:</td>
-                      <td className="text-gray-900 font-bold text-red-650">₹{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    </tr>
-                    <tr>
-                      <td className="text-gray-400">Loan Date:</td>
-                      <td className="text-gray-800 font-medium">{formatDateOld(selectedLoan.date)}</td>
-                    </tr>
-                  </tbody>
-                </table>
+              {/* Print Signatures */}
+              <div className="pt-16 grid grid-cols-2 gap-20 text-center text-gray-500 text-[10px] font-semibold">
+                <div>
+                  <div className="border-t border-gray-300 pt-1.5 w-32 mx-auto">Borrower Signature</div>
+                </div>
+                <div>
+                  <div className="border-t border-gray-300 pt-1.5 w-32 mx-auto">Auditor Signature</div>
+                </div>
               </div>
             </div>
-
-            {/* Guarantors */}
-            <div className="border-b pb-6 space-y-2">
-              <h4 className="text-green-800 border-b pb-1 text-[10px] font-bold uppercase tracking-wider">Guarantor Profiles</h4>
-              <div className="grid grid-cols-2 gap-4">
-                {guarantor1 ? (
-                  <div>
-                    <h5 className="font-bold text-gray-800 mb-1 text-xs">Guarantor 1:</h5>
-                    <table className="w-full text-left leading-normal text-xs">
-                      <tbody>
-                        <tr>
-                          <td className="text-gray-400 w-20">Name:</td>
-                          <td className="text-gray-900 font-medium">{guarantor1.name}</td>
-                        </tr>
-                        <tr>
-                          <td className="text-gray-400">Phone:</td>
-                          <td className="text-gray-800 font-medium">{guarantor1.phone}</td>
-                        </tr>
-                        <tr>
-                          <td className="text-gray-400">Aadhaar:</td>
-                          <td className="text-gray-800 font-medium">{guarantor1.aadhaar}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                ) : null}
-
-                {guarantor2 ? (
-                  <div>
-                    <h5 className="font-bold text-gray-800 mb-1 text-xs">Guarantor 2:</h5>
-                    <table className="w-full text-left leading-normal text-xs">
-                      <tbody>
-                        <tr>
-                          <td className="text-gray-400 w-20">Name:</td>
-                          <td className="text-gray-900 font-medium">{guarantor2.name}</td>
-                        </tr>
-                        <tr>
-                          <td className="text-gray-400">Phone:</td>
-                          <td className="text-gray-800 font-medium">{guarantor2.phone}</td>
-                        </tr>
-                        <tr>
-                          <td className="text-gray-400">Aadhaar:</td>
-                          <td className="text-gray-800 font-medium">{guarantor2.aadhaar}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            {/* Interest details */}
-            <div className="space-y-2">
-              <h4 className="text-green-800 border-b pb-1 text-[10px] font-bold uppercase tracking-wider">Interest & Penalty logs</h4>
-              <table className="w-full border border-gray-200 text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase text-[9px] font-bold">
-                    <th className="p-2 border-r">Date</th>
-                    <th className="p-2 border-r text-right">Credit</th>
-                    <th className="p-2 border-r">Receipt No</th>
-                    <th className="p-2 border-r">Type</th>
-                    <th className="p-2 border-r">Particulars</th>
-                    <th className="p-2 border-r text-center">Days Renewed</th>
-                    <th className="p-2">Renewed Till</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-250 font-mono text-gray-700">
-                  {displayedInterestDetails.map((detail) => (
-                    <tr key={detail.id}>
-                      <td className="p-2 border-r font-sans">{formatDateOld(detail.entry_date)}</td>
-                      <td className="p-2 border-r text-right text-green-700 font-semibold">₹{Number(detail.credit).toLocaleString('en-IN')}</td>
-                      <td className="p-2 border-r text-gray-500">{detail.receipt_no || '-'}</td>
-                      <td className="p-2 border-r font-sans text-gray-700">{detail.row_type || '-'}</td>
-                      <td className="p-2 border-r text-gray-500 font-sans">{detail.particulars || '-'}</td>
-                      <td className="p-2 border-r text-center font-bold text-gray-800">{detail.renewed_days > 0 ? `${detail.renewed_days} Days` : '-'}</td>
-                      <td className="p-2 font-sans">{detail.renewed_till_date ? formatDateOld(detail.renewed_till_date) : '-'}</td>
-                    </tr>
-                  ))}
-                  {displayedInterestDetails.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="text-center py-4 font-sans text-gray-400 italic">No details found</td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Statement table */}
-            <div className="space-y-2">
-              <h4 className="text-green-800 border-b pb-1 text-[10px] font-bold uppercase tracking-wider">Statement Ledgers</h4>
-              <table className="w-full border border-gray-200 text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase text-[9px] font-bold">
-                    <th className="p-2 border-r">Date</th>
-                    <th className="p-2 border-r">A/C Name</th>
-                    <th className="p-2 border-r text-left">CR Amount</th>
-                    <th className="p-2 border-r text-right">Credit</th>
-                    <th className="p-2 border-r text-right">Debit</th>
-                    <th className="p-2 border-r">User</th>
-                    <th className="p-2 border-r">Receipt No</th>
-                    <th className="p-2">Particulars</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-250 font-mono text-gray-700">
-                  {displayedStatementEntries.map((tx) => (
-                    <tr key={tx.id}>
-                      <td className="p-2 border-r font-sans">{formatDateOld(tx.entry_date)}</td>
-                      <td className="p-2 border-r font-sans font-bold text-gray-900">{mapAccountName(tx.account_name)}</td>
-                      <td className="p-2 border-r text-right text-indigo-700 font-bold">{isPaymentCollectionEntry(tx) && tx.credit > 0 ? `₹${Number(tx.credit).toLocaleString('en-IN')}` : '-'}</td>
-                      <td className="p-2 border-r text-right text-green-705 font-bold">{!isPaymentCollectionEntry(tx) && tx.credit > 0 ? `₹${Number(tx.credit).toLocaleString('en-IN')}` : '-'}</td>
-                      <td className="p-2 border-r text-right text-red-705 font-bold">{!isPaymentCollectionEntry(tx) && tx.debit > 0 ? `₹${Number(tx.debit).toLocaleString('en-IN')}` : '-'}</td>
-                      <td className="p-2 border-r font-sans text-gray-700">{tx.user_name || 'Staff'}</td>
-                      <td className="p-2 border-r text-gray-500">{tx.receipt_no || '-'}</td>
-                      <td className="p-2 text-gray-500 font-sans">{tx.particulars || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Print Signatures */}
-            <div className="pt-20 grid grid-cols-2 gap-20 text-center text-gray-500 text-[10px] font-semibold">
-              <div>
-                <div className="border-t border-gray-300 pt-1.5 w-32 mx-auto">Borrower Signature</div>
-              </div>
-              <div>
-                <div className="border-t border-gray-300 pt-1.5 w-32 mx-auto">Auditor Signature</div>
-              </div>
-            </div>
-
-          </div>
-        )}
+          );
+        })()}
       </FinancePrintPreview>
 
       {/* NPA Close Account Modal */}
@@ -3684,34 +3825,60 @@ const CDLedger: React.FC = () => {
               Edit Payment Transaction
             </h2>
             <div className="space-y-4">
+              {/* Original Snapshot Panel */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-xs space-y-2">
+                <div className="font-semibold text-slate-500 uppercase tracking-wider text-[10px]">Original Transaction Snapshot</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <div className="text-slate-400">Receipt No</div>
+                    <div className="font-bold font-mono text-slate-800">{editingTx.receipt_no || '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400">Payment Date</div>
+                    <div className="font-bold text-slate-800">
+                      {editingTx.date ? new Date(editingTx.date).toLocaleDateString('en-IN') : '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400">Amount Paid</div>
+                    <div className="font-bold text-slate-800">
+                      ₹{Number(editingTx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <Input 
-                  label="Receipt Number" 
+                  label="New Receipt Number" 
                   value={editTxReceiptNo} 
                   onChange={setEditTxReceiptNo} 
                   placeholder="Receipt number (e.g. RC150)"
                   required
                 />
               </div>
-              <div>
-                <label className="finance-caption uppercase mb-2 block font-sans">Payment Date</label>
-                <input 
-                  type="date"
-                  value={editTxDate}
-                  onChange={(e) => setEditTxDate(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none"
-                  required
-                />
-              </div>
-              <div>
-                <Input 
-                  label="Payment Amount (₹)" 
-                  value={editTxAmount} 
-                  onChange={setEditTxAmount} 
-                  placeholder="Amount paid"
-                  type="number"
-                  required
-                />
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="finance-caption uppercase mb-2 block font-sans">New Payment Date</label>
+                  <input 
+                    type="date"
+                    value={editTxDate}
+                    onChange={(e) => setEditTxDate(e.target.value)}
+                    className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <Input 
+                    label="New Payment Amount (₹)" 
+                    value={editTxAmount} 
+                    onChange={setEditTxAmount} 
+                    placeholder="Amount paid"
+                    type="number"
+                    required
+                  />
+                </div>
               </div>
 
               <div>
@@ -3723,6 +3890,7 @@ const CDLedger: React.FC = () => {
                   required
                 />
               </div>
+              
               <div className="pt-4 flex gap-3">
                 <Button onClick={() => setShowEditTxModal(false)} variant="secondary" className="flex-1 rounded-xl">
                   Cancel

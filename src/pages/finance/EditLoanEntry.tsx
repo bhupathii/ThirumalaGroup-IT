@@ -3,6 +3,7 @@ import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
 import { supabaseFinance, FinanceLoan, FinanceCustomer } from '../../lib/supabaseFinance';
+import { cdLedgerRebuildService } from '../../services/cdLedgerRebuildService';
 import { supabase } from '../../lib/supabase';
 import { Save, X, Edit, Trash2, AlertCircle, Upload, CheckCircle, FileText, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -527,6 +528,14 @@ const EditLoanEntry: React.FC = () => {
         }, staffName, true); // skip generic logging
       }
 
+      // Rebuild CD loan sequential history if it is a CD loan and has activity
+      if (loanCategory === 'CD' && hasLedgerActivity) {
+        const rebuildResult = await cdLedgerRebuildService.rebuildCDLoanLifecycle(selectedLoan.id);
+        if (!rebuildResult.success) {
+          throw new Error(rebuildResult.error || 'Rebuild of CD loan sequential history failed');
+        }
+      }
+
       // 3. Reload from database
       const reloaded = await supabaseFinance.getLoanById(selectedLoan.id);
       if (!reloaded) {
@@ -535,12 +544,12 @@ const EditLoanEntry: React.FC = () => {
 
       // 4. Compare saved values
       const mismatches: string[] = [];
-      if (Number(reloaded.amount) !== Number(amount)) mismatches.push('Amount');
+      if (!hasLedgerActivity && Number(reloaded.amount) !== Number(amount)) mismatches.push('Amount');
       if (Number(reloaded.interest_rate) !== Number(interestRate)) mismatches.push('Interest Rate');
       if (Number(reloaded.penalty_percent) !== Number(penaltyPercent)) mismatches.push('Penalty Rate');
       if (reloaded.date !== date) mismatches.push('Loan Date');
       if (Number(reloaded.document_charges) !== Number(docCharges)) mismatches.push('Document Charges');
-      if (reloaded.status !== status) mismatches.push('Status');
+      if (!hasLedgerActivity && reloaded.status !== status) mismatches.push('Status');
       
       if (loanCategory === 'CD') {
         const dbPeriodDays = reloaded.period_days ? Number(reloaded.period_days) : 30;
@@ -817,9 +826,9 @@ const EditLoanEntry: React.FC = () => {
             <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-6 rounded-r-lg flex gap-3 items-start shadow-sm">
               <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-amber-800 font-semibold text-sm uppercase">Financial Restrictions Active</h4>
+                <h4 className="text-amber-800 font-semibold text-sm uppercase">Sequential Rebuild Active</h4>
                 <p className="text-amber-700 text-xs mt-1">
-                  This loan already contains financial transactions. Core financial fields are locked to preserve ledger accuracy.
+                  This loan contains payment transactions. Saving modifications to core financial fields will automatically recalculate and rebuild the entire ledger history chronologically.
                 </p>
               </div>
             </div>
@@ -873,8 +882,6 @@ const EditLoanEntry: React.FC = () => {
                   value={date} 
                   onChange={setDate} 
                   required 
-                  readOnly={hasLedgerActivity}
-                  className={hasLedgerActivity ? 'bg-gray-150' : ''}
                 />
                 
                 <div>
@@ -901,8 +908,6 @@ const EditLoanEntry: React.FC = () => {
                   value={amount} 
                   onChange={setAmount} 
                   required 
-                  readOnly={hasLedgerActivity}
-                  className={hasLedgerActivity ? 'bg-gray-150' : ''}
                 />
                 
                 <div className="grid grid-cols-2 gap-2">
@@ -912,8 +917,6 @@ const EditLoanEntry: React.FC = () => {
                     value={interestRate} 
                     onChange={setInterestRate} 
                     required 
-                    readOnly={hasLedgerActivity}
-                    className={hasLedgerActivity ? 'bg-gray-150' : ''}
                   />
                   
                   <Input 
@@ -922,8 +925,6 @@ const EditLoanEntry: React.FC = () => {
                     value={penaltyPercent} 
                     onChange={setPenaltyPercent} 
                     required 
-                    readOnly={hasLedgerActivity}
-                    className={hasLedgerActivity ? 'bg-gray-150' : ''}
                   />
                 </div>
 
@@ -941,8 +942,6 @@ const EditLoanEntry: React.FC = () => {
                       }
                     }} 
                     required 
-                    readOnly={hasLedgerActivity}
-                    className={hasLedgerActivity ? 'bg-gray-150' : ''}
                   />
                   
                   <Input 
@@ -960,8 +959,7 @@ const EditLoanEntry: React.FC = () => {
                     type="date" 
                     value={liveCalculations.dueDatePreview} 
                     onChange={handleDueDateChange} 
-                    readOnly={hasLedgerActivity}
-                    className={hasLedgerActivity ? 'bg-gray-150 font-semibold text-gray-500' : 'font-semibold text-green-600'}
+                    className="font-semibold text-green-600"
                   />
 
                   <div>
