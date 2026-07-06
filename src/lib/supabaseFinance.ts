@@ -2354,9 +2354,10 @@ class SupabaseFinance {
       }
 
       const duesList = [];
-      for (let i = 1; i <= duesCount; i++) {
+      for (let i = 0; i < duesCount; i++) {
         let dDateStr = '';
         if (data.loan_category === 'CD' || data.due_type === 'Daily') {
+          // CD inclusive-cycle: Day 1 = loanDate (i=0), Day N = loanDate + (N-1) (i=N-1)
           dDateStr = financeCalculationService.addCalendarDays(data.date, i);
         } else if (data.due_type === 'Weekly') {
           dDateStr = financeCalculationService.addCalendarDays(data.date, i * 7);
@@ -3149,7 +3150,7 @@ class SupabaseFinance {
     
     try {
       const code = mode === 'REGULAR' ? 'REG-LEGACY' : 'ITR-LEGACY';
-      const { data, error } = await supabase
+      const { data, error: _error } = await supabase
         .from('books')
         .select('id')
         .eq('book_code', code)
@@ -3200,7 +3201,7 @@ class SupabaseFinance {
 
       if (!financeMode) {
         if (bookId) {
-          const regId = await this.getLegacyBookId('REGULAR');
+          await this.getLegacyBookId('REGULAR'); // warm cache; return value not needed
           const itrId = await this.getLegacyBookId('ITR');
           if (bookId === itrId) {
             financeMode = 'ITR';

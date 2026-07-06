@@ -66,6 +66,10 @@ describe('CD ₹25L legacy 80/20 penalty and sequential renewal parity', () => {
     const penaltyPercent = 0.75;
     const graceDays = 5;
 
+    // NOTE: This test replays historical transactions recorded by the legacy Access system.
+    // The Access system used baseDueDate = loanDate + periodDays (exclusive counting).
+    // We must reproduce that formula here to match the historical splits.
+    // The inclusive-cycle fix (periodDays - 1) applies to NEW calculations going forward only.
     const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays);
 
     let currentPrincipal = principal;

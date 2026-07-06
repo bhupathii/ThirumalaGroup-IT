@@ -60,10 +60,10 @@ export const cdLedgerRebuildService = {
       const interestRate = Number(loan.interest_rate) || 3;
       const penaltyPercent = loan.penalty_percent !== undefined && loan.penalty_percent !== null ? Number(loan.penalty_percent) : 0.75;
       
-      // The legacy CD business logic treats the loan-given date as Day 1 of the interest cycle.
-      // CycleEndDate = LoanDate + (PeriodDays - 1)
-      // InitialDueDate = LoanDate + PeriodDays
-      const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays);
+      // CD inclusive-cycle rule: the loan-given date IS Day 1 of the interest cycle.
+      // Day 1 = LoanDate, Day 2 = LoanDate+1, …, Day N = LoanDate+(N-1)
+      // Therefore: InitialDueDate = LoanDate + (periodDays - 1)
+      const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays - 1);
 
       console.log(`[Rebuild] Original Principal: ₹${originalPrincipal}, Date: ${originalLoanDateStr}, Period Days: ${periodDays}`);
 
@@ -346,7 +346,8 @@ export const cdLedgerRebuildService = {
 
       // 6. Update loan final state in the database
       const finalDueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, totalRenewedDays);
-      const finalLoanDate = financeCalculationService.addCalendarDays(finalDueDateStr, -periodDays);
+      // Inverse of inclusive-cycle rule: loanDate = dueDate - (periodDays - 1)
+      const finalLoanDate = financeCalculationService.addCalendarDays(finalDueDateStr, -(periodDays - 1));
 
       let finalStatus = currentPrincipal <= 0 ? 'Closed' : 'Active';
       if (loan.status === 'NPA_CLOSED') {

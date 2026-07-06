@@ -809,11 +809,10 @@ const CDLedger: React.FC = () => {
     const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
     const originalLoanDateStr = (disbEntry ? disbEntry.entry_date : selectedLoan.date).split('T')[0];
 
-    // The legacy CD business logic treats the loan-given date as Day 1 of the interest cycle.
-    // CycleEndDate = LoanDate + (PeriodDays - 1)
-    // InitialDueDate = LoanDate + PeriodDays
-    const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays);
-    const baseDueDate = new Date(baseDueDateStr);
+    // CD inclusive-cycle rule: the loan-given date IS Day 1 of the interest cycle.
+    // Day 1 = LoanDate, Day 2 = LoanDate+1, …, Day N = LoanDate+(N-1)
+    // Therefore: InitialDueDate = LoanDate + (periodDays - 1)
+    const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays - 1);
 
     // Sum total renewed days from cdInterestDetails note rows (credit === 0)
     const totalRenewedDays = cdInterestDetails
@@ -1105,7 +1104,8 @@ const CDLedger: React.FC = () => {
 
       // Dues calculation for this cycle
       const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
-      const cycleDueDateStr = financeCalculationService.addCalendarDays(cycle.start, periodDays);
+      // CD inclusive-cycle rule: cycle starts at cycle.start (Day 1), due date = cycle.start + (periodDays - 1)
+      const cycleDueDateStr = financeCalculationService.addCalendarDays(cycle.start, periodDays - 1);
       const cycleDueDays = financeCalculationService.differenceInCalendarDays(cycle.end, cycleDueDateStr);
 
       const interestRate = Number(selectedLoan.interest_rate) || 3;
@@ -1997,7 +1997,8 @@ const CDLedger: React.FC = () => {
           console.log('renewed_days:', renewedDays);
           console.log('next_due_date:', nextDueDateStr);
 
-          const newCycleStartStr = financeCalculationService.addCalendarDays(nextDueDateStr, -periodDays);
+          // Inverse of inclusive-cycle rule: newCycleStart = nextDueDate - (periodDays - 1)
+          const newCycleStartStr = financeCalculationService.addCalendarDays(nextDueDateStr, -(periodDays - 1));
           updates.date = newCycleStartStr;
 
           console.log('new_loan_date (updates.date):', updates.date);

@@ -1161,81 +1161,83 @@ describe('CD Ledger Calculation Rules', () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════════
-  // DUE-DATE OFF-BY-ONE REGRESSION (2026-06-17)
-  // Bug: baseDueDate used (periodDays - 1) instead of periodDays, pushing the
-  // due date 1 day earlier than correct. A 5-day grace payment was treated as 6
-  // days overdue, triggering a ₹600 penalty instead of ₹0.
+  // CD DUE-DATE INCLUSIVE-CYCLE RULE (2026-07-06)
+  // Business rule: The loan-given date IS Day 1 of the CD cycle.
+  //   Day 1 = LoanDate
+  //   Day 2 = LoanDate + 1
+  //   ...
+  //   Day N = LoanDate + (N - 1)
+  //   Therefore: DueDate = LoanDate + (periodDays - 1)  NOT LoanDate + periodDays
   //
-  // Scenario (from live data):
-  //   Loan Date = 05-Oct-23, Period = 30 days
-  //   First renewal 08-Nov-23 → dueDate was 03-Nov-23 (off-by-one) → now 04-Nov-23
-  //   After 30-day renewal → next dueDate was 03-Dec-23 → now 04-Dec-23
-  //   Payment on 09-Dec-23: old dueDays = 6 (penalty!), correct dueDays = 5 (no penalty)
+  // The formula "loanDate + periodDays" lands on Day (N+1) which is off-by-one WRONG.
+  //
+  // Verified examples:
+  //   05-Oct-2023 + 30-day period → Day 30 = 03-Nov-2023  (NOT 04-Nov-2023)
+  //   06-Jul-2026 + 30-day period → Day 30 = 04-Aug-2026  (NOT 05-Aug-2026)
   // ═══════════════════════════════════════════════════════════════════════════════
-  describe('Due-Date Off-By-One Regression: baseDueDate = loanDate + periodDays', () => {
-    it('loanDate + periodDays gives correct first due date', () => {
-      const loanDate = new Date('2023-10-05T00:00:00Z');
-      const periodDays = 30;
-      // Correct: dueDate = loanDate + 30 days = 04-Nov-23
-      const dueDate = new Date(loanDate.getTime() + periodDays * 24 * 60 * 60 * 1000);
-      expect(dueDate.toISOString().split('T')[0]).toBe('2023-11-04');
+  describe('CD Inclusive-Cycle Due-Date Regression', () => {
+    it('REGRESSION: 05-Oct-2023 + 30-day period → Due Date = 03-Nov-2023 (Day 30)', () => {
+      // Business rule: loanDate = Day 1 ⟹ dueDate = loanDate + (periodDays - 1)
+      // 05-Oct-2023 = Day 1, 06-Oct-2023 = Day 2, ..., 03-Nov-2023 = Day 30
+      const dueDate = financeCalculationService.addCalendarDays('2023-10-05', 30 - 1);
+      expect(dueDate).toBe('2023-11-03');
     });
 
-    it('after 30-day renewal, next due date = 04-Dec-23', () => {
-      const loanDate = new Date('2023-10-05T00:00:00Z');
-      const periodDays = 30;
-      const baseDueDate = new Date(loanDate.getTime() + periodDays * 24 * 60 * 60 * 1000);
-      // Renewal payment on 08-Nov-23 for full ₹12,000 interest → 30 renewed days
-      const renewedDays = 30;
-      const nextDueDate = new Date(baseDueDate.getTime() + renewedDays * 24 * 60 * 60 * 1000);
-      expect(nextDueDate.toISOString().split('T')[0]).toBe('2023-12-04');
+    it('REGRESSION: 06-Jul-2026 + 30-day period → Due Date = 04-Aug-2026 (Day 30)', () => {
+      // Business rule: loanDate = Day 1 ⟹ dueDate = loanDate + (periodDays - 1)
+      // 06-Jul-2026 = Day 1, 07-Jul-2026 = Day 2, ..., 04-Aug-2026 = Day 30
+      const dueDate = financeCalculationService.addCalendarDays('2026-07-06', 30 - 1);
+      expect(dueDate).toBe('2026-08-04');
     });
 
-    it('payment on 09-Dec-23 is exactly 5 days overdue → Penalty = ₹0', () => {
-      const loanDate = new Date('2023-10-05T00:00:00Z');
-      const periodDays = 30;
-      const baseDueDate = new Date(loanDate.getTime() + periodDays * 24 * 60 * 60 * 1000);
+    it('loanDate + (periodDays - 1) gives correct first due date', () => {
+      // Correct: dueDate = loanDate + 29 days = 03-Nov-23 (Day 30)
+      const dueDate = financeCalculationService.addCalendarDays('2023-10-05', 30 - 1);
+      expect(dueDate).toBe('2023-11-03');
+    });
+
+    it('after 30-day renewal from 03-Nov-2023, next due date = 03-Dec-2023', () => {
+      // Renewal advances: nextDue = oldDue + renewedDays
+      const baseDueDate = '2023-11-03'; // 05-Oct-2023 + 29 days
       const renewedDays = 30;
-      const nextDueDate = new Date(baseDueDate.getTime() + renewedDays * 24 * 60 * 60 * 1000);
+      const nextDueDate = financeCalculationService.addCalendarDays(baseDueDate, renewedDays);
+      expect(nextDueDate).toBe('2023-12-03');
+    });
 
-      const paymentDate = new Date('2023-12-09T00:00:00Z');
-      const dueDays = Math.round((paymentDate.getTime() - nextDueDate.getTime()) / (1000 * 60 * 60 * 24));
-
-      expect(dueDays).toBe(5); // exactly at grace limit
-
-      // dueDays <= 5 → Penalty = ₹0
+    it('payment on 08-Dec-2023 is exactly 5 days overdue from 03-Dec-2023 → Penalty = ₹0', () => {
+      // Due date = 03-Dec-2023; paid 08-Dec-2023 → 5 days overdue (grace = 5, no penalty)
+      const nextDueDate = '2023-12-03';
+      const dueDays = financeCalculationService.differenceInCalendarDays('2023-12-08', nextDueDate);
+      expect(dueDays).toBe(5);
       const penalty = financeCalculationService.calculatePenalty(400000, 0.75, dueDays, 30);
       expect(penalty).toBe(0);
     });
 
     it('exact CD100 regression rules using new timezone-independent date helpers', () => {
-      // 1. Core Loan Dates
+      // 1. Core Loan Dates — loanDate = Day 1 ⟹ dueDate = loanDate + (periodDays - 1)
       const loanDate = '2023-10-05';
       const periodDays = 30;
-      
-      const cycleEndDate = financeCalculationService.addCalendarDays(loanDate, periodDays - 1);
-      const initialDueDate = financeCalculationService.addCalendarDays(loanDate, periodDays);
-      
-      expect(cycleEndDate).toBe('2023-11-03');
-      expect(initialDueDate).toBe('2023-11-04');
+
+      const initialDueDate = financeCalculationService.addCalendarDays(loanDate, periodDays - 1);
+      expect(initialDueDate).toBe('2023-11-03'); // Day 30
 
       // 2. RC368: Payment on 08-Nov-2023 for ₹12,000 (30 days renewal)
-      const currentDueDate1 = initialDueDate; // 2023-11-04
+      const currentDueDate1 = initialDueDate; // 2023-11-03
       const renewedDays1 = 30;
       const nextDueDate1 = financeCalculationService.addCalendarDays(currentDueDate1, renewedDays1);
-      expect(nextDueDate1).toBe('2023-12-04');
+      expect(nextDueDate1).toBe('2023-12-03');
 
-      // 3. RC369: Payment on 09-Dec-2023
-      const currentDueDate2 = nextDueDate1; // 2023-12-04
-      const paymentDate = '2023-12-09';
+      // 3. RC369: Payment on 08-Dec-2023 (5 days overdue from 03-Dec-2023)
+      const currentDueDate2 = nextDueDate1; // 2023-12-03
+      const paymentDate = '2023-12-08';
       const dueDays = financeCalculationService.differenceInCalendarDays(paymentDate, currentDueDate2);
       expect(dueDays).toBe(5);
 
       const penaltyDue = financeCalculationService.calculatePenalty(400000, 0.75, dueDays, 30);
       expect(penaltyDue).toBe(0);
 
-      // 4. Overdue Day 6 rule: Payment on 10-Dec-2023
-      const paymentDate6 = '2023-12-10';
+      // 4. Overdue Day 6 rule: Payment on 09-Dec-2023
+      const paymentDate6 = '2023-12-09';
       const dueDays6 = financeCalculationService.differenceInCalendarDays(paymentDate6, currentDueDate2);
       expect(dueDays6).toBe(6);
 
@@ -1243,16 +1245,16 @@ describe('CD Ledger Calculation Rules', () => {
       // 400000 * 0.75% * 6 / 30 = 600
       expect(penaltyDue6).toBe(600);
 
-      // 5. Early Payment: due date 04-Dec-2023, paid on 01-Dec-2023, renewed by 30 days
+      // 5. Early Payment: due date 03-Dec-2023, renewed by 30 days
       const nextDueDateEarly = financeCalculationService.addCalendarDays(currentDueDate2, 30);
-      expect(nextDueDateEarly).toBe('2024-01-03');
+      expect(nextDueDateEarly).toBe('2024-01-02');
 
-      // 6. Partial Interest Payment: due date 04-Dec-2023, renewed by 15 days
+      // 6. Partial Interest Payment: due date 03-Dec-2023, renewed by 15 days
       const nextDueDatePartial = financeCalculationService.addCalendarDays(currentDueDate2, 15);
-      expect(nextDueDatePartial).toBe('2023-12-19');
+      expect(nextDueDatePartial).toBe('2023-12-18');
 
       // 7. Timezone-independent calendar difference check
-      const diff = financeCalculationService.differenceInCalendarDays('2023-12-09', '2023-12-04');
+      const diff = financeCalculationService.differenceInCalendarDays('2023-12-08', '2023-12-03');
       expect(diff).toBe(5);
     });
   });

@@ -134,8 +134,9 @@ const DuesLedger: React.FC = () => {
           const originalLoanDateStr = disbEntry ? disbEntry.entry_date.split('T')[0] : loan.date.split('T')[0];
 
           // Calculate current due date
+          // CD inclusive-cycle rule: loanDate = Day 1, so dueDate = loanDate + (periodDays - 1)
           const periodDays = loan.period_days || 30;
-          const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays);
+          const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays - 1);
           const totalRenewedDays = interestDetails
             .filter((d: any) => Number(d.credit) === 0)
             .reduce((sum: number, d: any) => sum + (Number(d.renewed_days) || 0), 0);
