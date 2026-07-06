@@ -135,9 +135,23 @@ class ErrorBoundary extends React.Component<
 
 // Offline Guard component to block access to unsupported routes when offline
 const OfflineGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isOnline } = useOffline();
+  const { connectionStatus } = useOffline();
 
-  if (!isOnline) {
+  if (connectionStatus === 'CHECKING') {
+    return (
+      <div className='min-h-[60vh] bg-white border border-gray-150 rounded-2xl p-8 flex flex-col items-center justify-center text-center max-w-lg mx-auto my-12 font-outfit shadow-sm'>
+        <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4'></div>
+        <h1 className='text-xl font-bold text-gray-900 mb-2'>
+          Verifying Connection
+        </h1>
+        <p className='text-gray-600 mb-6 text-sm max-w-xs'>
+          Please wait while we verify your network status.
+        </p>
+      </div>
+    );
+  }
+
+  if (connectionStatus === 'OFFLINE') {
     return (
       <div className='min-h-[60vh] bg-white border border-gray-150 rounded-2xl p-8 flex flex-col items-center justify-center text-center max-w-lg mx-auto my-12 font-outfit shadow-sm'>
         <div className='w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4 text-3xl'>
