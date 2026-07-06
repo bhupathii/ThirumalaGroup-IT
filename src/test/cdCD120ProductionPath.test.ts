@@ -63,4 +63,67 @@ describe('CD120 Production Path Integration Test', () => {
     // Total Close = ₹7,86,740.63
     expect(pos.totalForClose).toBe(786740.63);
   });
+
+  it('proves that the UI-facing mapping logic formats the production position result correctly for the UI cards/detail blocks', async () => {
+    // 1. Fetch real DB data for CD120
+    const selectedLoan = await supabaseFinance.getLoanById(CD120_LOAN_UUID);
+    const cdLedgerEntries = await supabaseFinance.getCDLedgerEntries(CD120_LOAN_UUID);
+    const cdInterestDetails = await supabaseFinance.getCDInterestDetails(CD120_LOAN_UUID);
+
+    // 2. Generate production position
+    const pos = financeCalculationService.getCDAccountPosition(
+      selectedLoan,
+      cdLedgerEntries,
+      cdInterestDetails,
+      AUDIT_DATE
+    );
+
+    // 3. UI Helpers replicating CDLedger.tsx mapping and formatting
+    const formatDateOld = (dateStr: string | Date | number | null | undefined) => {
+      if (!dateStr) return '';
+      if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        const parts = dateStr.split('-');
+        const year = parseInt(parts[0], 10);
+        const monthIndex = parseInt(parts[1], 10) - 1;
+        const day = parts[2];
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const yy = String(year).slice(-2);
+        return `${day}-${months[monthIndex]}-${yy}`;
+      }
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const yy = String(d.getFullYear()).slice(-2);
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${day}-${months[d.getMonth()]}-${yy}`;
+    };
+
+    const formatCurrency = (val: number) => {
+      return '₹' + val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    // 4. Map to UI fields (exactly as ledgerMetrics and JSX cards render them now)
+    const uiPrincipalBalance   = formatCurrency(pos.principalBalance);
+    const uiTodayDue           = formatCurrency(pos.todayDue);
+    const uiAccruedInterest    = formatCurrency(pos.accruedInterest);
+    const uiAccruedPenalty     = formatCurrency(pos.accruedPenalty);
+    const uiTotalForRenewal    = formatCurrency(pos.totalRenewal);
+    const uiTotalToRegularize  = formatCurrency(pos.totalToRegularize);
+    const uiTotalForClose      = formatCurrency(pos.totalForClose);
+    const uiLastPayment        = formatDateOld(pos.lastPaymentDate);
+    const uiCurrentDueDate     = formatDateOld(pos.currentDueDate);
+    const uiDueDays            = pos.displayDueDays;
+
+    // 5. Assert display values match the user requirements exactly
+    expect(uiPrincipalBalance).toBe('₹7,50,000.00');
+    expect(uiTodayDue).toBe('₹36,740.63');
+    expect(uiAccruedInterest).toBe('₹29,392.50');
+    expect(uiAccruedPenalty).toBe('₹7,348.13');
+    expect(uiTotalForRenewal).toBe('₹22,500.00');
+    expect(uiTotalToRegularize).toBe('₹59,240.63');
+    expect(uiTotalForClose).toBe('₹7,86,740.63');
+    expect(uiLastPayment).toBe('29-Jun-26');
+    expect(uiCurrentDueDate).toBe('28-May-26');
+    expect(uiDueDays).toBe(39);
+  });
 });

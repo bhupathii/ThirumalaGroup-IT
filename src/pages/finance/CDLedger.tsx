@@ -1282,6 +1282,7 @@ const CDLedger: React.FC = () => {
         paidPenalty: 0,
         pendingInterest: 0,
         pendingPenalty: 0,
+        todayDue: 0,
         renewalDue: 0,
         currentTotalDues: 0,
         currentPaidDues: 0,
@@ -1295,33 +1296,21 @@ const CDLedger: React.FC = () => {
 
     const originalPrincipal = originalLoanAmount;
     const principalPaid = principalPaidTotal;
-    const principalBalance = Number((originalPrincipal - principalPaid).toFixed(2));
+    
+    // Direct consumption from production calculator (renewCalculations)
+    const principalBalance = renewCalculations.principalBalance;
+    const pendingInterest = renewCalculations.accruedInterest;
+    const pendingPenalty = renewCalculations.accruedPenalty;
+    const todayDue = renewCalculations.todayDue;
+    const renewalDue = renewCalculations.totalRenewal; // matches renewalAmount
+    const totalToRegularize = renewCalculations.totalToRegularize;
+    const totalClose = renewCalculations.totalForClose;
 
     const grossInterestDue = renewCalculations.effectiveGrossInterest || 0;
     const grossPenaltyDue = renewCalculations.effectiveGrossPenalty || 0;
 
     const paidInterest = renewCalculations.interestPaid || 0;
     const paidPenalty = renewCalculations.penaltyPaid || 0;
-
-    // Display values (can be negative when loan is not yet due)
-    const pendingInterest = renewCalculations.interest || 0;
-    const pendingPenalty = renewCalculations.penalty || 0;
-
-
-    // Outstanding values for payment purposes (always >= 0)
-
-    const interestRate = Number(selectedLoan.interest_rate) || 3;
-    const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
-    const renewalDue = Number(((principalBalance * (interestRate / 100) * periodDays) / 30).toFixed(2));
-
-    const outstandingInterest = renewCalculations.outstandingInterest || 0;
-    const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
-    const totalDue = outstandingInterest + outstandingPenalty;
-
-    // Total To Regularize = total_due + total_for_renewal (if there are active dues)
-    const totalToRegularize = (outstandingInterest === 0 && outstandingPenalty === 0)
-      ? 0
-      : Number((totalDue + renewalDue).toFixed(2));
 
     // Footer metrics synchronized with calculations and card values
     const currentTotalDues = (renewCalculations.daysPastDue || 0) <= 0
@@ -1331,9 +1320,6 @@ const CDLedger: React.FC = () => {
       ? 0
       : Number((paidInterest + paidPenalty).toFixed(2));
     const currentPendingDues = Math.max(0, Number((currentTotalDues - currentPaidDues).toFixed(2)));
-
-    // Close Amount = Principal + Interest + Penalty
-    const totalClose = Number((principalBalance + pendingInterest + pendingPenalty).toFixed(2));
 
     // totalCredit = only real cash collected (interest, penalty, principal payments)
     // Must NOT include opening_commission or document_charge rows (not real collections)
@@ -1356,6 +1342,7 @@ const CDLedger: React.FC = () => {
       paidPenalty,
       pendingInterest,
       pendingPenalty,
+      todayDue,
       renewalDue,
       currentTotalDues,
       currentPaidDues,
@@ -2607,7 +2594,7 @@ const CDLedger: React.FC = () => {
                       </div>
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Current Due Date</span>
-                        <span className="text-[16px] font-bold text-slate-900">{formatDateOld(renewCalculations?.dueDate)}</span>
+                        <span className="text-[16px] font-bold text-slate-900">{formatDateOld(renewCalculations?.currentDueDate)}</span>
                       </div>
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Next Due Date</span>
@@ -2616,9 +2603,9 @@ const CDLedger: React.FC = () => {
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Due Days</span>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[16px] font-bold text-slate-900">{renewCalculations?.displayDays !== undefined ? renewCalculations.displayDays : 0}</span>
-                          {renewCalculations && renewCalculations.displayDays !== undefined && renewCalculations.displayDays < 0 && (
-                            <span className="inline-flex px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-black text-[10px] uppercase tracking-wider">{Math.abs(renewCalculations.displayDays)} Left</span>
+                          <span className="text-[16px] font-bold text-slate-900">{renewCalculations?.displayDueDays !== undefined ? renewCalculations.displayDueDays : 0}</span>
+                          {renewCalculations && renewCalculations.displayDueDays !== undefined && renewCalculations.displayDueDays < 0 && (
+                            <span className="inline-flex px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-black text-[10px] uppercase tracking-wider">{Math.abs(renewCalculations.displayDueDays)} Left</span>
                           )}
                         </div>
                       </div>
@@ -2704,8 +2691,8 @@ const CDLedger: React.FC = () => {
                       </div>
                       <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Today Due</span>
-                        <span className={`text-[20px] font-bold block leading-snug ${(ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty) < 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                          ₹{(ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        <span className={`text-[20px] font-bold block leading-snug ${ledgerMetrics.todayDue < 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                          ₹{ledgerMetrics.todayDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                       <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
