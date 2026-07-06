@@ -109,11 +109,9 @@ export const cdLedgerRebuildService = {
           actionType = 'Close';
         }
 
-        // Calculate due date before this payment using calendar math
-        const dueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, totalRenewedDays);
-        
-        // Calculate due days as calendar day difference
-        const dueDays = financeCalculationService.differenceInCalendarDays(txDateStr, dueDateStr);
+
+        // Calculate due days using exact fractional math
+        const dueDays = financeCalculationService.differenceInCalendarDays(txDateStr, baseDueDateStr) - totalRenewedDays;
 
         // Calculate dues
         const interestDue = Number(((currentPrincipal * interestRate * dueDays) / (periodDays * 100)).toFixed(2));
@@ -179,7 +177,9 @@ export const cdLedgerRebuildService = {
 
         let renewedTillDate: string | null = null;
         if (renewedDays > 0) {
-          renewedTillDate = financeCalculationService.addCalendarDays(dueDateStr, renewedDays);
+          const newTotalRenewedDays = financeCalculationService.advanceExactRenewalPosition(totalRenewedDays, renewedDays);
+          const nextDisplayDays = financeCalculationService.calculateDisplayDays(newTotalRenewedDays);
+          renewedTillDate = financeCalculationService.addCalendarDays(baseDueDateStr, nextDisplayDays);
         }
 
         console.log(`[Rebuild-Tx ${receiptNo}] Amt: ₹${paymentAmount}, Split: Pen=₹${penaltyPaid}, Int=₹${interestPaid}, Prin=₹${principalPaid}, RenewDays=${renewedDays}`);
@@ -246,8 +246,8 @@ export const cdLedgerRebuildService = {
 
         // Post Interest
         if (interestPaid > 0) {
-          const interestParticulars = actionType === 'Renew'
-            ? 'Interest Paid - Renewal Payment'
+          const interestParticulars = renewedDays > 0
+            ? financeCalculationService.formatRenewedDaysDescription(renewedDays)
             : `Interest Paid - ${actionText} - ${receiptNo}`;
 
           const entry = await supabaseFinance.addCDLedgerEntry({
@@ -345,7 +345,8 @@ export const cdLedgerRebuildService = {
       }
 
       // 6. Update loan final state in the database
-      const finalDueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, totalRenewedDays);
+      const finalDisplayRenewedDays = financeCalculationService.calculateDisplayDays(totalRenewedDays);
+      const finalDueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, finalDisplayRenewedDays);
       // Inverse of inclusive-cycle rule: loanDate = dueDate - (periodDays - 1)
       const finalLoanDate = financeCalculationService.addCalendarDays(finalDueDateStr, -(periodDays - 1));
 

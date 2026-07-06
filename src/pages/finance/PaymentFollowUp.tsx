@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabaseFinance, FinanceLoanPaymentFollowup } from '../../lib/supabaseFinance';
-import { supabase } from '../../lib/supabase';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -13,8 +12,6 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
-import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
-import { financeCalculationService } from '../../services/financeCalculationService';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface ActiveDueLoan {
@@ -68,7 +65,6 @@ const PaymentFollowUp: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loans, setLoans] = useState<ActiveDueLoan[]>([]);
   const [followUps, setFollowUps] = useState<FinanceLoanPaymentFollowup[]>([]);
-  const [, setAllLoansMap] = useState<Map<string, any>>(new Map());
 
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<FollowUpTab>('ACTIVE_QUEUE');
@@ -100,176 +96,46 @@ const PaymentFollowUp: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Loans with borrower details
-      const { data: loansData, error: loansError } = await supabase
-        .from('finance_loans')
-        .select(`
-          *,
-          customer:finance_customers!customer_id(*)
-        `);
-      if (loansError) throw loansError;
-
-      // Fetch all customers for in-memory guarantor resolution
-      const { data: allCustomers, error: custError } = await supabase
-        .from('finance_customers')
-        .select('id, name, phone');
-      if (custError) throw custError;
-
-      const customerMap = new Map<string, { name: string; phone: string }>(
-        (allCustomers || []).map((c: any) => [c.id, { name: c.name || '', phone: c.phone || '' }])
-      );
-
-      // 2. Fetch Dues (for HP/STBD/TBD calculations)
-      const { data: duesData, error: duesError } = await supabase
-        .from('finance_dues')
-        .select('*');
-      if (duesError) throw duesError;
-
-      // 3. Fetch CD Ledger Entries
-      const { data: cdEntries, error: cdEntriesError } = await supabase
-        .from('finance_cd_ledger_entries')
-        .select('*');
-      if (cdEntriesError) throw cdEntriesError;
-
-      // 4. Fetch CD Interest Details
-      const { data: cdInterest, error: cdInterestError } = await supabase
-        .from('finance_cd_interest_details')
-        .select('*');
-      if (cdInterestError) throw cdInterestError;
-
-      // 5. Fetch Followup records
+      // 1. Fetch Followup records
       const fetchedFollowups = await supabaseFinance.getFollowUps();
       setFollowUps(fetchedFollowups);
 
-      // Build customer mapping & loan map for history references
-      const loanMap = new Map();
-      (loansData || []).forEach((l: any) => loanMap.set(l.id, l));
-      setAllLoansMap(loanMap);
+      // 2. Fetch Aggregated Dues Summary via RPC
+      const summaryData = await supabaseFinance.getDuesLedgerSummary();
 
-      const ledgerSettings = await financeLedgerSettingsService.getAllLedgerSettings();
-
-      const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
-      const calculatedLoans: ActiveDueLoan[] = [];
-
-      (loansData || []).forEach((loan: any) => {
-        const type = loan.loan_id.startsWith('CD') ? 'CD' : loan.loan_id.startsWith('HP') ? 'HP' : loan.loan_id.startsWith('STBD') ? 'STBD' : 'TBD';
-        const g1 = loan.guarantor_1_id ? customerMap.get(loan.guarantor_1_id) : null;
-        const g2 = loan.guarantor_2_id ? customerMap.get(loan.guarantor_2_id) : null;
-
-        let principalBalance = 0;
-        let pendingInterest = 0;
-        let penalty = 0;
-        let presentDue = 0;
-        let dueDays = 0;
-        let currentDueDateStr = loan.date;
-        let originalLoanDateStr = loan.date;
-
-        if (type === 'CD') {
-          // CD Loan calculations
-          const entries = (cdEntries || []).filter((e: any) => e.loan_id === loan.id);
-          const interestDetails = (cdInterest || []).filter((d: any) => d.loan_id === loan.id);
-
-          const disb = entries
-            .filter((e: any) => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement')
-            .reduce((sum: number, e: any) => sum + (Number(e.debit) || 0), 0);
-          const repaid = entries
-            .filter((e: any) => e.entry_type === 'principal_payment' || e.account_name === 'CD A/C')
-            .reduce((sum: number, e: any) => sum + (Number(e.credit) || 0), 0);
-          principalBalance = disb - repaid;
-
-          const disbEntry = entries
-            .filter((e: any) => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement')
-            .sort((a: any, b: any) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime())[0];
-          originalLoanDateStr = disbEntry ? disbEntry.entry_date.split('T')[0] : loan.date.split('T')[0];
-
-          const periodDays = loan.period_days || 30;
-          // CD inclusive-cycle rule: loanDate = Day 1, so dueDate = loanDate + (periodDays - 1)
-          const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays - 1);
-          const totalRenewedDays = interestDetails
-            .filter((d: any) => Number(d.credit) === 0)
-            .reduce((sum: number, d: any) => sum + (Number(d.renewed_days) || 0), 0);
-          currentDueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, totalRenewedDays);
-
-          dueDays = financeCalculationService.differenceInCalendarDays(todayStr, currentDueDateStr);
-          
-          const interestRate = Number(loan.interest_rate) || 3;
-          const penaltyRate = Number(loan.penalty_percent) || 0.75;
-          const graceDays = Number(loan.grace_days) || 5;
-
-          if (dueDays > 0) {
-            pendingInterest = Number(((principalBalance * interestRate * dueDays) / periodDays / 100).toFixed(2));
-            if (dueDays > graceDays) {
-              penalty = Number(((principalBalance * penaltyRate * dueDays) / periodDays / 100).toFixed(2));
-            }
-            presentDue = pendingInterest + penalty;
-          }
-        } else {
-          // HP/STBD/TBD calculations
-          const dues = (duesData || []).filter((d: any) => d.loan_id === loan.id);
-          const unpaidDues = dues.filter((d: any) => d.status !== 'Paid');
-          const sortedUnpaid = [...unpaidDues].sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
-          const oldestUnpaid = sortedUnpaid[0];
-
-          currentDueDateStr = oldestUnpaid ? oldestUnpaid.due_date : loan.date;
-          dueDays = oldestUnpaid ? Math.round((today.getTime() - new Date(oldestUnpaid.due_date).getTime()) / (1000 * 60 * 60 * 24)) : 0;
-          
-          const pastUnpaidDues = unpaidDues.filter((d: any) => d.due_date <= todayStr);
-          const unpaidPresentDue = pastUnpaidDues.reduce((sum: number, d: any) => sum + (Number(d.amount) - Number(d.paid_amount || 0)), 0);
-
-          const totalPaid = dues.reduce((sum: number, d: any) => sum + Number(d.paid_amount || 0), 0);
-
-          if (oldestUnpaid && dueDays > 0) {
-            const cat = loan.loan_category?.trim().toUpperCase() || 'CD';
-            const setting = ledgerSettings[cat] || ledgerSettings['CD'];
-            if (setting) {
-              penalty = financeCalculationService.calculatePenaltyFromSetting(unpaidPresentDue, dueDays, setting);
-            }
-          }
-          penalty = Math.round(penalty);
-
-          const totalLoanRepayable = dues.reduce((sum: number, d: any) => sum + Number(d.amount), 0);
-          const totalPrincipal = Number(loan.amount);
-          const totalInterest = totalLoanRepayable - totalPrincipal;
-          const interestRatio = totalLoanRepayable > 0 ? totalInterest / totalLoanRepayable : 0;
-          pendingInterest = unpaidPresentDue * interestRatio;
-
-          principalBalance = Number(loan.amount) - (totalPaid * (1 - interestRatio));
-          presentDue = unpaidPresentDue + penalty;
-        }
-
+      const calculatedLoans: ActiveDueLoan[] = summaryData.map((row: any) => {
         // Get this loan's follow-up history
         const loanFollowups = fetchedFollowups
-          .filter((f: any) => f.loan_id === loan.id)
+          .filter((f: any) => f.loan_id === row.id)
           .sort((a, b) => new Date(b.followed_up_at).getTime() - new Date(a.followed_up_at).getTime());
 
         const lastFollowUp = loanFollowups[0];
         const nextFollowUpDate = lastFollowUp ? lastFollowUp.next_follow_up_date : null;
 
-        calculatedLoans.push({
-          id: loan.id,
-          loanId: loan.loan_id,
-          customerName: loan.customer?.name || 'N/A',
-          loanCategory: loan.loan_category || 'General',
-          loanType: type,
-          loanAmount: Number(loan.amount),
-          currentPrincipal: principalBalance,
-          loanDate: originalLoanDateStr,
-          currentDueDate: currentDueDateStr,
-          pendingInterest,
-          penalty,
-          presentDue,
-          dueDays: dueDays > 0 ? dueDays : 0,
-          phone: loan.customer?.phone || '',
-          g1Name: g1?.name || '',
-          g1Phone: g1?.phone || '',
-          g2Name: g2?.name || '',
-          g2Phone: g2?.phone || '',
-          partnerName: loan.customer?.partner_name || 'Unassigned',
-          status: loan.status,
+        return {
+          id: row.id,
+          loanId: row.loan_id,
+          customerName: row.customer_name,
+          loanCategory: row.loan_category || 'General',
+          loanType: row.loan_type,
+          loanAmount: Number(row.loan_amount),
+          currentPrincipal: Number(row.current_principal),
+          loanDate: row.loan_date,
+          currentDueDate: row.current_due_date,
+          pendingInterest: Number(row.pending_interest || 0),
+          penalty: Number(row.penalty || 0),
+          presentDue: Number(row.present_due || 0),
+          dueDays: Number(row.due_days || 0),
+          phone: row.phone || '',
+          g1Name: row.g1_name || '',
+          g1Phone: row.g1_phone || '',
+          g2Name: row.g2_name || '',
+          g2Phone: row.g2_phone || '',
+          partnerName: row.partner_name || 'Unassigned',
+          status: 'Active',
           lastFollowUp,
           nextFollowUpDate
-        });
+        };
       });
 
       setLoans(calculatedLoans);

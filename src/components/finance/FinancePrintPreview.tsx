@@ -87,7 +87,7 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
       <style>{`
         @media print {
           @page {
-            size: ${orientation};
+            size: A4 ${orientation};
             margin: 8mm 6mm;
           }
 
@@ -125,7 +125,7 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
             border: 1px solid #000000 !important;
             padding: 4px 5px !important;
             color: black !important;
-            font-size: 10pt !important;
+            font-size: 9px !important;
             line-height: 1.35 !important;
             vertical-align: middle !important;
           }

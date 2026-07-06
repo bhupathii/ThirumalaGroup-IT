@@ -1,11 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { supabase } from '../../lib/supabase';
 import { Printer, ArrowLeft, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
-import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
-import { financeCalculationService } from '../../services/financeCalculationService';
 import { useNavigate } from 'react-router-dom';
 
 interface OverdueDueItem {
@@ -62,198 +59,32 @@ const DuesLedger: React.FC = () => {
       const partnersData = await supabaseFinance.getPartners();
       setPartners(partnersData.map(p => ({ id: p.id, name: p.name })));
 
-      // 2. Fetch Loans (without guarantor join — FK constraint was dropped; resolved in-memory below)
-      const { data: loansData, error: loansError } = await supabase
-        .from('finance_loans')
-        .select(`
-          *,
-          customer:finance_customers!customer_id(*)
-        `);
-      if (loansError) throw loansError;
-
-      // 3. Fetch ALL customers to resolve guarantors in-memory (bypasses missing FK)
-      const { data: allCustomers, error: custError } = await supabase
-        .from('finance_customers')
-        .select('id, name, phone');
-      if (custError) throw custError;
-      const customerMap = new Map<string, { name: string; phone: string }>(
-        (allCustomers || []).map((c: any) => [c.id, { name: c.name || '', phone: c.phone || '' }])
-      );
-
-      // 4. Fetch Dues (for HP/STBD/TBD)
-      const { data: duesData, error: duesError } = await supabase
-        .from('finance_dues')
-        .select('*');
-      if (duesError) throw duesError;
-
-      // 5. Fetch CD Ledger Entries
-      const { data: cdEntries, error: cdEntriesError } = await supabase
-        .from('finance_cd_ledger_entries')
-        .select('*');
-      if (cdEntriesError) throw cdEntriesError;
-
-      // 6. Fetch CD Interest Details
-      const { data: cdInterest, error: cdInterestError } = await supabase
-        .from('finance_cd_interest_details')
-        .select('*');
-      if (cdInterestError) throw cdInterestError;
-
-      const ledgerSettings = await financeLedgerSettingsService.getAllLedgerSettings();
-
-      const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
-      const formatted: OverdueDueItem[] = [];
-
-      (loansData || []).forEach((loan: any) => {
-        if (loan.status !== 'Active') return; // Only process Active loans
-
-        // Resolve guarantors in-memory
-        const g1 = loan.guarantor_1_id ? customerMap.get(loan.guarantor_1_id) : null;
-        const g2 = loan.guarantor_2_id ? customerMap.get(loan.guarantor_2_id) : null;
-
-        const type = loan.loan_id.startsWith('CD') ? 'CD' : loan.loan_id.startsWith('HP') ? 'HP' : loan.loan_id.startsWith('STBD') ? 'STBD' : 'TBD';
-
-        if (type === 'CD') {
-          // CD Loan calculations
-          const entries = (cdEntries || []).filter((e: any) => e.loan_id === loan.id);
-          const interestDetails = (cdInterest || []).filter((d: any) => d.loan_id === loan.id);
-
-          // Calculate current principal balance
-          const disb = entries
-            .filter((e: any) => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement')
-            .reduce((sum: number, e: any) => sum + (Number(e.debit) || 0), 0);
-          const repaid = entries
-            .filter((e: any) => e.entry_type === 'principal_payment' || e.account_name === 'CD A/C')
-            .reduce((sum: number, e: any) => sum + (Number(e.credit) || 0), 0);
-          const principalBalance = disb - repaid;
-
-          // Original loan date
-          const disbEntry = entries
-            .filter((e: any) => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement')
-            .sort((a: any, b: any) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime())[0];
-          const originalLoanDateStr = disbEntry ? disbEntry.entry_date.split('T')[0] : loan.date.split('T')[0];
-
-          // Calculate current due date
-          // CD inclusive-cycle rule: loanDate = Day 1, so dueDate = loanDate + (periodDays - 1)
-          const periodDays = loan.period_days || 30;
-          const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays - 1);
-          const totalRenewedDays = interestDetails
-            .filter((d: any) => Number(d.credit) === 0)
-            .reduce((sum: number, d: any) => sum + (Number(d.renewed_days) || 0), 0);
-          const currentDueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, totalRenewedDays);
-
-          // Calculate due days
-          const dueDays = financeCalculationService.differenceInCalendarDays(todayStr, currentDueDateStr);
-          
-          // Calculate pending interest & penalty
-          const interestRate = Number(loan.interest_rate) || 3;
-          const penaltyRate = Number(loan.penalty_percent) || 0.75;
-          const graceDays = Number(loan.grace_days) || 5;
-
-          let pendingInterest = 0;
-          let pendingPenalty = 0;
-          let presentDue = 0;
-
-          if (dueDays > 0) {
-            pendingInterest = Number(((principalBalance * interestRate * dueDays) / periodDays / 100).toFixed(2));
-            if (dueDays > graceDays) {
-              pendingPenalty = Number(((principalBalance * penaltyRate * dueDays) / periodDays / 100).toFixed(2));
-            }
-            presentDue = pendingInterest + pendingPenalty;
-          }
-
-          // Total interest paid
-          const interestPaid = entries
-            .filter((e: any) => e.account_name === 'CD COMMISSION A/C' || e.entry_type === 'interest_payment')
-            .reduce((sum: number, e: any) => sum + (Number(e.credit) || 0), 0);
-
-          const isNPA = dueDays > 90;
-
-          formatted.push({
-            id: loan.id,
-            loanId: loan.loan_id,
-            customerName: loan.customer?.name || 'N/A',
-            loanCategory: loan.loan_category || 'CD',
-            loanType: 'CD',
-            loanAmount: Number(loan.amount),
-            currentPrincipal: principalBalance,
-            loanDate: originalLoanDateStr,
-            currentDueDate: currentDueDateStr,
-            interestPaid,
-            pendingInterest,
-            penalty: pendingPenalty,
-            presentDue,
-            dueDays: dueDays > 0 ? dueDays : 0,
-            isNPA,
-            phone: loan.customer?.phone || '',
-            g1Name: g1?.name || '',
-            g1Phone: g1?.phone || '',
-            g2Name: g2?.name || '',
-            g2Phone: g2?.phone || '',
-            partnerName: loan.customer?.partner_name || 'Unassigned'
-          });
-        } else {
-          // HP/STBD/TBD loan calculations from finance_dues
-          const dues = (duesData || []).filter((d: any) => d.loan_id === loan.id);
-          const unpaidDues = dues.filter((d: any) => d.status !== 'Paid');
-          
-          const sortedUnpaid = [...unpaidDues].sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
-          const oldestUnpaid = sortedUnpaid[0];
-
-          const currentDueDate = oldestUnpaid ? oldestUnpaid.due_date : loan.date;
-          const dueDays = oldestUnpaid ? Math.round((today.getTime() - new Date(oldestUnpaid.due_date).getTime()) / (1000 * 60 * 60 * 24)) : 0;
-          
-          // Present Due = sum of (amount - paid_amount) for all dues past due
-          const pastUnpaidDues = unpaidDues.filter((d: any) => d.due_date <= todayStr);
-          const presentDue = pastUnpaidDues.reduce((sum: number, d: any) => sum + (Number(d.amount) - Number(d.paid_amount || 0)), 0);
-
-          const totalPaid = dues.reduce((sum: number, d: any) => sum + Number(d.paid_amount || 0), 0);
-
-          let penalty = 0;
-          if (oldestUnpaid && dueDays > 0) {
-            const cat = loan.loan_category?.trim().toUpperCase() || 'CD';
-            const setting = ledgerSettings[cat] || ledgerSettings['CD'];
-            if (setting) {
-              penalty = financeCalculationService.calculatePenaltyFromSetting(presentDue, dueDays, setting);
-            }
-          }
-          penalty = Math.round(penalty);
-
-          const isNPA = oldestUnpaid && dueDays > 90;
-
-          // Installments split estimate
-          const totalLoanRepayable = dues.reduce((sum: number, d: any) => sum + Number(d.amount), 0);
-          const totalPrincipal = Number(loan.amount);
-          const totalInterest = totalLoanRepayable - totalPrincipal;
-          const interestRatio = totalLoanRepayable > 0 ? totalInterest / totalLoanRepayable : 0;
-          const interestPaid = totalPaid * interestRatio;
-          const pendingInterest = presentDue * interestRatio;
-
-          formatted.push({
-            id: loan.id,
-            loanId: loan.loan_id,
-            customerName: loan.customer?.name || 'N/A',
-            loanCategory: loan.loan_category || 'Regular',
-            loanType: type,
-            loanAmount: Number(loan.amount),
-            currentPrincipal: Number(loan.amount) - (totalPaid * (1 - interestRatio)),
-            loanDate: loan.date,
-            currentDueDate,
-            interestPaid,
-            pendingInterest,
-            penalty,
-            presentDue: presentDue + penalty,
-            dueDays: dueDays > 0 ? dueDays : 0,
-            isNPA,
-            phone: loan.customer?.phone || '',
-            g1Name: g1?.name || '',
-            g1Phone: g1?.phone || '',
-            g2Name: g2?.name || '',
-            g2Phone: g2?.phone || '',
-            partnerName: loan.customer?.partner_name || 'Unassigned'
-          });
-        }
-      });
+      // 2. Fetch Aggregated Dues Summary via RPC
+      const summaryData = await supabaseFinance.getDuesLedgerSummary();
+      
+      const formatted: OverdueDueItem[] = summaryData.map((row: any) => ({
+        id: row.id,
+        loanId: row.loan_id,
+        customerName: row.customer_name,
+        loanCategory: row.loan_category,
+        loanType: row.loan_type,
+        loanAmount: Number(row.loan_amount),
+        currentPrincipal: Number(row.current_principal),
+        loanDate: row.loan_date,
+        currentDueDate: row.current_due_date,
+        interestPaid: Number(row.interest_paid || 0),
+        pendingInterest: Number(row.pending_interest || 0),
+        penalty: Number(row.penalty || 0),
+        presentDue: Number(row.present_due || 0),
+        dueDays: Number(row.due_days || 0),
+        isNPA: Boolean(row.is_npa),
+        phone: row.phone || '',
+        g1Name: row.g1_name || '',
+        g1Phone: row.g1_phone || '',
+        g2Name: row.g2_name || '',
+        g2Phone: row.g2_phone || '',
+        partnerName: row.partner_name || 'Unassigned'
+      }));
 
       setDues(formatted);
     } catch (err) {
@@ -294,18 +125,22 @@ const DuesLedger: React.FC = () => {
 
   const totals = useMemo(() => {
     let principal = 0;
+    let interestPaid = 0;
     let interest = 0;
     let penalty = 0;
     let presentDue = 0;
+    let amountToClose = 0;
 
     filteredDues.forEach(d => {
       principal += d.currentPrincipal;
+      interestPaid += d.interestPaid;
       interest += d.pendingInterest;
       penalty += d.penalty;
       presentDue += d.presentDue;
+      amountToClose += d.currentPrincipal + d.pendingInterest + d.penalty;
     });
 
-    return { principal, interest, penalty, presentDue };
+    return { principal, interestPaid, interest, penalty, presentDue, amountToClose };
   }, [filteredDues]);
 
   const options: ReportType[] = ['OUTSTANDING', 'TOTAL DUE LIST', 'CD DUE LIST', 'A -> B DUE LIST', 'NPA LIST'];
@@ -469,6 +304,7 @@ const DuesLedger: React.FC = () => {
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Pend. Int</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-24 bg-slate-50 finance-small-label">Penalty</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-32 bg-slate-50 finance-small-label font-black">Present Due</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-32 bg-slate-50 finance-small-label font-black text-blue-900">Close Amt</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-28 bg-slate-50 finance-small-label">Due Date</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-16 bg-slate-50 finance-small-label">Days</th>
                   <th className="px-2 py-1.5 text-slate-800 text-left bg-slate-50 finance-small-label">Contact (B / G1 / G2)</th>
@@ -486,6 +322,7 @@ const DuesLedger: React.FC = () => {
                     <td className="px-2 py-1.5 border-r border-slate-100 text-right text-orange-600 text-[13px] font-semibold whitespace-nowrap">₹{Math.round(due.pendingInterest).toLocaleString('en-IN')}</td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-right text-red-650 text-[13px] font-semibold whitespace-nowrap">₹{Math.round(due.penalty).toLocaleString('en-IN')}</td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-[13px] font-bold whitespace-nowrap">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-blue-900 font-sans text-[13px] font-bold whitespace-nowrap">₹{Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}</td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-[13px] font-semibold">{due.currentDueDate.split('-').reverse().join('/')}</td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-center text-red-650 text-[13px] font-bold whitespace-nowrap">{due.dueDays}</td>
                     <td className="px-2 py-1.5 font-sans text-[13px] text-slate-600 space-y-0.5">
@@ -503,10 +340,11 @@ const DuesLedger: React.FC = () => {
                 <tr className="bg-slate-50 font-sans font-extrabold border-t-2 border-slate-200 text-[13px]">
                   <td colSpan={4} className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 uppercase">Grand Total:</td>
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 font-bold text-[13px] whitespace-nowrap">₹{Math.round(totals.principal).toLocaleString('en-IN')}</td>
-                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 font-bold text-[13px]"></td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-emerald-700 font-bold text-[13px] whitespace-nowrap">₹{Math.round(totals.interestPaid).toLocaleString('en-IN')}</td>
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-orange-750 font-bold text-[13px] whitespace-nowrap">₹{Math.round(totals.interest).toLocaleString('en-IN')}</td>
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-red-650 font-bold text-[13px] whitespace-nowrap">₹{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-950 font-black text-[13px] whitespace-nowrap">₹{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-blue-950 font-black text-[13px] whitespace-nowrap">₹{Math.round(totals.amountToClose).toLocaleString('en-IN')}</td>
                   <td colSpan={3}></td>
                 </tr>
               </tbody>
@@ -520,90 +358,121 @@ const DuesLedger: React.FC = () => {
         isOpen={showPrintPreview}
         onClose={() => setShowPrintPreview(false)}
         title="Collection Dues Report"
-        documentTitle={`DUES_LIST_${activeReport}_${loanTypeFilter}`}
+        documentTitle={`DUES LIST — ${activeReport}`}
         orientation="landscape"
       >
         {!loading && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-end border-b border-slate-900 pb-2">
+          <div className="space-y-4">
+            {/* Print Header */}
+            <div className="flex justify-between items-end border-b-2 border-slate-900 pb-2 mb-4" style={{ fontSize: '10px' }}>
               <div>
-                <h2 className="text-xl font-bold uppercase text-slate-900">Thirumala Group Finance</h2>
-            <p className="text-[13px] uppercase text-slate-500">Collection Dues Ledger ({activeReport} - {loanTypeFilter})</p>
+                <h3 className="font-bold uppercase text-slate-900" style={{ fontSize: '12px', margin: 0 }}>THIRUMALA GROUP FINANCE</h3>
+                <p className="text-slate-500" style={{ margin: 0 }}>Collection Dues Ledger</p>
               </div>
-              <div className="text-right text-[13px] text-slate-600">
-                <p>Date: {new Date().toLocaleDateString('en-IN')}</p>
-                <p>Partner: {selectedPartner}</p>
+              <div className="text-right text-slate-900">
+                <p style={{ margin: 0 }}><span className="font-bold">DATE:</span> {new Date().toLocaleDateString('en-IN')}</p>
+                <p style={{ margin: 0 }}><span className="font-bold">PARTNER:</span> {selectedPartner}</p>
               </div>
             </div>
 
-            <table className="w-full border-collapse" style={{ tableLayout: 'auto', fontSize: '10pt' }}>
+            <table className="w-full border-collapse" style={{ tableLayout: 'fixed', fontSize: '9px' }}>
               <colgroup>
-                {/* Sl   Loan    Name     Type   Principal IntPaid  PendInt  Penalty  PresentDue DueDate  Days   Phone */}
                 <col style={{ width: '3%' }} />
                 <col style={{ width: '6%' }} />
                 <col style={{ width: '13%' }} />
                 <col style={{ width: '4%' }} />
                 <col style={{ width: '9%' }} />
                 <col style={{ width: '8%' }} />
+                <col style={{ width: '9%' }} />
                 <col style={{ width: '8%' }} />
-                <col style={{ width: '7%' }} />
-                <col style={{ width: '10%' }} />
+                <col style={{ width: '9%' }} />
+                <col style={{ width: '9%' }} />
                 <col style={{ width: '8%' }} />
                 <col style={{ width: '5%' }} />
-                <col style={{ width: '19%' }} />
+                <col style={{ width: '10%' }} />
               </colgroup>
               <thead>
-                <tr className="border-b-2 border-slate-850 bg-slate-100">
-                  <th className="p-1 border text-center font-bold print-nowrap">Sl No</th>
-                  <th className="p-1 border font-bold print-nowrap">Loan No</th>
-                  <th className="p-1 border font-bold print-wrap">Party Name</th>
-                  <th className="p-1 border text-center font-bold print-nowrap">Type</th>
-                  <th className="p-1 border text-right font-bold print-nowrap">Principal</th>
-                  <th className="p-1 border text-right font-bold print-nowrap">Int. Paid</th>
-                  <th className="p-1 border text-right font-bold print-nowrap">Pend. Int</th>
-                  <th className="p-1 border text-right font-bold print-nowrap">Penalty</th>
-                  <th className="p-1 border text-right font-bold print-nowrap">Present Due</th>
-                  <th className="p-1 border font-bold print-nowrap">Due Date</th>
-                  <th className="p-1 border text-center font-bold print-nowrap">Days</th>
-                  <th className="p-1 border font-bold print-wrap">Phone Details (Borrower &amp; Guarantors)</th>
+                <tr className="border-b-2 border-slate-900 bg-slate-100 font-bold" style={{ fontSize: '9px' }}>
+                  <th className="p-1 border text-center print-nowrap" style={{ whiteSpace: 'nowrap' }}>SL</th>
+                  <th className="p-1 border text-left print-nowrap" style={{ whiteSpace: 'nowrap' }}>LOAN NO</th>
+                  <th className="p-1 border text-left print-wrap" style={{ wordBreak: 'normal', overflowWrap: 'normal', whiteSpace: 'normal' }}>PARTY NAME</th>
+                  <th className="p-1 border text-center print-nowrap" style={{ whiteSpace: 'nowrap' }}>TYPE</th>
+                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>PRINCIPAL</th>
+                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>INT. PAID</th>
+                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>PEND. INT</th>
+                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>PENALTY</th>
+                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>PRESENT DUE</th>
+                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>CLOSE AMT</th>
+                  <th className="p-1 border text-left print-nowrap" style={{ whiteSpace: 'nowrap' }}>DUE DATE</th>
+                  <th className="p-1 border text-center print-nowrap" style={{ whiteSpace: 'nowrap' }}>DAYS</th>
+                  <th className="p-1 border text-left print-nowrap" style={{ whiteSpace: 'nowrap' }}>CONTACT</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredDues.map((due, idx) => (
-                  <tr key={due.id} className="border-b">
-                    <td className="p-1 border text-center print-nowrap">{idx + 1}</td>
-                    <td className="p-1 border font-bold text-blue-800 print-nowrap">{due.loanId}</td>
-                    <td className="p-1 border font-bold print-wrap">{due.customerName}</td>
-                    <td className="p-1 border text-center print-nowrap">{due.loanType}</td>
-                    <td className="p-1 border text-right print-amount">₹{Math.round(due.currentPrincipal).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right text-green-700 print-amount">₹{Math.round(due.interestPaid).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right text-orange-700 print-amount">₹{Math.round(due.pendingInterest).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right text-red-600 print-amount">₹{Math.round(due.penalty).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right font-bold text-red-700 print-amount">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border print-nowrap">{due.currentDueDate.split('-').reverse().join('/')}</td>
-                    <td className="p-1 border text-center text-red-600 font-bold print-nowrap">{due.dueDays}</td>
-                    <td className="p-1 border font-sans text-[9.5pt] leading-snug print-wrap">
-                      <div><span className="font-semibold">B:</span> {due.phone || '—'}</div>
-                      {due.g1Name && (
-                        <div><span className="font-semibold">G1:</span> {due.g1Name} ({due.g1Phone || '—'})</div>
+                  <tr key={due.id} className="border-b" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                    <td className="p-1 border text-center print-nowrap" style={{ whiteSpace: 'nowrap' }}>{idx + 1}</td>
+                    <td className="p-1 border font-bold text-blue-800 print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.loanId}</td>
+                    <td className="p-1 border font-bold print-wrap" style={{ wordBreak: 'normal', overflowWrap: 'normal', whiteSpace: 'normal', minWidth: '90px' }}>
+                      {due.customerName}
+                    </td>
+                    <td className="p-1 border text-center print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.loanType}</td>
+                    <td className="p-1 border text-right print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{Math.round(due.currentPrincipal).toLocaleString('en-IN')}</td>
+                    <td className="p-1 border text-right text-green-700 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{Math.round(due.interestPaid).toLocaleString('en-IN')}</td>
+                    <td className="p-1 border text-right text-orange-700 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{Math.round(due.pendingInterest).toLocaleString('en-IN')}</td>
+                    <td className="p-1 border text-right text-red-600 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{Math.round(due.penalty).toLocaleString('en-IN')}</td>
+                    <td className="p-1 border text-right font-bold text-red-750 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
+                    <td className="p-1 border text-right font-bold text-blue-900 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}</td>
+                    <td className="p-1 border print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.currentDueDate.split('-').reverse().join('/')}</td>
+                    <td className="p-1 border text-center text-red-600 font-bold print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.dueDays}</td>
+                    <td className="p-1 border font-sans leading-tight print-nowrap" style={{ whiteSpace: 'nowrap', fontSize: '8.5px' }}>
+                      {due.phone && (
+                        <div style={{ whiteSpace: 'nowrap' }}><span className="font-semibold text-slate-850">B:</span> {due.phone}</div>
                       )}
-                      {due.g2Name && (
-                        <div><span className="font-semibold">G2:</span> {due.g2Name} ({due.g2Phone || '—'})</div>
+                      {due.g1Phone && (
+                        <div style={{ whiteSpace: 'nowrap' }}><span className="font-semibold text-slate-850">G1:</span> {due.g1Phone}</div>
+                      )}
+                      {due.g2Phone && (
+                        <div style={{ whiteSpace: 'nowrap' }}><span className="font-semibold text-slate-850">G2:</span> {due.g2Phone}</div>
                       )}
                     </td>
                   </tr>
                 ))}
-                <tr className="font-bold bg-slate-50 border-t-2 border-slate-800 print-total">
-                  <td colSpan={4} className="p-1 border text-right uppercase print-wrap">Grand Total:</td>
-                  <td className="p-1 border text-right print-amount">₹{Math.round(totals.principal).toLocaleString('en-IN')}</td>
-                  <td className="p-1 border print-nowrap"></td>
-                  <td className="p-1 border text-right print-amount">₹{Math.round(totals.interest).toLocaleString('en-IN')}</td>
-                  <td className="p-1 border text-right print-amount">₹{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
-                  <td className="p-1 border text-right text-red-700 print-amount">₹{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
-                  <td colSpan={3} className="border"></td>
-                </tr>
               </tbody>
             </table>
+
+            {/* Totals Section */}
+            <div className="mt-6 flex justify-end" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+              <div className="w-[450px] border-2 border-slate-900 rounded-lg p-4 bg-slate-50" style={{ fontSize: '11px', fontFamily: 'sans-serif' }}>
+                <h4 className="font-bold text-center border-b-2 border-slate-900 pb-2 mb-3 uppercase tracking-wider" style={{ fontSize: '12px', margin: 0 }}>Report Totals</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between border-b border-slate-300 pb-1">
+                    <span className="font-semibold text-slate-700 uppercase">Outstanding Principal:</span>
+                    <span className="font-bold" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.principal).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-300 pb-1">
+                    <span className="font-semibold text-slate-700 uppercase">Interest Paid:</span>
+                    <span className="font-bold text-green-700" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.interestPaid).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-300 pb-1">
+                    <span className="font-semibold text-slate-700 uppercase">Pending Interest:</span>
+                    <span className="font-bold text-orange-700" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.interest).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-300 pb-1">
+                    <span className="font-semibold text-slate-700 uppercase">Pending Penalty:</span>
+                    <span className="font-bold text-red-600" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.penalty).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-300 pb-1">
+                    <span className="font-semibold text-slate-700 uppercase">Present Due:</span>
+                    <span className="font-bold text-red-700" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.presentDue).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t-2 border-slate-900 mt-2 bg-slate-900 text-white p-2 rounded" style={{ fontSize: '13px' }}>
+                    <span className="font-black uppercase tracking-wide">Total Amount to Close:</span>
+                    <span className="font-black" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.amountToClose).toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </FinancePrintPreview>

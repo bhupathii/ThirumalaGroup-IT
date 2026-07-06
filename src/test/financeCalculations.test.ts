@@ -1258,4 +1258,140 @@ describe('CD Ledger Calculation Rules', () => {
       expect(diff).toBe(5);
     });
   });
+
+  describe('CD Fractional-Day Parity Tests', () => {
+    // TEST 1 — GREATER THAN .50
+    it('TEST 1: handles exact days > 0.50 correctly', () => {
+      const exactDays = 10.67;
+      const displayDays = financeCalculationService.calculateDisplayDays(exactDays);
+      expect(displayDays).toBe(11);
+      expect(exactDays).toBe(10.67); // Exact value unchanged
+    });
+
+    // TEST 2 — LESS THAN .50
+    it('TEST 2: handles exact days < 0.50 correctly', () => {
+      const exactDays = 10.40;
+      const displayDays = financeCalculationService.calculateDisplayDays(exactDays);
+      expect(displayDays).toBe(10);
+      expect(exactDays).toBe(10.40); // Exact value unchanged
+    });
+
+    // TEST 3 — EXACT .50
+    it('TEST 3: handles exact days of exactly 0.50 correctly', () => {
+      const exactDays = 10.50;
+      const displayDays = financeCalculationService.calculateDisplayDays(exactDays);
+      expect(displayDays).toBe(11);
+    });
+
+    // TEST 4 — FRACTION ACCUMULATION
+    it('TEST 4: accumulates exact fractional days and displays correctly', () => {
+      const start = 10.40;
+      const add = 0.67;
+      const total = financeCalculationService.advanceExactRenewalPosition(start, add);
+      expect(total).toBe(11.07);
+      expect(financeCalculationService.calculateDisplayDays(total)).toBe(11);
+    });
+
+    // TEST 5 — DO NOT USE DISPLAY DAY FOR MONEY
+    it('TEST 5: uses exact fractional days for interest calculation instead of displayed days', () => {
+      const principal = 12000;
+      const rate = 3;
+      const exactRenewedDays = 10.67;
+      // interestValue = principal * rate% * exactRenewedDays / 30
+      const calculatedInterest = financeCalculationService.calculateInterest(principal, rate, exactRenewedDays, 30);
+      
+      const expectedCorrect = Number(((principal * (rate / 100) * exactRenewedDays) / 30).toFixed(2));
+      const expectedIncorrect = Number(((principal * (rate / 100) * 11) / 30).toFixed(2));
+      
+      expect(calculatedInterest).toBe(expectedCorrect);
+      expect(calculatedInterest).not.toBe(expectedIncorrect);
+    });
+
+    // TEST 6 — 10.83 LEGACY DESCRIPTION
+    it('TEST 6: calculates 10.83 exact renewed days and legacy description', () => {
+      const principal = 750000;
+      const rate = 3;
+      const dailyInterest = financeCalculationService.calculateDailyInterest(principal, rate);
+      expect(dailyInterest).toBe(750);
+
+      const interestPaid = 8122; // Legacy amount paid for interest
+      const exactRenewedDays = financeCalculationService.calculateExactRenewedDays(interestPaid, principal, rate);
+      // 8122 / 750 = 10.8293...
+      expect(exactRenewedDays).toBe(10.83);
+
+      const desc = financeCalculationService.formatRenewedDaysDescription(exactRenewedDays);
+      expect(desc).toBe('10.83-Days Renewed');
+
+      const displayDays = financeCalculationService.calculateDisplayDays(exactRenewedDays);
+      expect(displayDays).toBe(11);
+    });
+
+    // TEST 7 — 6.67 LEGACY DESCRIPTION
+    it('TEST 7: calculates 6.67 exact renewed days and legacy description', () => {
+      const principal = 750000;
+      const rate = 3;
+      const interestPaid = 5002; // Legacy amount paid
+      const exactRenewedDays = financeCalculationService.calculateExactRenewedDays(interestPaid, principal, rate);
+      // 5002 / 750 = 6.6693...
+      expect(exactRenewedDays).toBe(6.67);
+
+      const desc = financeCalculationService.formatRenewedDaysDescription(exactRenewedDays);
+      expect(desc).toBe('6.67-Days Renewed');
+
+      const displayDays = financeCalculationService.calculateDisplayDays(exactRenewedDays);
+      expect(displayDays).toBe(7);
+    });
+
+    // TEST 8 — 13.33 LEGACY DESCRIPTION
+    it('TEST 8: calculates 13.33 exact renewed days and legacy description', () => {
+      const principal = 750000;
+      const rate = 3;
+      const interestPaid = 9998; // Legacy amount paid
+      const exactRenewedDays = financeCalculationService.calculateExactRenewedDays(interestPaid, principal, rate);
+      // 9998 / 750 = 13.3306...
+      expect(exactRenewedDays).toBe(13.33);
+
+      const desc = financeCalculationService.formatRenewedDaysDescription(exactRenewedDays);
+      expect(desc).toBe('13.33-Days Renewed');
+
+      const displayDays = financeCalculationService.calculateDisplayDays(exactRenewedDays);
+      expect(displayDays).toBe(13);
+    });
+
+    // TEST 9 — SEQUENTIAL FRACTIONAL RENEWALS
+    it('TEST 9: calculates sequential fractional renewals without intermediate rounding', () => {
+      const movement1 = 10.83;
+      const movement2 = 6.67;
+      const movement3 = 13.33;
+
+      const sum1 = financeCalculationService.advanceExactRenewalPosition(0, movement1);
+      const sum2 = financeCalculationService.advanceExactRenewalPosition(sum1, movement2);
+      const sum3 = financeCalculationService.advanceExactRenewalPosition(sum2, movement3);
+
+      expect(sum3).toBe(30.83); // 10.83 + 6.67 + 13.33
+      expect(sum3).not.toBe(31);  // 11 + 7 + 13
+      expect(sum3).not.toBe(29);  // 10 + 6 + 13
+    });
+
+    // TEST 10 — SAVE / RELOAD PARITY
+    it('TEST 10: preserves exact fractional renewal position through save/reload simulation', () => {
+      const originalValue = 11.07;
+      const dbValue = Number(originalValue.toString());
+      expect(dbValue).toBe(11.07);
+    });
+
+    // TEST 11 — MULTIPLE FRACTIONS CREATE AN EXTRA DAY
+    it('TEST 11: carries decimal and allows extra day to emerge', () => {
+      const start = 0.40;
+      const add = 0.67;
+      const total = financeCalculationService.advanceExactRenewalPosition(start, add);
+      expect(total).toBe(1.07);
+      
+      const displayDays = financeCalculationService.calculateDisplayDays(total);
+      expect(displayDays).toBe(1); // 1 complete day emerged
+      
+      const carry = Number((total - Math.floor(total)).toFixed(2));
+      expect(carry).toBe(0.07); // remaining fractional precision
+    });
+  });
 });

@@ -687,57 +687,9 @@ class SupabaseFinance {
 
   async getNextReceiptNumber(): Promise<string> {
     try {
-      let maxNum = 0;
-
-      const extractMax = (rows: Array<{ receipt_no?: string | null }>) => {
-        if (!rows) return;
-        for (const row of rows) {
-          if (row.receipt_no) {
-            const match = row.receipt_no.match(/RC(\d+)/i);
-            if (match) {
-              const num = parseInt(match[1], 10);
-              if (num > maxNum) maxNum = num;
-            }
-          }
-        }
-      };
-
-      // Query finance_cd_ledger_entries
-      const { data: ledgerData } = await supabase
-        .from('finance_cd_ledger_entries')
-        .select('receipt_no')
-        .like('receipt_no', 'RC%');
-      extractMax(ledgerData || []);
-
-      // Query finance_cd_interest_details
-      const { data: interestData } = await supabase
-        .from('finance_cd_interest_details')
-        .select('receipt_no')
-        .like('receipt_no', 'RC%');
-      extractMax(interestData || []);
-
-      // Query finance_transactions (safe - column may not exist in all envs)
-      try {
-        const { data: txData } = await supabase
-          .from('finance_transactions')
-          .select('receipt_no')
-          .like('receipt_no', 'RC%');
-        extractMax(txData || []);
-      } catch (_) {
-        // Ignore if receipt_no column does not exist yet
-      }
-
-      // Query finance_documents_returned
-      try {
-        const { data: docRetData } = await supabase
-          .from('finance_documents_returned')
-          .select('receipt_no')
-          .like('receipt_no', 'RC%');
-        extractMax(docRetData || []);
-      } catch (_) {
-        // Ignore if receipt_no column does not exist yet
-      }
-
+      const { data, error } = await supabase.schema('finance').rpc('get_max_receipt_number');
+      if (error) throw error;
+      const maxNum = Number(data) || 0;
       const nextNum = maxNum + 1;
       const padded = String(nextNum).padStart(3, '0');
       return `RC${padded}`;
@@ -885,8 +837,8 @@ class SupabaseFinance {
 
       // 3. Post Interest
       if (params.interestPaid > 0) {
-        const interestParticulars = params.actionType === 'Renew'
-          ? 'Interest Paid - Renewal Payment'
+        const interestParticulars = params.renewedDays > 0
+          ? financeCalculationService.formatRenewedDaysDescription(params.renewedDays)
           : `Interest Paid - ${actionText} - ${receiptNo}`;
 
         const entry = await this.addCDLedgerEntry({
@@ -1772,10 +1724,10 @@ class SupabaseFinance {
     try {
       const { data, error } = await supabase
         .from('finance_loans')
-        .select('*, customer:finance_customers!customer_id(*)')
+        .select('id, loan_id, amount, date, status, loan_category, interest_rate, duration_months, customer_id, customer:finance_customers!customer_id(id, name, phone, partner_name)')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data || [];
+      return (data as any) || [];
     } catch (error) {
       console.error('Error fetching finance loans:', error);
       return [];
@@ -1804,7 +1756,7 @@ class SupabaseFinance {
         .select(`
           id, loan_id, amount, date, status, npa_closed, loan_category, interest_rate, penalty_percent, duration_months,
           customer_id, guarantor_1_id, guarantor_2_id,
-          customer:finance_customers!customer_id(*)
+          customer:finance_customers!customer_id(id, name, phone, partner_name)
         `)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -1813,7 +1765,7 @@ class SupabaseFinance {
       // Fetch customers to resolve guarantors in-memory to bypass missing DB foreign keys
       const { data: customers } = await supabase
         .from('finance_customers')
-        .select('*');
+        .select('id, name, phone');
 
       const customerMap = new Map();
       if (customers) {
@@ -1835,50 +1787,54 @@ class SupabaseFinance {
     try {
       const { data: loan, error: loanError } = await supabase
         .from('finance_loans')
-        .select('*, customer:finance_customers!customer_id(*)')
+        .select(`
+          id, loan_id, loan_category, customer_id, amount, date, interest_rate, duration_months, due_type, due_amount,
+          status, period_days, grace_days, penalty_percent, document_charges, surety_name, surety_phone, surety_aadhaar,
+          surety_present_address, surety_relation, remarks, guarantor_1_id, guarantor_2_id,
+          balance_with_interest, balance_without_interest, installments_paid,
+          customer:finance_customers!customer_id(id, name, phone, phone2, address, aadhaar, customer_photo_url, father_husband_name, partner_name)
+        `)
         .eq('id', id)
         .single();
       if (loanError) throw loanError;
       if (!loan) return null;
 
-      const { data: transactions } = await supabase
-        .from('finance_transactions')
-        .select('*')
-        .eq('loan_id', id)
-        .order('date', { ascending: true });
-
-      const { data: photos } = await supabase
-        .from('finance_photos')
-        .select('*')
-        .eq('loan_id', id);
-
-      const { data: dues } = await supabase
-        .from('finance_dues')
-        .select('*')
-        .eq('loan_id', id)
-        .order('due_date', { ascending: true });
-
-      let documents: FinanceDocument[] = [];
-      try {
-        const { data: docs, error: docsError } = await supabase
-          .from('finance_documents')
-          .select('*')
+      const [txsRes, photosRes, duesRes, docsRes] = await Promise.all([
+        supabase
+          .from('finance_transactions')
+          .select('id, date, amount, type, remarks, collected_by, receipt_no')
           .eq('loan_id', id)
-          .order('created_at', { ascending: false });
-        if (!docsError && docs) {
-          documents = docs;
-        }
-      } catch (docErr) {
-        console.warn('Could not fetch finance_documents (table might not exist yet):', docErr);
-      }
+          .order('date', { ascending: true }),
+        supabase
+          .from('finance_photos')
+          .select('id, photo_type, photo_url')
+          .eq('loan_id', id),
+        supabase
+          .from('finance_dues')
+          .select('id, due_date, amount, paid_amount, status')
+          .eq('loan_id', id)
+          .order('due_date', { ascending: true }),
+        (async () => {
+          try {
+            const { data } = await supabase
+              .from('finance_documents')
+              .select('id, file_name, file_url, created_at')
+              .eq('loan_id', id)
+              .order('created_at', { ascending: false });
+            return data || [];
+          } catch (_) {
+            return [];
+          }
+        })()
+      ]);
 
       return {
         ...loan,
-        transactions: transactions || [],
-        photos: photos || [],
-        dues: dues || [],
-        documents
-      };
+        transactions: txsRes.data || [],
+        photos: photosRes.data || [],
+        dues: duesRes.data || [],
+        documents: docsRes
+      } as any;
     } catch (error) {
       console.error('Error fetching loan by id:', error);
       return null;
@@ -2450,7 +2406,13 @@ class SupabaseFinance {
     try {
       let query = supabase
         .from('finance_transactions')
-        .select('*, loan:finance_loans(*, customer:finance_customers!customer_id(*))')
+        .select(`
+          id, date, amount, type, remarks, collected_by, receipt_no, loan_id,
+          loan:finance_loans(
+            id, loan_id, loan_category, amount, customer_id,
+            customer:finance_customers!customer_id(id, name, phone)
+          )
+        `)
         .order('date', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -2463,7 +2425,7 @@ class SupabaseFinance {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data || [];
+      return (data as any) || [];
     } catch (error) {
       console.error('Error fetching finance transactions:', error);
       return [];
@@ -2600,18 +2562,13 @@ class SupabaseFinance {
         };
       });
 
-      // 4. Update each due record in Supabase
-      // Note: We perform individual updates or bulk if supported, individual is simple and safe for typical loan dues counts (e.g. 50-100)
-      for (const due of updatedDues) {
-        await supabase
-          .from('finance_dues')
-          .update({
-            paid_amount: due.paid_amount,
-            status: due.status,
-            updated_at: due.updated_at
-          })
-          .eq('id', due.id);
-      }
+      // 4. Update each due record in Supabase via bulk RPC
+      const { error: updateError } = await supabase
+        .schema('finance')
+        .rpc('bulk_update_dues', {
+          dues_data: updatedDues
+        });
+      if (updateError) throw updateError;
 
       console.log(`✅ Recalculated dues for loan ${loanId}. Remaining collections: ${totalCollected}`);
     } catch (error) {
@@ -3720,7 +3677,7 @@ class SupabaseFinance {
             customer_id,
             guarantor_1_id,
             guarantor_2_id,
-            customer:finance_customers!customer_id(*)
+            customer:finance_customers!customer_id(id, name, phone, partner_name)
           )
         `);
 
@@ -3741,7 +3698,7 @@ class SupabaseFinance {
       // Fetch customers to resolve guarantors in-memory to bypass missing DB foreign keys
       const { data: customers } = await supabase
         .from('finance_customers')
-        .select('*');
+        .select('id, name, phone');
 
       const customerMap = new Map();
       if (customers) {
@@ -3776,6 +3733,209 @@ class SupabaseFinance {
     } catch (error) {
       console.error('Error creating follow-up:', error);
       return null;
+    }
+  }
+
+  async getDuesLedgerSummary(todayDate?: string): Promise<any[]> {
+    try {
+      const targetDate = todayDate || new Date().toISOString().split('T')[0];
+
+      // 1. Fetch all Active loans
+      const { data: loans, error: loansErr } = await supabase
+        .from('finance_loans')
+        .select('*')
+        .eq('status', 'Active');
+
+      if (loansErr) throw loansErr;
+      if (!loans || loans.length === 0) return [];
+
+      // 2. Fetch all borrowers
+      const { data: borrowers, error: borrowersErr } = await supabase
+        .from('finance_customers')
+        .select('*');
+      if (borrowersErr) throw borrowersErr;
+
+      // 3. Fetch all CD entries
+      const { data: cdLedgerEntries, error: entriesErr } = await supabase
+        .from('finance_cd_ledger_entries')
+        .select('*');
+      if (entriesErr) throw entriesErr;
+
+      // 4. Fetch all CD interest details
+      const { data: cdInterestDetails, error: interestsErr } = await supabase
+        .from('finance_cd_interest_details')
+        .select('*');
+      if (interestsErr) throw interestsErr;
+
+      // 5. Fetch unpaid due entries
+      const { data: dueEntries, error: duesErr } = await supabase
+        .from('finance_dues')
+        .select('*')
+        .neq('status', 'Paid');
+      if (duesErr) throw duesErr;
+
+      // 6. Fetch ledger settings
+      let ledgerSettings: any[] = [];
+      try {
+        const { data, error } = await supabase
+          .from('finance_ledger_settings')
+          .select('*');
+        if (!error && data) {
+          ledgerSettings = data;
+        }
+      } catch (err) {
+        console.warn('Could not fetch ledger settings:', err);
+      }
+
+      const borrowerMap = new Map<string, any>((borrowers || []).map(b => [b.id, b]));
+
+      const results = (loans || []).map(loan => {
+        const borrower = borrowerMap.get(loan.customer_id) || {};
+        const g1 = borrowerMap.get(loan.guarantor_1_id) || {};
+        const g2 = borrowerMap.get(loan.guarantor_2_id) || {};
+
+        const loanType = loan.loan_id.startsWith('CD') ? 'CD' : (loan.loan_id.startsWith('HP') ? 'HP' : (loan.loan_id.startsWith('STBD') ? 'STBD' : 'TBD'));
+        const phone = borrower.phone || borrower.phone_1 || borrower.phone_2 || '';
+        const g1_name = g1.name || '';
+        const g1_phone = g1.phone || g1.phone_1 || g1.phone_2 || '';
+        const g2_name = g2.name || '';
+        const g2_phone = g2.phone || g2.phone_1 || g2.phone_2 || '';
+
+        if (loanType === 'CD') {
+          const entries = cdLedgerEntries.filter(e => e.loan_id === loan.id);
+          const interests = cdInterestDetails.filter(d => d.loan_id === loan.id);
+
+          const disbEntry = entries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
+          const originalLoanDateStr = disbEntry ? disbEntry.entry_date.split('T')[0] : loan.date.split('T')[0];
+          const periodDays = loan.period_days || 30;
+          const interestRate = Number(loan.interest_rate) || 3;
+          const penaltyRate = loan.penalty_percent !== undefined && loan.penalty_percent !== null ? Number(loan.penalty_percent) : 0.75;
+          const graceDays = loan.grace_days !== undefined && loan.grace_days !== null ? Number(loan.grace_days) : 5;
+
+          const totalRenewedDays = interests
+            .filter(d => Number(d.credit) === 0)
+            .reduce((sum, d) => sum + (Number(d.renewed_days) || 0), 0);
+
+          const interestPaid = entries
+            .filter(e => e.account_name === 'CD COMMISSION A/C' || e.entry_type === 'interest_payment')
+            .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
+          const currentPrincipal = Number(loan.amount);
+
+          const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays - 1);
+          const displayRenewedDays = financeCalculationService.calculateDisplayDays(totalRenewedDays);
+          const currentDueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, displayRenewedDays);
+
+          const rawDueDays = financeCalculationService.differenceInCalendarDays(targetDate, currentDueDateStr);
+          const dueDays = Math.max(0, rawDueDays);
+          const isNpa = rawDueDays > 90;
+
+          let pendingInterest = 0;
+          if (rawDueDays > 0) {
+            pendingInterest = Number(((currentPrincipal * interestRate * rawDueDays) / periodDays / 100).toFixed(2));
+          }
+
+          let penalty = 0;
+          if (rawDueDays > graceDays) {
+            penalty = Number(((currentPrincipal * penaltyRate * rawDueDays) / periodDays / 100).toFixed(2));
+          }
+
+          const presentDue = Number((pendingInterest + penalty).toFixed(2));
+
+          return {
+            id: loan.id,
+            loan_id: loan.loan_id,
+            customer_name: borrower.name || '',
+            loan_category: loan.loan_category || 'CD',
+            loan_type: 'CD',
+            loan_amount: Number(loan.amount),
+            current_principal: currentPrincipal,
+            loan_date: originalLoanDateStr,
+            current_due_date: currentDueDateStr,
+            interest_paid: interestPaid,
+            pending_interest: pendingInterest,
+            penalty: penalty,
+            present_due: presentDue,
+            due_days: dueDays,
+            is_npa: isNpa,
+            phone,
+            g1_name,
+            g1_phone,
+            g2_name,
+            g2_phone,
+            partner_name: borrower.partner_name || 'Unassigned'
+          };
+        } else {
+          const loanDues = dueEntries.filter(d => d.loan_id === loan.id);
+          const totalRepayable = loanDues.reduce((sum, d) => sum + Number(d.amount), 0);
+          const totalPaid = loanDues.reduce((sum, d) => sum + Number(d.paid_amount || 0), 0);
+
+          let currentPrincipal = Number(loan.amount);
+          if (totalRepayable > 0) {
+            currentPrincipal = Number(loan.amount) - (totalPaid * (1.0 - ((totalRepayable - Number(loan.amount)) / totalRepayable)));
+          }
+
+          let interestPaid = 0;
+          if (totalRepayable > 0) {
+            interestPaid = totalPaid * ((totalRepayable - Number(loan.amount)) / totalRepayable);
+          }
+
+          const overdueDues = loanDues.filter(d => d.due_date <= targetDate && d.status !== 'Paid');
+          const presentDuePrincipalAndInterest = overdueDues.reduce((sum, d) => sum + Number(d.amount - (d.paid_amount || 0)), 0);
+
+          let pendingInterest = 0;
+          if (totalRepayable > 0) {
+            pendingInterest = presentDuePrincipalAndInterest * ((totalRepayable - Number(loan.amount)) / totalRepayable);
+          }
+
+          const unpaidDues = loanDues.filter(d => d.status !== 'Paid');
+          const oldestDueDateStr = unpaidDues.reduce((min, d) => !min || d.due_date < min ? d.due_date : min, null as string | null);
+          const dueDaysRaw = oldestDueDateStr ? financeCalculationService.differenceInCalendarDays(targetDate, oldestDueDateStr) : 0;
+          const dueDays = Math.max(0, dueDaysRaw);
+          const isNpa = dueDaysRaw > 90;
+
+          const categorySetting = (ledgerSettings || []).find(s => s.code === loan.loan_category) || 
+                                  (ledgerSettings || []).find(s => s.code === 'CD') || 
+                                  { overdue: 24, days_per_year: 365 };
+
+          let penalty = 0;
+          if (dueDays > 5) {
+            const daysPerMonth = categorySetting.days_per_year / 12.0;
+            penalty = Math.round(presentDuePrincipalAndInterest * (categorySetting.overdue / 100.0) * (dueDays / daysPerMonth));
+          }
+
+          const presentDue = Number((presentDuePrincipalAndInterest + penalty).toFixed(2));
+
+          return {
+            id: loan.id,
+            loan_id: loan.loan_id,
+            customer_name: borrower.name || '',
+            loan_category: loan.loan_category || 'General',
+            loan_type: loanType,
+            loan_amount: Number(loan.amount),
+            current_principal: currentPrincipal,
+            loan_date: loan.date,
+            current_due_date: oldestDueDateStr || loan.date,
+            interest_paid: interestPaid,
+            pending_interest: pendingInterest,
+            penalty: penalty,
+            present_due: presentDue,
+            due_days: dueDays,
+            is_npa: isNpa,
+            phone,
+            g1_name,
+            g1_phone,
+            g2_name,
+            g2_phone,
+            partner_name: borrower.partner_name || 'Unassigned'
+          };
+        }
+      });
+
+      return results;
+    } catch (error) {
+      console.error('Error fetching dues ledger summary:', error);
+      return [];
     }
   }
 }

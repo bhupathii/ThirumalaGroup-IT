@@ -91,6 +91,33 @@ export const financeCalculationService = {
     return `${y}-${m}-${dd}`;
   },
 
+  calculateDailyInterest(principal: number, rate: number): number {
+    return (principal * (rate / 100)) / 30;
+  },
+
+  calculateExactRenewedDays(interestAmount: number, principal: number, rate: number): number {
+    const dailyInterest = this.calculateDailyInterest(principal, rate);
+    return dailyInterest > 0 ? Number((interestAmount / dailyInterest).toFixed(2)) : 0;
+  },
+
+  calculateDisplayDays(exactDays: number): number {
+    const floor = Math.floor(exactDays);
+    const frac = exactDays - floor;
+    if (Number(frac.toFixed(4)) >= 0.5) {
+      return floor + 1;
+    }
+    return floor;
+  },
+
+  advanceExactRenewalPosition(currentExactPosition: number, exactDaysAdded: number): number {
+    return Number((currentExactPosition + exactDaysAdded).toFixed(2));
+  },
+
+  formatRenewedDaysDescription(exactDays: number): string {
+    const rounded = Number(exactDays.toFixed(2));
+    return `${rounded}-Days Renewed`;
+  },
+
   /**
    * Banker's Rounding (round-half-to-even) to whole rupees.
    * Matches MS Access VBA Int() / Round() behaviour for CD ledger entries.
@@ -340,7 +367,8 @@ export const financeCalculationService = {
 
       // dailyInterest = Principal * interestRate / 100 / 30
       const dailyInterestValue = renDue / days;
-      renewedDays = dailyInterestValue > 0 ? Number((interestPaid / dailyInterestValue).toFixed(2)) : 0;
+      const rate = prin > 0 ? (dailyInterestValue * 30 * 100) / prin : 0;
+      renewedDays = this.calculateExactRenewedDays(interestPaid, prin, rate);
     }
 
     return {
@@ -351,6 +379,42 @@ export const financeCalculationService = {
       principalPaid,
       renewedDays,
       remaining: 0
+    };
+  },
+
+  calculateCDCloseAmount(principal: number, pendingInterest: number, pendingPenalty: number): number {
+    return Number((principal + pendingInterest + pendingPenalty).toFixed(2));
+  },
+
+  calculateCDOutstandingDues(
+    principal: number,
+    originalLoanDateStr: string,
+    periodDays: number,
+    interestRate: number,
+    penaltyRate: number,
+    graceDays: number,
+    totalRenewedDays: number,
+    paymentDate: string
+  ) {
+    const dueDays = this.differenceInCalendarDays(paymentDate, this.addCalendarDays(originalLoanDateStr, periodDays - 1)) - totalRenewedDays;
+    const rawDueDays = dueDays;
+    let pendingInterest = 0;
+    if (rawDueDays > 0) {
+      pendingInterest = Number(((principal * interestRate * rawDueDays) / periodDays / 100).toFixed(2));
+    }
+    let penalty = 0;
+    if (rawDueDays > graceDays) {
+      penalty = Number(((principal * penaltyRate * rawDueDays) / periodDays / 100).toFixed(2));
+    }
+    const presentDue = Number((pendingInterest + penalty).toFixed(2));
+    const closeAmount = Number((principal + presentDue).toFixed(2));
+    return {
+      dueDays: Math.max(0, rawDueDays),
+      rawDueDays,
+      pendingInterest,
+      penalty,
+      presentDue,
+      closeAmount
     };
   },
 

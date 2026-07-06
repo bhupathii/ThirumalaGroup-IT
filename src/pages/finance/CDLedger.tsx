@@ -217,6 +217,82 @@ const CDLedger: React.FC = () => {
     }
   };
 
+  const [loadingTab, setLoadingTab] = useState(false);
+
+  const loadTabDetails = async (tab: 'statement' | 'interest' | 'payment' | 'editHistory', loanId: string) => {
+    setLoadingTab(true);
+    try {
+      if (tab === 'statement') {
+        const entries = await supabaseFinance.getCDLedgerEntries(loanId);
+        
+        const normalizedEntries = entries.map((entry: any) => {
+          let entryType = entry.entry_type;
+          let particulars = entry.particulars || '';
+          const accountNameLower = (entry.account_name || '').toLowerCase();
+          const particularsLower = particulars.toLowerCase();
+
+          if (entry.account_name) {
+            if (accountNameLower === 'cd commission a/c') {
+              const isOpeningRow = entryType === 'opening_commission' || entryType === 'Commission'
+                || (!entry.receipt_no || entry.receipt_no === '-');
+              if (isOpeningRow && entryType !== 'interest_payment' && entryType !== 'penalty_payment') {
+                entryType = 'opening_commission';
+                particulars = 'Opening CD Commission Charged';
+              }
+            } else if (accountNameLower === 'cd document charges a/c') {
+              if (entryType !== 'document_charge') entryType = 'document_charge';
+            } else if (
+              particularsLower.includes('disbursement') ||
+              accountNameLower === 'disbursement' ||
+              entryType === 'original_loan' ||
+              (accountNameLower === 'cd a/c' && entry.debit > 0 && !entry.credit)
+            ) {
+              entryType = 'original_loan';
+              particulars = 'Original Loan Disbursement';
+            }
+            return { ...entry, entry_type: entryType, particulars };
+          }
+
+          if (particularsLower.includes('disbursement') || (entry.debit > 0 && !entry.credit)) {
+            entryType = 'original_loan';
+            particulars = 'Original Loan Disbursement';
+          }
+
+          return { ...entry, entry_type: entryType, particulars };
+        });
+
+        setCdLedgerEntries(normalizedEntries);
+      } else if (tab === 'interest') {
+        const interests = await supabaseFinance.getCDInterestDetails(loanId);
+        setCdInterestDetails(interests);
+      } else if (tab === 'payment') {
+        const { data: txs } = await supabase
+          .from('finance_transactions')
+          .select('id, date, amount, type, remarks, collected_by, receipt_no')
+          .eq('loan_id', loanId)
+          .order('date', { ascending: true });
+        setLoanTransactions(txs || []);
+      } else if (tab === 'editHistory') {
+        const { data: editLogsData } = await supabase
+          .from('finance_cd_transaction_edit_logs')
+          .select('*')
+          .eq('loan_id', loanId)
+          .order('edited_at', { ascending: false });
+        setEditLogs(editLogsData || []);
+      }
+    } catch (err) {
+      console.error('Error loading tab details:', err);
+    } finally {
+      setLoadingTab(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedLoan?.id) {
+      loadTabDetails(activeLogTab, selectedLoan.id);
+    }
+  }, [activeLogTab, selectedLoan?.id]);
+
   const loadLedgerDetails = async (loanId: string) => {
     setLoading(true);
     try {
@@ -240,117 +316,33 @@ const CDLedger: React.FC = () => {
         setEditSuretyRelation(fullDetails.surety_relation || '');
         setEditLoanRemarks(fullDetails.remarks || '');
 
-        // Fetch explicit CD entries and interest rows
-        const entries = await supabaseFinance.getCDLedgerEntries(loanId);
-        const interests = await supabaseFinance.getCDInterestDetails(loanId);
+        // Fetch remaining core details in parallel
+        const [g1Res, g2Res, docsRes, colLogsRes, retDocsRes, nextReceipt] = await Promise.all([
+          fullDetails.guarantor_1_id
+            ? supabase.from('finance_customers').select('id, name, phone, customer_photo_url, aadhaar, address').eq('id', fullDetails.guarantor_1_id).single()
+            : Promise.resolve({ data: null }),
+          fullDetails.guarantor_2_id
+            ? supabase.from('finance_customers').select('id, name, phone, customer_photo_url, aadhaar, address').eq('id', fullDetails.guarantor_2_id).single()
+            : Promise.resolve({ data: null }),
+          supabase.from('finance_loan_documents').select('*').eq('loan_id', loanId),
+          supabase.from('finance_edited_logs').select('*').eq('table_name', 'finance_loans_collateral').eq('record_id', loanId).order('edited_at', { ascending: false }).limit(1),
+          supabase.from('finance_documents_returned').select('*').eq('loan_id', loanId).order('created_at', { ascending: false }).limit(1),
+          supabaseFinance.getNextReceiptNumber()
+        ]);
 
-        // Normalize legacy/native entries to prevent commission/charges from reducing dues.
-        // KEY RULE: Never reclassify a row whose entry_type is already interest_payment or penalty_payment.
-        // Only mark as opening_commission when: (a) DB type is opening_commission/Commission/document_charge,
-        // OR (b) receipt_no is '-' or null/missing (disbursement-time rows have no real receipt number).
-        const normalizedEntries = entries.map((entry: any) => {
-          let entryType = entry.entry_type;
-          let particulars = entry.particulars || '';
-          const accountNameLower = (entry.account_name || '').toLowerCase();
-          const particularsLower = particulars.toLowerCase();
-
-          // If native CD entry, keep particulars unchanged except for opening charges normalization
-          if (entry.account_name) {
-            if (accountNameLower === 'cd commission a/c') {
-              // Only treat as opening_commission if it was saved as such, or has no real receipt (disbursement row).
-              // Do NOT reclassify interest_payment rows - they have RC numbers and different entry_type.
-              const isOpeningRow = entryType === 'opening_commission' || entryType === 'Commission'
-                || (!entry.receipt_no || entry.receipt_no === '-');
-              if (isOpeningRow && entryType !== 'interest_payment' && entryType !== 'penalty_payment') {
-                entryType = 'opening_commission';
-                particulars = 'Opening CD Commission Charged';
-              }
-              // If entry_type is interest_payment or penalty_payment, leave completely unchanged
-            } else if (accountNameLower === 'cd document charges a/c') {
-              if (entryType !== 'document_charge') entryType = 'document_charge';
-            } else if (
-              particularsLower.includes('disbursement') ||
-              accountNameLower === 'disbursement' ||
-              entryType === 'original_loan' ||
-              (accountNameLower === 'cd a/c' && entry.debit > 0 && !entry.credit)
-            ) {
-              entryType = 'original_loan';
-              particulars = 'Original Loan Disbursement';
-            }
-            return { ...entry, entry_type: entryType, particulars };
-          }
-
-          // Fallback normalization for legacy/unsplit entries where account_name is null
-          if (particularsLower.includes('disbursement') || (entry.debit > 0 && !entry.credit)) {
-            entryType = 'original_loan';
-            particulars = 'Original Loan Disbursement';
-          }
-
-          return { ...entry, entry_type: entryType, particulars };
-        });
-
-        setCdLedgerEntries(normalizedEntries);
-        setCdInterestDetails(interests);
-        setLoanTransactions(fullDetails.transactions || []);
-
-        // Fetch Guarantors if present from finance_customers
-        if (fullDetails.guarantor_1_id) {
-          const { data: g1 } = await supabase.from('finance_customers').select('*').eq('id', fullDetails.guarantor_1_id).single();
-          setGuarantor1(g1 || null);
-        } else {
-          setGuarantor1(null);
-        }
-
-        if (fullDetails.guarantor_2_id) {
-          const { data: g2 } = await supabase.from('finance_customers').select('*').eq('id', fullDetails.guarantor_2_id).single();
-          setGuarantor2(g2 || null);
-        } else {
-          setGuarantor2(null);
-        }
-
-        // Fetch loan documents from finance_loan_documents
-        const { data: loanDocs } = await supabase
-          .from('finance_loan_documents')
-          .select('*')
-          .eq('loan_id', loanId);
-        setLoanDocuments(loanDocs || []);
-
-        // Fetch collateral logs from finance_edited_logs
-        const { data: colLogs } = await supabase
-          .from('finance_edited_logs')
-          .select('*')
-          .eq('table_name', 'finance_loans_collateral')
-          .eq('record_id', loanId)
-          .order('edited_at', { ascending: false })
-          .limit(1);
-        if (colLogs && colLogs.length > 0) {
-          setCollateralLog(colLogs[0].new_values);
+        setGuarantor1(g1Res.data || null);
+        setGuarantor2(g2Res.data || null);
+        setLoanDocuments(docsRes.data || []);
+        
+        if (colLogsRes.data && colLogsRes.data.length > 0) {
+          setCollateralLog(colLogsRes.data[0].new_values);
         } else {
           setCollateralLog(null);
         }
 
-        // Fetch returned document status
-        const { data: retDocs } = await supabase
-          .from('finance_documents_returned')
-          .select('*')
-          .eq('loan_id', loanId)
-          .order('created_at', { ascending: false })
-          .limit(1);
-        setDocumentReturned(retDocs && retDocs.length > 0 ? retDocs[0] : null);
-
-        // Fetch transaction edit logs
-        const { data: editLogsData } = await supabase
-          .from('finance_cd_transaction_edit_logs')
-          .select('*')
-          .eq('loan_id', loanId)
-          .order('edited_at', { ascending: false });
-        setEditLogs(editLogsData || []);
-
-        // Set auto-generated receipt number (sequential)
-        const nextReceipt = await supabaseFinance.getNextReceiptNumber();
+        setDocumentReturned(retDocsRes.data && retDocsRes.data.length > 0 ? retDocsRes.data[0] : null);
         setReceiptNo(nextReceipt);
         setTotalAmountPaying('');
-
         setIsEditing(false);
       } else {
         toast.error('Ledger details could not be resolved');
@@ -819,8 +811,9 @@ const CDLedger: React.FC = () => {
       .filter(d => Number(d.credit) === 0)
       .reduce((sum, d) => sum + (Number(d.renewed_days) || 0), 0);
 
-    // Extended Due Date = Base Due Date + Total Renewed Days
-    const dueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, totalRenewedDays);
+    // Extended Due Date = Base Due Date + Display Renewed Days (whole-day representation)
+    const displayRenewedDays = financeCalculationService.calculateDisplayDays(totalRenewedDays);
+    const dueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, displayRenewedDays);
     const dueDate = new Date(dueDateStr);
 
     // Dynamic Penalty Rate Lookup
@@ -833,8 +826,8 @@ const CDLedger: React.FC = () => {
     console.log('due_date:', dueDateStr);
     console.log('calculated_cycle_days:', financeCalculationService.differenceInCalendarDays(dueDateStr, originalLoanDateStr));
 
-    // Due Days = Payment Date - Due Date as calendar day difference
-    const dueDays = financeCalculationService.differenceInCalendarDays(paymentDate, dueDateStr);
+    // Due Days = Payment Date - Base Due Date - totalRenewedDays (exact fractional difference)
+    const dueDays = financeCalculationService.differenceInCalendarDays(paymentDate, baseDueDateStr) - totalRenewedDays;
     const rawDueDays = dueDays;
     const daysRemaining = dueDays < 0 ? Math.abs(dueDays) : 0;
 
@@ -917,7 +910,7 @@ const CDLedger: React.FC = () => {
       dueDate: dueDate,
       dueDateStr,
       daysPastDue: dueDays,            // raw due days (can be negative)
-      displayDays: Math.round(dueDays),
+      displayDays: financeCalculationService.calculateDisplayDays(dueDays),
       daysRemaining,                    // absolute days remaining (when not yet due)
       nextDueDate: null,                // Computed dynamically based on renewedDays
       penaltyDays,
@@ -1881,6 +1874,7 @@ const CDLedger: React.FC = () => {
       // Snapshot variables before saving
       const principalBefore = ledgerMetrics.principalBalance;
       const paymentAmount = Number(amount.toFixed(2));
+      const disbEntry = cdLedgerEntries.find(e => e.entry_type === 'original_loan');
 
       // ===== PRIORITY ALLOCATION: Penalty → Interest → Principal =====
       let penaltyPaid = 0;
@@ -1931,9 +1925,22 @@ const CDLedger: React.FC = () => {
 
       let renewedTillDate: string | null = null;
       if (renewedDays > 0) {
-        // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate
-        const baseDateStr = renewCalculations?.dueDateStr || paymentDate;
-        renewedTillDate = financeCalculationService.addCalendarDays(baseDateStr, renewedDays);
+        const originalLoanDateStr = (disbEntry ? disbEntry.entry_date : selectedLoan.date).split('T')[0];
+        const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays - 1);
+
+        // Sum total renewed days up to now (excluding current payment)
+        const prevTotalRenewedDays = cdInterestDetails
+          .filter(d => Number(d.credit) === 0)
+          .reduce((sum, d) => sum + (Number(d.renewed_days) || 0), 0);
+
+        // Add new renewed days to find the new exact total renewed days
+        const newTotalRenewedDays = financeCalculationService.advanceExactRenewalPosition(prevTotalRenewedDays, renewedDays);
+
+        // Convert exact total renewed days to display days
+        const nextDisplayDays = financeCalculationService.calculateDisplayDays(newTotalRenewedDays);
+
+        // Calculate display-rounded renewed till date
+        renewedTillDate = financeCalculationService.addCalendarDays(baseDueDateStr, nextDisplayDays);
       }
 
       // Console logs for debugging
@@ -1986,7 +1993,14 @@ const CDLedger: React.FC = () => {
         // VBA: NextDueDate = DueDate + RDAYS — always extends from old DueDate
         if (renewedDays > 0) {
           const baseDateStr = renewCalculations?.dueDateStr || paymentDate;
-          const nextDueDateStr = financeCalculationService.addCalendarDays(baseDateStr, renewedDays);
+          const originalLoanDateStr = (disbEntry ? disbEntry.entry_date : selectedLoan.date).split('T')[0];
+          const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays - 1);
+          const prevTotalRenewedDays = cdInterestDetails
+            .filter(d => Number(d.credit) === 0)
+            .reduce((sum, d) => sum + (Number(d.renewed_days) || 0), 0);
+          const newTotalRenewedDays = financeCalculationService.advanceExactRenewalPosition(prevTotalRenewedDays, renewedDays);
+          const nextDisplayDays = financeCalculationService.calculateDisplayDays(newTotalRenewedDays);
+          const nextDueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, nextDisplayDays);
 
           console.log('=== RENEWAL DUE DATE ADVANCEMENT DEBUG ===');
           console.log('old_current_due_date:', baseDateStr);
@@ -2966,8 +2980,16 @@ const CDLedger: React.FC = () => {
                   </div>
                 </div>
               }
-              className="shadow-sm border-gray-100 rounded-3xl w-full font-sans print:hidden animate-none"
+              className="shadow-sm border-gray-100 rounded-3xl w-full font-sans print:hidden animate-none relative"
             >
+              {loadingTab && (
+                <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex items-center justify-center z-10 rounded-3xl">
+                  <div className="text-xs font-semibold text-slate-600 flex items-center gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-green-600" />
+                    Updating Tab Data...
+                  </div>
+                </div>
+              )}
               {activeLogTab === 'statement' && (
                 <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
                   <table className="w-full text-[13px] text-left min-w-[1000px]">
