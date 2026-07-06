@@ -1118,11 +1118,13 @@ export const financeCalculationService = {
       currentDueDate: dueDateStr,
       lastPaymentDate,
       exactCalculationDays,
+      exactDueDays: exactCalculationDays,
       displayDueDays,
       accruedInterest,
       accruedPenalty,
       todayDue,
       renewalAmount,
+      totalRenewal: renewalAmount,
       totalToRegularize,
       totalForClose
     };
