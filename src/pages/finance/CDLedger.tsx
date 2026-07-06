@@ -30,10 +30,7 @@ import toast from 'react-hot-toast';
 import { exportToExcel, exportToCSV } from '../../utils/excel';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
-const startOfDay = (d: Date | string | number) => {
-  const { year, month, day } = financeCalculationService.parseDateParts(d);
-  return Date.UTC(year, month - 1, day);
-};
+
 
 const mapAccountName = (name: string): string => {
   const cleanName = (name || '').trim().toUpperCase();
@@ -54,6 +51,43 @@ const isPaymentCollectionEntry = (entry: any): boolean => {
     cleanName === 'CUSTOMER PAYMENT' ||
     cleanName === 'AMOUNT RECEIVED'
   );
+};
+const normalizeCDLedgerEntries = (entries: any[]) => {
+  return entries.map((entry: any) => {
+    let entryType = entry.entry_type;
+    let particulars = entry.particulars || '';
+    const accountNameLower = (entry.account_name || '').toLowerCase();
+    const particularsLower = particulars.toLowerCase();
+
+    if (entry.account_name) {
+      if (accountNameLower === 'cd commission a/c') {
+        const isOpeningRow = entryType === 'opening_commission' || entryType === 'Commission'
+          || (!entry.receipt_no || entry.receipt_no === '-');
+        if (isOpeningRow && entryType !== 'interest_payment' && entryType !== 'penalty_payment') {
+          entryType = 'opening_commission';
+          particulars = 'Opening CD Commission Charged';
+        }
+      } else if (accountNameLower === 'cd document charges a/c') {
+        if (entryType !== 'document_charge') entryType = 'document_charge';
+      } else if (
+        particularsLower.includes('disbursement') ||
+        accountNameLower === 'disbursement' ||
+        entryType === 'original_loan' ||
+        (accountNameLower === 'cd a/c' && entry.debit > 0 && !entry.credit)
+      ) {
+        entryType = 'original_loan';
+        particulars = 'Original Loan Disbursement';
+      }
+      return { ...entry, entry_type: entryType, particulars };
+    }
+
+    if (particularsLower.includes('disbursement') || (entry.debit > 0 && !entry.credit)) {
+      entryType = 'original_loan';
+      particulars = 'Original Loan Disbursement';
+    }
+
+    return { ...entry, entry_type: entryType, particulars };
+  });
 };
 
 const CDLedger: React.FC = () => {
@@ -222,49 +256,15 @@ const CDLedger: React.FC = () => {
   const loadTabDetails = async (tab: 'statement' | 'interest' | 'payment' | 'editHistory', loanId: string) => {
     setLoadingTab(true);
     try {
-      if (tab === 'statement') {
-        const entries = await supabaseFinance.getCDLedgerEntries(loanId);
-        
-        const normalizedEntries = entries.map((entry: any) => {
-          let entryType = entry.entry_type;
-          let particulars = entry.particulars || '';
-          const accountNameLower = (entry.account_name || '').toLowerCase();
-          const particularsLower = particulars.toLowerCase();
+      if (tab === 'statement' || tab === 'interest') {
+        const [entries, interests] = await Promise.all([
+          supabaseFinance.getCDLedgerEntries(loanId),
+          supabaseFinance.getCDInterestDetails(loanId)
+        ]);
 
-          if (entry.account_name) {
-            if (accountNameLower === 'cd commission a/c') {
-              const isOpeningRow = entryType === 'opening_commission' || entryType === 'Commission'
-                || (!entry.receipt_no || entry.receipt_no === '-');
-              if (isOpeningRow && entryType !== 'interest_payment' && entryType !== 'penalty_payment') {
-                entryType = 'opening_commission';
-                particulars = 'Opening CD Commission Charged';
-              }
-            } else if (accountNameLower === 'cd document charges a/c') {
-              if (entryType !== 'document_charge') entryType = 'document_charge';
-            } else if (
-              particularsLower.includes('disbursement') ||
-              accountNameLower === 'disbursement' ||
-              entryType === 'original_loan' ||
-              (accountNameLower === 'cd a/c' && entry.debit > 0 && !entry.credit)
-            ) {
-              entryType = 'original_loan';
-              particulars = 'Original Loan Disbursement';
-            }
-            return { ...entry, entry_type: entryType, particulars };
-          }
-
-          if (particularsLower.includes('disbursement') || (entry.debit > 0 && !entry.credit)) {
-            entryType = 'original_loan';
-            particulars = 'Original Loan Disbursement';
-          }
-
-          return { ...entry, entry_type: entryType, particulars };
-        });
-
+        const normalizedEntries = normalizeCDLedgerEntries(entries || []);
         setCdLedgerEntries(normalizedEntries);
-      } else if (tab === 'interest') {
-        const interests = await supabaseFinance.getCDInterestDetails(loanId);
-        setCdInterestDetails(interests);
+        setCdInterestDetails(interests || []);
       } else if (tab === 'payment') {
         const { data: txs } = await supabase
           .from('finance_transactions')
@@ -317,7 +317,16 @@ const CDLedger: React.FC = () => {
         setEditLoanRemarks(fullDetails.remarks || '');
 
         // Fetch remaining core details in parallel
-        const [g1Res, g2Res, docsRes, colLogsRes, retDocsRes, nextReceipt] = await Promise.all([
+        const [
+          g1Res,
+          g2Res,
+          docsRes,
+          colLogsRes,
+          retDocsRes,
+          nextReceipt,
+          cdEntries,
+          cdInterests
+        ] = await Promise.all([
           fullDetails.guarantor_1_id
             ? supabase.from('finance_customers').select('id, name, phone, customer_photo_url, aadhaar, address').eq('id', fullDetails.guarantor_1_id).single()
             : Promise.resolve({ data: null }),
@@ -327,7 +336,9 @@ const CDLedger: React.FC = () => {
           supabase.from('finance_loan_documents').select('*').eq('loan_id', loanId),
           supabase.from('finance_edited_logs').select('*').eq('table_name', 'finance_loans_collateral').eq('record_id', loanId).order('edited_at', { ascending: false }).limit(1),
           supabase.from('finance_documents_returned').select('*').eq('loan_id', loanId).order('created_at', { ascending: false }).limit(1),
-          supabaseFinance.getNextReceiptNumber()
+          supabaseFinance.getNextReceiptNumber(),
+          supabaseFinance.getCDLedgerEntries(loanId),
+          supabaseFinance.getCDInterestDetails(loanId)
         ]);
 
         setGuarantor1(g1Res.data || null);
@@ -344,6 +355,11 @@ const CDLedger: React.FC = () => {
         setReceiptNo(nextReceipt);
         setTotalAmountPaying('');
         setIsEditing(false);
+
+        // Populate entries and interest details immediately on select/refresh
+        const normalizedEntries = normalizeCDLedgerEntries(cdEntries || []);
+        setCdLedgerEntries(normalizedEntries);
+        setCdInterestDetails(cdInterests || []);
       } else {
         toast.error('Ledger details could not be resolved');
       }
@@ -721,216 +737,17 @@ const CDLedger: React.FC = () => {
     }
   };
 
-  // ===== SINGLE SOURCE OF TRUTH: current principal balance =====
-  // Derived from cdLedgerEntries so that renewCalculations, ledgerMetrics,
-  // and all UI sections consume the exact same value.
-  const currentPrincipalBalance = useMemo(() => {
-    if (!selectedLoan) return Number(0);
 
-    // 1. Find original disbursement amount from ledger entries
-    const disbursementEntries = cdLedgerEntries.filter(
-      (e: any) => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement'
-    );
-    const originalFromLedger = disbursementEntries.reduce(
-      (sum: number, e: any) => sum + Number(e.debit || 0), 0
-    );
-
-    // 2. Find total principal paid from ledger entries
-    const principalPaidFromLedger = cdLedgerEntries
-      .filter((e: any) => {
-        const isPrincipalPaid =
-          (e.particulars || '').toLowerCase().includes('principal paid') ||
-          (e.particulars || '').toLowerCase().includes('principal adjusted') ||
-          e.entry_type === 'principal_payment';
-        return isPrincipalPaid && Number(e.credit || 0) > 0;
-      })
-      .reduce((sum: number, e: any) => sum + Number(e.credit || 0), 0);
-
-    // 3. If we found disbursement entries, use ledger-derived value;
-    //    otherwise fall back to selectedLoan.amount (for loans without ledger history)
-    if (originalFromLedger > 0) {
-      return Number(Math.max(0, originalFromLedger - principalPaidFromLedger).toFixed(2));
-    }
-
-    // Fallback: use DB amount (already reduced by past payments)
-    return Number(selectedLoan.amount);
-  }, [selectedLoan, cdLedgerEntries]);
 
   // Dynamic calculations based on payment date and selected loan
   const renewCalculations = useMemo(() => {
-    if (!selectedLoan) return null;
-
-    const entryDate = new Date(selectedLoan.date);
-    const today = new Date(paymentDate);
-
-    // Original disbursement date (earliest disbursal entry or loan creation date)
-    const disbEntry = [...cdLedgerEntries]
-      .filter(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement')
-      .sort((a, b) => startOfDay(a.entry_date) - startOfDay(b.entry_date))[0];
-    const originalLoanDateMs: number = disbEntry
-      ? startOfDay(disbEntry.entry_date)
-      : startOfDay(selectedLoan.date);
-
-    const originalLoanDate = new Date(originalLoanDateMs);
-
-    // Validate: payment date must not be before the original loan disbursement date
-    const isDateInvalid = startOfDay(today) < originalLoanDateMs;
-    if (isDateInvalid) {
-      return {
-        isDateInvalid: true,
-        daysCount: 0,
-        loanDate: originalLoanDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-        dueDate: null,
-        daysPastDue: 0,
-        daysRemaining: 0,
-        nextDueDate: null,
-        penaltyDays: 0,
-        interest: 0,
-        penalty: 0,
-        principal: currentPrincipalBalance,
-        grossInterest: 0,
-        grossPenalty: 0,
-        dailyInterest: 0,
-        dailyPenalty: 0,
-        penaltyPaid: 0,
-        interestPaid: 0,
-        principalPaid: 0
-      };
-    }
-
-    const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
-    const originalLoanDateStr = (disbEntry ? disbEntry.entry_date : selectedLoan.date).split('T')[0];
-
-    // CD inclusive-cycle rule: the loan-given date IS Day 1 of the interest cycle.
-    // Day 1 = LoanDate, Day 2 = LoanDate+1, …, Day N = LoanDate+(N-1)
-    // Therefore: InitialDueDate = LoanDate + (periodDays - 1)
-    const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays - 1);
-
-    // Sum total renewed days from cdInterestDetails note rows (credit === 0)
-    const totalRenewedDays = cdInterestDetails
-      .filter(d => Number(d.credit) === 0)
-      .reduce((sum, d) => sum + (Number(d.renewed_days) || 0), 0);
-
-    // Extended Due Date = Base Due Date + Display Renewed Days (whole-day representation)
-    const displayRenewedDays = financeCalculationService.calculateDisplayDays(totalRenewedDays);
-    const dueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, displayRenewedDays);
-    const dueDate = new Date(dueDateStr);
-
-    // Dynamic Penalty Rate Lookup
-    const penaltyRate = selectedLoan.penalty_percent !== undefined && selectedLoan.penalty_percent !== null ? Number(selectedLoan.penalty_percent) : 0.75;
-
-    // Requirement 5: Debug logging
-    console.log('=== CD LEDGER RENEW CALCULATIONS DEBUG ===');
-    console.log('period_days:', periodDays);
-    console.log('loan_date:', selectedLoan.date);
-    console.log('due_date:', dueDateStr);
-    console.log('calculated_cycle_days:', financeCalculationService.differenceInCalendarDays(dueDateStr, originalLoanDateStr));
-
-    // Due Days = Payment Date - Base Due Date - totalRenewedDays (exact fractional difference)
-    const dueDays = financeCalculationService.differenceInCalendarDays(paymentDate, baseDueDateStr) - totalRenewedDays;
-    const rawDueDays = dueDays;
-    const daysRemaining = dueDays < 0 ? Math.abs(dueDays) : 0;
-
-    const interestRate = Number(selectedLoan.interest_rate) || 3;
-    const principalBalance = currentPrincipalBalance;
-
-    // Interest = principal × rate × rawDueDays ÷ periodDays ÷ 100 (may be negative)
-    const grossInterest = Number(((principalBalance * interestRate * rawDueDays) / periodDays / 100).toFixed(2));
-    const graceDays = selectedLoan.grace_days !== undefined && selectedLoan.grace_days !== null ? Number(selectedLoan.grace_days) : 5;
-    // Grace period only determines WHETHER penalty applies.
-    // Once rawDueDays > graceDays, penalty is on the FULL overdue period (not rawDueDays - graceDays).
-    const grossPenalty = rawDueDays > graceDays
-      ? Number(((principalBalance * penaltyRate * rawDueDays) / periodDays / 100).toFixed(2))
-      : 0;
-    const penaltyDays = rawDueDays > graceDays ? rawDueDays : 0;
-
-    // Daily interest / renewal day value:
-    // Derived from the Renewal Due divided by Period Days (cancels out to principal * rate / 100 / periodDays)
-    const renewalInterest = (principalBalance * (interestRate / 100) * periodDays) / periodDays;
-    const baseDailyInterest = Number((renewalInterest / periodDays).toFixed(5));
-
-    const renewalPenalty = (principalBalance * (penaltyRate / 100) * periodDays) / periodDays;
-    const baseDailyPenalty = Number((renewalPenalty / periodDays).toFixed(5));
-
-    let dailyInterest = baseDailyInterest;
-    let dailyPenalty = 0;
-    if (dueDays > graceDays) {
-      dailyInterest = Number((baseDailyInterest + baseDailyPenalty).toFixed(5));
-      dailyPenalty = baseDailyPenalty;
-    }
-
-    // ── BUGFIX: Determine the true current-cycle start from the ledger ──────────
-    // The start of the current cycle is exactly the due date of the current cycle.
-    // Any payments posted with entry_date strictly after the due date belong to the current cycle's overdue period.
-    const cycleStartDateMs = startOfDay(dueDate);
-
-    // Paid amounts for the current cycle:
-    const penaltyPaidInCycle = cdLedgerEntries
-      .filter(e => e.entry_type === 'penalty_payment' && startOfDay(e.entry_date) > cycleStartDateMs)
-      .reduce((sum, e) => sum + Number(e.credit || 0), 0);
-
-    const interestPaidInCycle = cdLedgerEntries
-      .filter(e => e.entry_type === 'interest_payment' && startOfDay(e.entry_date) > cycleStartDateMs)
-      .reduce((sum, e) => sum + Number(e.credit || 0), 0);
-
-    // ── OLD ACCESS VBA: effective gross & pending dues ────────────────────────────
-    // grossInterest can be NEGATIVE when loan is not yet due (credit).
-    // For payment/outstanding purposes, outstanding = max(0, gross - paid).
-    // For DISPLAY purposes, show the raw gross (including negative = credit).
-    //
-    // When gross is negative but there are payments in cycle, effectiveGross
-    // must be at least the paid amount so pending doesn't go negative.
-    const effectiveGrossInterest = grossInterest;
-    const effectiveGrossPenalty = grossPenalty;
-
-    // Outstanding dues for PAYMENT purposes (never negative)
-    const outstandingInterest = Math.max(0, Number(grossInterest.toFixed(2)));
-    const outstandingPenalty = Math.max(0, Number(grossPenalty.toFixed(2)));
-
-    // Display interest/penalty: show the raw formula value (interest can be negative)
-    const displayInterest = grossInterest;
-    const displayPenalty = grossPenalty;
-
-    // CD067 / CD070 debugging trace
-    console.log('=== CD LEDGER MIGRATION AUDIT TRACE ===', {
-      loan_number: selectedLoan.loan_id,
-      principal_balance: principalBalance,
-      due_days: dueDays,
-      interest_formula_result: grossInterest,
-      penalty_formula_result: grossPenalty,
-      interest_paid_considered: interestPaidInCycle,
-      penalty_paid_considered: penaltyPaidInCycle,
-      total_dues_result: outstandingInterest + outstandingPenalty
-    });
-
-    return {
-      isDateInvalid: false,
-      daysCount: dueDays,
-      loanDate: entryDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      dueDate: dueDate,
-      dueDateStr,
-      daysPastDue: dueDays,            // raw due days (can be negative)
-      displayDays: financeCalculationService.calculateDisplayDays(dueDays),
-      daysRemaining,                    // absolute days remaining (when not yet due)
-      nextDueDate: null,                // Computed dynamically based on renewedDays
-      penaltyDays,
-      interest: displayInterest,        // for display: negative when credit, pending when overdue
-      penalty: displayPenalty,          // for display: 0 when not due, pending when overdue
-      outstandingInterest,              // for payments: always >= 0
-      outstandingPenalty,               // for payments: always >= 0
-      principal: principalBalance,
-      grossInterest,                    // raw formula result (can be negative)
-      grossPenalty,                     // raw formula result (0 if dueDays <= 5)
-      effectiveGrossInterest,           // max(grossInterest, paid) — always >= paid
-      effectiveGrossPenalty,            // max(grossPenalty, paid) — always >= paid
-      dailyInterest,
-      dailyPenalty,
-      baseDailyInterest,               // pure interest daily rate (no penalty component)
-      penaltyPaid: penaltyPaidInCycle,
-      interestPaid: interestPaidInCycle,
-      principalPaid: 0
-    };
-  }, [selectedLoan, paymentDate, cdLedgerEntries, cdInterestDetails, currentPrincipalBalance]);
+    return financeCalculationService.getCDAccountPosition(
+      selectedLoan,
+      cdLedgerEntries,
+      cdInterestDetails,
+      paymentDate
+    );
+  }, [selectedLoan, paymentDate, cdLedgerEntries, cdInterestDetails]);
 
   // Date Formatter helper (returns format e.g. 07-Mar-26)
   const formatDateOld = (dateStr: string | Date | number | null | undefined) => {
@@ -2786,7 +2603,7 @@ const CDLedger: React.FC = () => {
                       </div>
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Last Payment</span>
-                        <span className="text-[16px] font-bold text-slate-900">{formatDateOld(selectedLoan.date)}</span>
+                        <span className="text-[16px] font-bold text-slate-900">{formatDateOld(renewCalculations?.lastPaymentDate) || '—'}</span>
                       </div>
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Current Due Date</span>

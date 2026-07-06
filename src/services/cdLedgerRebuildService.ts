@@ -67,6 +67,30 @@ export const cdLedgerRebuildService = {
 
       console.log(`[Rebuild] Original Principal: ₹${originalPrincipal}, Date: ${originalLoanDateStr}, Period Days: ${periodDays}`);
 
+      // Map to preserve historical splits by receipt number (Mode B - Historical Replay)
+      const historicalSplits = new Map<string, { penaltyPaid: number; interestPaid: number; principalPaid: number }>();
+      if (ledgerEntries) {
+        for (const entry of ledgerEntries) {
+          const receiptNo = entry.receipt_no;
+          if (!receiptNo) continue;
+
+          let split = historicalSplits.get(receiptNo);
+          if (!split) {
+            split = { penaltyPaid: 0, interestPaid: 0, principalPaid: 0 };
+            historicalSplits.set(receiptNo, split);
+          }
+
+          const creditVal = Number(entry.credit || 0);
+          if (entry.entry_type === 'penalty_payment') {
+            split.penaltyPaid += creditVal;
+          } else if (entry.entry_type === 'interest_payment') {
+            split.interestPaid += creditVal;
+          } else if (entry.entry_type === 'principal_payment') {
+            split.principalPaid += creditVal;
+          }
+        }
+      }
+
       // 4. Delete existing payment ledger entries and interest details
       // Keep only 'original_loan', 'opening_commission', 'document_charge' entries
       const { error: deleteLedgerError } = await supabase
@@ -138,7 +162,31 @@ export const cdLedgerRebuildService = {
         let principalPaid = 0;
         let renewedDays = 0;
 
-        if (isClosing) {
+        const histSplit = receiptNo ? historicalSplits.get(receiptNo) : null;
+
+        if (histSplit) {
+          // Mode B — Replay exact persisted allocations
+          penaltyPaid = histSplit.penaltyPaid;
+          interestPaid = histSplit.interestPaid;
+          principalPaid = histSplit.principalPaid;
+          
+          if (penaltyPaid < 0 || interestPaid < 0 || principalPaid < 0) {
+            throw new Error(`Invariant Violation: Negative split in receipt ${receiptNo}`);
+          }
+          const totalSplits = penaltyPaid + interestPaid + principalPaid;
+          if (Math.abs(paymentAmount - totalSplits) > 0.05) {
+            throw new Error(`Invariant Violation: Split sum mismatch in receipt ${receiptNo} (Paid: ₹${paymentAmount}, Splits Sum: ₹${totalSplits})`);
+          }
+
+          // Calculate exact renewed days: exactRenewedDays = interestPaid / dailyInterest
+          if (actionType === 'Renew') {
+            const dailyInterestRate = monthlyInterest / periodDays;
+            renewedDays = dailyInterestRate > 0 ? Number((interestPaid / dailyInterestRate).toFixed(2)) : 0;
+          } else {
+            renewedDays = 0;
+          }
+          overdueInterestPaid = actionType === 'Close' ? interestPaid : 0;
+        } else if (isClosing) {
           penaltyPaid = financeCalculationService.roundRupee(penaltyDue);
           overdueInterestPaid = financeCalculationService.roundRupee(interestDue);
           interestPaid = overdueInterestPaid;

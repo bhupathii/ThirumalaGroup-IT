@@ -3807,40 +3807,12 @@ class SupabaseFinance {
 
           const disbEntry = entries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
           const originalLoanDateStr = disbEntry ? disbEntry.entry_date.split('T')[0] : loan.date.split('T')[0];
-          const periodDays = loan.period_days || 30;
-          const interestRate = Number(loan.interest_rate) || 3;
-          const penaltyRate = loan.penalty_percent !== undefined && loan.penalty_percent !== null ? Number(loan.penalty_percent) : 0.75;
-          const graceDays = loan.grace_days !== undefined && loan.grace_days !== null ? Number(loan.grace_days) : 5;
-
-          const totalRenewedDays = interests
-            .filter(d => Number(d.credit) === 0)
-            .reduce((sum, d) => sum + (Number(d.renewed_days) || 0), 0);
 
           const interestPaid = entries
             .filter(e => e.account_name === 'CD COMMISSION A/C' || e.entry_type === 'interest_payment')
             .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
-          const currentPrincipal = Number(loan.amount);
-
-          const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays - 1);
-          const displayRenewedDays = financeCalculationService.calculateDisplayDays(totalRenewedDays);
-          const currentDueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, displayRenewedDays);
-
-          const rawDueDays = financeCalculationService.differenceInCalendarDays(targetDate, currentDueDateStr);
-          const dueDays = Math.max(0, rawDueDays);
-          const isNpa = rawDueDays > 90;
-
-          let pendingInterest = 0;
-          if (rawDueDays > 0) {
-            pendingInterest = Number(((currentPrincipal * interestRate * rawDueDays) / periodDays / 100).toFixed(2));
-          }
-
-          let penalty = 0;
-          if (rawDueDays > graceDays) {
-            penalty = Number(((currentPrincipal * penaltyRate * rawDueDays) / periodDays / 100).toFixed(2));
-          }
-
-          const presentDue = Number((pendingInterest + penalty).toFixed(2));
+          const pos = financeCalculationService.getCDAccountPosition(loan, entries, interests, targetDate);
 
           return {
             id: loan.id,
@@ -3849,15 +3821,15 @@ class SupabaseFinance {
             loan_category: loan.loan_category || 'CD',
             loan_type: 'CD',
             loan_amount: Number(loan.amount),
-            current_principal: currentPrincipal,
+            current_principal: pos.principalBalance,
             loan_date: originalLoanDateStr,
-            current_due_date: currentDueDateStr,
+            current_due_date: pos.currentDueDate,
             interest_paid: interestPaid,
-            pending_interest: pendingInterest,
-            penalty: penalty,
-            present_due: presentDue,
-            due_days: dueDays,
-            is_npa: isNpa,
+            pending_interest: pos.accruedInterest,
+            penalty: pos.accruedPenalty,
+            present_due: pos.todayDue,
+            due_days: Math.max(0, pos.displayDueDays),
+            is_npa: pos.displayDueDays > 90,
             phone,
             g1_name,
             g1_phone,
