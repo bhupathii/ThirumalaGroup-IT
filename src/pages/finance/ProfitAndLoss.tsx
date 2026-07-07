@@ -5,8 +5,6 @@ import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, RefreshCw, Printer } from 'lucide-react';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
-import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
-import {  } from '../../services/';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -39,12 +37,11 @@ const ProfitAndLoss: React.FC = () => {
   const fetchStatementData = async () => {
     setLoading(true);
     try {
-      const [loans, txs, cashbookEntries, partners, ledgerSettings] = await Promise.all([
+      const [loans, txs, cashbookEntries, partners] = await Promise.all([
         supabaseFinance.getLoans(),
         supabaseFinance.getTransactions(),
         supabaseFinance.getCashbookEntries(),
-        supabaseFinance.getPartners(),
-        financeLedgerSettingsService.getAllLedgerSettings()
+        supabaseFinance.getPartners()
       ]);
 
       setPartnerCount(partners.length || 1); // Avoid division by zero

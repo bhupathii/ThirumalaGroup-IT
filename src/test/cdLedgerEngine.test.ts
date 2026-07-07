@@ -107,11 +107,11 @@ describe('cdLedgerEngine Unit Tests', () => {
     expect(pos.displayDueDays).toBe(39);
     expect(pos.exactDueDays).toBe(39.19);
     expect(pos.accruedInterest).toBe(29392.50);
-    expect(pos.accruedPenalty).toBe(7348.12);
-    expect(pos.todayDue).toBe(36740.62);
+    expect(pos.accruedPenalty).toBe(7348.13);
+    expect(pos.todayDue).toBe(36740.63);
     expect(pos.renewalAmount).toBe(22500.00);
-    expect(pos.totalToRegularize).toBe(59240.62);
-    expect(pos.totalForClose).toBe(786740.62);
+    expect(pos.totalToRegularize).toBe(59240.63);
+    expect(pos.totalForClose).toBe(786740.63);
   });
 
   // 4. Chronology Guards
@@ -201,7 +201,7 @@ describe('cdLedgerEngine Unit Tests', () => {
     expect(split.renewedDays).toBe(39.19); // advances to the audit date exactly
   });
 
-  it('correctly splits Overdue Renew payment (80/20)', () => {
+  it('correctly splits Overdue Partial payment (combined-rate)', () => {
     const mockPos: cdEngine.CDAccountPosition = {
       principalBalance: 750000,
       originalLoanDate: '2025-02-18',
@@ -225,16 +225,114 @@ describe('cdLedgerEngine Unit Tests', () => {
       lastPaymentDate: '2026-06-29'
     };
 
-    // Pay ₹22,500 on Renew:
-    // penaltyDue = round(39 * 187.5) = round(7312.5) = 7312
-    // interestBucket = 22500 - 7312 = 15188
-    // renewedDays = 15188 / 750 = 20.25
-    // interestPaid = 15188
-    // penaltyPaid = 7312
-    const split = cdEngine.allocateCDPayment(mockPos, 22500.00, 'Renew', 30);
-    expect(split.penaltyPaid).toBe(7312);
-    expect(split.interestPaid).toBe(15188);
+    const split = cdEngine.allocateCDPayment(mockPos, 22500.00, 'Partial', 30);
+    expect(split.penaltyPaid).toBe(4500);
+    expect(split.interestPaid).toBe(18000);
     expect(split.principalPaid).toBe(0);
-    expect(split.renewedDays).toBe(20.25);
+    expect(split.renewedDays).toBe(24.00);
+  });
+
+  it('correctly splits Overdue Renew payment (RenBtn_GotFocus)', () => {
+    const mockPos: cdEngine.CDAccountPosition = {
+      principalBalance: 750000,
+      originalLoanDate: '2025-02-18',
+      periodDays: 30,
+      initialContractualPositionStr: "2025-03-19",
+      baseDueDate: '2025-03-19',
+      totalRenewedDays: 434.81,
+      contractualPositionDate: '2026-05-27',
+      currentDueDate: '2026-05-28',
+      fractionalCarry: 0.81,
+      displayDueDays: 39,
+      exactDueDays: 39.19,
+      dailyInterest: 750,
+      dailyPenalty: 187.5,
+      accruedInterest: 29392.50,
+      accruedPenalty: 7348.13,
+      todayDue: 36740.63,
+      renewalAmount: 22500,
+      totalToRegularize: 59240.63,
+      totalForClose: 786740.63,
+      lastPaymentDate: '2026-06-29'
+    };
+
+    const split = cdEngine.allocateCDPayment(mockPos, 22500.00, 'Renew', 30);
+    expect(split.renewedDays).toBe(24.00);
+    expect(split.interestPaid).toBe(18000.00);
+    expect(split.penaltyPaid).toBe(4500.00);
+    expect(split.principalPaid).toBe(0);
+  });
+
+  it('proves Access event chain simulation parses and mutates intermediate state correctly', () => {
+    const mockPos: cdEngine.CDAccountPosition = {
+      principalBalance: 750000,
+      originalLoanDate: '2025-02-18',
+      periodDays: 30,
+      initialContractualPositionStr: "2025-03-19",
+      baseDueDate: '2025-03-19',
+      totalRenewedDays: 434.81,
+      contractualPositionDate: '2026-05-27',
+      currentDueDate: '2026-05-28',
+      fractionalCarry: 0.81,
+      displayDueDays: 39,
+      exactDueDays: 39.19,
+      dailyInterest: 750,
+      dailyPenalty: 187.5,
+      accruedInterest: 29392.50,
+      accruedPenalty: 7348.13,
+      todayDue: 36740.63,
+      renewalAmount: 22500,
+      totalToRegularize: 59240.63,
+      totalForClose: 786740.63,
+      lastPaymentDate: '2026-06-29'
+    };
+
+    const sim = cdEngine.simulateAccessRenewEventChain(mockPos, 22500.00);
+    
+    // stage 2: LostFocus mutations
+    expect(sim.lostFocusRDays).toBe(24);
+    expect(sim.lostFocusInterest).toBe(18000);
+    expect(sim.lostFocusPenalty).toBe(4500);
+
+    // stage 4: RenBtn_GotFocus mutations
+    expect(sim.finalRDays).toBe(24.00);
+    expect(sim.finalInterestExact).toBe(18000.00);
+    expect(sim.finalPenaltyExact).toBe(4500.00);
+
+    // stage 5: Persisted/daybook values
+    expect(sim.persistedInterest).toBe(18000);
+    expect(sim.persistedPenalty).toBe(4500);
+
+    // Confirm that the original accrued penalty (7348.13) was NOT used directly
+    expect(sim.persistedPenalty).not.toBe(Math.round(7348.13));
+  });
+
+  it('throws an error for unsupported actionTypes', () => {
+    const mockPos: cdEngine.CDAccountPosition = {
+      principalBalance: 750000,
+      originalLoanDate: '2025-02-18',
+      periodDays: 30,
+      initialContractualPositionStr: "2025-03-19",
+      baseDueDate: '2025-03-19',
+      totalRenewedDays: 434.81,
+      contractualPositionDate: '2026-05-27',
+      currentDueDate: '2026-05-28',
+      fractionalCarry: 0.81,
+      displayDueDays: 39,
+      exactDueDays: 39.19,
+      dailyInterest: 750,
+      dailyPenalty: 187.5,
+      accruedInterest: 29392.50,
+      accruedPenalty: 7348.13,
+      todayDue: 36740.63,
+      renewalAmount: 22500,
+      totalToRegularize: 59240.63,
+      totalForClose: 786740.63,
+      lastPaymentDate: '2026-06-29'
+    };
+
+    expect(() => {
+      cdEngine.allocateCDPayment(mockPos, 22500.00, 'Unsupported' as any, 30);
+    }).toThrow('Unsupported CD payment action: Unsupported');
   });
 });

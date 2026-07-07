@@ -688,15 +688,13 @@ class SupabaseFinance {
 
   async getNextReceiptNumber(): Promise<string> {
     try {
-      const { data, error } = await supabase.schema('finance').rpc('get_max_receipt_number');
+      const { data, error } = await supabase.schema('finance').rpc('get_next_finance_receipt_no');
       if (error) throw error;
-      const maxNum = Number(data) || 0;
-      const nextNum = maxNum + 1;
-      const padded = String(nextNum).padStart(3, '0');
-      return `RC${padded}`;
+      if (!data) throw new Error('No receipt number returned from database');
+      return data as string;
     } catch (e) {
       console.error('Error generating receipt number:', e);
-      return 'RC001';
+      throw new Error('Unable to generate receipt number. Payment was not saved.');
     }
   }
 

@@ -533,16 +533,18 @@ export const financeCalculationService = {
 
   getNextReceiptNumber(latestReceiptNo: string | null): string {
     if (!latestReceiptNo) {
-      return 'RC001';
+      return 'RC1000';
     }
-    const match = latestReceiptNo.match(/RC(\d+)/i);
+    const match = latestReceiptNo.match(/^RC(\d+)$/i);
     if (!match) {
-      return 'RC001';
+      return 'RC1000';
     }
     const num = parseInt(match[1], 10);
-    const nextNum = num + 1;
-    const padded = String(nextNum).padStart(3, '0');
-    return `RC${padded}`;
+    if (isNaN(num)) {
+      return 'RC1000';
+    }
+    const nextNum = Math.max(999, num) + 1;
+    return `RC${nextNum}`;
   },
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -727,7 +729,7 @@ export const financeCalculationService = {
       displayDays: pos.displayDueDays,
       daysRemaining: pos.exactDueDays < 0 ? Math.abs(pos.exactDueDays) : 0,
       nextDueDate: null,
-      penaltyDays: pos.exactDueDays > loan.grace_days ? pos.exactDueDays : 0,
+      penaltyDays: Math.round(pos.exactDueDays) > loan.grace_days ? pos.exactDueDays : 0,
       interest: pos.accruedInterest,
       penalty: pos.accruedPenalty,
       outstandingInterest: pos.accruedInterest,

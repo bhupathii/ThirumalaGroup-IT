@@ -81,7 +81,7 @@ export function roundMoney(value: number): number {
 }
 
 export function roundCDMoney(value: number): number {
-  return Math.round(value * 100) / 100;
+  return Math.round((value + 1e-9) * 100) / 100;
 }
 
 export function roundRenewedDays(value: number): number {
@@ -405,14 +405,14 @@ export function getCDAccountPosition(
   const dailyInterest = vbaRound((principalBalance * (contract.interestRate / 100)) / 30, 5);
   const dailyPenalty = vbaRound((principalBalance * (contract.penaltyRate / 100)) / 30, 2);
 
-  const accruedInterest = isPaidAhead ? 0 : vbaRound(exactDueDays * dailyInterest, 2);
-  const isWithinGrace = exactDueDays <= contract.graceDays;
-  const accruedPenalty = (isPaidAhead || isWithinGrace) ? 0 : vbaRound(exactDueDays * dailyPenalty, 2);
+  const accruedInterest = isPaidAhead ? 0 : roundCDMoney(exactDueDays * dailyInterest);
+  const isWithinGrace = vbaRound(exactDueDays, 0) <= contract.graceDays;
+  const accruedPenalty = (isPaidAhead || isWithinGrace) ? 0 : roundCDMoney(exactDueDays * dailyPenalty);
 
-  const todayDue = roundMoney(accruedInterest + accruedPenalty);
-  const renewalAmount = vbaRound(principalBalance * (contract.interestRate / 100) * (contract.periodDays / 30), 2);
-  const totalToRegularize = isPaidAhead ? 0 : roundMoney(todayDue + renewalAmount);
-  const totalForClose = roundMoney(principalBalance + todayDue);
+  const todayDue = roundCDMoney(accruedInterest + accruedPenalty);
+  const renewalAmount = roundCDMoney(principalBalance * (contract.interestRate / 100) * (contract.periodDays / 30));
+  const totalToRegularize = isPaidAhead ? 0 : roundCDMoney(todayDue + renewalAmount);
+  const totalForClose = roundCDMoney(principalBalance + todayDue);
 
   const paymentEntries = ledgerEvents
     .filter(e => e.entryType === 'amount_paid' && e.credit > 0)
@@ -463,13 +463,121 @@ export function allocateCDRenewalPayment(
   if (penaltyResidual < 0) {
       penaltyResidual = 0;
   }
-
   return {
       renewedDays,
       interestPaidExact,
       penaltyPaidExact: penaltyResidual,
       interestLedgerCredit: vbaRound(interestPaidExact, 0),
       penaltyLedgerCredit: vbaRound(penaltyResidual, 0)
+  };
+}
+
+export interface AccessRenewSimulationResult {
+  initialInterest: number;
+  initialPenalty: number;
+  lostFocusRDays: number;
+  lostFocusInterest: number;
+  lostFocusPenalty: number;
+  finalRDays: number;
+  finalInterestExact: number;
+  finalPenaltyExact: number;
+  persistedInterest: number;
+  persistedPenalty: number;
+}
+
+export function simulateAccessRenewEventChain(
+  position: CDAccountPosition,
+  cash: number
+): AccessRenewSimulationResult {
+  const principal = position.principalBalance;
+  
+  // Derive rates from position values to keep it signature-compatible
+  const rate = position.principalBalance > 0 
+    ? vbaRound((position.dailyInterest * 3000) / position.principalBalance, 2) 
+    : 3;
+  const penaltyRate = position.principalBalance > 0 
+    ? vbaRound((position.dailyPenalty * 3000) / position.principalBalance, 2) 
+    : 0.75;
+
+  const DueDays = position.exactDueDays;
+  const initialInterest = position.accruedInterest;
+  const initialPenalty = position.accruedPenalty;
+
+  let rdays = DueDays < 0 ? 0 : DueDays;
+  let interest = initialInterest;
+  let penalty = initialPenalty;
+  let dailyInterestLostFocus = 0;
+
+  // STAGE 2 — TotalAmountPaying_LostFocus parity
+  const checkDueDays = vbaRound(DueDays, 0);
+  if (checkDueDays <= 5) {
+    dailyInterestLostFocus = vbaRound((principal * rate / 100) / 30, 2);
+    if (dailyInterestLostFocus > 0) {
+      rdays = vbaRound(cash / dailyInterestLostFocus, 0);
+    } else {
+      rdays = 0;
+    }
+  } else {
+    dailyInterestLostFocus = vbaRound((principal * (rate + penaltyRate) / 100) / 30, 2);
+    if (dailyInterestLostFocus > 0) {
+      rdays = vbaRound(cash / dailyInterestLostFocus, 0);
+    } else {
+      rdays = 0;
+    }
+  }
+
+  // STAGE 3 — Calculating parity
+  if (checkDueDays <= 5) {
+    interest = vbaRound((principal * (rate / 100) / 30) * rdays, 0);
+    penalty = 0;
+  } else {
+    interest = vbaRound((principal * (rate / 100) / 30) * rdays, 0);
+    const pDAYS = DueDays > rdays ? rdays : DueDays;
+    penalty = vbaRound((principal * (penaltyRate / 100) / 30) * pDAYS, 0);
+  }
+
+  const lostFocusRDays = rdays;
+  const lostFocusInterest = interest;
+  const lostFocusPenalty = penalty;
+
+  // STAGE 4 — RenBtn_GotFocus parity
+  const dailyInterestGotFocus = vbaRound((principal * (rate / 100)) / 30, 5);
+  let finalRDays = 0;
+  let interestExact = 0;
+  let penaltyExact = 0;
+
+  if (cash <= penalty) {
+    finalRDays = 0;
+    interestExact = 0;
+    penaltyExact = cash;
+  } else {
+    if (dailyInterestGotFocus > 0) {
+      finalRDays = vbaRound((cash - penalty) / dailyInterestGotFocus, 2);
+    } else {
+      finalRDays = 0;
+    }
+    interestExact = vbaRound(dailyInterestGotFocus * finalRDays, 2);
+    penaltyExact = vbaRound(cash - interestExact, 2);
+    if (penaltyExact < 0) {
+      penaltyExact = 0;
+    }
+  }
+
+  // STAGE 5 — RenBtn_Click persistence parity
+  const persistedInterest = vbaRound(interestExact, 0);
+  const persistedPenalty = vbaRound(penaltyExact, 0);
+
+  return {
+    initialInterest,
+    initialPenalty,
+    lostFocusRDays,
+    lostFocusInterest,
+    lostFocusPenalty,
+    finalRDays,
+    finalInterestExact: interestExact,
+    finalPenaltyExact: penaltyExact,
+    persistedInterest,
+    persistedPenalty,
   };
 }
 
@@ -497,32 +605,32 @@ export function allocateCDPayment(
     interestPaid = roundCDMoney(intDue);
     principalPaid = roundMoney(Math.max(0, pAmt - penaltyPaid - interestPaid));
     renewedDays = 0;
+  } else if (actionType === 'Renew') {
+    const sim = simulateAccessRenewEventChain(position, pAmt);
+    renewedDays = sim.finalRDays;
+    interestPaid = sim.persistedInterest;
+    penaltyPaid = sim.persistedPenalty;
+    principalPaid = 0;
   } else if (pAmt >= totalDues && actionType === 'Partial') {
     penaltyPaid = roundCDMoney(penDue);
     interestPaid = roundCDMoney(intDue);
     principalPaid = roundMoney(Math.max(0, pAmt - penaltyPaid - interestPaid));
     renewedDays = position.exactDueDays;
-  } else {
-    // Underpaying Partial or Renew action
-    // We now use exact MS Access logic for Renew.
-    // Assuming 5 grace days by default as we don't have contract.graceDays in the signature easily accessible,
-    // wait, we can just pass position.exactDueDays and position.dailyInterest and position.dailyPenalty.
-    // If we need graceDays we could assume 5, but actually it is better to just compute it via allocateCDRenewalPayment
-    // However, position has already computed penaltyDue based on Grace Days!
-    // We can just use the allocateCDRenewalPayment natively.
-    const graceDays = 5; // Default for CD120
-    const alloc = allocateCDRenewalPayment(
-      pAmt,
-      position.displayDueDays,
-      position.dailyInterest,
-      position.dailyPenalty,
-      graceDays
-    );
-    
-    renewedDays = alloc.renewedDays;
-    interestPaid = alloc.interestLedgerCredit;
-    penaltyPaid = alloc.penaltyLedgerCredit;
+  } else if (actionType === 'Partial') {
+    // actionType === 'Partial' underpaying (combined-rate allocator)
+    const combinedRate = position.dailyInterest + position.dailyPenalty;
+    if (combinedRate <= 0) {
+      renewedDays = 0;
+      interestPaid = 0;
+      penaltyPaid = pAmt;
+    } else {
+      renewedDays = vbaRound(pAmt / combinedRate, 2);
+      interestPaid = vbaRound(renewedDays * position.dailyInterest, 2);
+      penaltyPaid = vbaRound(pAmt - interestPaid, 2);
+    }
     principalPaid = 0;
+  } else {
+    throw new Error(`Unsupported CD payment action: ${actionType}`);
   }
 
   const isOverduePayment = isClosing || (pAmt >= totalDues && actionType === 'Partial');

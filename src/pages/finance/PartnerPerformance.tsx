@@ -5,9 +5,6 @@ import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
-import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
-import {  } from '../../services/';
-
 interface PartnerPerfRow {
   id: string;
   name: string;
@@ -39,7 +36,6 @@ const PartnerPerformance: React.FC = () => {
       const capEntries = await supabaseFinance.getCapitalEntries();
       const loans = await supabaseFinance.getLoans();
       const txs = await supabaseFinance.getTransactions();
-      const ledgerSettings = await financeLedgerSettingsService.getAllLedgerSettings();
 
       // 1. Calculate net capital contributions per partner
       const partnerCapitals: Record<string, number> = {};

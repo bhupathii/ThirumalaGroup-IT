@@ -4,7 +4,6 @@ import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
-import {  } from '../../services/';
 import { Printer, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
@@ -210,8 +209,6 @@ const BusinessReport: React.FC = () => {
         const loan = due.finance_loans;
         if (loan) {
           const totalPrincipal = Number(loan.amount) || 0;
-          const cat = loan.loan_category?.trim().toUpperCase() || 'CD';
-          const setting = ledgerSettings[cat] || ledgerSettings['CD'];
           const durationMonths = Number(loan.duration_months) || 12;
           const interestRate = Number(loan.interest_rate) || 3;
           
