@@ -899,13 +899,13 @@ describe('CD Ledger Calculation Rules', () => {
         // 10000 * 0.75% * 131 / 30 = 327.50  (full 131 days)
         expect(res.penalty).toBe(327.50);
         expect(res.totalDue).toBe(1637.50);
-        // 20% of 1700 = 340 > penalty(327.50) → penaltyPaid = 327.50 (Banker's round → 328)
-        // interestPaid = 1700 - 328 = 1372
-        expect(res.penaltyPaid).toBe(328);
-        expect(res.interestPaid).toBe(1372);
+        // 20% of 1700 = 340 > penalty(327.50) → penaltyPaid = 327.50
+        // interestPaid = 1700 - 327.50 = 1372.50
+        expect(res.penaltyPaid).toBe(327.5);
+        expect(res.interestPaid).toBe(1372.5);
         expect(res.principalPaid).toBe(0);
-        // dailyInterest = 300/30 = 10; renewedDays = 1372/10 = 137.2
-        expect(res.renewedDays).toBe(137.2);
+        // dailyInterest = 300/30 = 10; renewedDays = 1372.5/10 = 137.25
+        expect(res.renewedDays).toBe(137.25);
         // 2026-01-30 + 137 days = 2026-06-16
         expect(res.nextDueDate).toBe('2026-06-16');
       });
@@ -983,11 +983,11 @@ describe('CD Ledger Calculation Rules', () => {
         // 1000 * 0.75% * 15 / 15 = 7.50 (full 15 days)
         expect(res.penalty).toBe(7.50);
         expect(res.totalDue).toBe(37.50);
-        // 20% of 600 = 120 > penalty(7.50) → penaltyPaid = 7.50 (Banker's round → 8)
-        // interestPaid = 600 - 8 = 592
-        expect(res.penaltyPaid).toBe(8);
-        expect(res.interestPaid).toBe(592);
-        expect(res.renewedDays).toBe(296); // daily interest is 30 / 15 = 2. 592 / 2 = 296
+        // 20% of 600 = 120 > penalty(7.50) → penaltyPaid = 7.50
+        // interestPaid = 600 - 7.5 = 592.5
+        expect(res.penaltyPaid).toBe(7.5);
+        expect(res.interestPaid).toBe(592.5);
+        expect(res.renewedDays).toBe(296.25); // daily interest is 30 / 15 = 2. 592.5 / 2 = 296.25
       });
 
       it('verifies due date is calculated as loan_date + period_days exactly', () => {

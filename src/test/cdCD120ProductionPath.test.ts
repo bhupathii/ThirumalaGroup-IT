@@ -1,4 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// Force unmocking of Supabase client to ensure live network database queries
+vi.unmock('../lib/supabase');
+vi.unmock('@supabase/supabase-js');
+
 import { supabaseFinance } from '../lib/supabaseFinance';
 import { financeCalculationService } from '../services/financeCalculationService';
 
@@ -18,7 +23,6 @@ describe('CD120 Production Path Integration Test', () => {
 
     expect(cdLedgerEntries.length).toBeGreaterThan(0);
     expect(cdInterestDetails.length).toBeGreaterThan(0);
-
     // 3. Run through the real production service used by CD Ledger React component
     const pos = financeCalculationService.getCDAccountPosition(
       selectedLoan,

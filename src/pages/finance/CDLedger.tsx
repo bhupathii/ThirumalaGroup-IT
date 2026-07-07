@@ -1727,11 +1727,8 @@ const CDLedger: React.FC = () => {
           console.log('renewed_days:', renewedDays);
           console.log('next_due_date:', nextDueDateStr);
 
-          // Inverse of inclusive-cycle rule: newCycleStart = nextDueDate - (periodDays - 1)
-          const newCycleStartStr = financeCalculationService.addCalendarDays(nextDueDateStr, -(periodDays - 1));
-          updates.date = newCycleStartStr;
-
-          console.log('new_loan_date (updates.date):', updates.date);
+          // Removed updates.date assignment to keep finance_loans.date permanently immutable.
+          console.log('next_due_date calculated for local flow:', nextDueDateStr);
         }
 
         if (principalPaid > 0) {

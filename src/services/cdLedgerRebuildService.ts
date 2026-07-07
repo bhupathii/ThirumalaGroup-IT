@@ -67,8 +67,18 @@ export const cdLedgerRebuildService = {
 
       console.log(`[Rebuild] Original Principal: ₹${originalPrincipal}, Date: ${originalLoanDateStr}, Period Days: ${periodDays}`);
 
+      // Fetch existing interest details to preserve historical manual renewed_days overrides
+      const { data: existingInterestDetails, error: fetchInterestError } = await supabase
+        .from('finance_cd_interest_details')
+        .select('*')
+        .eq('loan_id', loanId);
+
+      if (fetchInterestError) {
+        throw new Error(`Failed to fetch existing interest details: ${fetchInterestError.message}`);
+      }
+
       // Map to preserve historical splits by receipt number (Mode B - Historical Replay)
-      const historicalSplits = new Map<string, { penaltyPaid: number; interestPaid: number; principalPaid: number }>();
+      const historicalSplits = new Map<string, { penaltyPaid: number; interestPaid: number; principalPaid: number; renewedDays?: number }>();
       if (ledgerEntries) {
         for (const entry of ledgerEntries) {
           const receiptNo = entry.receipt_no;
@@ -87,6 +97,19 @@ export const cdLedgerRebuildService = {
             split.interestPaid += creditVal;
           } else if (entry.entry_type === 'principal_payment') {
             split.principalPaid += creditVal;
+          }
+        }
+      }
+
+      // Populate historical renewed_days from interest details snapshot
+      if (existingInterestDetails) {
+        for (const detail of existingInterestDetails) {
+          const receiptNo = detail.receipt_no;
+          if (!receiptNo) continue;
+
+          const split = historicalSplits.get(receiptNo);
+          if (split && Number(detail.renewed_days) > 0) {
+            split.renewedDays = Number(detail.renewed_days);
           }
         }
       }
@@ -180,8 +203,12 @@ export const cdLedgerRebuildService = {
 
           // Calculate exact renewed days: exactRenewedDays = interestPaid / dailyInterest
           if (actionType === 'Renew') {
-            const dailyInterestRate = monthlyInterest / periodDays;
-            renewedDays = dailyInterestRate > 0 ? Number((interestPaid / dailyInterestRate).toFixed(2)) : 0;
+            if (histSplit.renewedDays !== undefined) {
+              renewedDays = histSplit.renewedDays;
+            } else {
+              const dailyInterestRate = monthlyInterest / periodDays;
+              renewedDays = dailyInterestRate > 0 ? Number((interestPaid / dailyInterestRate).toFixed(2)) : 0;
+            }
           } else {
             renewedDays = 0;
           }
@@ -395,8 +422,6 @@ export const cdLedgerRebuildService = {
       // 6. Update loan final state in the database
       const finalDisplayRenewedDays = financeCalculationService.calculateDisplayDays(totalRenewedDays);
       const finalDueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, finalDisplayRenewedDays);
-      // Inverse of inclusive-cycle rule: loanDate = dueDate - (periodDays - 1)
-      const finalLoanDate = financeCalculationService.addCalendarDays(finalDueDateStr, -(periodDays - 1));
 
       let finalStatus = currentPrincipal <= 0 ? 'Closed' : 'Active';
       if (loan.status === 'NPA_CLOSED') {
@@ -405,8 +430,7 @@ export const cdLedgerRebuildService = {
 
       const updates = {
         amount: currentPrincipal,
-        status: finalStatus,
-        date: finalLoanDate
+        status: finalStatus
       };
 
       console.log(`[Rebuild] Final updates for Loan ID ${loanId}:`, updates);

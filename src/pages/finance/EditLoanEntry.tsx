@@ -882,6 +882,7 @@ const EditLoanEntry: React.FC = () => {
                   value={date} 
                   onChange={setDate} 
                   required 
+                  disabled={loanCategory === 'CD' && hasLedgerActivity}
                 />
                 
                 <div>
@@ -960,6 +961,7 @@ const EditLoanEntry: React.FC = () => {
                     value={liveCalculations.dueDatePreview} 
                     onChange={handleDueDateChange} 
                     className="font-semibold text-green-600"
+                    disabled={loanCategory === 'CD' && hasLedgerActivity}
                   />
 
                   <div>

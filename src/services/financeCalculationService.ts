@@ -1,5 +1,15 @@
 import { FinanceLedgerSetting } from '../lib/supabaseFinance';
 import { financeLedgerSettingsService } from './financeLedgerSettingsService';
+import { 
+  getCDAccountPosition as engineGetCDAccountPosition,
+  allocateCDPayment,
+  buildCDContract,
+  getCDHistoricalEvents,
+  getCDContractualPosition,
+  getCDPrincipalBalance,
+  dateOrdinal,
+  roundMoney
+} from './cdLedgerEngine';
 
 export const financeCalculationService = {
   parseDateParts(d: string | Date | number): { year: number; month: number; day: number } {
@@ -348,65 +358,23 @@ export const financeCalculationService = {
     periodDays: number = 30,
     dueDays: number = 0
   ) {
-    const pAmt = Number(paymentAmount) || 0;
-    const penDue = Number(penaltyDue) || 0;
-    const intDue = Number(interestDue) || 0;
-    const renDue = Number(renewalInterestDue) || 0;
-    const prin = Number(principal) || 0;
-    const days = Number(periodDays) || 30;
-
-    const totalDues = penDue + intDue;
-    const isClosing = actionType === 'Close' || pAmt >= (totalDues + prin);
-
-    let penaltyPaid = 0;
-    let interestPaid = 0;
-    let principalPaid = 0;
-    let renewedDays = 0;
-
-    if (isClosing) {
-      penaltyPaid = this.roundRupee(penDue);
-      interestPaid = this.roundRupee(intDue);
-      principalPaid = Number(Math.max(0, pAmt - penaltyPaid - interestPaid).toFixed(2));
-      renewedDays = 0;
-    } else if (pAmt >= totalDues && actionType === 'Partial') {
-      // Partial payment that clears all outstanding dues
-      penaltyPaid = this.roundRupee(penDue);
-      interestPaid = this.roundRupee(intDue);
-      principalPaid = Number(Math.max(0, pAmt - penaltyPaid - interestPaid).toFixed(2));
-      renewedDays = dueDays; // next due date becomes the payment date
-    } else {
-      // Renewal or under-paying Partial payment: 80/20 bucket allocation
-      // Buckets are rounded to nearest whole rupee using Banker's Rounding
-      const penaltyBucket = this.roundRupee(pAmt * 0.20);
-      const interestBucket = pAmt - penaltyBucket;
-
-      if (penDue > 0) {
-        if (penDue < penaltyBucket) {
-          penaltyPaid = this.roundRupee(penDue);
-          interestPaid = pAmt - penaltyPaid;
-        } else {
-          penaltyPaid = penaltyBucket;
-          interestPaid = interestBucket;
-        }
-      } else {
-        penaltyPaid = 0;
-        interestPaid = pAmt;
-      }
-      principalPaid = 0;
-
-      // dailyInterest = Principal * interestRate / 100 / 30
-      const dailyInterestValue = renDue / days;
-      const rate = prin > 0 ? (dailyInterestValue * 30 * 100) / prin : 0;
-      renewedDays = this.calculateExactRenewedDays(interestPaid, prin, rate);
-    }
-
+    const dailyInterest = roundMoney(renewalInterestDue / periodDays);
+    const mockPos: any = {
+      accruedPenalty: penaltyDue,
+      accruedInterest: interestDue,
+      principalBalance: principal,
+      dailyInterest,
+      exactDueDays: dueDays,
+    };
+    const split = allocateCDPayment(mockPos, paymentAmount, actionType as any, periodDays);
+    
     return {
-      penaltyPaid,
-      overdueInterestPaid: isClosing || (pAmt >= totalDues && actionType === 'Partial') ? interestPaid : 0,
-      renewalInterestPaid: !(isClosing || (pAmt >= totalDues && actionType === 'Partial')) ? interestPaid : 0,
-      interestPaid,
-      principalPaid,
-      renewedDays,
+      penaltyPaid: split.penaltyPaid,
+      overdueInterestPaid: (actionType === 'Close' || (paymentAmount >= (penaltyDue + interestDue) && actionType === 'Partial')) ? split.interestPaid : 0,
+      renewalInterestPaid: !((actionType === 'Close' || (paymentAmount >= (penaltyDue + interestDue) && actionType === 'Partial'))) ? split.interestPaid : 0,
+      interestPaid: split.interestPaid,
+      principalPaid: split.principalPaid,
+      renewedDays: split.renewedDays,
       remaining: 0
     };
   },
@@ -655,18 +623,6 @@ export const financeCalculationService = {
 
   /**
    * Builds the canonical CD contractual timeline from historical interest credits.
-   *
-   * @param loan           Loan record (needs: date, amount, interest_rate,
-   *                       period_days, penalty_percent, grace_days)
-   * @param interestRows   Rows from finance_cd_interest_details for this loan,
-   *                       ordered by entry_date / created_at ascending.
-   *                       Rows with credit > 0 AND entry_date > loanDate are
-   *                       post-opening renewal credits.
-   *                       Rows with credit = 0 are note-only rows whose
-   *                       renewed_days field is the authoritative pre-stored
-   *                       value (used for the old CD120-style accounts).
-   * @param ledgerEntries  Rows from finance_cd_ledger_entries for this loan
-   *                       (used to locate the original loan date).
    */
   buildCDContractualTimeline(
     loan: any,
@@ -685,114 +641,29 @@ export const financeCalculationService = {
     fractionalCarry: number;
     lastPaymentDate: string;
   } {
-    // ── Loan Parameters ────────────────────────────────────────────────────
-    const sortedEntries = [...ledgerEntries].sort(
-      (a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime()
-    );
-    const disbEntry = sortedEntries.find(
-      e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement'
-    );
-    const loanDateStr = disbEntry
-      ? disbEntry.entry_date.split('T')[0]
-      : loan.date.split('T')[0];
-
-    const periodDays = (loan.period_days && Number(loan.period_days) > 0)
-      ? Number(loan.period_days)
-      : 30;
-    const interestRate = Number(loan.interest_rate) || 3;
-    const penaltyRate  = (loan.penalty_percent !== undefined && loan.penalty_percent !== null)
-      ? Number(loan.penalty_percent)
-      : 0.75;
-
-    // Principal balance (current, after any principal payments)
-    const originalPrincipal = disbEntry ? Number(disbEntry.debit) : Number(loan.amount);
-    const principalPaid = ledgerEntries
-      .filter(e => e.entry_type === 'principal_payment')
-      .reduce((sum, e) => sum + Number(e.credit || 0), 0);
-    const principalBalance = Number(Math.max(0, originalPrincipal - principalPaid).toFixed(2));
-
-    // Daily interest / penalty rates (unchanged after principal payment for CD)
-    const dailyInterest = (originalPrincipal * (interestRate / 100)) / periodDays;
-    const dailyPenalty  = (originalPrincipal * (penaltyRate  / 100)) / periodDays;
-
-    // ── Initial Contractual Position ───────────────────────────────────────
-    // Inclusive-cycle rule: loanDate is Day 1 of the first interest cycle.
-    // initialDueDate = loanDate + (periodDays - 1)
-    const initialContractualPositionStr = this.addCalendarDays(loanDateStr, periodDays - 1);
-    const initialContractualOrdinal     = this.dateOrdinal(initialContractualPositionStr);
-
-    // ── Post-Opening Renewal Credits ───────────────────────────────────────
-    //
-    // The engine supports two storage modes (both may co-exist in the DB):
-    //
-    //   Mode A — renewed_days pre-stored (credit = 0, renewed_days > 0)
-    //     Used by existing CD120-style accounts where the rebuild already wrote
-    //     the fractional days into the column.  The engine trusts renewed_days.
-    //
-    //   Mode B — interest credit only (credit > 0, entry_date > loanDate)
-    //     Used by accounts migrated from the OG Access system where only the
-    //     rupee credit is stored.  The engine derives:
-    //       renewedDays = credit / dailyInterest
-    //
-    // The opening commission (credit > 0 AND entry_date === loanDate) is part
-    // of the initial contractual position and MUST NOT be double-counted.
-    //
-    // Accumulate all post-opening credits with full float precision.
-    let cumulativeRenewedDaysExact = 0;
-
-    for (const row of interestRows) {
-      const credit    = Number(row.credit || 0);
-      const storedDays = Number(row.renewed_days || 0);
-
-      if (credit === 0 && storedDays > 0) {
-        // Mode A: pre-stored fractional days
-        cumulativeRenewedDaysExact += storedDays;
-      } else if (credit > 0) {
-        // Mode B: derive from credit amount
-        // Skip the opening commission row (same date as loanDate)
-        const rowDateStr = (row.entry_date || '').split('T')[0];
-        if (rowDateStr === loanDateStr) continue; // opening commission — skip
-        if (dailyInterest > 0) {
-          cumulativeRenewedDaysExact += credit / dailyInterest;
-        }
-      }
-      // Rows with credit = 0 AND renewed_days = 0 are informational — skip.
-    }
-
-    // ── Exact Contractual Position ─────────────────────────────────────────
-    const currentContractualPositionExact = initialContractualOrdinal + cumulativeRenewedDaysExact;
-    const wholePart     = Math.floor(currentContractualPositionExact);
-    const fractionalCarry = Number((currentContractualPositionExact - wholePart).toFixed(10));
-    const currentDueDateStr = this.ordinalToDateStr(wholePart);
-
-    // ── Last Payment Date ──────────────────────────────────────────────────
-    // MAX entry_date of actual monetary payment rows (credit > 0, entry_type
-    // is a customer payment).  Opening commission and generated notes are
-    // excluded.
-    const paymentTypes = new Set(['amount_paid', 'interest_payment', 'penalty_payment', 'principal_payment']);
-    const paymentDateCandidates = ledgerEntries
-      .filter(e =>
-        paymentTypes.has(e.entry_type) &&
-        Number(e.credit || 0) > 0 &&
-        (e.entry_date || '').split('T')[0] > loanDateStr  // exclude opening day
-      )
-      .map(e => (e.entry_date || '').split('T')[0]);
-
-    let lastPaymentDate = '';
-    for (const d of paymentDateCandidates) {
-      if (d > lastPaymentDate) lastPaymentDate = d;
-    }
+    const contract = buildCDContract(loan);
+    const { ledgerEvents, interestEvents } = getCDHistoricalEvents(ledgerEntries, interestRows);
+    const { baseDueDate, exactRenewedDays, currentDueDate, fractionalCarry } = getCDContractualPosition(contract, ledgerEvents, interestEvents);
+    const principalBalance = getCDPrincipalBalance(contract, ledgerEvents);
+    
+    const dailyInterest = (contract.originalPrincipal * (contract.interestRate / 100)) / contract.periodDays;
+    const dailyPenalty  = (contract.originalPrincipal * (contract.penaltyRate / 100)) / contract.periodDays;
+    
+    const paymentEntries = ledgerEvents
+      .filter(e => e.entryType === 'amount_paid' && e.credit > 0)
+      .sort((a, b) => dateOrdinal(b.entryDate) - dateOrdinal(a.entryDate));
+    const lastPaymentDate = paymentEntries.length > 0 ? paymentEntries[0].entryDate : '';
 
     return {
-      loanDateStr,
+      loanDateStr: contract.originalLoanDate,
       principalBalance,
       dailyInterest,
       dailyPenalty,
-      initialContractualPositionStr,
-      initialContractualOrdinal,
-      cumulativeRenewedDaysExact,
-      currentContractualPositionExact,
-      currentDueDateStr,
+      initialContractualPositionStr: baseDueDate,
+      initialContractualOrdinal: dateOrdinal(baseDueDate),
+      cumulativeRenewedDaysExact: exactRenewedDays,
+      currentContractualPositionExact: dateOrdinal(baseDueDate) + exactRenewedDays,
+      currentDueDateStr: currentDueDate,
       fractionalCarry,
       lastPaymentDate,
     };
@@ -800,95 +671,38 @@ export const financeCalculationService = {
 
   /**
    * Computes the full CD account position from a pre-built contractual timeline.
-   *
-   * This is the PREFERRED entry point for all new consumers.  It separates the
-   * timeline construction (buildCDContractualTimeline) from the as-of-date
-   * calculations so that the timeline can be built once and reused for
-   * multiple dates without re-reading the DB.
    */
   getCDAccountPositionV2(
     loan: any,
-    timeline: ReturnType<typeof this.buildCDContractualTimeline>,
+    timeline: any,
     asOfDate: string
   ) {
-    const {
-      loanDateStr,
-      principalBalance,
-      dailyInterest,
-      dailyPenalty,
-      currentDueDateStr,
-      fractionalCarry,
-      currentContractualPositionExact,
-      lastPaymentDate,
-    } = timeline;
-
-    const periodDays = (loan.period_days && Number(loan.period_days) > 0)
-      ? Number(loan.period_days)
-      : 30;
-    const interestRate = Number(loan.interest_rate) || 3;
-    const penaltyRate  = (loan.penalty_percent !== undefined && loan.penalty_percent !== null)
-      ? Number(loan.penalty_percent)
-      : 0.75;
-    const graceDays    = (loan.grace_days !== undefined && loan.grace_days !== null)
-      ? Number(loan.grace_days)
-      : 5;
-
-    const todayOrdinal = this.dateOrdinal(asOfDate);
-    const loanOrdinal  = this.dateOrdinal(loanDateStr);
-
-    if (todayOrdinal < loanOrdinal) {
-      return null; // asOfDate is before the loan date — caller handles this
-    }
-
-    // exactDueDays = ordinal(asOfDate) - contractualPositionExact
-    //             = diff(asOfDate, currentDueDate) - fractionalCarry
-    const exactDueDays = Number((todayOrdinal - currentContractualPositionExact).toFixed(10));
-
-    // Display days: integer representation (OG shows floor for overdue accounts;
-    // parity tests cover the exact boundary behaviour).  For now we use floor
-    // because the OG verified case shows exactDueDays=3.30 → display=3.
-    const displayDueDays = Math.floor(exactDueDays);
-    const daysRemaining  = exactDueDays < 0 ? Math.abs(exactDueDays) : 0;
-
-    // Monthly interest is always on the ORIGINAL principal (CD convention)
-    const originalPrincipal = principalBalance; // already net of principal payments
-    const monthlyInterest = Number(((originalPrincipal * (interestRate / 100) * periodDays) / periodDays).toFixed(2));
-    // standardRenewalAmount = 1 full period of interest at the loan rate
-    const standardRenewalAmount = Number(((originalPrincipal * (interestRate / 100) * periodDays) / periodDays).toFixed(2));
-
-    // Accrued interest / penalty use EXACT days
-    const accruedInterest = exactDueDays > 0
-      ? Number(((originalPrincipal * interestRate * exactDueDays) / (periodDays * 100)).toFixed(2))
-      : 0;
-
-    const penaltyApplies  = exactDueDays > graceDays;
-    const accruedPenalty  = penaltyApplies
-      ? Number(((originalPrincipal * penaltyRate * exactDueDays) / (periodDays * 100)).toFixed(2))
-      : 0;
-
-    const todayDue       = Number((accruedInterest + accruedPenalty).toFixed(2));
-    const totalToRegularize = (accruedInterest === 0 && accruedPenalty === 0)
-      ? 0
-      : Number((todayDue + standardRenewalAmount).toFixed(2));
-    const totalForClose  = Number((principalBalance + accruedInterest + accruedPenalty).toFixed(2));
-
+    const contract = buildCDContract(loan);
+    const dummyInterestRows = [{ credit: 0, renewed_days: timeline.cumulativeRenewedDaysExact }];
+    const dummyLedgerEntries = [
+      { entry_type: 'original_loan', entry_date: timeline.loanDateStr, debit: contract.originalPrincipal, credit: 0 },
+      { entry_type: 'amount_paid', entry_date: timeline.lastPaymentDate || timeline.loanDateStr, debit: 0, credit: 1000 }
+    ];
+    
+    const pos = engineGetCDAccountPosition(loan, dummyLedgerEntries, dummyInterestRows, asOfDate);
+    
     return {
-      currentDueDateStr,
-      fractionalCarry,
-      exactDueDays,
-      displayDueDays,
-      daysRemaining,
-      dailyInterest,
-      dailyPenalty,
-      accruedInterest,
-      accruedPenalty,
-      todayDue,
-      standardRenewalAmount,
-      totalToRegularize,
-      totalForClose,
-      principalBalance,
-      lastPaymentDate,
-      monthlyInterest,
+      currentDueDateStr: pos.currentDueDate,
+      fractionalCarry: timeline.fractionalCarry,
+      exactDueDays: pos.exactDueDays,
+      displayDueDays: pos.displayDueDays,
+      daysRemaining: pos.exactDueDays < 0 ? Math.abs(pos.exactDueDays) : 0,
+      dailyInterest: pos.dailyInterest,
+      dailyPenalty: pos.dailyPenalty,
+      accruedInterest: pos.accruedInterest,
+      accruedPenalty: pos.accruedPenalty,
+      todayDue: pos.todayDue,
+      standardRenewalAmount: pos.renewalAmount,
+      totalToRegularize: pos.totalToRegularize,
+      totalForClose: pos.totalForClose,
+      principalBalance: pos.principalBalance,
+      lastPaymentDate: timeline.lastPaymentDate,
+      monthlyInterest: pos.renewalAmount,
     };
   },
 
@@ -934,213 +748,72 @@ export const financeCalculationService = {
         accruedPenalty: 0,
         todayDue: 0,
         renewalAmount: 0,
+        totalRenewal: 0,
         totalToRegularize: 0,
         totalForClose: 0
       };
     }
 
-    const sortedDbEntries = [...ledgerEntries].sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime());
-    const disbEntry = sortedDbEntries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
-    const originalLoanDateStr = disbEntry ? disbEntry.entry_date.split('T')[0] : loan.date.split('T')[0];
-
-    // Chronology data-integrity guard for historical monetary payments
-    const monetaryPayments = ledgerEntries
-      .filter(e => e.entry_type === 'amount_paid' || Number(e.credit) > 0)
-      .sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime());
-    if (monetaryPayments.length > 0) {
-      const earliestPaymentDateStr = monetaryPayments[0].entry_date.split('T')[0];
-      if (originalLoanDateStr > earliestPaymentDateStr) {
-        const err = new Error(`CD_DATA_INTEGRITY_ERROR: Loan ${loan.loan_id} has loan_date ${originalLoanDateStr} after earliest monetary payment ${earliestPaymentDateStr}.`);
-        (err as any).code = 'CD_DATA_INTEGRITY_ERROR';
-        throw err;
-      }
-    }
-    const periodDays = (loan.period_days && Number(loan.period_days) > 0) ? Number(loan.period_days) : 30;
-    const interestRate = Number(loan.interest_rate) || 3;
-    const penaltyRate = loan.penalty_percent !== undefined && loan.penalty_percent !== null ? Number(loan.penalty_percent) : 0.75;
-    const graceDays = loan.grace_days !== undefined && loan.grace_days !== null ? Number(loan.grace_days) : 5;
-
-    const originalLoanDateMs = this.getCalendarMidnightUTC(originalLoanDateStr);
-    const todayMs = this.getCalendarMidnightUTC(asOfDate);
-    const isDateInvalid = todayMs < originalLoanDateMs;
-
-    if (isDateInvalid) {
-      const origDate = new Date(originalLoanDateMs);
-      const loanDateFormatted = origDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-      return {
-        isDateInvalid: true,
-        daysCount: 0,
-        loanDate: loanDateFormatted,
-        dueDate: null,
-        dueDateStr: '',
-        daysPastDue: 0,
-        displayDays: 0,
-        daysRemaining: 0,
-        nextDueDate: null,
-        penaltyDays: 0,
-        interest: 0,
-        penalty: 0,
-        outstandingInterest: 0,
-        outstandingPenalty: 0,
-        principal: Number(loan.amount),
-        grossInterest: 0,
-        grossPenalty: 0,
-        effectiveGrossInterest: 0,
-        effectiveGrossPenalty: 0,
-        dailyInterest: 0,
-        dailyPenalty: 0,
-        baseDailyInterest: 0,
-        penaltyPaid: 0,
-        interestPaid: 0,
-        principalPaid: 0,
-        principalBalance: Number(loan.amount),
-        currentDueDate: '',
-        lastPaymentDate: '',
-        exactCalculationDays: 0,
-        displayDueDays: 0,
-        accruedInterest: 0,
-        accruedPenalty: 0,
-        todayDue: 0,
-        renewalAmount: 0,
-        totalToRegularize: 0,
-        totalForClose: Number(loan.amount)
-      };
-    }
-
-    // CD inclusive-cycle rule: the loan-given date IS Day 1 of the interest cycle.
-    const baseDueDateStr = this.addCalendarDays(originalLoanDateStr, periodDays - 1);
-
-    // Sum total renewed days from interestDetails note rows (credit === 0)
-    const totalRenewedDays = interestDetails
-      .filter(d => Number(d.credit) === 0)
-      .reduce((sum, d) => sum + (Number(d.renewed_days) || 0), 0);
-
-    // Extended Due Date = Base Due Date + Display Renewed Days (whole-day representation)
-    const displayRenewedDays = this.calculateDisplayDays(totalRenewedDays);
-    const dueDateStr = this.addCalendarDays(baseDueDateStr, displayRenewedDays);
-    const dueDate = new Date(dueDateStr);
-
-    // principalBalance = originalPrincipal - principalPaid
-    const originalPrincipal = disbEntry ? Number(disbEntry.debit) : Number(loan.amount);
-    const principalPaid = ledgerEntries
-      .filter(e => e.entry_type === 'principal_payment')
-      .reduce((sum, e) => sum + Number(e.credit || 0), 0);
-    const principalBalance = Number(Math.max(0, originalPrincipal - principalPaid).toFixed(2));
-
-    // exactCalculationDays = asOfDate - baseDueDateStr - totalRenewedDays (exact fractional difference)
-    const exactCalculationDays = Number((this.differenceInCalendarDays(asOfDate, baseDueDateStr) - totalRenewedDays).toFixed(2));
-    const daysRemaining = exactCalculationDays < 0 ? Math.abs(exactCalculationDays) : 0;
-
-    // displayDueDays
-    const displayDueDays = this.calculateDisplayDays(exactCalculationDays);
-
-    // Accrued Interest & Penalty
-    const accruedInterest = Number(((principalBalance * interestRate * exactCalculationDays) / periodDays / 100).toFixed(2));
-    const accruedPenalty = exactCalculationDays > graceDays
-      ? Number(((principalBalance * penaltyRate * exactCalculationDays) / periodDays / 100).toFixed(2))
-      : 0;
-
-    const penaltyDays = exactCalculationDays > graceDays ? exactCalculationDays : 0;
-
-    // Daily interest / renewal day value
-    const renewalInterest = (principalBalance * (interestRate / 100) * periodDays) / periodDays;
-    const baseDailyInterest = Number((renewalInterest / periodDays).toFixed(5));
-
-    const renewalPenalty = (principalBalance * (penaltyRate / 100) * periodDays) / periodDays;
-    const baseDailyPenalty = Number((renewalPenalty / periodDays).toFixed(5));
-
-    let dailyInterest = baseDailyInterest;
-    let dailyPenalty = 0;
-    if (exactCalculationDays > graceDays) {
-      dailyInterest = Number((baseDailyInterest + baseDailyPenalty).toFixed(5));
-      dailyPenalty = baseDailyPenalty;
-    }
-
-    // Determine the true current-cycle start from the ledger
-    const cycleStartDateMs = this.getCalendarMidnightUTC(dueDateStr);
-
-    // Paid amounts for the current cycle
+    const pos = engineGetCDAccountPosition(loan, ledgerEntries, interestDetails, asOfDate);
+    const dateFormatted = new Date(pos.originalLoanDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    
+    const cycleStartDateMs = new Date(pos.currentDueDate).getTime();
     const penaltyPaidInCycle = ledgerEntries
-      .filter(e => e.entry_type === 'penalty_payment' && this.getCalendarMidnightUTC(e.entry_date) > cycleStartDateMs)
+      .filter(e => e.entry_type === 'penalty_payment' && new Date(e.entry_date).getTime() > cycleStartDateMs)
       .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
     const interestPaidInCycle = ledgerEntries
-      .filter(e => e.entry_type === 'interest_payment' && this.getCalendarMidnightUTC(e.entry_date) > cycleStartDateMs)
+      .filter(e => e.entry_type === 'interest_payment' && new Date(e.entry_date).getTime() > cycleStartDateMs)
       .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
-    // Outstanding dues (always >= 0)
-    const outstandingInterest = Math.max(0, accruedInterest);
-    const outstandingPenalty = Math.max(0, accruedPenalty);
-    const todayDue = Number((accruedInterest + accruedPenalty).toFixed(2));
-    const totalDue = outstandingInterest + outstandingPenalty;
-
-    // renewalAmount
-    const renewalAmount = Number(((principalBalance * (interestRate / 100) * periodDays) / 30).toFixed(2));
-
-    // Total To Regularize
-    const totalToRegularize = (outstandingInterest === 0 && outstandingPenalty === 0)
-      ? 0
-      : Number((totalDue + renewalAmount).toFixed(2));
-
-    // Total For Close
-    const totalForClose = Number((principalBalance + accruedInterest + accruedPenalty).toFixed(2));
-
-    // lastPaymentDate = MAX(transaction/payment date) from actual payment ledger rows where credit > 0
-    const paymentEntries = ledgerEntries.filter(e => 
-      e.entry_type === 'amount_paid' && 
-      Number(e.credit || 0) > 0
-    );
-    let lastPaymentDate = '';
-    if (paymentEntries.length > 0) {
-      lastPaymentDate = paymentEntries[0].entry_date.split('T')[0];
-      for (const entry of paymentEntries) {
-        const dStr = entry.entry_date.split('T')[0];
-        if (dStr > lastPaymentDate) {
-          lastPaymentDate = dStr;
-        }
-      }
-    }
+    const addCalendarDays = (dateStr: string, days: number): string => {
+      const cleanDate = (dateStr || '').split('T')[0];
+      const d = new Date(cleanDate + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + days);
+      return d.toISOString().split('T')[0];
+    };
+    const baseDueDateStr = addCalendarDays(pos.originalLoanDate, pos.periodDays - 1);
+    const displayDueDateStr = addCalendarDays(baseDueDateStr, Math.ceil(pos.totalRenewedDays));
 
     return {
       isDateInvalid: false,
-      daysCount: exactCalculationDays,
-      loanDate: new Date(originalLoanDateStr).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      dueDate: dueDate,
-      dueDateStr,
-      daysPastDue: exactCalculationDays,
-      displayDays: displayDueDays,
-      daysRemaining,
+      daysCount: pos.exactDueDays,
+      loanDate: dateFormatted,
+      dueDate: new Date(displayDueDateStr),
+      dueDateStr: displayDueDateStr,
+      daysPastDue: pos.exactDueDays,
+      displayDays: pos.displayDueDays,
+      daysRemaining: pos.exactDueDays < 0 ? Math.abs(pos.exactDueDays) : 0,
       nextDueDate: null,
-      penaltyDays,
-      interest: accruedInterest,
-      penalty: accruedPenalty,
-      outstandingInterest,
-      outstandingPenalty,
-      principal: principalBalance,
-      grossInterest: accruedInterest,
-      grossPenalty: accruedPenalty,
-      effectiveGrossInterest: accruedInterest,
-      effectiveGrossPenalty: accruedPenalty,
-      dailyInterest,
-      dailyPenalty,
-      baseDailyInterest,
+      penaltyDays: pos.exactDueDays > loan.grace_days ? pos.exactDueDays : 0,
+      interest: pos.accruedInterest,
+      penalty: pos.accruedPenalty,
+      outstandingInterest: pos.accruedInterest,
+      outstandingPenalty: pos.accruedPenalty,
+      principal: pos.principalBalance,
+      grossInterest: pos.accruedInterest,
+      grossPenalty: pos.accruedPenalty,
+      effectiveGrossInterest: pos.accruedInterest,
+      effectiveGrossPenalty: pos.accruedPenalty,
+      dailyInterest: pos.dailyInterest,
+      dailyPenalty: pos.dailyPenalty,
+      baseDailyInterest: pos.dailyInterest,
       penaltyPaid: penaltyPaidInCycle,
       interestPaid: interestPaidInCycle,
       principalPaid: 0,
-      principalBalance,
-      currentDueDate: dueDateStr,
-      lastPaymentDate,
-      exactCalculationDays,
-      exactDueDays: exactCalculationDays,
-      displayDueDays,
-      accruedInterest,
-      accruedPenalty,
-      todayDue,
-      renewalAmount,
-      totalRenewal: renewalAmount,
-      totalToRegularize,
-      totalForClose
+      principalBalance: pos.principalBalance,
+      currentDueDate: displayDueDateStr,
+      lastPaymentDate: pos.lastPaymentDate || '',
+      exactCalculationDays: pos.exactDueDays,
+      exactDueDays: pos.exactDueDays,
+      displayDueDays: pos.displayDueDays,
+      accruedInterest: pos.accruedInterest,
+      accruedPenalty: pos.accruedPenalty,
+      todayDue: pos.todayDue,
+      renewalAmount: pos.renewalAmount,
+      totalRenewal: pos.renewalAmount,
+      totalToRegularize: pos.totalToRegularize,
+      totalForClose: pos.totalForClose
     };
   }
 };
-
