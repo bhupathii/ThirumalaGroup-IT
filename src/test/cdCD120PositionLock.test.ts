@@ -184,11 +184,12 @@ describe('CD120 Full Account-Position — PRECISION LOCK (DO NOT MODIFY EXPECTED
     expect(Number(tl.cumulativeRenewedDaysExact.toFixed(2))).toBe(EXPECTED_CUMULATIVE_RENEWED);
   });
 
-  it('3. buildCDContractualTimeline: currentDueDateStr = 2026-05-27', () => {
+  it('3. buildCDContractualTimeline: currentDueDateStr = 2026-05-28', () => {
     const tl = financeCalculationService.buildCDContractualTimeline(
       mockLoan, CD120_INTEREST_ROWS, CD120_LEDGER_ENTRIES
     );
-    expect(tl.currentDueDateStr).toBe(EXPECTED_CURRENT_DUE_DATE_FLOOR);
+    expect(tl.currentDueDateStr).toBe(EXPECTED_CURRENT_DUE_DATE_UI);
+    expect(tl.contractualPositionDate).toBe(EXPECTED_CURRENT_DUE_DATE_FLOOR);
   });
 
   it('4. buildCDContractualTimeline: fractionalCarry = 0.81', () => {
@@ -303,7 +304,8 @@ describe('CD120 Full Account-Position — PRECISION LOCK (DO NOT MODIFY EXPECTED
 
     // Timeline layer
     expect(Number(tl.cumulativeRenewedDaysExact.toFixed(2))).toBe(EXPECTED_CUMULATIVE_RENEWED);
-    expect(tl.currentDueDateStr).toBe(EXPECTED_CURRENT_DUE_DATE_FLOOR);
+    expect(tl.currentDueDateStr).toBe(EXPECTED_CURRENT_DUE_DATE_UI);
+    expect(tl.contractualPositionDate).toBe(EXPECTED_CURRENT_DUE_DATE_FLOOR);
     expect(Number(tl.fractionalCarry.toFixed(2))).toBe(EXPECTED_FRACTIONAL_CARRY);
     expect(tl.lastPaymentDate).toBe(EXPECTED_LAST_PAYMENT);
 

@@ -637,21 +637,22 @@ export const financeCalculationService = {
     initialContractualOrdinal: number;
     cumulativeRenewedDaysExact: number;
     currentContractualPositionExact: number;
+    contractualPositionDate: string;
     currentDueDateStr: string;
     fractionalCarry: number;
     lastPaymentDate: string;
   } {
     const contract = buildCDContract(loan);
     const { ledgerEvents, interestEvents } = getCDHistoricalEvents(ledgerEntries, interestRows);
-    const { baseDueDate, exactRenewedDays, currentDueDate, fractionalCarry } = getCDContractualPosition(contract, ledgerEvents, interestEvents);
+    const { baseDueDate, exactRenewedDays, contractualPositionDate, currentDueDate, fractionalCarry } = getCDContractualPosition(contract, ledgerEvents, interestEvents);
     const principalBalance = getCDPrincipalBalance(contract, ledgerEvents);
     
     const dailyInterest = (contract.originalPrincipal * (contract.interestRate / 100)) / contract.periodDays;
     const dailyPenalty  = (contract.originalPrincipal * (contract.penaltyRate / 100)) / contract.periodDays;
     
     const paymentEntries = ledgerEvents
-      .filter(e => e.entryType === 'amount_paid' && e.credit > 0)
-      .sort((a, b) => dateOrdinal(b.entryDate) - dateOrdinal(a.entryDate));
+       .filter(e => e.entryType === 'amount_paid' && e.credit > 0)
+       .sort((a, b) => dateOrdinal(b.entryDate) - dateOrdinal(a.entryDate));
     const lastPaymentDate = paymentEntries.length > 0 ? paymentEntries[0].entryDate : '';
 
     return {
@@ -663,6 +664,7 @@ export const financeCalculationService = {
       initialContractualOrdinal: dateOrdinal(baseDueDate),
       cumulativeRenewedDaysExact: exactRenewedDays,
       currentContractualPositionExact: dateOrdinal(baseDueDate) + exactRenewedDays,
+      contractualPositionDate,
       currentDueDateStr: currentDueDate,
       fractionalCarry,
       lastPaymentDate,
@@ -766,14 +768,7 @@ export const financeCalculationService = {
       .filter(e => e.entry_type === 'interest_payment' && new Date(e.entry_date).getTime() > cycleStartDateMs)
       .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
-    const addCalendarDays = (dateStr: string, days: number): string => {
-      const cleanDate = (dateStr || '').split('T')[0];
-      const d = new Date(cleanDate + 'T00:00:00Z');
-      d.setUTCDate(d.getUTCDate() + days);
-      return d.toISOString().split('T')[0];
-    };
-    const baseDueDateStr = addCalendarDays(pos.originalLoanDate, pos.periodDays - 1);
-    const displayDueDateStr = addCalendarDays(baseDueDateStr, Math.ceil(pos.totalRenewedDays));
+    const displayDueDateStr = pos.currentDueDate;
 
     return {
       isDateInvalid: false,

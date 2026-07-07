@@ -1,3 +1,4 @@
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Input from '../../components/UI/Input';
@@ -58,7 +59,7 @@ const LoanEntry: React.FC = () => {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   // Form State - Basics
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => getLocalBusinessDateISO());
   const [loanCategory, setLoanCategory] = useState<'CD' | 'STBD' | 'HP' | 'TBD' | 'L'>('CD');
   const [loanId, setLoanId] = useState('');
 
@@ -801,7 +802,7 @@ const LoanEntry: React.FC = () => {
   const handleClearForm = () => {
     if (!window.confirm('Are you sure you want to clear the form? All details will be reset.')) return;
     
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(getLocalBusinessDateISO());
     setLoanCategory('CD');
     setSelectedCustomerId('');
     setCustName('');
@@ -1116,7 +1117,7 @@ const LoanEntry: React.FC = () => {
           dDate.setMonth(start.getMonth() + i);
         }
         duesList.push({
-          due_date: dDate.toISOString().split('T')[0],
+          due_date: getLocalBusinessDateISO(dDate),
           amount: liveCalculations.dueAmount
         });
       }

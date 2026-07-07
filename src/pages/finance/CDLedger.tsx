@@ -28,6 +28,7 @@ import {
 import toast from 'react-hot-toast';
 import { exportToExcel, exportToCSV } from '../../utils/excel';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 
 
 
@@ -121,7 +122,7 @@ const CDLedger: React.FC = () => {
 
   const [selectedLoan, setSelectedLoan] = useState<(FinanceLoan & { customer: FinanceCustomer; transactions: FinanceTransaction[]; photos: any[]; dues: FinanceDue[]; documents: FinanceDocument[] }) | null>(null);
 
-  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [paymentDate, setPaymentDate] = useState(() => getLocalBusinessDateISO());
 
 
 
@@ -133,7 +134,7 @@ const CDLedger: React.FC = () => {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   // Return Document Modal State
-  const [returnDate, setReturnDate] = useState(new Date().toISOString().split('T')[0]);
+  const [returnDate, setReturnDate] = useState(() => getLocalBusinessDateISO());
   const [returnedTo, setReturnedTo] = useState('');
   const [returnRemarks, setReturnRemarks] = useState('');
   const [isReturningDoc, setIsReturningDoc] = useState(false);
@@ -1297,20 +1298,23 @@ const CDLedger: React.FC = () => {
     const isClosingPayment = paymentAmount >= Math.max(0, ledgerMetrics.totalClose);
 
     if (isClosingPayment) {
-      const penaltyPaid = outstandingPenalty;
-      const overdueInterestPaid = outstandingInterest;
-      const renewalInterestPaid = 0;
-      const principalPaid = Number(Math.max(0, paymentAmount - penaltyPaid - overdueInterestPaid).toFixed(2));
-      const principalAfter = Number(Math.max(0, principalBefore - principalPaid).toFixed(2));
-
+      const closeSplit = financeCalculationService.computeCDPaymentSplit(
+        paymentAmount,
+        outstandingPenalty,
+        outstandingInterest,
+        monthlyInterest,
+        principalBefore,
+        'Close',
+        periodDays
+      );
       const details = {
-        penaltyPaid,
-        overdueInterestPaid,
-        renewalInterestPaid,
-        interestPaid: overdueInterestPaid + renewalInterestPaid,
-        principalPaid,
-        principalAfter,
-        renewedDays: 0,
+        penaltyPaid: closeSplit.penaltyPaid,
+        overdueInterestPaid: closeSplit.overdueInterestPaid,
+        renewalInterestPaid: closeSplit.renewalInterestPaid,
+        interestPaid: closeSplit.interestPaid,
+        principalPaid: closeSplit.principalPaid,
+        principalAfter: Number(Math.max(0, principalBefore - closeSplit.principalPaid).toFixed(2)),
+        renewedDays: closeSplit.renewedDays,
         nextDueDate: null,
         dailyInterestValue
       };
@@ -1597,6 +1601,8 @@ const CDLedger: React.FC = () => {
       let interestPaid = 0;
       let principalPaid = 0;
       let renewedDays = 0;
+      let overdueInterestPaid = 0;
+      let renewalInterestPaid = 0;
 
       // Use OUTSTANDING (always >= 0) for payment allocation, not display values
       const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
@@ -1608,36 +1614,22 @@ const CDLedger: React.FC = () => {
 
       const isClosingPayment = actionType === 'Close' || paymentAmount >= Math.max(0, ledgerMetrics.totalClose);
 
-      let overdueInterestPaid = 0;
-      let renewalInterestPaid = 0;
-
-      if (isClosingPayment) {
-        // Close: clear all remaining dues, excess reduces principal.
-        // Banker's-round penalty and interest so paise never land in principal balance.
-        penaltyPaid = financeCalculationService.roundRupee(outstandingPenalty);
-        overdueInterestPaid = financeCalculationService.roundRupee(outstandingInterest);
-        renewalInterestPaid = 0;
-        interestPaid = overdueInterestPaid;
-        principalPaid = Number(Math.max(0, paymentAmount - penaltyPaid - overdueInterestPaid).toFixed(2));
-        renewedDays = 0;
-      } else {
-        const split = financeCalculationService.computeCDPaymentSplit(
-          paymentAmount,
-          outstandingPenalty,
-          outstandingInterest,
-          monthlyInterest,
-          principalBefore,
-          actionType,
-          periodDays,
-          dueDays
-        );
-        penaltyPaid = split.penaltyPaid;
-        overdueInterestPaid = split.overdueInterestPaid;
-        renewalInterestPaid = split.renewalInterestPaid;
-        interestPaid = split.interestPaid;
-        principalPaid = split.principalPaid;
-        renewedDays = split.renewedDays;
-      }
+      const split = financeCalculationService.computeCDPaymentSplit(
+        paymentAmount,
+        outstandingPenalty,
+        outstandingInterest,
+        monthlyInterest,
+        principalBefore,
+        isClosingPayment ? 'Close' : actionType,
+        periodDays,
+        dueDays
+      );
+      penaltyPaid = split.penaltyPaid;
+      overdueInterestPaid = split.overdueInterestPaid;
+      renewalInterestPaid = split.renewalInterestPaid;
+      interestPaid = split.interestPaid;
+      principalPaid = split.principalPaid;
+      renewedDays = split.renewedDays;
 
       let renewedTillDate: string | null = null;
       if (renewedDays > 0) {
@@ -1910,7 +1902,7 @@ const CDLedger: React.FC = () => {
       };
     });
 
-    const filename = `${selectedLoan.loan_id}_CD_Ledger_${new Date().toISOString().split('T')[0]}`;
+    const filename = `${selectedLoan.loan_id}_CD_Ledger_${getLocalBusinessDateISO()}`;
 
     if (format === 'xlsx') {
       const res = exportToExcel(exportData, filename, 'Transactions');

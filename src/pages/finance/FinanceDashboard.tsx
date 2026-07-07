@@ -1,3 +1,4 @@
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTableMode } from '../../contexts/TableModeContext';
@@ -77,7 +78,7 @@ const FinanceDashboard: React.FC = () => {
       const today = new Date();
       const offset = today.getTimezoneOffset();
       const localToday = new Date(today.getTime() - (offset * 60 * 1000));
-      const todayStr = localToday.toISOString().split('T')[0];
+      const todayStr = getLocalBusinessDateISO(localToday);
 
       // 1. Disbursed (All-time)
       const totalDisbursed = loans.reduce((sum, loan) => sum + Number(loan.amount), 0);

@@ -1,3 +1,4 @@
+import { getLocalBusinessDateISO } from '../utils/dateUtils';
 import { supabase } from './supabaseDatabase';
 import { financeCalculationService } from '../services/financeCalculationService';
 
@@ -860,7 +861,7 @@ class SupabaseFinance {
             const renewedTillDate = params.renewedTillDate !== undefined
               ? params.renewedTillDate
               : (params.renewedDays > 0 
-                  ? new Date(new Date(entryDate).getTime() + params.renewedDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                  ? getLocalBusinessDateISO(new Date(new Date(entryDate).getTime() + params.renewedDays * 24 * 60 * 60 * 1000))
                   : null);
 
             await this.addCDInterestDetail({
@@ -918,7 +919,7 @@ class SupabaseFinance {
       // 5. Post Note row to Interest Details (Credit = 0, contains full split detail description)
       if (mainEntryId && isInterestOrPenaltyPaid) {
         const renewedTillDate = params.renewedDays > 0 
-          ? new Date(new Date(entryDate).getTime() + params.renewedDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+          ? getLocalBusinessDateISO(new Date(new Date(entryDate).getTime() + params.renewedDays * 24 * 60 * 60 * 1000))
           : null;
 
         const noteParticulars = params.actionType === 'Renew'
@@ -3821,7 +3822,7 @@ class SupabaseFinance {
 
   async getDuesLedgerSummary(todayDate?: string): Promise<any[]> {
     try {
-      const targetDate = todayDate || new Date().toISOString().split('T')[0];
+      const targetDate = todayDate || getLocalBusinessDateISO();
 
       // 1. Fetch all Active loans
       const { data: loans, error: loansErr } = await supabase

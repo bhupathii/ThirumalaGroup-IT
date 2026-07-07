@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
 import { financeCalculationService } from '../../services/financeCalculationService';
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 
 const TBDLedger: React.FC = () => {
   const [ledgerRows, setLedgerRows] = useState<any[]>([]);
@@ -25,7 +26,7 @@ const TBDLedger: React.FC = () => {
   const [payingInsts, setPayingInsts] = useState<number>(1);
   const [discount, setDiscount] = useState<number>(0);
   const [waivedPenalty, setWaivedPenalty] = useState<number>(0);
-  const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [paymentDate, setPaymentDate] = useState<string>(() => getLocalBusinessDateISO());
   const [receiptNo, setReceiptNo] = useState<string>('');
   const [isDirectDaysPayment, setIsDirectDaysPayment] = useState<boolean>(false);
   const [customTotalAmount, setCustomTotalAmount] = useState<number>(0);

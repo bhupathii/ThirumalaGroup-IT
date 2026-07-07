@@ -6,6 +6,7 @@ import { Printer, ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useNavigate } from 'react-router-dom';
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 
 interface DailyTransaction {
   id: string;
@@ -22,7 +23,7 @@ interface DailyTransaction {
 const DailyReportFinance: React.FC = () => {
   const navigate = useNavigate();
   // Default to today
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => getLocalBusinessDateISO());
   const [loading, setLoading] = useState(true);
   
   const [openingBalance, setOpeningBalance] = useState(0);
@@ -39,13 +40,13 @@ const DailyReportFinance: React.FC = () => {
   const handlePrevDay = () => {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() - 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    setSelectedDate(getLocalBusinessDateISO(d));
   };
 
   const handleNextDay = () => {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() + 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    setSelectedDate(getLocalBusinessDateISO(d));
   };
 
   const fetchDailyData = async () => {

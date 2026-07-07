@@ -1,3 +1,4 @@
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState } from 'react';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer } from 'lucide-react';
@@ -15,8 +16,8 @@ interface DaybookItem {
 }
 
 const Daybook: React.FC = () => {
-  const [fromDate, setFromDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [toDate, setToDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [fromDate, setFromDate] = useState(() => getLocalBusinessDateISO());
+  const [toDate, setToDate] = useState(() => getLocalBusinessDateISO());
   const [loading, setLoading] = useState(true);
   
   const [openingBalance, setOpeningBalance] = useState(0);

@@ -101,7 +101,9 @@ describe('cdLedgerEngine Unit Tests', () => {
 
     expect(pos.principalBalance).toBe(750000.00);
     expect(pos.lastPaymentDate).toBe('2026-06-29');
-    expect(pos.currentDueDate).toBe('2026-05-27'); // Floor of baseDueDate + exactRenewedDays
+    expect(pos.contractualPositionDate).toBe('2026-05-27');
+    expect(pos.currentDueDate).toBe('2026-05-28'); // Ceil of baseDueDate + exactRenewedDays for display
+    expect(pos.fractionalCarry).toBe(0.81);
     expect(pos.displayDueDays).toBe(39);
     expect(pos.exactDueDays).toBe(39.19);
     expect(pos.accruedInterest).toBe(29392.50);
@@ -139,9 +141,12 @@ describe('cdLedgerEngine Unit Tests', () => {
     const mockPos: cdEngine.CDAccountPosition = {
       principalBalance: 750000,
       originalLoanDate: '2025-02-18',
+      periodDays: 30,
       baseDueDate: '2025-03-19',
       totalRenewedDays: 434.81,
-      currentDueDate: '2026-05-27',
+      contractualPositionDate: '2026-05-27',
+      currentDueDate: '2026-05-28',
+      fractionalCarry: 0.81,
       displayDueDays: 39,
       exactDueDays: 39.19,
       dailyInterest: 750,
@@ -166,9 +171,12 @@ describe('cdLedgerEngine Unit Tests', () => {
     const mockPos: cdEngine.CDAccountPosition = {
       principalBalance: 750000,
       originalLoanDate: '2025-02-18',
+      periodDays: 30,
       baseDueDate: '2025-03-19',
       totalRenewedDays: 434.81,
-      currentDueDate: '2026-05-27',
+      contractualPositionDate: '2026-05-27',
+      currentDueDate: '2026-05-28',
+      fractionalCarry: 0.81,
       displayDueDays: 39,
       exactDueDays: 39.19,
       dailyInterest: 750,
@@ -195,9 +203,12 @@ describe('cdLedgerEngine Unit Tests', () => {
     const mockPos: cdEngine.CDAccountPosition = {
       principalBalance: 750000,
       originalLoanDate: '2025-02-18',
+      periodDays: 30,
       baseDueDate: '2025-03-19',
       totalRenewedDays: 434.81,
-      currentDueDate: '2026-05-27',
+      contractualPositionDate: '2026-05-27',
+      currentDueDate: '2026-05-28',
+      fractionalCarry: 0.81,
       displayDueDays: 39,
       exactDueDays: 39.19,
       dailyInterest: 750,

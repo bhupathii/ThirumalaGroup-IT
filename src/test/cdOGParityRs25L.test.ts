@@ -96,6 +96,7 @@ const EXPECTED_POST_OPENING_TOTAL     = 2_281_750;
 const EXPECTED_CUMULATIVE_RENEWED     = 912.70;
 const EXPECTED_INITIAL_DUE_DATE       = '2023-12-13';
 const EXPECTED_CURRENT_DUE_DATE       = '2026-06-12';
+const EXPECTED_CURRENT_DUE_DATE_UI    = '2026-06-13';
 const EXPECTED_FRACTIONAL_CARRY       = 0.70;
 
 const AUDIT_DATE = '2026-06-16';
@@ -184,11 +185,12 @@ describe('Rs25L OG Access CD Account — Canonical Timeline Parity', () => {
     expect(Number(tl.cumulativeRenewedDaysExact.toFixed(2))).toBe(EXPECTED_CUMULATIVE_RENEWED);
   });
 
-  it('7. currentDueDateStr = 2026-06-12', () => {
+  it('7. currentDueDateStr = 2026-06-13', () => {
     const tl = financeCalculationService.buildCDContractualTimeline(
       mockLoan, allInterestRows, mockLedgerEntries
     );
-    expect(tl.currentDueDateStr).toBe(EXPECTED_CURRENT_DUE_DATE);
+    expect(tl.currentDueDateStr).toBe(EXPECTED_CURRENT_DUE_DATE_UI);
+    expect(tl.contractualPositionDate).toBe(EXPECTED_CURRENT_DUE_DATE);
   });
 
   it('8. fractionalCarry = 0.70', () => {
@@ -284,7 +286,8 @@ describe('Rs25L OG Access CD Account — Canonical Timeline Parity', () => {
     const pos = financeCalculationService.getCDAccountPositionV2(mockLoan, tl, AUDIT_DATE);
 
     expect(Number(tl.cumulativeRenewedDaysExact.toFixed(2))).toBe(EXPECTED_CUMULATIVE_RENEWED);
-    expect(tl.currentDueDateStr).toBe(EXPECTED_CURRENT_DUE_DATE);
+    expect(tl.currentDueDateStr).toBe(EXPECTED_CURRENT_DUE_DATE_UI);
+    expect(tl.contractualPositionDate).toBe(EXPECTED_CURRENT_DUE_DATE);
     expect(Number(tl.fractionalCarry.toFixed(2))).toBe(EXPECTED_FRACTIONAL_CARRY);
     expect(Number(pos!.exactDueDays.toFixed(2))).toBe(EXPECTED_EXACT_DUE_DAYS);
     expect(pos!.displayDueDays).toBe(EXPECTED_DISPLAY_DUE_DAYS);

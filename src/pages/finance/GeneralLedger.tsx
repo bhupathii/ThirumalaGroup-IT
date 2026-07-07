@@ -1,3 +1,4 @@
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo } from 'react';
 import Button from '../../components/UI/Button';
 import Card from '../../components/UI/Card';
@@ -15,7 +16,7 @@ const GeneralLedger: React.FC = () => {
     d.setDate(1); // Default to start of month
     return d.toISOString().split('T')[0];
   });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => getLocalBusinessDateISO());
   const [loading, setLoading] = useState(true);
   const [allEntries, setAllEntries] = useState<UnifiedLedgerEntry[]>([]);
   const [showPrintPreview, setShowPrintPreview] = useState(false);

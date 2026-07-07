@@ -1,3 +1,4 @@
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabaseFinance, FinanceLoanPaymentFollowup } from '../../lib/supabaseFinance';
@@ -157,7 +158,7 @@ const PaymentFollowUp: React.FC = () => {
   }, [followUps]);
 
   // Tab calculations
-  const todayDateStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayDateStr = useMemo(() => getLocalBusinessDateISO(), []);
 
   const categorizedLoans = useMemo(() => {
     // Only Active Loans are eligible for active queues
@@ -270,7 +271,7 @@ const PaymentFollowUp: React.FC = () => {
 
     const payload = {
       loan_id: selectedLoan.id,
-      follow_up_date: new Date().toISOString().split('T')[0],
+      follow_up_date: getLocalBusinessDateISO(),
       followed_up_by: staffName,
       contacted_person: contactedPerson,
       result: result,
@@ -789,7 +790,7 @@ const PaymentFollowUp: React.FC = () => {
                     <input
                       type="date"
                       value={nextFollowUpDate}
-                      min={new Date().toISOString().split('T')[0]}
+                      min={getLocalBusinessDateISO()}
                       onChange={(e) => setNextFollowUpDate(e.target.value)}
                       className="text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-sm uppercase h-10 w-44"
                     />

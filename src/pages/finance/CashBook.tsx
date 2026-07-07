@@ -20,6 +20,7 @@ import toast from 'react-hot-toast';
 import { validateFinanceForm, ValidationField } from '../../utils/financeValidation';
 import { useAuth } from '../../contexts/AuthContext';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 
 const CashBook: React.FC = () => {
   const { user } = useAuth();
@@ -32,7 +33,7 @@ const CashBook: React.FC = () => {
 
   // Form States
   const [editId, setEditId] = useState<string | null>(null);
-  const [entryDate, setEntryDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [entryDate, setEntryDate] = useState(() => getLocalBusinessDateISO());
   const [accountNumber, setAccountNumber] = useState('');
   const [headOfAccount, setHeadOfAccount] = useState('');
   const [particulars, setParticulars] = useState('');
@@ -112,7 +113,7 @@ const CashBook: React.FC = () => {
   // Form Reset / Clear
   const handleReset = (confirm = true) => {
     if (confirm && !window.confirm('Clear all form fields?')) return;
-    setEntryDate(new Date().toISOString().split('T')[0]);
+    setEntryDate(getLocalBusinessDateISO());
     setHeadOfAccount('');
     setAccountNumber('');
     setParticulars('');

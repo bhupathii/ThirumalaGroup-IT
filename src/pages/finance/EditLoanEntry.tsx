@@ -1,3 +1,4 @@
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
@@ -343,7 +344,7 @@ const EditLoanEntry: React.FC = () => {
       } else {
         d.setMonth(d.getMonth() + D);
       }
-      dueDatePreview = d.toISOString().split('T')[0];
+      dueDatePreview = getLocalBusinessDateISO(d);
     }
 
     return {

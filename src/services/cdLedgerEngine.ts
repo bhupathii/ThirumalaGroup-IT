@@ -45,7 +45,9 @@ export interface CDAccountPosition {
   periodDays: number;
   baseDueDate: string;
   totalRenewedDays: number;
+  contractualPositionDate: string;
   currentDueDate: string;
+  fractionalCarry: number;
   displayDueDays: number;
   exactDueDays: number;
   dailyInterest: number;
@@ -273,6 +275,7 @@ export function getCDContractualPosition(
 ): {
   baseDueDate: string;
   exactRenewedDays: number;
+  contractualPositionDate: string;
   currentDueDate: string;
   fractionalCarry: number;
 } {
@@ -337,12 +340,14 @@ export function getCDContractualPosition(
   const currentPositionExact = baseOrdinal + exactRenewedDays;
   const wholePart = Math.floor(currentPositionExact);
   const fractionalCarry = roundRenewedDays(currentPositionExact - wholePart);
-  const currentDueDate = ordinalToDateStr(wholePart);
+  const contractualPositionDate = ordinalToDateStr(wholePart);
+  const displayDueDate = ordinalToDateStr(baseOrdinal + Math.ceil(exactRenewedDays));
 
   return {
     baseDueDate,
     exactRenewedDays: roundRenewedDays(exactRenewedDays),
-    currentDueDate,
+    contractualPositionDate,
+    currentDueDate: displayDueDate,
     fractionalCarry,
   };
 }
@@ -377,7 +382,7 @@ export function getCDAccountPosition(
   }
 
   const principalBalance = getCDPrincipalBalance(contract, ledgerEvents);
-  const { baseDueDate, exactRenewedDays, currentDueDate } = getCDContractualPosition(contract, ledgerEvents, interestEvents);
+  const { baseDueDate, exactRenewedDays, contractualPositionDate, currentDueDate, fractionalCarry } = getCDContractualPosition(contract, ledgerEvents, interestEvents);
 
   // Elapsed days from baseDueDate to asOfDate
   const elapsedDays = differenceInCalendarDays(asOfDate, baseDueDate);
@@ -423,7 +428,9 @@ export function getCDAccountPosition(
     periodDays: contract.periodDays,
     baseDueDate,
     totalRenewedDays: exactRenewedDays,
+    contractualPositionDate,
     currentDueDate,
+    fractionalCarry,
     displayDueDays,
     exactDueDays,
     dailyInterest,

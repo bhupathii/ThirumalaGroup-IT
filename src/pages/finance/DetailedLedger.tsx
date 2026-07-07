@@ -1,3 +1,4 @@
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
@@ -14,7 +15,7 @@ const DetailedLedgerFinance: React.FC = () => {
     d.setDate(1); // Default to start of month
     return d.toISOString().split('T')[0];
   });
-  const [toDate, setToDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [toDate, setToDate] = useState(() => getLocalBusinessDateISO());
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'CD' | 'HP' | 'STBD' | 'TBD' | 'BANK' | 'SALARY' | 'EXPENSE'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
