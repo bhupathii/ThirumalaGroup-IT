@@ -1641,9 +1641,29 @@ class SupabaseFinance {
         .eq('id', id)
         .single();
 
+      // Explicit allowlist/DTO for customer updates
+      const customerPatch: any = {};
+      const allowedFields: Array<keyof FinanceCustomer> = [
+        'name', 'phone', 'address', 'aadhaar', 'customer_photo_url',
+        'fingerprint_url', 'fingerprint_template', 'fingerprint_added',
+        'customer_fingerprint_template', 'customer_fingerprint_image_url',
+        'customer_fingerprint_added', 'surety_fingerprint_template',
+        'surety_fingerprint_image_url', 'surety_fingerprint_added',
+        'father_husband_name', 'father_name', 'village', 'mandal', 'district',
+        'aadhaar_address', 'aadhaar_village', 'aadhaar_mandal', 'aadhaar_district',
+        'present_address', 'present_village', 'present_mandal', 'present_district',
+        'phone_1', 'phone_2', 'phone2', 'partner_name'
+      ];
+
+      for (const field of allowedFields) {
+        if (customer[field] !== undefined) {
+          customerPatch[field] = customer[field];
+        }
+      }
+
       const { data, error } = await supabase
         .from('finance_customers')
-        .update({ ...customer, updated_at: new Date().toISOString() })
+        .update({ ...customerPatch, updated_at: new Date().toISOString() })
         .eq('id', id)
         .select()
         .single();
@@ -2107,17 +2127,73 @@ class SupabaseFinance {
         .eq('id', id)
         .single();
 
-      const safeLoanUpdate = { ...loan };
-      delete (safeLoanUpdate as any).customer_fingerprint_template;
-      delete (safeLoanUpdate as any).customer_fingerprint_image_url;
-      delete (safeLoanUpdate as any).customer_fingerprint_added;
-      delete (safeLoanUpdate as any).surety_fingerprint_template;
-      delete (safeLoanUpdate as any).surety_fingerprint_image_url;
-      delete (safeLoanUpdate as any).surety_fingerprint_added;
+      if (!oldData) throw new Error('Loan not found');
+
+      // 1. Detect CD ledger activity
+      const [{ count: cdLedgerCount }, { count: txCount }] = await Promise.all([
+        supabase
+          .from('finance_cd_ledger_entries')
+          .select('*', { count: 'exact', head: true })
+          .eq('loan_id', id)
+          .neq('entry_type', 'original_loan'),
+        supabase
+          .from('finance_transactions')
+          .select('*', { count: 'exact', head: true })
+          .eq('loan_id', id)
+          .neq('type', 'Disbursement')
+      ]);
+
+      const hasLedgerActivity = (cdLedgerCount || 0) > 0 || (txCount || 0) > 0;
+
+      if (hasLedgerActivity) {
+        // Compare protected fields
+        if (loan.date !== undefined && loan.date !== oldData.date) {
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Cannot modify loan_date for ${oldData.loan_id} because ledger activity exists.`);
+        }
+        if (loan.amount !== undefined && Number(loan.amount) !== Number(oldData.amount)) {
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Cannot modify amount for ${oldData.loan_id} because ledger activity exists.`);
+        }
+        if (loan.interest_rate !== undefined && Number(loan.interest_rate) !== Number(oldData.interest_rate)) {
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Cannot modify interest_rate for ${oldData.loan_id} because ledger activity exists.`);
+        }
+        const oldPenaltyPercent = oldData.penalty_percent !== null && oldData.penalty_percent !== undefined ? oldData.penalty_percent : 0.75;
+        const newPenaltyPercent = loan.penalty_percent !== undefined ? loan.penalty_percent : (loan as any).penalty_rate;
+        if (newPenaltyPercent !== undefined && Number(newPenaltyPercent) !== Number(oldPenaltyPercent)) {
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Cannot modify penalty_rate for ${oldData.loan_id} because ledger activity exists.`);
+        }
+        if (loan.period_days !== undefined && loan.period_days !== oldData.period_days) {
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Cannot modify period_days for ${oldData.loan_id} because ledger activity exists.`);
+        }
+        if (loan.loan_category !== undefined && loan.loan_category !== oldData.loan_category) {
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Cannot modify loan_type for ${oldData.loan_id} because ledger activity exists.`);
+        }
+      }
+
+      // Explicit allowlist/DTO for loan updates
+      const loanPatch: any = {};
+      const allowedFields: Array<keyof FinanceLoan> = [
+        'surety_name', 'surety_phone', 'surety_aadhaar', 'remarks',
+        'surety_present_address', 'surety_relation', 'status',
+        'customer_photo_url', 'surety_photo_url', 'fingerprint_url',
+        'fingerprint_template', 'fingerprint_added', 'customer_fingerprint_template',
+        'customer_fingerprint_image_url', 'customer_fingerprint_added',
+        'surety_fingerprint_template', 'surety_fingerprint_image_url',
+        'surety_fingerprint_added', 'guarantor_1_id', 'guarantor_2_id',
+        'grace_days', 'document_charges', 'npa_closed', 'dc_status',
+        // Fields allowed only if protected criteria passes
+        'date', 'amount', 'interest_rate', 'duration_months', 'due_type',
+        'due_amount', 'penalty_percent', 'period_days', 'loan_category'
+      ];
+
+      for (const field of allowedFields) {
+        if (loan[field] !== undefined) {
+          loanPatch[field] = loan[field];
+        }
+      }
 
       const { data, error } = await supabase
         .from('finance_loans')
-        .update({ ...safeLoanUpdate, updated_at: new Date().toISOString() })
+        .update({ ...loanPatch, updated_at: new Date().toISOString() })
         .eq('id', id)
         .select()
         .single();
@@ -2211,7 +2287,8 @@ class SupabaseFinance {
             particulars: 'Original Loan Disbursement',
             user_name: editedBy,
             entry_type: 'original_loan',
-            total_paid: 0
+            total_paid: 0,
+            book_id: data.book_id
           }]);
         }
 
@@ -2246,7 +2323,8 @@ class SupabaseFinance {
             particulars: 'Opening CD Commission Charged',
             user_name: editedBy,
             entry_type: 'opening_commission',
-            total_paid: 0
+            total_paid: 0,
+            book_id: data.book_id
           }]);
         }
 
@@ -2281,7 +2359,8 @@ class SupabaseFinance {
             particulars: 'Document Charges Collected',
             user_name: editedBy,
             entry_type: 'document_charge',
-            total_paid: 0
+            total_paid: 0,
+            book_id: data.book_id
           }]);
         }
       }
@@ -2331,7 +2410,8 @@ class SupabaseFinance {
           due_date: dDateStr,
           amount: dueAmount,
           paid_amount: 0,
-          status: 'Pending'
+          status: 'Pending',
+          book_id: data.book_id
         });
       }
 
@@ -2371,8 +2451,11 @@ class SupabaseFinance {
         await this.logEdit('finance_loans', id, oldData, data, editedBy);
       }
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating finance loan:', error);
+      if (error?.message && error.message.includes('CD_CONTRACT_FIELD_IMMUTABLE')) {
+        throw error;
+      }
       return null;
     }
   }

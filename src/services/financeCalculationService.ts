@@ -942,6 +942,19 @@ export const financeCalculationService = {
     const sortedDbEntries = [...ledgerEntries].sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime());
     const disbEntry = sortedDbEntries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
     const originalLoanDateStr = disbEntry ? disbEntry.entry_date.split('T')[0] : loan.date.split('T')[0];
+
+    // Chronology data-integrity guard for historical monetary payments
+    const monetaryPayments = ledgerEntries
+      .filter(e => e.entry_type === 'amount_paid' || Number(e.credit) > 0)
+      .sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime());
+    if (monetaryPayments.length > 0) {
+      const earliestPaymentDateStr = monetaryPayments[0].entry_date.split('T')[0];
+      if (originalLoanDateStr > earliestPaymentDateStr) {
+        const err = new Error(`CD_DATA_INTEGRITY_ERROR: Loan ${loan.loan_id} has loan_date ${originalLoanDateStr} after earliest monetary payment ${earliestPaymentDateStr}.`);
+        (err as any).code = 'CD_DATA_INTEGRITY_ERROR';
+        throw err;
+      }
+    }
     const periodDays = (loan.period_days && Number(loan.period_days) > 0) ? Number(loan.period_days) : 30;
     const interestRate = Number(loan.interest_rate) || 3;
     const penaltyRate = loan.penalty_percent !== undefined && loan.penalty_percent !== null ? Number(loan.penalty_percent) : 0.75;

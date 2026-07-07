@@ -14,7 +14,6 @@ import {
   RefreshCw,
   Search,
   Edit2,
-  Save,
   X,
   User,
   File as FileIcon,
@@ -124,26 +123,7 @@ const CDLedger: React.FC = () => {
 
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // Edit mode details
-  const [isEditing, setIsEditing] = useState(false);
-  const [savingDetails, setSavingDetails] = useState(false);
 
-  // Edit fields: Customer details
-  const [editCustName, setEditCustName] = useState('');
-  const [editCustPhone, setEditCustPhone] = useState('');
-  const [editCustPhone2, setEditCustPhone2] = useState('');
-  const [editCustAddress, setEditCustAddress] = useState('');
-  const [editCustAadhaar, setEditCustAadhaar] = useState('');
-  const [editCustFatherName, setEditCustFatherName] = useState('');
-  const [editCustPartnerName, setEditCustPartnerName] = useState('');
-
-  // Edit fields: Surety details
-  const [editSuretyName, setEditSuretyName] = useState('');
-  const [editSuretyPhone, setEditSuretyPhone] = useState('');
-  const [editSuretyAadhaar, setEditSuretyAadhaar] = useState('');
-  const [editSuretyAddress, setEditSuretyAddress] = useState('');
-  const [editSuretyRelation, setEditSuretyRelation] = useState('');
-  const [editLoanRemarks, setEditLoanRemarks] = useState('');
 
   // Upload document fields
   const [docType, setDocType] = useState('Pledge Document');
@@ -300,21 +280,7 @@ const CDLedger: React.FC = () => {
       if (fullDetails) {
         setSelectedLoan(fullDetails);
 
-        // Map edit fields
-        setEditCustName(fullDetails.customer?.name || '');
-        setEditCustPhone(fullDetails.customer?.phone || '');
-        setEditCustPhone2(fullDetails.customer?.phone2 || '');
-        setEditCustAddress(fullDetails.customer?.address || '');
-        setEditCustAadhaar(fullDetails.customer?.aadhaar || '');
-        setEditCustFatherName(fullDetails.customer?.father_husband_name || '');
-        setEditCustPartnerName(fullDetails.customer?.partner_name || '');
 
-        setEditSuretyName(fullDetails.surety_name || '');
-        setEditSuretyPhone(fullDetails.surety_phone || '');
-        setEditSuretyAadhaar(fullDetails.surety_aadhaar || '');
-        setEditSuretyAddress(fullDetails.surety_present_address || '');
-        setEditSuretyRelation(fullDetails.surety_relation || '');
-        setEditLoanRemarks(fullDetails.remarks || '');
 
         // Fetch remaining core details in parallel
         const [
@@ -354,7 +320,6 @@ const CDLedger: React.FC = () => {
         setDocumentReturned(retDocsRes.data && retDocsRes.data.length > 0 ? retDocsRes.data[0] : null);
         setReceiptNo(nextReceipt);
         setTotalAmountPaying('');
-        setIsEditing(false);
 
         // Populate entries and interest details immediately on select/refresh
         const normalizedEntries = normalizeCDLedgerEntries(cdEntries || []);
@@ -554,71 +519,7 @@ const CDLedger: React.FC = () => {
     }
   };
 
-  const handleToggleEdit = () => {
-    setIsEditing(!isEditing);
-  };
 
-  const handleSaveDetails = async () => {
-    if (!selectedLoan) return;
-    setSavingDetails(true);
-    try {
-      const staffName = user?.username || 'Staff';
-
-      const customerPayload: Partial<FinanceCustomer> = {
-        name: editCustName,
-        phone: editCustPhone || null,
-        address: editCustAddress || null,
-        aadhaar: editCustAadhaar || null,
-        father_husband_name: editCustFatherName || null,
-      };
-
-      try {
-        customerPayload.phone2 = editCustPhone2 || null;
-        customerPayload.partner_name = editCustPartnerName || null;
-      } catch (err) {
-        console.warn('phone2 or partner_name could not be updated in payload', err);
-      }
-
-      const updatedCust = await supabaseFinance.updateCustomer(
-        selectedLoan.customer_id,
-        customerPayload,
-        staffName
-      );
-
-      const loanPayload: Partial<FinanceLoan> = {
-        surety_name: editSuretyName || null,
-        surety_phone: editSuretyPhone || null,
-        surety_aadhaar: editSuretyAadhaar || null,
-        remarks: editLoanRemarks || null,
-      };
-
-      try {
-        loanPayload.surety_present_address = editSuretyAddress || null;
-        loanPayload.surety_relation = editSuretyRelation || null;
-      } catch (err) {
-        console.warn('surety_present_address or surety_relation could not be updated in payload', err);
-      }
-
-      const updatedLoan = await supabaseFinance.updateLoan(
-        selectedLoan.id,
-        loanPayload,
-        staffName
-      );
-
-      if (updatedCust && updatedLoan) {
-        toast.success('Account details updated successfully!');
-        setIsEditing(false);
-        loadLedgerDetails(selectedLoan.id);
-      } else {
-        toast.error('Failed to save details. Verify database schemas.');
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Error saving updates');
-    } finally {
-      setSavingDetails(false);
-    }
-  };
 
   const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!selectedLoan) return;
@@ -741,13 +642,20 @@ const CDLedger: React.FC = () => {
 
   // Dynamic calculations based on payment date and selected loan
   const renewCalculations = useMemo(() => {
-    return financeCalculationService.getCDAccountPosition(
-      selectedLoan,
-      cdLedgerEntries,
-      cdInterestDetails,
-      paymentDate
-    );
-  }, [selectedLoan, paymentDate, cdLedgerEntries, cdInterestDetails]);
+    try {
+      return financeCalculationService.getCDAccountPosition(
+        selectedLoan,
+        cdLedgerEntries,
+        cdInterestDetails,
+        paymentDate
+      ) as any;
+    } catch (err: any) {
+      if (err.message && err.message.includes('CD_DATA_INTEGRITY_ERROR')) {
+        return { error: err.message } as any;
+      }
+      throw err;
+    }
+  }, [selectedLoan, paymentDate, cdLedgerEntries, cdInterestDetails]) as any;
 
   // Date Formatter helper (returns format e.g. 07-Mar-26)
   const formatDateOld = (dateStr: string | Date | number | null | undefined) => {
@@ -1271,7 +1179,7 @@ const CDLedger: React.FC = () => {
 
   // Shared single source of truth calculations
   const ledgerMetrics = useMemo(() => {
-    if (!selectedLoan || !renewCalculations) {
+    if (!selectedLoan || !renewCalculations || renewCalculations.error) {
       return {
         originalPrincipal: 0,
         principalPaid: 0,
@@ -1612,6 +1520,10 @@ const CDLedger: React.FC = () => {
   const handleActionSubmit = async (actionType: 'Renew' | 'Partial' | 'Close') => {
     if (isRenewing) return;
     if (!selectedLoan || !renewCalculations) return;
+    if (renewCalculations.error) {
+      toast.error('Cannot submit payment due to account data chronology error.');
+      return;
+    }
 
     // Block if payment date is before loan date
     if (renewCalculations.isDateInvalid) {
@@ -2042,7 +1954,7 @@ const CDLedger: React.FC = () => {
                 value={paymentDate}
                 onChange={(e) => setPaymentDate(e.target.value)}
                 disabled={selectedLoan?.status === 'Closed' || selectedLoan?.status === 'NPA_CLOSED'}
-                className={`bg-white border rounded-xl p-2 text-gray-800 focus:ring-2 focus:outline-none finance-input h-[42px] ${renewCalculations?.isDateInvalid ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-green-500'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                className={`bg-white border rounded-xl p-2 text-gray-800 focus:ring-2 focus:outline-none finance-input h-[42px] ${(renewCalculations?.isDateInvalid || renewCalculations?.error) ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-green-500'} disabled:opacity-50 disabled:cursor-not-allowed`}
               />
             </div>
 
@@ -2333,46 +2245,24 @@ const CDLedger: React.FC = () => {
                     <div className="p-3">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[13px] font-bold uppercase text-slate-500 tracking-wider">Borrower</span>
-                        <Button
-                          onClick={isEditing ? handleSaveDetails : handleToggleEdit}
-                          variant={isEditing ? "success" : "secondary"}
-                          size="xs"
-                          icon={isEditing ? Save : Edit2}
-                          disabled={savingDetails || selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
-                          className="!py-0.5 !px-2 !text-[11px] border-0 shadow-none"
-                        >
-                          {isEditing ? 'Save' : 'Edit'}
-                        </Button>
                       </div>
 
-                      {isEditing ? (
-                        <div className="space-y-1.5">
-                          <Input label="Name" value={editCustName} onChange={setEditCustName} className="text-xs" />
-                          <Input label="S/o W/o" value={editCustFatherName} onChange={setEditCustFatherName} className="text-xs" />
-                          <Input label="Address" value={editCustAddress} onChange={setEditCustAddress} className="text-xs" />
-                          <Input label="Phone 1" value={editCustPhone} onChange={setEditCustPhone} className="text-xs" />
-                          <Input label="Phone 2" value={editCustPhone2} onChange={setEditCustPhone2} className="text-xs" />
-                          <Input label="Aadhaar" value={editCustAadhaar} onChange={setEditCustAadhaar} className="text-xs" />
-                          <Input label="Partner" value={editCustPartnerName} onChange={setEditCustPartnerName} className="text-xs" />
+                      <div className="flex gap-2.5 items-start">
+                        <div className="w-12 h-14 shrink-0 rounded-lg bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center shadow-sm">
+                          {borrowerPhotoUrl ? (
+                            <img src={borrowerPhotoUrl} alt="Borrower" className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="w-5 h-5 text-gray-300" />
+                          )}
                         </div>
-                      ) : (
-                        <div className="flex gap-2.5 items-start">
-                          <div className="w-12 h-14 shrink-0 rounded-lg bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center shadow-sm">
-                            {borrowerPhotoUrl ? (
-                              <img src={borrowerPhotoUrl} alt="Borrower" className="w-full h-full object-cover" />
-                            ) : (
-                              <User className="w-5 h-5 text-gray-300" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-extrabold text-[16px] text-slate-900 leading-tight truncate">{selectedLoan.customer?.name}</div>
-                            <div className="text-[14px] text-slate-500 leading-tight truncate">{selectedLoan.customer?.father_husband_name || '—'}</div>
-                            <div className="text-[14px] font-semibold text-slate-700 mt-0.5">☎ {selectedLoan.customer?.phone || 'N/A'}{selectedLoan.customer?.phone2 ? ` / ${selectedLoan.customer.phone2}` : ''}</div>
-                            <div className="text-[14px] font-mono text-slate-600 mt-0.5">{selectedLoan.customer?.aadhaar || 'No Aadhaar'}</div>
-                            <div className="text-[14px] text-slate-500 truncate" title={selectedLoan.customer?.address || undefined}>{selectedLoan.customer?.address || 'No address'}</div>
-                          </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-extrabold text-[16px] text-slate-900 leading-tight truncate">{selectedLoan.customer?.name}</div>
+                          <div className="text-[14px] text-slate-500 leading-tight truncate">{selectedLoan.customer?.father_husband_name || '—'}</div>
+                          <div className="text-[14px] font-semibold text-slate-700 mt-0.5">☎ {selectedLoan.customer?.phone || 'N/A'}{selectedLoan.customer?.phone2 ? ` / ${selectedLoan.customer.phone2}` : ''}</div>
+                          <div className="text-[14px] font-mono text-slate-600 mt-0.5">{selectedLoan.customer?.aadhaar || 'No Aadhaar'}</div>
+                          <div className="text-[14px] text-slate-500 truncate" title={selectedLoan.customer?.address || undefined}>{selectedLoan.customer?.address || 'No address'}</div>
                         </div>
-                      )}
+                      </div>
                     </div>
 
                     {/* GUARANTOR 1 column */}
@@ -2438,7 +2328,12 @@ const CDLedger: React.FC = () => {
                   {/* Card micro-header */}
                   <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100">
                     <span className="text-[14px] font-bold uppercase text-slate-800 tracking-wider">Operator Action &amp; Calculations</span>
-                    {renewCalculations?.isDateInvalid && (
+                    {renewCalculations?.error ? (
+                      <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-2 py-1 text-red-700 font-semibold text-[12px]">
+                        <ShieldAlert className="w-3.5 h-3.5 shrink-0 text-red-600" />
+                        <span>Timeline Chronology Error</span>
+                      </div>
+                    ) : renewCalculations?.isDateInvalid && (
                       <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-2 py-1 text-red-700 font-semibold text-[12px]">
                         <ShieldAlert className="w-3.5 h-3.5 shrink-0 text-red-600" />
                         <span>Payment date before loan date ({renewCalculations.loanDate})</span>
@@ -2590,21 +2485,21 @@ const CDLedger: React.FC = () => {
                       </div>
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Last Payment</span>
-                        <span className="text-[16px] font-bold text-slate-900">{formatDateOld(renewCalculations?.lastPaymentDate) || '—'}</span>
+                        <span className="text-[16px] font-bold text-slate-900">{renewCalculations?.error ? '—' : (formatDateOld(renewCalculations?.lastPaymentDate) || '—')}</span>
                       </div>
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Current Due Date</span>
-                        <span className="text-[16px] font-bold text-slate-900">{formatDateOld(renewCalculations?.currentDueDate)}</span>
+                        <span className="text-[16px] font-bold text-slate-900">{renewCalculations?.error ? '—' : formatDateOld(renewCalculations?.currentDueDate)}</span>
                       </div>
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Next Due Date</span>
-                        <span className="text-[16px] font-bold text-slate-900">{totalAmountPaying && Number(totalAmountPaying) > 0 && paymentPreview?.renew?.nextDueDate ? formatDateOld(paymentPreview.renew.nextDueDate) : '—'}</span>
+                        <span className="text-[16px] font-bold text-slate-900">{renewCalculations?.error ? '—' : (totalAmountPaying && Number(totalAmountPaying) > 0 && paymentPreview?.renew?.nextDueDate ? formatDateOld(paymentPreview.renew.nextDueDate) : '—')}</span>
                       </div>
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Due Days</span>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[16px] font-bold text-slate-900">{renewCalculations?.displayDueDays !== undefined ? renewCalculations.displayDueDays : 0}</span>
-                          {renewCalculations && renewCalculations.displayDueDays !== undefined && renewCalculations.displayDueDays < 0 && (
+                          <span className="text-[16px] font-bold text-slate-900">{renewCalculations?.error ? '—' : (renewCalculations?.displayDueDays !== undefined ? renewCalculations.displayDueDays : 0)}</span>
+                          {!renewCalculations?.error && renewCalculations && renewCalculations.displayDueDays !== undefined && renewCalculations.displayDueDays < 0 && (
                             <span className="inline-flex px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-black text-[10px] uppercase tracking-wider">{Math.abs(renewCalculations.displayDueDays)} Left</span>
                           )}
                         </div>
@@ -2624,6 +2519,7 @@ const CDLedger: React.FC = () => {
                           selectedLoan.status === 'Closed' ||
                           selectedLoan.status === 'NPA_CLOSED' ||
                           !!renewCalculations?.isDateInvalid ||
+                          !!renewCalculations?.error ||
                           !totalAmountPaying ||
                           Number(totalAmountPaying) <= 0
                         }
@@ -2643,7 +2539,8 @@ const CDLedger: React.FC = () => {
                           Number(totalAmountPaying) >= ledgerMetrics.totalClose ||
                           selectedLoan.status === 'Closed' ||
                           selectedLoan.status === 'NPA_CLOSED' ||
-                          !!renewCalculations?.isDateInvalid
+                          !!renewCalculations?.isDateInvalid ||
+                          !!renewCalculations?.error
                         }
                         className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0 animate-none"
                       >
@@ -2659,7 +2556,8 @@ const CDLedger: React.FC = () => {
                           selectedLoan.status === 'NPA_CLOSED' ||
                           !totalAmountPaying ||
                           Number(totalAmountPaying) < ledgerMetrics.totalClose ||
-                          !!renewCalculations?.isDateInvalid
+                          !!renewCalculations?.isDateInvalid ||
+                          !!renewCalculations?.error
                         }
                         className="bg-rose-600 hover:bg-rose-700 text-white py-2.5 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1 border-0 animate-none"
                       >
@@ -2674,74 +2572,89 @@ const CDLedger: React.FC = () => {
 
               {/* RIGHT BLOCK (4 cols): Account Position Metrics */}
               <div className="col-span-4">
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden h-full flex flex-col">
-
-                  {/* Card micro-header */}
-                  <div className="px-3 py-2.5 border-b border-gray-100">
-                    <span className="text-[14px] font-bold uppercase text-slate-800 tracking-wider">Account Position</span>
+                {renewCalculations?.error ? (
+                  <div className="bg-red-50 border border-red-200 rounded-2xl p-4 shadow-sm h-full flex flex-col justify-center items-center text-center">
+                    <ShieldAlert className="w-12 h-12 text-red-600 mb-3 animate-pulse" />
+                    <h3 className="text-red-900 text-lg font-black uppercase tracking-wider mb-2">Account Data Error</h3>
+                    <p className="text-red-700 text-sm font-semibold mb-4 leading-relaxed">
+                      {selectedLoan.loan_id} contains an invalid loan timeline.
+                      <br />
+                      Loan date: {formatDateOld(originalLoanDate)}
+                      <br />
+                      Earliest payment: {formatDateOld(cdLedgerEntries.filter(e => e.entry_type === 'amount_paid' || Number(e.credit) > 0).sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime())[0]?.entry_date)}
+                    </p>
+                    <span className="text-xs text-red-500 font-bold uppercase tracking-wider">Account position cannot be calculated safely.</span>
                   </div>
+                ) : (
+                  <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden h-full flex flex-col">
 
-                  <div className="p-3 flex flex-col gap-2.5 flex-1">
+                    {/* Card micro-header */}
+                    <div className="px-3 py-2.5 border-b border-gray-100">
+                      <span className="text-[14px] font-bold uppercase text-slate-800 tracking-wider">Account Position</span>
+                    </div>
 
-                    {/* 2×2 Compact Metrics Grid */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
-                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Principal Bal.</span>
-                        <span className="text-[20px] font-bold text-slate-955 block leading-snug">₹{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <div className="p-3 flex flex-col gap-2.5 flex-1">
+
+                      {/* 2×2 Compact Metrics Grid */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
+                          <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Principal Bal.</span>
+                          <span className="text-[20px] font-bold text-slate-955 block leading-snug">₹{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
+                          <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Today Due</span>
+                          <span className={`text-[20px] font-bold block leading-snug ${ledgerMetrics.todayDue < 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                            ₹{ledgerMetrics.todayDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
+                          <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Accrued Interest</span>
+                          <span className={`text-[20px] font-bold block leading-snug ${ledgerMetrics.pendingInterest < 0 ? 'text-emerald-700' : 'text-slate-955'}`}>
+                            ₹{ledgerMetrics.pendingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
+                          <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Accrued Penalty</span>
+                          <span className="text-[20px] font-bold text-rose-700 block leading-snug">₹{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        </div>
                       </div>
-                      <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
-                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Today Due</span>
-                        <span className={`text-[20px] font-bold block leading-snug ${ledgerMetrics.todayDue < 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                          ₹{ledgerMetrics.todayDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+
+                      {/* Total for Renewal */}
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 flex justify-between items-center shadow-sm">
+                        <div>
+                          <span className="text-emerald-900 text-[13px] uppercase font-bold tracking-wider block leading-none">Total for Renewal</span>
+                          <span className="text-[12px] text-emerald-700 font-semibold block mt-0.5">To extend standard cycle</span>
+                        </div>
+                        <span className="text-[22px] font-extrabold text-emerald-800">
+                          ₹{ledgerMetrics.renewalDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
-                      <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
-                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Accrued Interest</span>
-                        <span className={`text-[20px] font-bold block leading-snug ${ledgerMetrics.pendingInterest < 0 ? 'text-emerald-700' : 'text-slate-955'}`}>
-                          ₹{ledgerMetrics.pendingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+
+                      {/* Total to Regularize */}
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex justify-between items-center shadow-sm">
+                        <div>
+                          <span className="text-amber-900 text-[13px] uppercase font-bold tracking-wider block leading-none">Total to Regularize</span>
+                          <span className="text-[12px] text-amber-700 font-semibold block mt-0.5">Overdue int + penalty + renewal</span>
+                        </div>
+                        <span className="text-[22px] font-extrabold text-amber-800">
+                          ₹{ledgerMetrics.totalToRegularize.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
-                      <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
-                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Accrued Penalty</span>
-                        <span className="text-[20px] font-bold text-rose-700 block leading-snug">₹{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                    </div>
 
-                    {/* Total for Renewal */}
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 flex justify-between items-center shadow-sm">
-                      <div>
-                        <span className="text-emerald-900 text-[13px] uppercase font-bold tracking-wider block leading-none">Total for Renewal</span>
-                        <span className="text-[12px] text-emerald-700 font-semibold block mt-0.5">To extend standard cycle</span>
+                      {/* Total for Close */}
+                      <div className="bg-slate-950 border border-slate-900 rounded-xl px-3 py-2 flex justify-between items-center shadow-md">
+                        <div>
+                          <span className="text-white text-[13px] uppercase font-bold tracking-wider block leading-none">Total for Close</span>
+                          <span className="text-[12px] text-slate-400 font-semibold block mt-0.5">Full payoff principal &amp; dues</span>
+                        </div>
+                        <span className="text-[22px] font-extrabold text-emerald-400">
+                          ₹{ledgerMetrics.totalClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>
                       </div>
-                      <span className="text-[22px] font-extrabold text-emerald-800">
-                        ₹{ledgerMetrics.renewalDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
 
-                    {/* Total to Regularize */}
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex justify-between items-center shadow-sm">
-                      <div>
-                        <span className="text-amber-900 text-[13px] uppercase font-bold tracking-wider block leading-none">Total to Regularize</span>
-                        <span className="text-[12px] text-amber-700 font-semibold block mt-0.5">Overdue int + penalty + renewal</span>
-                      </div>
-                      <span className="text-[22px] font-extrabold text-amber-800">
-                        ₹{ledgerMetrics.totalToRegularize.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </span>
                     </div>
-
-                    {/* Total for Close */}
-                    <div className="bg-slate-950 border border-slate-900 rounded-xl px-3 py-2 flex justify-between items-center shadow-md">
-                      <div>
-                        <span className="text-white text-[13px] uppercase font-bold tracking-wider block leading-none">Total for Close</span>
-                        <span className="text-[12px] text-slate-400 font-semibold block mt-0.5">Full payoff principal &amp; dues</span>
-                      </div>
-                      <span className="text-[22px] font-extrabold text-emerald-400">
-                        ₹{ledgerMetrics.totalClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-
                   </div>
-                </div>
+                )}
               </div>
 
             </div>
