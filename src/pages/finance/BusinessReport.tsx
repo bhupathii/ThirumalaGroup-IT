@@ -4,7 +4,7 @@ import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
-import { financeCalculationService } from '../../services/financeCalculationService';
+import {  } from '../../services/';
 import { Printer, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
@@ -133,9 +133,7 @@ const BusinessReport: React.FC = () => {
           const pt = pTotalsMap.get(pName)!;
           
           const principal = Number(loan.amount);
-          const cat = loan.loan_category?.trim().toUpperCase() || 'CD';
-          const setting = ledgerSettings[cat] || ledgerSettings['CD'];
-          const interest = setting ? financeCalculationService.calculateInterestFromSetting(principal, Number(loan.duration_months) * 30, setting, Number(loan.duration_months)) : (principal * (Number(loan.interest_rate) / 100) * Number(loan.duration_months));
+          const interest = (principal * (Number(loan.interest_rate) / 100) * Number(loan.duration_months));
           
           const loanTxs = txs.filter(t => t.loan_id === loan.id && t.type === 'Collection');
           const paid = loanTxs.reduce((sum, t) => sum + Number(t.amount), 0);
@@ -217,17 +215,7 @@ const BusinessReport: React.FC = () => {
           const durationMonths = Number(loan.duration_months) || 12;
           const interestRate = Number(loan.interest_rate) || 3;
           
-          let totalInterest = 0;
-          if (setting) {
-            totalInterest = financeCalculationService.calculateInterestFromSetting(
-              totalPrincipal,
-              durationMonths * 30,
-              setting,
-              durationMonths
-            );
-          } else {
-            totalInterest = totalPrincipal * (interestRate / 100) * durationMonths;
-          }
+          const totalInterest = totalPrincipal * (interestRate / 100) * durationMonths;
           
           const totalLoanRepayable = totalPrincipal + totalInterest;
           const interestRatio = totalLoanRepayable > 0 ? totalInterest / totalLoanRepayable : 0;
@@ -249,8 +237,8 @@ const BusinessReport: React.FC = () => {
         if (duePending > 0 && overdueDays > 0) {
            const cat = due.finance_loans?.loan_category?.trim().toUpperCase() || 'CD';
            const setting = ledgerSettings[cat] || ledgerSettings['CD'];
-           if (setting) {
-              const calcPenalty = financeCalculationService.calculatePenaltyFromSetting(duePending, overdueDays, setting);
+           if (setting && overdueDays > 5) {
+              const calcPenalty = (duePending * (setting.overdue / 100) * overdueDays) / (setting.days_per_year / 12);
               penalty = calcPenalty > penalty ? Math.round(calcPenalty) : penalty;
            }
         }

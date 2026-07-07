@@ -4,8 +4,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTableMode } from '../../contexts/TableModeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
-import { financeCalculationService } from '../../services/financeCalculationService';
+
+
 import { 
   FileText, 
   Edit, 
@@ -66,10 +66,9 @@ const FinanceDashboard: React.FC = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [loans, txs, ledgerSettings, pendingCount] = await Promise.all([
+      const [loans, txs, pendingCount] = await Promise.all([
         supabaseFinance.getLoans(),
         supabaseFinance.getTransactions(),
-        financeLedgerSettingsService.getAllLedgerSettings(),
         user?.is_admin ? supabaseFinance.getPendingApprovalsCount() : Promise.resolve(0)
       ]);
       setPendingApprovalsCount(pendingCount);
@@ -90,10 +89,8 @@ const FinanceDashboard: React.FC = () => {
 
       loans.forEach(loan => {
         const principal = Number(loan.amount);
-        const cat = loan.loan_category?.trim().toUpperCase() || 'CD';
-        const setting = ledgerSettings[cat] || ledgerSettings['CD'];
         const duration = Number(loan.duration_months);
-        const interestAmount = setting ? financeCalculationService.calculateInterestFromSetting(principal, duration * 30, setting, duration) : (principal * (Number(loan.interest_rate) / 100) * duration);
+        const interestAmount = (principal * (Number(loan.interest_rate) / 100) * duration);
         const repayable = principal + interestAmount;
 
         const loanCols = txs.filter(t => t.loan_id === loan.id && t.type === 'Collection');

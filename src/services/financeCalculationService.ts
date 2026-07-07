@@ -101,15 +101,6 @@ export const financeCalculationService = {
     return `${y}-${m}-${dd}`;
   },
 
-  calculateDailyInterest(principal: number, rate: number): number {
-    return (principal * (rate / 100)) / 30;
-  },
-
-  calculateExactRenewedDays(interestAmount: number, principal: number, rate: number): number {
-    const dailyInterest = this.calculateDailyInterest(principal, rate);
-    return dailyInterest > 0 ? Number((interestAmount / dailyInterest).toFixed(2)) : 0;
-  },
-
   /**
    * Returns the integer ordinal day number of a calendar date relative to the
    * fixed financial epoch 1970-01-01 (UTC midnight).  This is the ONLY numeric
@@ -310,20 +301,6 @@ export const financeCalculationService = {
   /**
    * CD Ledger Specific Calculations
    */
-  calculateInterest(principal: number, rate: number, interestDays: number, periodDays: number = 30): number {
-    // Overdue interest uses periodDays divisor as it is a daily accrual.
-    return Number(((principal * (rate / 100) * interestDays) / periodDays).toFixed(2));
-  },
-
-  calculatePenalty(principal: number, penaltyRate: number, dueDays: number, periodDays: number = 30, graceDays: number = 5): number {
-    if (dueDays > graceDays) {
-      // Grace period only determines WHETHER penalty applies.
-      // Once dueDays > graceDays, penalty is calculated on the FULL overdue period (not dueDays - graceDays).
-      return Number(((principal * (penaltyRate / 100) * dueDays) / periodDays).toFixed(2));
-    }
-    return 0;
-  },
-
   calculateRenewalTotal(interest: number, penalty: number): number {
     return Number((interest + penalty).toFixed(2));
   },
@@ -348,36 +325,6 @@ export const financeCalculationService = {
     };
   },
 
-  computeCDPaymentSplit(
-    paymentAmount: number,
-    penaltyDue: number,
-    interestDue: number,
-    renewalInterestDue: number,
-    principal: number,
-    actionType: string,
-    periodDays: number = 30,
-    dueDays: number = 0
-  ) {
-    const dailyInterest = roundMoney(renewalInterestDue / periodDays);
-    const mockPos: any = {
-      accruedPenalty: penaltyDue,
-      accruedInterest: interestDue,
-      principalBalance: principal,
-      dailyInterest,
-      exactDueDays: dueDays,
-    };
-    const split = allocateCDPayment(mockPos, paymentAmount, actionType as any, periodDays);
-    
-    return {
-      penaltyPaid: split.penaltyPaid,
-      overdueInterestPaid: (actionType === 'Close' || (paymentAmount >= (penaltyDue + interestDue) && actionType === 'Partial')) ? split.interestPaid : 0,
-      renewalInterestPaid: !((actionType === 'Close' || (paymentAmount >= (penaltyDue + interestDue) && actionType === 'Partial'))) ? split.interestPaid : 0,
-      interestPaid: split.interestPaid,
-      principalPaid: split.principalPaid,
-      renewedDays: split.renewedDays,
-      remaining: 0
-    };
-  },
 
   calculateCDCloseAmount(principal: number, pendingInterest: number, pendingPenalty: number): number {
     return Number((principal + pendingInterest + pendingPenalty).toFixed(2));
@@ -798,6 +745,9 @@ export const financeCalculationService = {
       principalPaid: 0,
       principalBalance: pos.principalBalance,
       currentDueDate: displayDueDateStr,
+      initialContractualPositionStr: (pos as any).initialContractualPositionStr || '',
+      contractualPositionDate: (pos as any).contractualPositionDate || '',
+      currentDueDateStr: displayDueDateStr,
       lastPaymentDate: pos.lastPaymentDate || '',
       exactCalculationDays: pos.exactDueDays,
       exactDueDays: pos.exactDueDays,

@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase';
 import { ArrowLeft, RefreshCw, Printer } from 'lucide-react';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
-import { financeCalculationService } from '../../services/financeCalculationService';
+import {  } from '../../services/';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -59,9 +59,7 @@ const ProfitAndLoss: React.FC = () => {
           const loan = loans.find(l => l.id === tx.loan_id);
           if (loan) {
             const P = Number(loan.amount);
-            const cat = loan.loan_category?.trim().toUpperCase() || 'CD';
-            const setting = ledgerSettings[cat] || ledgerSettings['CD'];
-            const I = setting ? financeCalculationService.calculateInterestFromSetting(P, Number(loan.duration_months) * 30, setting, Number(loan.duration_months)) : (P * (Number(loan.interest_rate) / 100) * Number(loan.duration_months));
+            const I = (P * (Number(loan.interest_rate) / 100) * Number(loan.duration_months));
             const totalRepayable = P + I;
             if (totalRepayable > 0) {
               const interestRatio = I / totalRepayable;

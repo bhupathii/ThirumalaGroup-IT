@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { allocateCDPayment } from '../../services/cdLedgerEngine';
 
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
@@ -685,34 +686,6 @@ const CDLedger: React.FC = () => {
     const list: any[] = [];
     const sortedDbEntries = [...cdLedgerEntries].sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime());
 
-    // Find original loan start date as YYYY-MM-DD string
-    const disb = sortedDbEntries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
-    const originalLoanStartStr = (disb ? disb.entry_date : selectedLoan.date).split('T')[0];
-
-    // Find all renewal dates as YYYY-MM-DD strings
-    const cycleEnds = sortedDbEntries
-      .filter(e =>
-        e.entry_type === 'Renewal' ||
-        e.entry_type === 'Renew' ||
-        (e.particulars || '').toLowerCase().includes('renewal') ||
-        (e.particulars || '').toLowerCase().includes('renew')
-      )
-      .map(e => (e.entry_date || '').split('T')[0]);
-
-    const uniqueCycleEnds = Array.from(new Set(cycleEnds)).sort();
-
-    // Build the list of cycles
-    const cycles: { start: string; end: string; isCurrent: boolean }[] = [];
-    let currentStart = originalLoanStartStr;
-    for (const end of uniqueCycleEnds) {
-      if (end > currentStart) {
-        cycles.push({ start: currentStart, end, isCurrent: false });
-        currentStart = end;
-      }
-    }
-    cycles.push({ start: currentStart, end: paymentDate, isCurrent: true });
-
-    // Step-by-step simulation of cycles to determine running principal and split payments
     const principalPaidTotalDb = sortedDbEntries
       .filter(e => {
         const isPrincipalPaid = (e.particulars || '').toLowerCase().includes('principal paid') ||
@@ -723,7 +696,6 @@ const CDLedger: React.FC = () => {
       .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
     const originalAmount = Number(selectedLoan.amount) + principalPaidTotalDb;
-    let runningPrincipal = originalAmount;
 
     // Let's first add the Disbursement row
     const hasDisbursement = sortedDbEntries.some(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
@@ -744,7 +716,6 @@ const CDLedger: React.FC = () => {
     }
 
     // Check if we have CD Commission opening row in the DB.
-    // IMPORTANT: check by entry_type, not by account name — interest_payment rows also use CD COMMISSION A/C.
     const hasCommission = sortedDbEntries.some(e =>
       e.entry_type === 'opening_commission' || e.entry_type === 'Commission'
     );
@@ -778,6 +749,7 @@ const CDLedger: React.FC = () => {
       e.entry_type === 'document_charge'
     );
     if (!hasDocCharges && docChargesVal > 0) {
+      const disb = sortedDbEntries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
       list.push({
         id: `fallback-doc-${selectedLoan.id}`,
         loan_id: selectedLoan.id,
@@ -793,166 +765,10 @@ const CDLedger: React.FC = () => {
       });
     }
 
-    // Process each cycle
-    cycles.forEach((cycle) => {
-      // Find all payments inside this cycle
-      const cyclePayments = sortedDbEntries.filter(entry => {
-        const isNonPaymentEntry =
-          entry.entry_type === 'original_loan' || entry.entry_type === 'Disbursement' ||
-          entry.entry_type === 'Document Charges' || entry.entry_type === 'document_charge' ||
-          entry.entry_type === 'Commission' || entry.entry_type === 'opening_commission' ||
-          entry.entry_type === 'amount_paid';
-        if (isNonPaymentEntry) {
-          return false;
-        }
-        const isPayment = entry.credit > 0 &&
-          !isNonPaymentEntry &&
-          !entry.id.toString().startsWith('fallback-comm-') &&
-          !entry.id.toString().startsWith('fallback-doc-');
-        if (!isPayment) return false;
-
-        const d = (entry.entry_date || '').split('T')[0];
-
-        const isFirstCycle = cycle.start === originalLoanStartStr;
-        if (isFirstCycle) {
-          return d >= cycle.start && d <= cycle.end;
-        } else {
-          return d > cycle.start && d <= cycle.end;
-        }
-      });
-
-      // Dues calculation for this cycle
-      const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
-      // CD inclusive-cycle rule: cycle starts at cycle.start (Day 1), due date = cycle.start + (periodDays - 1)
-      const cycleDueDateStr = financeCalculationService.addCalendarDays(cycle.start, periodDays - 1);
-      const cycleDueDays = financeCalculationService.differenceInCalendarDays(cycle.end, cycleDueDateStr);
-
-      const interestRate = Number(selectedLoan.interest_rate) || 3;
-      const penaltyRate = selectedLoan.penalty_percent !== undefined && selectedLoan.penalty_percent !== null ? Number(selectedLoan.penalty_percent) : 0.75;
-
-      const graceDays = selectedLoan.grace_days !== undefined && selectedLoan.grace_days !== null ? Number(selectedLoan.grace_days) : 5;
-      const cycleGrossInterest = Number(((runningPrincipal * interestRate * cycleDueDays) / (periodDays * 100)).toFixed(2));
-      // Grace period only determines WHETHER penalty applies.
-      // Once cycleDueDays > graceDays, penalty is on the FULL overdue period (not cycleDueDays - graceDays).
-      const cycleGrossPenalty = cycleDueDays > graceDays
-        ? Number(((runningPrincipal * penaltyRate * cycleDueDays) / (periodDays * 100)).toFixed(2))
-        : 0;
-
-      // Check if some payments inside this cycle are ALREADY split
-      const alreadySplitSum = cyclePayments.filter(e => {
-        const isPrincipalPaid = (e.particulars || '').toLowerCase().includes('principal paid') ||
-          (e.particulars || '').toLowerCase().includes('principal adjusted') ||
-          e.entry_type === 'principal_payment';
-        const isAlreadySplit = ['penalty a/c', 'cd commission a/c'].includes((e.account_name || '').toLowerCase()) ||
-          e.entry_type === 'penalty_payment' ||
-          e.entry_type === 'interest_payment' ||
-          e.entry_type === 'principal_payment' ||
-          ((e.account_name || '').toLowerCase() === 'cd a/c' && isPrincipalPaid);
-        return isAlreadySplit;
-      }).reduce((sum, e) => sum + Number(e.credit), 0);
-
-      let accumulatedPayments = alreadySplitSum;
-
-      // Now map each payment entry in the cycle
-      cyclePayments.forEach(entry => {
-        const isPrincipalPaid = (entry.particulars || '').toLowerCase().includes('principal paid') ||
-          (entry.particulars || '').toLowerCase().includes('principal adjusted') ||
-          entry.entry_type === 'principal_payment';
-        const isAlreadySplit = ['penalty a/c', 'cd commission a/c'].includes((entry.account_name || '').toLowerCase()) ||
-          entry.entry_type === 'penalty_payment' ||
-          entry.entry_type === 'interest_payment' ||
-          entry.entry_type === 'principal_payment' ||
-          ((entry.account_name || '').toLowerCase() === 'cd a/c' && isPrincipalPaid);
-
-        if (isAlreadySplit) {
-          list.push({ ...entry, account_name: entry.account_name || 'CD A/C' });
-          if (((entry.account_name || '').toLowerCase() === 'cd a/c' && isPrincipalPaid) || entry.entry_type === 'principal_payment') {
-            runningPrincipal -= Number(entry.credit);
-          }
-          return;
-        }
-
-        const isRenewal = entry.entry_type === 'Renewal' || entry.entry_type === 'Renew' ||
-          (entry.particulars || '').toLowerCase().includes('renewal') ||
-          (entry.particulars || '').toLowerCase().includes('renew');
-        const isCloseAction = entry.entry_type === 'Close' || entry.entry_type === 'Settlement';
-        const actionType = isCloseAction ? 'Close' : (isRenewal ? 'Renew' : 'Partial');
-        const creditAmt = Number(entry.credit || 0);
-
-        const monthlyInterestVal = Number((runningPrincipal * interestRate / 100).toFixed(2));
-
-        const oldSplit = financeCalculationService.computeCDPaymentSplit(
-          accumulatedPayments,
-          cycleGrossPenalty,
-          cycleGrossInterest,
-          monthlyInterestVal,
-          runningPrincipal,
-          actionType,
-          periodDays
-        );
-        const newSplit = financeCalculationService.computeCDPaymentSplit(
-          accumulatedPayments + creditAmt,
-          cycleGrossPenalty,
-          cycleGrossInterest,
-          monthlyInterestVal,
-          runningPrincipal,
-          actionType,
-          periodDays
-        );
-
-        const pPaid = Number((newSplit.penaltyPaid - oldSplit.penaltyPaid).toFixed(2));
-        const iPaid = Number((newSplit.interestPaid - oldSplit.interestPaid).toFixed(2));
-        const prPaid = Number((newSplit.principalPaid - oldSplit.principalPaid).toFixed(2));
-
-        accumulatedPayments += creditAmt;
-        runningPrincipal -= prPaid;
-
-        const actionText = actionType === 'Renew'
-          ? 'Renewal Completed'
-          : (actionType === 'Close' ? 'Close' : 'Partial Payment');
-        const rNum = entry.receipt_no ? ` - ${entry.receipt_no}` : '';
-
-        if (pPaid > 0) {
-          list.push({
-            ...entry,
-            id: `${entry.id}-penalty`,
-            account_name: 'PENALTY A/C',
-            credit: pPaid,
-            particulars: `Penalty Paid - ${actionText}${rNum}`
-          });
-        }
-        if (iPaid > 0) {
-          list.push({
-            ...entry,
-            id: `${entry.id}-interest`,
-            account_name: 'CD COMMISSION A/C',
-            credit: iPaid,
-            particulars: `Interest Paid - ${actionText}${rNum}`
-          });
-        }
-        if (prPaid > 0) {
-          list.push({
-            ...entry,
-            id: `${entry.id}-principal`,
-            account_name: 'CD A/C',
-            credit: prPaid,
-            particulars: `Principal Adjusted - ${actionText}${rNum}`
-          });
-        }
-      });
-    });
-
-    // Pushes non-payment database entries directly (opening rows that are immutable)
+    // Push all database entries directly (both payment and non-payment)
+    // The canonical engine handles all mathematics, UI simply displays stored facts.
     sortedDbEntries.forEach(entry => {
-      const isNonPayment =
-        entry.entry_type === 'original_loan' || entry.entry_type === 'Disbursement' ||
-        entry.entry_type === 'Document Charges' || entry.entry_type === 'document_charge' ||
-        entry.entry_type === 'Commission' || entry.entry_type === 'opening_commission' ||
-        entry.entry_type === 'NPA_CLOSE' || entry.entry_type === 'NPA_CLOSED' ||
-        entry.entry_type === 'amount_paid';
-      if (isNonPayment) {
-        list.push({ ...entry, account_name: entry.account_name || 'CD A/C' });
-      }
+      list.push({ ...entry, account_name: entry.account_name || 'CD A/C' });
     });
 
     return list.sort((a, b) => {
@@ -1298,12 +1114,9 @@ const CDLedger: React.FC = () => {
     const isClosingPayment = paymentAmount >= Math.max(0, ledgerMetrics.totalClose);
 
     if (isClosingPayment) {
-      const closeSplit = financeCalculationService.computeCDPaymentSplit(
+      const closeSplit = allocateCDPayment(
+        renewCalculations as any,
         paymentAmount,
-        outstandingPenalty,
-        outstandingInterest,
-        monthlyInterest,
-        principalBefore,
         'Close',
         periodDays
       );
@@ -1328,12 +1141,9 @@ const CDLedger: React.FC = () => {
     }
 
     // Renew Option (Option 1)
-    const renewSplit = financeCalculationService.computeCDPaymentSplit(
+    const renewSplit = allocateCDPayment(
+      renewCalculations as any,
       paymentAmount,
-      outstandingPenalty,
-      outstandingInterest,
-      monthlyInterest,
-      principalBefore,
       'Renew',
       periodDays
     );
@@ -1357,15 +1167,11 @@ const CDLedger: React.FC = () => {
     };
 
     // Partial Option (Option 2)
-    const partialSplit = financeCalculationService.computeCDPaymentSplit(
+    const partialSplit = allocateCDPayment(
+      renewCalculations as any,
       paymentAmount,
-      outstandingPenalty,
-      outstandingInterest,
-      monthlyInterest,
-      principalBefore,
       'Partial',
-      periodDays,
-      renewCalculations.daysPastDue || 0
+      periodDays
     );
     const partialBaseDateStr = renewCalculations?.dueDateStr || paymentDate;
     const partialNextDueDateStr = partialSplit.renewedDays > 0
@@ -1567,16 +1373,7 @@ const CDLedger: React.FC = () => {
       const interestRate = Number(selectedLoan?.interest_rate) || 3;
       const monthlyInterest = Number(((principalBefore * (interestRate / 100) * periodDays) / 30).toFixed(2));
 
-      const split = financeCalculationService.computeCDPaymentSplit(
-        amount,
-        outstandingPenalty,
-        outstandingInterest,
-        monthlyInterest,
-        principalBefore,
-        'Partial',
-        periodDays,
-        dueDays
-      );
+      const split = allocateCDPayment(renewCalculations, amount, 'Partial', periodDays);
 
       let confirmMsg = '';
       if (amount >= totalOutstanding) {
@@ -1614,7 +1411,7 @@ const CDLedger: React.FC = () => {
 
       const isClosingPayment = actionType === 'Close' || paymentAmount >= Math.max(0, ledgerMetrics.totalClose);
 
-      const split = financeCalculationService.computeCDPaymentSplit(
+      const split = allocateCDPayment(
         paymentAmount,
         outstandingPenalty,
         outstandingInterest,

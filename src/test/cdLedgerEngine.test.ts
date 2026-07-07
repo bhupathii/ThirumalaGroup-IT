@@ -102,16 +102,16 @@ describe('cdLedgerEngine Unit Tests', () => {
     expect(pos.principalBalance).toBe(750000.00);
     expect(pos.lastPaymentDate).toBe('2026-06-29');
     expect(pos.contractualPositionDate).toBe('2026-05-27');
-    expect(pos.currentDueDate).toBe('2026-05-28'); // Ceil of baseDueDate + exactRenewedDays for display
+    expect(pos.currentDueDate).toBe('2026-05-28'); // Ceil of baseDueDate + 434.81 days
     expect(pos.fractionalCarry).toBe(0.81);
     expect(pos.displayDueDays).toBe(39);
     expect(pos.exactDueDays).toBe(39.19);
     expect(pos.accruedInterest).toBe(29392.50);
-    expect(pos.accruedPenalty).toBe(7348.13);
-    expect(pos.todayDue).toBe(36740.63);
+    expect(pos.accruedPenalty).toBe(7348.12);
+    expect(pos.todayDue).toBe(36740.62);
     expect(pos.renewalAmount).toBe(22500.00);
-    expect(pos.totalToRegularize).toBe(59240.63);
-    expect(pos.totalForClose).toBe(786740.63);
+    expect(pos.totalToRegularize).toBe(59240.62);
+    expect(pos.totalForClose).toBe(786740.62);
   });
 
   // 4. Chronology Guards
@@ -142,6 +142,7 @@ describe('cdLedgerEngine Unit Tests', () => {
       principalBalance: 750000,
       originalLoanDate: '2025-02-18',
       periodDays: 30,
+      initialContractualPositionStr: "2025-03-19",
       baseDueDate: '2025-03-19',
       totalRenewedDays: 434.81,
       contractualPositionDate: '2026-05-27',
@@ -172,6 +173,7 @@ describe('cdLedgerEngine Unit Tests', () => {
       principalBalance: 750000,
       originalLoanDate: '2025-02-18',
       periodDays: 30,
+      initialContractualPositionStr: "2025-03-19",
       baseDueDate: '2025-03-19',
       totalRenewedDays: 434.81,
       contractualPositionDate: '2026-05-27',
@@ -204,6 +206,7 @@ describe('cdLedgerEngine Unit Tests', () => {
       principalBalance: 750000,
       originalLoanDate: '2025-02-18',
       periodDays: 30,
+      initialContractualPositionStr: "2025-03-19",
       baseDueDate: '2025-03-19',
       totalRenewedDays: 434.81,
       contractualPositionDate: '2026-05-27',
@@ -223,14 +226,15 @@ describe('cdLedgerEngine Unit Tests', () => {
     };
 
     // Pay ₹22,500 on Renew:
-    // Penalty bucket: roundRupee(22500 * 0.2) = 4500
-    // Interest bucket: 22500 - 4500 = 18000
-    // penaltyPaid = 4500, interestPaid = 18000
-    // renewedDays = 18000 / 750 = 24
+    // penaltyDue = round(39 * 187.5) = round(7312.5) = 7312
+    // interestBucket = 22500 - 7312 = 15188
+    // renewedDays = 15188 / 750 = 20.25
+    // interestPaid = 15188
+    // penaltyPaid = 7312
     const split = cdEngine.allocateCDPayment(mockPos, 22500.00, 'Renew', 30);
-    expect(split.penaltyPaid).toBe(4500.00);
-    expect(split.interestPaid).toBe(18000.00);
+    expect(split.penaltyPaid).toBe(7312);
+    expect(split.interestPaid).toBe(15188);
     expect(split.principalPaid).toBe(0);
-    expect(split.renewedDays).toBe(24.00);
+    expect(split.renewedDays).toBe(20.25);
   });
 });

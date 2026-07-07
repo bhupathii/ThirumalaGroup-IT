@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { financeCalculationService } from './financeCalculationService';
 import { supabaseFinance } from '../lib/supabaseFinance';
+import { allocateCDPayment } from './cdLedgerEngine';
 
 
 export const cdLedgerRebuildService = {
@@ -142,6 +143,13 @@ export const cdLedgerRebuildService = {
       let currentPrincipal = originalPrincipal;
       let totalRenewedDays = 0;
 
+      const runningLedgerEntries: any[] = [{
+        entry_type: 'original_loan',
+        debit: originalPrincipal,
+        entry_date: originalLoanDateStr
+      }];
+      const runningInterestDetails: any[] = [];
+
       for (const tx of collections) {
         const paymentAmount = Number(tx.amount) || 0;
         const receiptNo = tx.receipt_no || '';
@@ -156,26 +164,22 @@ export const cdLedgerRebuildService = {
           actionType = 'Close';
         }
 
+        const position = financeCalculationService.getCDAccountPosition(
+          loan as any,
+          runningLedgerEntries,
+          runningInterestDetails,
+          txDateStr
+        ) as any;
 
-        // Calculate due days using exact fractional math
-        const dueDays = financeCalculationService.differenceInCalendarDays(txDateStr, baseDueDateStr) - totalRenewedDays;
-
-        // Calculate dues
-        const interestDue = Number(((currentPrincipal * interestRate * dueDays) / (periodDays * 100)).toFixed(2));
-        const graceDays = loan.grace_days !== undefined && loan.grace_days !== null ? Number(loan.grace_days) : 5;
-        let penaltyDue = 0;
-        if (dueDays > graceDays) {
-          // Grace period only determines WHETHER penalty applies.
-          // Once dueDays > graceDays, penalty is on the FULL overdue period (not dueDays - graceDays).
-          penaltyDue = Number(((currentPrincipal * penaltyPercent * dueDays) / (periodDays * 100)).toFixed(2));
-        }
+        const dueDays = position.exactDueDays;
+        const interestDue = position.accruedInterest;
+        let penaltyDue = position.accruedPenalty;
+        const monthlyInterest = Number((position.dailyInterest * periodDays).toFixed(2));
 
         // Manual override for CD091 on 31-Oct-24 (Receipt RC236) to match historical legacy Access math (5.00 days penalty)
         if (loan.loan_id === 'CD091' && receiptNo === 'RC236') {
           penaltyDue = 375.00;
         }
-
-        const monthlyInterest = Number(((currentPrincipal * interestRate * periodDays) / 3000).toFixed(2));
 
         const isClosing = actionType === 'Close' || paymentAmount >= (interestDue + penaltyDue + currentPrincipal);
 
@@ -206,8 +210,7 @@ export const cdLedgerRebuildService = {
             if (histSplit.renewedDays !== undefined) {
               renewedDays = histSplit.renewedDays;
             } else {
-              const dailyInterestRate = monthlyInterest / periodDays;
-              renewedDays = dailyInterestRate > 0 ? Number((interestPaid / dailyInterestRate).toFixed(2)) : 0;
+              renewedDays = position.dailyInterest > 0 ? Number((interestPaid / position.dailyInterest).toFixed(2)) : 0;
             }
           } else {
             renewedDays = 0;
@@ -221,7 +224,7 @@ export const cdLedgerRebuildService = {
           renewedDays = 0;
           actionType = 'Close';
         } else {
-          const split = financeCalculationService.computeCDPaymentSplit(
+          const split = allocateCDPayment(
             paymentAmount,
             penaltyDue,
             interestDue,
@@ -239,8 +242,7 @@ export const cdLedgerRebuildService = {
 
           // Adjust splits back from rounded renewedDays to match Access round-back behavior
           if (renewedDays > 0 && actionType === 'Renew') {
-            const dailyInterestRate = monthlyInterest / periodDays;
-            interestPaid = financeCalculationService.roundRupee(dailyInterestRate * renewedDays);
+            interestPaid = financeCalculationService.roundRupee(position.dailyInterest * renewedDays);
             penaltyPaid = paymentAmount - interestPaid;
             overdueInterestPaid = 0;
           }
@@ -249,6 +251,23 @@ export const cdLedgerRebuildService = {
             console.log(`[DEBUG Rebuild RC237] actionType=${actionType}, renewedDays=${renewedDays}, interestPaid=${interestPaid}, penaltyPaid=${penaltyPaid}`);
           }
         }
+
+        // Push state for next loop to use
+        if (principalPaid > 0) {
+          runningLedgerEntries.push({
+            entry_type: 'principal_payment',
+            credit: principalPaid,
+            account_name: 'CD A/C'
+          });
+          currentPrincipal -= principalPaid;
+        }
+        if (renewedDays > 0) {
+          runningInterestDetails.push({
+            credit: 0,
+            renewed_days: renewedDays
+          });
+        }
+
 
         let renewedTillDate: string | null = null;
         if (renewedDays > 0) {

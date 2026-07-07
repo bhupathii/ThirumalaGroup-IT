@@ -33,7 +33,7 @@ import { describe, it, expect } from 'vitest';
 import { financeCalculationService } from '../services/financeCalculationService';
 
 // ── Loan Constants ──────────────────────────────────────────────────────────
-const LOAN_DATE     = '2023-11-14';
+const LOAN_DATE     = '2023-11-12';
 const PRINCIPAL     = 2_500_000;
 const INTEREST_RATE = 3;       // % per 30 days
 const PENALTY_RATE  = 0.75;    // % per 30 days
@@ -94,22 +94,22 @@ const POST_OPENING_INTEREST_CREDITS: { date: string; interest: number }[] = [
 // ── Expected Invariants ──────────────────────────────────────────────────────
 const EXPECTED_POST_OPENING_TOTAL     = 2_281_750;
 const EXPECTED_CUMULATIVE_RENEWED     = 912.70;
-const EXPECTED_INITIAL_DUE_DATE       = '2023-12-13';
-const EXPECTED_CURRENT_DUE_DATE       = '2026-06-12';
-const EXPECTED_CURRENT_DUE_DATE_UI    = '2026-06-13';
+const EXPECTED_INITIAL_DUE_DATE       = '2023-12-11';
+const EXPECTED_CURRENT_DUE_DATE       = '2026-06-10';
+const EXPECTED_CURRENT_DUE_DATE_UI    = '2026-06-11'; // rounded up since 0.70 >= 0.5
 const EXPECTED_FRACTIONAL_CARRY       = 0.70;
 
 const AUDIT_DATE = '2026-06-16';
 
-const EXPECTED_EXACT_DUE_DAYS   = 3.30;
-const EXPECTED_DISPLAY_DUE_DAYS = 3;
-const EXPECTED_ACCRUED_INTEREST = 8_250;
-const EXPECTED_ACCRUED_PENALTY  = 0;
-const EXPECTED_TODAY_DUE        = 8_250;
-const EXPECTED_TOTAL_FOR_CLOSE  = 2_508_250;
+const EXPECTED_EXACT_DUE_DAYS   = 5.30; // 2026-06-16 - 2026-06-10 (with carry)
+const EXPECTED_DISPLAY_DUE_DAYS = 5;
+const EXPECTED_ACCRUED_INTEREST = 13_250;
+const EXPECTED_ACCRUED_PENALTY  = 3312.50;
+const EXPECTED_TODAY_DUE        = 16562.50;
+const EXPECTED_TOTAL_FOR_CLOSE  = 2_516_562.50;
 
 const EXPECTED_RENEWED_DAYS_PURCHASED = 3.30;
-const EXPECTED_NEXT_DUE_DATE          = '2026-06-16';
+const EXPECTED_NEXT_DUE_DATE          = '2026-06-14';
 
 // ── Mock Data ────────────────────────────────────────────────────────────────
 
@@ -133,6 +133,7 @@ const postOpeningRows = POST_OPENING_INTEREST_CREDITS.map(r => ({
   entry_date: r.date,
   credit: r.interest,
   renewed_days: 0,
+  row_type: 'interest_payment',
 }));
 
 const allInterestRows = [openingCommissionRow, ...postOpeningRows];

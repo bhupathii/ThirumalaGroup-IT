@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { financeCalculationService } from '../services/financeCalculationService';
+import * as cdLedgerEngine from '../services/cdLedgerEngine';
 
 function parseDateStr(dateStr: string): string {
   const months: Record<string, string> = {
@@ -98,15 +99,24 @@ describe('CD ₹25L legacy 80/20 penalty and sequential renewal parity', () => {
 
       const monthlyInterest = Number(((currentPrincipal * interestRate * periodDays) / 3000).toFixed(2));
 
-      const split = financeCalculationService.computeCDPaymentSplit(
-        paymentAmount,
-        penaltyDue,
-        interestDue,
-        monthlyInterest,
-        currentPrincipal,
-        actionType,
+      const dummyPos = {
+        principalBalance: currentPrincipal,
         periodDays,
-        dueDays
+        exactDueDays: dueDays,
+        dailyInterest: monthlyInterest / periodDays,
+        dailyPenalty: 0,
+        accruedInterest: interestDue,
+        accruedPenalty: penaltyDue,
+        todayDue: penaltyDue + interestDue,
+        renewalAmount: monthlyInterest,
+        totalToRegularize: penaltyDue + interestDue + monthlyInterest
+      } as any;
+
+      const split = cdLedgerEngine.allocateCDPayment(
+        dummyPos,
+        paymentAmount,
+        actionType,
+        periodDays
       );
 
       let penaltyPaid = split.penaltyPaid;

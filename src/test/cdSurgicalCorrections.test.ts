@@ -106,17 +106,15 @@ describe('CD Rebuild Surgical Corrections — Issue 1-3 Regression Tests', () =>
       todayDue: 36740.63,
       renewalAmount: 22500,
       totalToRegularize: 59240.63,
+      initialContractualPositionStr: '2025-02-18',
       totalForClose: 786740.63,
       lastPaymentDate: '2026-06-29'
-    };
+    } as cdLedgerEngine.CDAccountPosition;
 
     it('correctly allocates split for Close action with ₹7,86,740.63 (exact close amount)', () => {
-      const split = financeCalculationService.computeCDPaymentSplit(
+      const split = cdLedgerEngine.allocateCDPayment(
+        mockPos,
         786740.63,
-        mockPos.accruedPenalty,
-        mockPos.accruedInterest,
-        mockPos.renewalAmount,
-        mockPos.principalBalance,
         'Close',
         30
       );
@@ -128,12 +126,15 @@ describe('CD Rebuild Surgical Corrections — Issue 1-3 Regression Tests', () =>
     });
 
     it('correctly allocates split for Close action with ₹7,87,678.13 (close amount for next day)', () => {
-      const split = financeCalculationService.computeCDPaymentSplit(
+      const nextDayPos = {
+        ...mockPos,
+        accruedPenalty: 7535.63,
+        accruedInterest: 30142.50
+      };
+      
+      const split = cdLedgerEngine.allocateCDPayment(
+        nextDayPos,
         787678.13,
-        7535.63, // next day penalty
-        30142.50, // next day interest
-        mockPos.renewalAmount,
-        mockPos.principalBalance,
         'Close',
         30
       );
