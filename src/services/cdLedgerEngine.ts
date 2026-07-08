@@ -49,6 +49,7 @@ export interface CDAccountPosition {
   contractualPositionDate: string;
   currentDueDate: string;
   fractionalCarry: number;
+  displayDays: number;
   displayDueDays: number;
   exactDueDays: number;
   dailyInterest: number;
@@ -398,8 +399,8 @@ export function getCDAccountPosition(
 
   const elapsedDays = differenceInCalendarDays(asOfDate, baseDueDate);
   const exactDueDays = vbaRound(elapsedDays - exactRenewedDays, 2);
-  
-  const displayDueDays = differenceInCalendarDays(asOfDate, currentDueDate);
+  const displayDays = exactDueDays;
+  const displayDueDays = vbaRound(displayDays, 0);
 
   const dailyInterest = vbaRound((principalBalance * (contract.interestRate / 100)) / 30, 5);
   const dailyPenalty = vbaRound((principalBalance * (contract.penaltyRate / 100)) / 30, 2);
@@ -429,6 +430,7 @@ export function getCDAccountPosition(
     contractualPositionDate,
     currentDueDate,
     fractionalCarry,
+    displayDays,
     displayDueDays,
     exactDueDays,
     dailyInterest,

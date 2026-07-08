@@ -434,7 +434,7 @@ const CDLedger: React.FC = () => {
       }
 
       // 4. Run rebuild
-      const rebuildResult = await cdLedgerRebuildService.rebuildCDLoanLifecycle(selectedLoan.id);
+      const rebuildResult = await cdLedgerRebuildService.rebuildCDLoanLifecycle(selectedLoan.id, 'FULL_RECALCULATE');
       if (!rebuildResult.success) {
         throw new Error(rebuildResult.error || 'Rebuild failed');
       }
@@ -506,7 +506,7 @@ const CDLedger: React.FC = () => {
       if (deleteError) throw deleteError;
 
       // 4. Run rebuild
-      const rebuildResult = await cdLedgerRebuildService.rebuildCDLoanLifecycle(selectedLoan.id);
+      const rebuildResult = await cdLedgerRebuildService.rebuildCDLoanLifecycle(selectedLoan.id, 'FULL_RECALCULATE');
       if (!rebuildResult.success) {
         throw new Error(rebuildResult.error || 'Rebuild failed');
       }
@@ -1103,8 +1103,6 @@ const CDLedger: React.FC = () => {
     if (paymentAmount <= 0 || !renewCalculations) return null;
 
     const principalBefore = ledgerMetrics.principalBalance;
-    const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
-    const outstandingInterest = renewCalculations.outstandingInterest || 0;
 
     const periodDays = (selectedLoan?.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
     const interestRate = Number(selectedLoan?.interest_rate) || 3;
@@ -1362,24 +1360,18 @@ const CDLedger: React.FC = () => {
     }
 
     const dueDays = renewCalculations.daysPastDue || 0;
-
     // Operator Warning/Confirmation when outstanding dues exist during Partial Payment
-    const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
-    const outstandingInterest = renewCalculations.outstandingInterest || 0;
     if (actionType === 'Partial') {
-      const totalOutstanding = outstandingPenalty + outstandingInterest;
-      const principalBefore = ledgerMetrics.principalBalance;
+      const totalOutstanding = (renewCalculations.outstandingPenalty || 0) + (renewCalculations.outstandingInterest || 0);
       const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
-      const interestRate = Number(selectedLoan?.interest_rate) || 3;
-      const monthlyInterest = Number(((principalBefore * (interestRate / 100) * periodDays) / 30).toFixed(2));
 
       const split = allocateCDPayment(renewCalculations, amount, 'Partial', periodDays);
 
       let confirmMsg = '';
       if (amount >= totalOutstanding) {
-        confirmMsg = `You are making a Partial Payment of ₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. This will pay off the outstanding dues of ₹${totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Interest: ₹${outstandingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Penalty: ₹${outstandingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}) and reduce the Principal Balance by ₹${split.principalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}.\n\nThe loan's due date will be extended to the payment date (${formatDateOld(paymentDate)}).\n\nDo you want to proceed?`;
+        confirmMsg = `You are making a Partial Payment of ₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. This will pay off the outstanding dues of ₹${totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Interest: ₹${(renewCalculations.outstandingInterest || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Penalty: ₹${(renewCalculations.outstandingPenalty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}) and reduce the Principal Balance by ₹${split.principalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}.\n\nThe loan's due date will be extended to the payment date (${formatDateOld(paymentDate)}).\n\nDo you want to proceed?`;
       } else {
-        confirmMsg = `WARNING: The payment amount ₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} is less than the total outstanding dues of ₹${totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Interest: ₹${outstandingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Penalty: ₹${outstandingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}).\n\nNo principal reduction will occur. Instead, this payment will renew the loan by ${split.renewedDays} days.\n\nDo you want to proceed?`;
+        confirmMsg = `WARNING: The payment amount ₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} is less than the total outstanding dues of ₹${totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Interest: ₹${(renewCalculations.outstandingInterest || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Penalty: ₹${(renewCalculations.outstandingPenalty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}).\n\nNo principal reduction will occur. Instead, this payment will renew the loan by ${split.renewedDays} days.\n\nDo you want to proceed?`;
       }
       if (!window.confirm(confirmMsg)) {
         return;
@@ -1401,25 +1393,15 @@ const CDLedger: React.FC = () => {
       let overdueInterestPaid = 0;
       let renewalInterestPaid = 0;
 
-      // Use OUTSTANDING (always >= 0) for payment allocation, not display values
-      const outstandingPenalty = renewCalculations.outstandingPenalty || 0;
-      const outstandingInterest = renewCalculations.outstandingInterest || 0;
-
       const periodDays = (selectedLoan.period_days && Number(selectedLoan.period_days) > 0) ? Number(selectedLoan.period_days) : 30;
-      const interestRate = Number(selectedLoan?.interest_rate) || 3;
-      const monthlyInterest = Number(((principalBefore * (interestRate / 100) * periodDays) / 30).toFixed(2));
 
       const isClosingPayment = actionType === 'Close' || paymentAmount >= Math.max(0, ledgerMetrics.totalClose);
 
       const split = allocateCDPayment(
+        renewCalculations as any,
         paymentAmount,
-        outstandingPenalty,
-        outstandingInterest,
-        monthlyInterest,
-        principalBefore,
         isClosingPayment ? 'Close' : actionType,
-        periodDays,
-        dueDays
+        periodDays
       );
       penaltyPaid = split.penaltyPaid;
       overdueInterestPaid = split.overdueInterestPaid;
@@ -1512,7 +1494,6 @@ const CDLedger: React.FC = () => {
           console.log('payment_date:', paymentDate);
           console.log('base_date:', baseDateStr);
           console.log('interest_paid:', interestPaid);
-          console.log('monthly_interest:', monthlyInterest);
           console.log('renewed_days:', renewedDays);
           console.log('next_due_date:', nextDueDateStr);
 
@@ -2255,7 +2236,7 @@ const CDLedger: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Compact 8-cell Loan Details grid (4 rows × 2 cols) */}
+                    {/* Compact 9-cell Loan Details grid (2 cols per row, except Days & Due Days side-by-side) */}
                     <div className="grid grid-cols-4 gap-2 font-sans">
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Loan Amount</span>
@@ -2281,7 +2262,11 @@ const CDLedger: React.FC = () => {
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Next Due Date</span>
                         <span className="text-[16px] font-bold text-slate-900">{renewCalculations?.error ? '—' : (totalAmountPaying && Number(totalAmountPaying) > 0 && paymentPreview?.renew?.nextDueDate ? formatDateOld(paymentPreview.renew.nextDueDate) : '—')}</span>
                       </div>
-                      <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
+                      <div className="col-span-1 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
+                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Days</span>
+                        <span className="text-[16px] font-bold text-slate-900">{renewCalculations?.error ? '—' : (renewCalculations?.displayDays !== undefined ? Number(renewCalculations.displayDays).toFixed(2) : '0.00')}</span>
+                      </div>
+                      <div className="col-span-1 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Due Days</span>
                         <div className="flex items-center gap-1.5">
                           <span className="text-[16px] font-bold text-slate-900">{renewCalculations?.error ? '—' : (renewCalculations?.displayDueDays !== undefined ? renewCalculations.displayDueDays : 0)}</span>
@@ -2652,7 +2637,7 @@ const CDLedger: React.FC = () => {
                                 <td className="px-4 py-3.5 text-slate-800 font-bold">{tx.collected_by || 'Staff'}</td>
                                 <td className="px-4 py-3.5">
                                   <div className="flex items-center justify-center gap-2">
-                                    {isTxEditable && !isPending ? (
+                                    {isTxEditable ? (
                                       <button
                                         onClick={() => handleOpenEditTxModal(tx)}
                                         className="p-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 rounded-lg transition-colors border border-indigo-200"

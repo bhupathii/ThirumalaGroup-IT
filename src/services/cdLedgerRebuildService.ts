@@ -3,13 +3,24 @@ import { financeCalculationService } from './financeCalculationService';
 import { supabaseFinance } from '../lib/supabaseFinance';
 import { allocateCDPayment } from './cdLedgerEngine';
 
+export interface CDReplayState {
+  currentPrincipal: number;
+  totalRenewedDays: number;
+  currentDueDate: string;
+  fractionalCarry: number;
+  ledgerEntries: any[];
+  interestDetails: any[];
+}
 
 export const cdLedgerRebuildService = {
   /**
    * Performs a complete sequential rebuild of a CD loan's ledger lifecycle
    * starting from original disbursement and replaying all collections chronologically.
    */
-  async rebuildCDLoanLifecycle(loanId: string): Promise<{ success: boolean; error?: string }> {
+  async rebuildCDLoanLifecycle(
+    loanId: string,
+    forceMode?: 'PRESERVE_HISTORY' | 'FULL_RECALCULATE'
+  ): Promise<{ success: boolean; error?: string }> {
     try {
       console.log(`🔄 [cdLedgerRebuildService] Starting full rebuild for loan ID: ${loanId}`);
 
@@ -46,6 +57,38 @@ export const cdLedgerRebuildService = {
         throw new Error(txError.message);
       }
 
+      // Automatic Rebuild Mode Selection via Timeline Hash Comparison
+      const collections = (txs || []).filter(t => t.type === 'Collection');
+      const txTimeline = collections.map(t => ({
+        loan_id: t.loan_id,
+        receipt_no: t.receipt_no,
+        payment_date: t.date,
+        amount: Number(t.amount || 0).toFixed(2),
+        type: t.type
+      }));
+      const txTimelineStr = JSON.stringify(txTimeline);
+
+      const amountPaidEntries = (ledgerEntries || [])
+        .filter(e => e.entry_type === 'amount_paid')
+        .sort((a, b) => {
+          const dateDiff = new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime();
+          if (dateDiff !== 0) return dateDiff;
+          return (a.receipt_no || '').localeCompare(b.receipt_no || '');
+        });
+      const persistedTimeline = amountPaidEntries.map(e => ({
+        loan_id: e.loan_id,
+        receipt_no: e.receipt_no,
+        payment_date: e.entry_date,
+        amount: Number(e.credit || 0).toFixed(2),
+        type: 'Collection'
+      }));
+      const persistedTimelineStr = JSON.stringify(persistedTimeline);
+
+      const timelineChanged = txTimelineStr !== persistedTimelineStr;
+      const mode = forceMode || (timelineChanged ? 'FULL_RECALCULATE' : 'PRESERVE_HISTORY');
+
+      console.log(`[Rebuild] Mode Selection: timelineChanged=${timelineChanged}, forceMode=${forceMode || 'None'} -> Selected Rebuild Mode: ${mode}`);
+
       // Find original loan disbursement details
       const origEntry = ledgerEntries?.find(e => e.entry_type === 'original_loan');
       const disbTx = txs?.find(t => t.type === 'Disbursement');
@@ -58,8 +101,6 @@ export const cdLedgerRebuildService = {
       }
 
       const periodDays = (loan.period_days && Number(loan.period_days) > 0) ? Number(loan.period_days) : 30;
-      const interestRate = Number(loan.interest_rate) || 3;
-      const penaltyPercent = loan.penalty_percent !== undefined && loan.penalty_percent !== null ? Number(loan.penalty_percent) : 0.75;
       
       // CD inclusive-cycle rule: the loan-given date IS Day 1 of the interest cycle.
       // Day 1 = LoanDate, Day 2 = LoanDate+1, …, Day N = LoanDate+(N-1)
@@ -78,42 +119,46 @@ export const cdLedgerRebuildService = {
         throw new Error(`Failed to fetch existing interest details: ${fetchInterestError.message}`);
       }
 
-      // Map to preserve historical splits by receipt number (Mode B - Historical Replay)
+      // Map to preserve historical splits by receipt number (Mode A - PRESERVE_HISTORY)
       const historicalSplits = new Map<string, { penaltyPaid: number; interestPaid: number; principalPaid: number; renewedDays?: number }>();
-      if (ledgerEntries) {
-        for (const entry of ledgerEntries) {
-          const receiptNo = entry.receipt_no;
-          if (!receiptNo) continue;
+      
+      if (mode === 'PRESERVE_HISTORY') {
+        if (ledgerEntries) {
+          for (const entry of ledgerEntries) {
+            const receiptNo = entry.receipt_no;
+            if (!receiptNo) continue;
 
-          let split = historicalSplits.get(receiptNo);
-          if (!split) {
-            split = { penaltyPaid: 0, interestPaid: 0, principalPaid: 0 };
-            historicalSplits.set(receiptNo, split);
+            let split = historicalSplits.get(receiptNo);
+            if (!split) {
+              split = { penaltyPaid: 0, interestPaid: 0, principalPaid: 0 };
+              historicalSplits.set(receiptNo, split);
+            }
+
+            const creditVal = Number(entry.credit || 0);
+            if (entry.entry_type === 'penalty_payment') {
+              split.penaltyPaid += creditVal;
+            } else if (entry.entry_type === 'interest_payment') {
+              split.interestPaid += creditVal;
+            } else if (entry.entry_type === 'principal_payment') {
+              split.principalPaid += creditVal;
+            }
           }
+        }
 
-          const creditVal = Number(entry.credit || 0);
-          if (entry.entry_type === 'penalty_payment') {
-            split.penaltyPaid += creditVal;
-          } else if (entry.entry_type === 'interest_payment') {
-            split.interestPaid += creditVal;
-          } else if (entry.entry_type === 'principal_payment') {
-            split.principalPaid += creditVal;
+        // Populate historical renewed_days from interest details snapshot
+        if (existingInterestDetails) {
+          for (const detail of existingInterestDetails) {
+            const receiptNo = detail.receipt_no;
+            if (!receiptNo) continue;
+
+            const split = historicalSplits.get(receiptNo);
+            if (split && Number(detail.renewed_days) > 0) {
+              split.renewedDays = Number(detail.renewed_days);
+            }
           }
         }
       }
 
-      // Populate historical renewed_days from interest details snapshot
-      if (existingInterestDetails) {
-        for (const detail of existingInterestDetails) {
-          const receiptNo = detail.receipt_no;
-          if (!receiptNo) continue;
-
-          const split = historicalSplits.get(receiptNo);
-          if (split && Number(detail.renewed_days) > 0) {
-            split.renewedDays = Number(detail.renewed_days);
-          }
-        }
-      }
 
       // 4. Delete existing payment ledger entries and interest details
       // Keep only 'original_loan', 'opening_commission', 'document_charge' entries
@@ -137,18 +182,21 @@ export const cdLedgerRebuildService = {
       }
 
       // 5. Sequentially replay all collection transactions
-      const collections = (txs || []).filter(t => t.type === 'Collection');
       console.log(`[Rebuild] Replaying ${collections.length} collections...`);
 
-      let currentPrincipal = originalPrincipal;
-      let totalRenewedDays = 0;
-
-      const runningLedgerEntries: any[] = [{
-        entry_type: 'original_loan',
-        debit: originalPrincipal,
-        entry_date: originalLoanDateStr
-      }];
-      const runningInterestDetails: any[] = [];
+      // Initialize the single authoritative Replay State
+      let replayState: CDReplayState = {
+        currentPrincipal: originalPrincipal,
+        totalRenewedDays: 0,
+        currentDueDate: baseDueDateStr,
+        fractionalCarry: 0,
+        ledgerEntries: [{
+          entry_type: 'original_loan',
+          debit: originalPrincipal,
+          entry_date: originalLoanDateStr
+        }],
+        interestDetails: []
+      };
 
       for (const tx of collections) {
         const paymentAmount = Number(tx.amount) || 0;
@@ -164,24 +212,23 @@ export const cdLedgerRebuildService = {
           actionType = 'Close';
         }
 
+        // Calculate account position based solely on the current replay state
         const position = financeCalculationService.getCDAccountPosition(
           loan as any,
-          runningLedgerEntries,
-          runningInterestDetails,
+          replayState.ledgerEntries,
+          replayState.interestDetails,
           txDateStr
         ) as any;
 
-        const dueDays = position.exactDueDays;
         const interestDue = position.accruedInterest;
         let penaltyDue = position.accruedPenalty;
-        const monthlyInterest = Number((position.dailyInterest * periodDays).toFixed(2));
 
         // Manual override for CD091 on 31-Oct-24 (Receipt RC236) to match historical legacy Access math (5.00 days penalty)
         if (loan.loan_id === 'CD091' && receiptNo === 'RC236') {
           penaltyDue = 375.00;
         }
 
-        const isClosing = actionType === 'Close' || paymentAmount >= (interestDue + penaltyDue + currentPrincipal);
+        const isClosing = actionType === 'Close' || paymentAmount >= (interestDue + penaltyDue + replayState.currentPrincipal);
 
         let penaltyPaid = 0;
         let overdueInterestPaid = 0;
@@ -189,7 +236,7 @@ export const cdLedgerRebuildService = {
         let principalPaid = 0;
         let renewedDays = 0;
 
-        const histSplit = receiptNo ? historicalSplits.get(receiptNo) : null;
+        const histSplit = (mode === 'PRESERVE_HISTORY' && receiptNo) ? historicalSplits.get(receiptNo) : null;
 
         if (histSplit) {
           // Mode B — Replay exact persisted allocations
@@ -225,14 +272,10 @@ export const cdLedgerRebuildService = {
           actionType = 'Close';
         } else {
           const split = allocateCDPayment(
+            position,
             paymentAmount,
-            penaltyDue,
-            interestDue,
-            monthlyInterest,
-            currentPrincipal,
             actionType,
-            periodDays,
-            dueDays
+            periodDays
           );
           penaltyPaid = split.penaltyPaid;
           overdueInterestPaid = split.overdueInterestPaid;
@@ -252,29 +295,18 @@ export const cdLedgerRebuildService = {
           }
         }
 
-        // Push state for next loop to use
-        if (principalPaid > 0) {
-          runningLedgerEntries.push({
-            entry_type: 'principal_payment',
-            credit: principalPaid,
-            account_name: 'CD A/C'
-          });
-          currentPrincipal -= principalPaid;
-        }
-        if (renewedDays > 0) {
-          runningInterestDetails.push({
-            credit: 0,
-            renewed_days: renewedDays
-          });
-        }
-
-
         let renewedTillDate: string | null = null;
+        const newTotalRenewedDays = renewedDays > 0
+          ? financeCalculationService.advanceExactRenewalPosition(replayState.totalRenewedDays, renewedDays)
+          : replayState.totalRenewedDays;
+
         if (renewedDays > 0) {
-          const newTotalRenewedDays = financeCalculationService.advanceExactRenewalPosition(totalRenewedDays, renewedDays);
           const nextDisplayDays = financeCalculationService.calculateDisplayDays(newTotalRenewedDays);
           renewedTillDate = financeCalculationService.addCalendarDays(baseDueDateStr, nextDisplayDays);
         }
+
+        const finalDisplayRenewedDays = financeCalculationService.calculateDisplayDays(newTotalRenewedDays);
+        const nextDueDate = financeCalculationService.addCalendarDays(baseDueDateStr, finalDisplayRenewedDays);
 
         console.log(`[Rebuild-Tx ${receiptNo}] Amt: ₹${paymentAmount}, Split: Pen=₹${penaltyPaid}, Int=₹${interestPaid}, Prin=₹${principalPaid}, RenewDays=${renewedDays}`);
 
@@ -433,22 +465,38 @@ export const cdLedgerRebuildService = {
           });
         }
 
-        // Update running state variables
-        currentPrincipal = Number(Math.max(0, currentPrincipal - principalPaid).toFixed(2));
-        totalRenewedDays += renewedDays;
+        // Transition the single authoritative replayState
+        const newLedgerEntries = [
+          { entry_type: 'amount_paid', credit: paymentAmount, entry_date: txDateStr, receipt_no: receiptNo }
+        ];
+        if (penaltyPaid > 0) newLedgerEntries.push({ entry_type: 'penalty_payment', credit: penaltyPaid, entry_date: txDateStr, receipt_no: receiptNo });
+        if (interestPaid > 0) newLedgerEntries.push({ entry_type: 'interest_payment', credit: interestPaid, entry_date: txDateStr, receipt_no: receiptNo });
+        if (principalPaid > 0) newLedgerEntries.push({ entry_type: 'principal_payment', credit: principalPaid, entry_date: txDateStr, receipt_no: receiptNo });
+
+        const newInterestDetails = [];
+        if (penaltyPaid > 0) newInterestDetails.push({ credit: penaltyPaid, renewed_days: 0, renewed_till_date: null, row_type: 'penalty_payment', receipt_no: receiptNo });
+        if (interestPaid > 0) newInterestDetails.push({ credit: interestPaid, renewed_days: renewedDays, renewed_till_date: renewedTillDate, row_type: 'interest_payment', receipt_no: receiptNo });
+        if (principalPaid > 0) newInterestDetails.push({ credit: principalPaid, renewed_days: 0, renewed_till_date: null, row_type: 'principal_payment', receipt_no: receiptNo });
+        if (renewedDays > 0) newInterestDetails.push({ credit: 0, renewed_days: renewedDays, renewed_till_date: renewedTillDate, row_type: 'Renewal', receipt_no: receiptNo });
+
+        replayState = {
+          currentPrincipal: Number(Math.max(0, replayState.currentPrincipal - principalPaid).toFixed(2)),
+          totalRenewedDays: newTotalRenewedDays,
+          currentDueDate: nextDueDate,
+          fractionalCarry: position.fractionalCarry,
+          ledgerEntries: [...replayState.ledgerEntries, ...newLedgerEntries],
+          interestDetails: [...replayState.interestDetails, ...newInterestDetails]
+        };
       }
 
       // 6. Update loan final state in the database
-      const finalDisplayRenewedDays = financeCalculationService.calculateDisplayDays(totalRenewedDays);
-      const finalDueDateStr = financeCalculationService.addCalendarDays(baseDueDateStr, finalDisplayRenewedDays);
-
-      let finalStatus = currentPrincipal <= 0 ? 'Closed' : 'Active';
+      let finalStatus = replayState.currentPrincipal <= 0 ? 'Closed' : 'Active';
       if (loan.status === 'NPA_CLOSED') {
         finalStatus = 'NPA_CLOSED'; // Keep NPA_CLOSED status intact
       }
 
       const updates = {
-        amount: currentPrincipal,
+        amount: replayState.currentPrincipal,
         status: finalStatus
       };
 

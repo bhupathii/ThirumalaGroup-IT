@@ -531,7 +531,7 @@ const EditLoanEntry: React.FC = () => {
 
       // Rebuild CD loan sequential history if it is a CD loan and has activity
       if (loanCategory === 'CD' && hasLedgerActivity) {
-        const rebuildResult = await cdLedgerRebuildService.rebuildCDLoanLifecycle(selectedLoan.id);
+        const rebuildResult = await cdLedgerRebuildService.rebuildCDLoanLifecycle(selectedLoan.id, 'FULL_RECALCULATE');
         if (!rebuildResult.success) {
           throw new Error(rebuildResult.error || 'Rebuild of CD loan sequential history failed');
         }

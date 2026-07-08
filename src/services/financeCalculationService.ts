@@ -2,15 +2,11 @@ import { FinanceLedgerSetting } from '../lib/supabaseFinance';
 import { financeLedgerSettingsService } from './financeLedgerSettingsService';
 import { 
   getCDAccountPosition as engineGetCDAccountPosition,
-  allocateCDPayment,
   buildCDContract,
   getCDHistoricalEvents,
   getCDContractualPosition,
   getCDPrincipalBalance,
-  dateOrdinal,
-  roundMoney,
-  roundCDMoney,
-  vbaRound
+  dateOrdinal
 } from './cdLedgerEngine';
 
 export const financeCalculationService = {
@@ -728,7 +724,7 @@ export const financeCalculationService = {
       dueDate: new Date(displayDueDateStr),
       dueDateStr: displayDueDateStr,
       daysPastDue: pos.exactDueDays,
-      displayDays: pos.displayDueDays,
+      displayDays: pos.displayDays,
       daysRemaining: pos.exactDueDays < 0 ? Math.abs(pos.exactDueDays) : 0,
       nextDueDate: null,
       penaltyDays: Math.round(pos.exactDueDays) > loan.grace_days ? pos.exactDueDays : 0,
