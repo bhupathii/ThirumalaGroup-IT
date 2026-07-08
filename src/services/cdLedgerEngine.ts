@@ -528,7 +528,7 @@ export function simulateAccessRenewEventChain(
       0
     ) : 0;
 
-    const pDays = Math.min(checkDueDays, lostFocusRDays);
+    const pDays = exactDueDays > lostFocusRDays ? lostFocusRDays : exactDueDays;
 
     penaltyAfterCalculating = vbaRound(
       dailyPenalty * pDays,
