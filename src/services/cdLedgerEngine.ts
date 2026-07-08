@@ -293,7 +293,7 @@ export function getCDTotalRenewedDays(interestEvents: CDInterestDetailEvent[]): 
 
 export function getCDContractualPosition(
   contract: CDContract,
-  ledgerEvents: CDEvent[],
+  _ledgerEvents: CDEvent[],
   interestEvents: CDInterestDetailEvent[]
 ): {
   baseDueDate: string;
@@ -400,18 +400,17 @@ export function getCDAccountPosition(
   const exactDueDays = vbaRound(elapsedDays - exactRenewedDays, 2);
   
   const displayDueDays = differenceInCalendarDays(asOfDate, currentDueDate);
-  const isPaidAhead = displayDueDays <= 0;
 
   const dailyInterest = vbaRound((principalBalance * (contract.interestRate / 100)) / 30, 5);
   const dailyPenalty = vbaRound((principalBalance * (contract.penaltyRate / 100)) / 30, 2);
 
-  const accruedInterest = isPaidAhead ? 0 : roundCDMoney(exactDueDays * dailyInterest);
-  const isWithinGrace = vbaRound(exactDueDays, 0) <= contract.graceDays;
-  const accruedPenalty = (isPaidAhead || isWithinGrace) ? 0 : roundCDMoney(exactDueDays * dailyPenalty);
+  const accruedInterest = exactDueDays <= 0 ? 0 : roundCDMoney(dailyInterest * exactDueDays);
+  const penaltyEligible = vbaRound(exactDueDays, 0) > contract.graceDays;
+  const accruedPenalty = (exactDueDays <= 0 || !penaltyEligible) ? 0 : roundCDMoney(dailyPenalty * exactDueDays);
 
   const todayDue = roundCDMoney(accruedInterest + accruedPenalty);
   const renewalAmount = roundCDMoney(principalBalance * (contract.interestRate / 100) * (contract.periodDays / 30));
-  const totalToRegularize = isPaidAhead ? 0 : roundCDMoney(todayDue + renewalAmount);
+  const totalToRegularize = exactDueDays <= 0 ? 0 : roundCDMoney(todayDue + renewalAmount);
   const totalForClose = roundCDMoney(principalBalance + todayDue);
 
   const paymentEntries = ledgerEvents
@@ -499,71 +498,80 @@ export function simulateAccessRenewEventChain(
     ? vbaRound((position.dailyPenalty * 3000) / position.principalBalance, 2) 
     : 0.75;
 
-  const DueDays = position.exactDueDays;
+  const exactDueDays = position.exactDueDays;
   const initialInterest = position.accruedInterest;
   const initialPenalty = position.accruedPenalty;
 
-  let rdays = DueDays < 0 ? 0 : DueDays;
-  let interest = initialInterest;
-  let penalty = initialPenalty;
-  let dailyInterestLostFocus = 0;
-
-  // STAGE 2 — TotalAmountPaying_LostFocus parity
-  const checkDueDays = vbaRound(DueDays, 0);
-  if (checkDueDays <= 5) {
-    dailyInterestLostFocus = vbaRound((principal * rate / 100) / 30, 2);
-    if (dailyInterestLostFocus > 0) {
-      rdays = vbaRound(cash / dailyInterestLostFocus, 0);
-    } else {
-      rdays = 0;
-    }
+  // 2. PENALTY ELIGIBILITY & 3. RENEW LOSTFOCUS EVENT SIMULATION
+  const checkDueDays = vbaRound(exactDueDays, 0);
+  const graceDays = position.periodDays === 45 ? 5 : 5; // standard grace is 5
+  
+  let penaltyAfterCalculating = 0;
+  let lostFocusRDays = 0;
+  
+  const dailyInterestLostFocus = vbaRound(principal * rate / 100 / 30, 2);
+  const dailyPenalty = vbaRound(principal * penaltyRate / 100 / 30, 2);
+  
+  if (checkDueDays <= graceDays) {
+    penaltyAfterCalculating = 0;
+    lostFocusRDays = dailyInterestLostFocus > 0 ? vbaRound(cash / dailyInterestLostFocus, 0) : 0;
   } else {
-    dailyInterestLostFocus = vbaRound((principal * (rate + penaltyRate) / 100) / 30, 2);
-    if (dailyInterestLostFocus > 0) {
-      rdays = vbaRound(cash / dailyInterestLostFocus, 0);
-    } else {
-      rdays = 0;
-    }
+    const dailyCombined = vbaRound(
+      principal * (rate + penaltyRate) / 100 / 30,
+      2
+    );
+
+    lostFocusRDays = dailyCombined > 0 ? vbaRound(
+      cash / dailyCombined,
+      0
+    ) : 0;
+
+    const pDays = Math.min(checkDueDays, lostFocusRDays);
+
+    penaltyAfterCalculating = vbaRound(
+      dailyPenalty * pDays,
+      0
+    );
   }
 
-  // STAGE 3 — Calculating parity
-  if (checkDueDays <= 5) {
-    interest = vbaRound((principal * (rate / 100) / 30) * rdays, 0);
-    penalty = 0;
-  } else {
-    interest = vbaRound((principal * (rate / 100) / 30) * rdays, 0);
-    const pDAYS = DueDays > rdays ? rdays : DueDays;
-    penalty = vbaRound((principal * (penaltyRate / 100) / 30) * pDAYS, 0);
-  }
+  const lostFocusInterest = vbaRound(dailyInterestLostFocus * lostFocusRDays, 0);
+  const lostFocusPenalty = penaltyAfterCalculating;
 
-  const lostFocusRDays = rdays;
-  const lostFocusInterest = interest;
-  const lostFocusPenalty = penalty;
+  // 4. RENBTN_GOTFOCUS SIMULATION
+  const dailyInterest = vbaRound(
+    principal * rate / 100 / 30,
+    5
+  );
 
-  // STAGE 4 — RenBtn_GotFocus parity
-  const dailyInterestGotFocus = vbaRound((principal * (rate / 100)) / 30, 5);
   let finalRDays = 0;
   let interestExact = 0;
   let penaltyExact = 0;
 
-  if (cash <= penalty) {
+  if (cash <= penaltyAfterCalculating) {
     finalRDays = 0;
     interestExact = 0;
     penaltyExact = cash;
   } else {
-    if (dailyInterestGotFocus > 0) {
-      finalRDays = vbaRound((cash - penalty) / dailyInterestGotFocus, 2);
-    } else {
-      finalRDays = 0;
-    }
-    interestExact = vbaRound(dailyInterestGotFocus * finalRDays, 2);
-    penaltyExact = vbaRound(cash - interestExact, 2);
+    finalRDays = dailyInterest > 0 ? vbaRound(
+      (cash - penaltyAfterCalculating) / dailyInterest,
+      2
+    ) : 0;
+
+    interestExact = vbaRound(
+      dailyInterest * finalRDays,
+      2
+    );
+
+    penaltyExact = vbaRound(
+      cash - interestExact,
+      2
+    );
     if (penaltyExact < 0) {
       penaltyExact = 0;
     }
   }
 
-  // STAGE 5 — RenBtn_Click persistence parity
+  // 5. DATABASE POSTING
   const persistedInterest = vbaRound(interestExact, 0);
   const persistedPenalty = vbaRound(penaltyExact, 0);
 

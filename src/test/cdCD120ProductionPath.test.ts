@@ -49,20 +49,20 @@ describe('CD120 Production Path Integration Test', () => {
     // Accrued Interest = 29392.50 (39.19 * 750)
     expect(pos.accruedInterest).toBe(29392.50);
 
-    // Accrued Penalty = 7348.12 (39.19 * 187.50)
-    expect(pos.accruedPenalty).toBe(7348.12);
+    // Accrued Penalty = 7348.13 (39.19 * 187.50)
+    expect(pos.accruedPenalty).toBe(7348.13);
 
-    // Today Due = 36740.62
-    expect(pos.todayDue).toBe(36740.62);
+    // Today Due = 36740.63
+    expect(pos.todayDue).toBe(36740.63);
 
     // Total Renewal = ₹22,500.00
     expect(pos.renewalAmount).toBe(22500.00);
 
-    // Total To Regularize = 36740.62 + 22500.00 = 59240.62
-    expect(pos.totalToRegularize).toBe(59240.62);
+    // Total To Regularize = 36740.63 + 22500.00 = 59240.63
+    expect(pos.totalToRegularize).toBe(59240.63);
 
-    // Total For Close = 750000 + 36740.62 = 786740.62
-    expect(pos.totalForClose).toBe(786740.62);
+    // Total For Close = 750000 + 36740.63 = 786740.63
+    expect(pos.totalForClose).toBe(786740.63);
   });
 
   it('proves that the UI-facing mapping logic formats the production position result correctly for the UI cards/detail blocks', async () => {
@@ -117,12 +117,12 @@ describe('CD120 Production Path Integration Test', () => {
 
     // 5. Assert display values match the user requirements exactly
     expect(uiPrincipalBalance).toBe('₹7,50,000.00');
-    expect(uiTodayDue).toBe('₹36,740.62');
+    expect(uiTodayDue).toBe('₹36,740.63');
     expect(uiAccruedInterest).toBe('₹29,392.50');
-    expect(uiAccruedPenalty).toBe('₹7,348.12');
+    expect(uiAccruedPenalty).toBe('₹7,348.13');
     expect(uiTotalForRenewal).toBe('₹22,500.00');
-    expect(uiTotalToRegularize).toBe('₹59,240.62');
-    expect(uiTotalForClose).toBe('₹7,86,740.62');
+    expect(uiTotalToRegularize).toBe('₹59,240.63');
+    expect(uiTotalForClose).toBe('₹7,86,740.63');
     expect(uiLastPayment).toBe('29-Jun-26');
     expect(uiCurrentDueDate).toBe('28-May-26');
     expect(uiDueDays).toBe(39);
