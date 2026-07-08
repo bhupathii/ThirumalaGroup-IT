@@ -1,6 +1,7 @@
 import { getLocalBusinessDateISO } from '../utils/dateUtils';
 import { supabase } from './supabaseDatabase';
 import { financeCalculationService } from '../services/financeCalculationService';
+import { cdLedgerRebuildService } from '../services/cdLedgerRebuildService';
 
 // TypeScript Interfaces for Finance Mode
 export interface FinancePartner {
@@ -189,7 +190,7 @@ export interface FinanceTransactionReview {
   principal_amount?: number;
   entered_by: string;
   entered_at: string;
-  review_status: 'PENDING' | 'APPROVED';
+  review_status: 'PENDING' | 'APPROVED' | 'REJECTED';
   approved_by?: string | null;
   approved_at?: string | null;
   created_at: string;
@@ -3457,6 +3458,144 @@ class SupabaseFinance {
     }
   }
 
+  async approveTransactionsBulk(params: {
+    transactionIds: string[];
+    approvedBy: string;
+  }): Promise<{
+    requested: number;
+    approved: number;
+    skipped: number;
+    failed: number;
+    failures: Array<{ transactionId: string; receiptNo?: string; reason: string }>;
+  }> {
+    const result = {
+      requested: params.transactionIds.length,
+      approved: 0,
+      skipped: 0,
+      failed: 0,
+      failures: [] as Array<{ transactionId: string; receiptNo?: string; reason: string }>
+    };
+
+    if (params.transactionIds.length === 0) return result;
+
+    try {
+      // 1. Fetch valid pending reviews
+      const { data: reviews, error: fetchErr } = await supabase
+        .from('finance_transaction_reviews')
+        .select('*')
+        .in('id', params.transactionIds);
+
+      if (fetchErr) throw fetchErr;
+      
+      // Separate already processed ones
+      const pendingReviews = reviews?.filter(r => r.review_status === 'PENDING') || [];
+      const nonPendingReviews = reviews?.filter(r => r.review_status !== 'PENDING') || [];
+      const foundIds = new Set(reviews?.map(r => r.id) || []);
+      
+      result.skipped += nonPendingReviews.length;
+      params.transactionIds.forEach(id => {
+        if (!foundIds.has(id)) {
+          result.skipped++; // missing record
+        }
+      });
+
+      // 2. Sort chronologically
+      pendingReviews.sort((a, b) => {
+        const dateA = new Date(a.transaction_date).getTime();
+        const dateB = new Date(b.transaction_date).getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        
+        const createdA = new Date(a.created_at).getTime();
+        const createdB = new Date(b.created_at).getTime();
+        if (createdA !== createdB) return createdA - createdB;
+        
+        return a.id.localeCompare(b.id);
+      });
+
+      // 3. Process canonical logic per review
+      const now = new Date().toISOString();
+      const affectedCdLoanIds = new Set<string>();
+
+      for (const review of pendingReviews) {
+        try {
+          const { error: updateReviewErr } = await supabase
+            .from('finance_transaction_reviews')
+            .update({
+              review_status: 'APPROVED',
+              approved_by: params.approvedBy,
+              approved_at: now,
+              updated_at: now
+            })
+            .eq('id', review.id);
+
+          if (updateReviewErr) throw updateReviewErr;
+
+          if (review.source_type === 'Day Book Entry') {
+            const { error: updateCashbookErr } = await supabase
+              .from('finance_cashbook_entries')
+              .update({
+                status: 'APPROVED',
+                approved_by: params.approvedBy,
+                approved_at: now,
+                updated_at: now
+              })
+              .eq('id', review.source_id);
+
+            if (updateCashbookErr) {
+              await supabase
+                .from('finance_transaction_reviews')
+                .update({
+                  review_status: 'PENDING',
+                  approved_by: null,
+                  approved_at: null,
+                  updated_at: now
+                })
+                .eq('id', review.id);
+              throw updateCashbookErr;
+            }
+          }
+
+          result.approved++;
+
+          // Track CD loans for rebuilding
+          if (review.loan_id && review.transaction_type && review.transaction_type.startsWith('CD ')) {
+            affectedCdLoanIds.add(review.loan_id);
+          }
+
+        } catch (err: any) {
+          result.failed++;
+          result.failures.push({
+            transactionId: review.id,
+            receiptNo: review.receipt_number || 'N/A',
+            reason: err?.message || 'Unknown error'
+          });
+        }
+      }
+
+      // 4. Grouped CD Rebuild
+      for (const loanId of affectedCdLoanIds) {
+        try {
+          console.log(`[Bulk Approval] Rebuilding affected CD loan: ${loanId}`);
+          await cdLedgerRebuildService.rebuildCDLoanLifecycle(loanId, 'FULL_RECALCULATE');
+        } catch (err: any) {
+           console.error(`Error rebuilding CD loan ${loanId} after bulk approval:`, err);
+        }
+      }
+
+      return result;
+
+    } catch (error: any) {
+      console.error('Error in approveTransactionsBulk:', error);
+      // Entire operation failed unexpectedly
+      result.failed += params.transactionIds.length - result.approved - result.skipped;
+      result.failures.push({
+        transactionId: 'ALL',
+        reason: error?.message || 'Fatal bulk operation error'
+      });
+      return result;
+    }
+  }
+
   async approveTransactionReview(reviewId: string, approvedBy: string): Promise<boolean> {
     try {
       const { data: review, error: fetchErr } = await supabase
@@ -3818,108 +3957,187 @@ class SupabaseFinance {
     }
   }
 
-  async getDuesLedgerSummary(todayDate?: string): Promise<any[]> {
-    try {
-      const targetDate = todayDate || getLocalBusinessDateISO();
+  async getActiveCDDuePositions(asOfDate: string): Promise<any[]> {
+    const { data: cdLoans, error: loansErr } = await supabase
+      .from('finance_loans')
+      .select('*')
+      .eq('status', 'Active')
+      .like('loan_id', 'CD%');
+      
+    if (loansErr) throw loansErr;
+    if (!cdLoans || cdLoans.length === 0) return [];
 
-      // 1. Fetch all Active loans
-      const { data: loans, error: loansErr } = await supabase
-        .from('finance_loans')
-        .select('*')
-        .eq('status', 'Active');
+    const loanIds = cdLoans.map(l => l.id);
 
-      if (loansErr) throw loansErr;
-      if (!loans || loans.length === 0) return [];
-
-      // 2. Fetch all borrowers
-      const { data: borrowers, error: borrowersErr } = await supabase
-        .from('finance_customers')
-        .select('*');
-      if (borrowersErr) throw borrowersErr;
-
-      // 3. Fetch all CD entries
-      const { data: cdLedgerEntries, error: entriesErr } = await supabase
-        .from('finance_cd_ledger_entries')
-        .select('*');
-      if (entriesErr) throw entriesErr;
-
-      // 4. Fetch all CD interest details
-      const { data: cdInterestDetails, error: interestsErr } = await supabase
-        .from('finance_cd_interest_details')
-        .select('*');
-      if (interestsErr) throw interestsErr;
-
-      // 5. Fetch unpaid due entries
-      const { data: dueEntries, error: duesErr } = await supabase
-        .from('finance_dues')
-        .select('*')
-        .neq('status', 'Paid');
-      if (duesErr) throw duesErr;
-
-      // 6. Fetch ledger settings
-      let ledgerSettings: any[] = [];
-      try {
+    let cdLedgerEntries: any[] = [];
+    const chunkSize = 100;
+    for (let i = 0; i < loanIds.length; i += chunkSize) {
+      const chunk = loanIds.slice(i, i + chunkSize);
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
         const { data, error } = await supabase
-          .from('finance_ledger_settings')
-          .select('*');
-        if (!error && data) {
-          ledgerSettings = data;
+          .from('finance_cd_ledger_entries')
+          .select('*')
+          .in('loan_id', chunk)
+          .range(page * 1000, (page + 1) * 1000 - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          cdLedgerEntries = cdLedgerEntries.concat(data);
+          if (data.length < 1000) hasMore = false;
+          else page++;
+        } else {
+          hasMore = false;
         }
-      } catch (err) {
-        console.warn('Could not fetch ledger settings:', err);
       }
+    }
 
-      const borrowerMap = new Map<string, any>((borrowers || []).map(b => [b.id, b]));
+    let cdInterestDetails: any[] = [];
+    for (let i = 0; i < loanIds.length; i += chunkSize) {
+      const chunk = loanIds.slice(i, i + chunkSize);
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('finance_cd_interest_details')
+          .select('*')
+          .in('loan_id', chunk)
+          .range(page * 1000, (page + 1) * 1000 - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          cdInterestDetails = cdInterestDetails.concat(data);
+          if (data.length < 1000) hasMore = false;
+          else page++;
+        } else {
+          hasMore = false;
+        }
+      }
+    }
 
-      const results = (loans || []).map(loan => {
+    const customerIds = [...new Set(cdLoans.flatMap(l => [l.customer_id, l.guarantor_1_id, l.guarantor_2_id]).filter(Boolean))];
+    let borrowers: any[] = [];
+    for (let i = 0; i < customerIds.length; i += chunkSize) {
+      const chunk = customerIds.slice(i, i + chunkSize);
+      const { data, error } = await supabase.from('finance_customers').select('*').in('id', chunk);
+      if (error) throw error;
+      if (data) borrowers = borrowers.concat(data);
+    }
+    const borrowerMap = new Map<string, any>(borrowers.map(b => [b.id, b]));
+
+    return cdLoans.reduce((acc, loan) => {
+      try {
+        const entries = cdLedgerEntries.filter(e => e.loan_id === loan.id);
+        const interests = cdInterestDetails.filter(d => d.loan_id === loan.id);
+        
         const borrower = borrowerMap.get(loan.customer_id) || {};
         const g1 = borrowerMap.get(loan.guarantor_1_id) || {};
         const g2 = borrowerMap.get(loan.guarantor_2_id) || {};
-
-        const loanType = loan.loan_id.startsWith('CD') ? 'CD' : (loan.loan_id.startsWith('HP') ? 'HP' : (loan.loan_id.startsWith('STBD') ? 'STBD' : 'TBD'));
+        
         const phone = borrower.phone || borrower.phone_1 || borrower.phone_2 || '';
         const g1_name = g1.name || '';
         const g1_phone = g1.phone || g1.phone_1 || g1.phone_2 || '';
         const g2_name = g2.name || '';
         const g2_phone = g2.phone || g2.phone_1 || g2.phone_2 || '';
+        
+        const disbEntry = entries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
+        const originalLoanDateStr = disbEntry ? disbEntry.entry_date.split('T')[0] : loan.date.split('T')[0];
 
-        if (loanType === 'CD') {
-          const entries = cdLedgerEntries.filter(e => e.loan_id === loan.id);
-          const interests = cdInterestDetails.filter(d => d.loan_id === loan.id);
+        const interestPaid = entries
+          .filter(e => e.account_name === 'CD COMMISSION A/C' || e.entry_type === 'interest_payment')
+          .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
-          const disbEntry = entries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
-          const originalLoanDateStr = disbEntry ? disbEntry.entry_date.split('T')[0] : loan.date.split('T')[0];
+        const pos = financeCalculationService.getCDAccountPosition(loan, entries, interests, asOfDate);
 
-          const interestPaid = entries
-            .filter(e => e.account_name === 'CD COMMISSION A/C' || e.entry_type === 'interest_payment')
-            .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+        acc.push({
+          id: loan.id,
+          loan_id: loan.loan_id,
+          customer_name: borrower.name || '',
+          loan_category: loan.loan_category || 'CD',
+          loan_type: 'CD',
+          loan_amount: Number(loan.amount),
+          current_principal: pos.principalBalance,
+          loan_date: originalLoanDateStr,
+          current_due_date: pos.currentDueDate,
+          interest_paid: interestPaid,
+          pending_interest: pos.accruedInterest,
+          penalty: pos.accruedPenalty,
+          present_due: pos.totalToRegularize,
+          due_days: pos.displayDueDays,
+          is_npa: pos.displayDueDays > 90,
+          phone,
+          g1_name,
+          g1_phone,
+          g2_name,
+          g2_phone,
+          partner_name: borrower.partner_name || 'Unassigned',
+          status: loan.status
+        });
+      } catch (err) {
+        console.error(`Error calculating CD Account Position for loan ${loan.loan_id} (${loan.id}):`, err);
+        // Surfacing error without failing the entire batch
+      }
+      return acc;
+    }, [] as any[]);
+  }
 
-          const pos = financeCalculationService.getCDAccountPosition(loan, entries, interests, targetDate);
+  async getDuesLedgerSummary(todayDate?: string): Promise<any[]> {
+    try {
+      const targetDate = todayDate || getLocalBusinessDateISO();
 
-          return {
-            id: loan.id,
-            loan_id: loan.loan_id,
-            customer_name: borrower.name || '',
-            loan_category: loan.loan_category || 'CD',
-            loan_type: 'CD',
-            loan_amount: Number(loan.amount),
-            current_principal: pos.principalBalance,
-            loan_date: originalLoanDateStr,
-            current_due_date: pos.currentDueDate,
-            interest_paid: interestPaid,
-            pending_interest: pos.accruedInterest,
-            penalty: pos.accruedPenalty,
-            present_due: pos.todayDue,
-            due_days: Math.max(0, pos.displayDueDays),
-            is_npa: pos.displayDueDays > 90,
-            phone,
-            g1_name,
-            g1_phone,
-            g2_name,
-            g2_phone,
-            partner_name: borrower.partner_name || 'Unassigned'
-          };
-        } else {
+      // 1. Fetch all Active CD Due Positions
+      const cdPositions = await this.getActiveCDDuePositions(targetDate);
+
+      // 2. Fetch all Active Non-CD loans
+      const { data: nonCdLoans, error: loansErr } = await supabase
+        .from('finance_loans')
+        .select('*')
+        .eq('status', 'Active')
+        .not('loan_id', 'like', 'CD%');
+
+      if (loansErr) throw loansErr;
+
+      let nonCdResults: any[] = [];
+
+      if (nonCdLoans && nonCdLoans.length > 0) {
+        // Fetch all borrowers for non-CD
+        const { data: borrowers, error: borrowersErr } = await supabase
+          .from('finance_customers')
+          .select('*');
+        if (borrowersErr) throw borrowersErr;
+        const borrowerMap = new Map<string, any>((borrowers || []).map(b => [b.id, b]));
+
+        // Fetch unpaid due entries for non-CD
+        const { data: dueEntries, error: duesErr } = await supabase
+          .from('finance_dues')
+          .select('*')
+          .neq('status', 'Paid');
+        if (duesErr) throw duesErr;
+
+        // Fetch ledger settings
+        let ledgerSettings: any[] = [];
+        try {
+          const { data, error } = await supabase
+            .from('finance_ledger_settings')
+            .select('*');
+          if (!error && data) {
+            ledgerSettings = data;
+          }
+        } catch (err) {
+          console.warn('Could not fetch ledger settings:', err);
+        }
+
+        nonCdResults = nonCdLoans.map(loan => {
+          const borrower = borrowerMap.get(loan.customer_id) || {};
+          const g1 = borrowerMap.get(loan.guarantor_1_id) || {};
+          const g2 = borrowerMap.get(loan.guarantor_2_id) || {};
+
+          const loanType = loan.loan_id.startsWith('HP') ? 'HP' : (loan.loan_id.startsWith('STBD') ? 'STBD' : 'TBD');
+          const phone = borrower.phone || borrower.phone_1 || borrower.phone_2 || '';
+          const g1_name = g1.name || '';
+          const g1_phone = g1.phone || g1.phone_1 || g1.phone_2 || '';
+          const g2_name = g2.name || '';
+          const g2_phone = g2.phone || g2.phone_1 || g2.phone_2 || '';
+
           const loanDues = dueEntries.filter(d => d.loan_id === loan.id);
           const totalRepayable = loanDues.reduce((sum, d) => sum + Number(d.amount), 0);
           const totalPaid = loanDues.reduce((sum, d) => sum + Number(d.paid_amount || 0), 0);
@@ -3949,7 +4167,7 @@ class SupabaseFinance {
           const isNpa = dueDaysRaw > 90;
 
           const categorySetting = (ledgerSettings || []).find(s => s.code === loan.loan_category) || 
-                                  (ledgerSettings || []).find(s => s.code === 'CD') || 
+                                  (ledgerSettings || []).find(s => s.code === loanType) || 
                                   { overdue: 24, days_per_year: 365 };
 
           let penalty = 0;
@@ -3958,22 +4176,20 @@ class SupabaseFinance {
             penalty = Math.round(presentDuePrincipalAndInterest * (categorySetting.overdue / 100.0) * (dueDays / daysPerMonth));
           }
 
-          const presentDue = Number((presentDuePrincipalAndInterest + penalty).toFixed(2));
-
           return {
             id: loan.id,
             loan_id: loan.loan_id,
             customer_name: borrower.name || '',
-            loan_category: loan.loan_category || 'General',
+            loan_category: loan.loan_category || loanType,
             loan_type: loanType,
             loan_amount: Number(loan.amount),
             current_principal: currentPrincipal,
-            loan_date: loan.date,
-            current_due_date: oldestDueDateStr || loan.date,
+            loan_date: loan.date.split('T')[0],
+            current_due_date: oldestDueDateStr || loan.date.split('T')[0],
             interest_paid: interestPaid,
             pending_interest: pendingInterest,
             penalty: penalty,
-            present_due: presentDue,
+            present_due: presentDuePrincipalAndInterest + penalty,
             due_days: dueDays,
             is_npa: isNpa,
             phone,
@@ -3983,10 +4199,10 @@ class SupabaseFinance {
             g2_phone,
             partner_name: borrower.partner_name || 'Unassigned'
           };
-        }
-      });
+        });
+      }
 
-      return results;
+      return [...cdPositions, ...nonCdResults];
     } catch (error) {
       console.error('Error fetching dues ledger summary:', error);
       return [];

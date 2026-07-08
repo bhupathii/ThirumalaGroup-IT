@@ -26,6 +26,12 @@ const TransactionApproval: React.FC = () => {
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
 
+  // Bulk Approval States
+  const [selectedReviewIds, setSelectedReviewIds] = useState<Set<string>>(new Set());
+  const [showBulkConfirmModal, setShowBulkConfirmModal] = useState(false);
+  const [bulkResult, setBulkResult] = useState<any>(null);
+  const [isBulkApproving, setIsBulkApproving] = useState(false);
+
   // Filter States
   const [statusTab, setStatusTab] = useState<'PENDING' | 'APPROVED' | 'ALL'>('PENDING');
   const [filterDate, setFilterDate] = useState('');
@@ -54,6 +60,7 @@ const TransactionApproval: React.FC = () => {
 
   const fetchReviews = async () => {
     try {
+      setSelectedReviewIds(new Set());
       setLoading(true);
       setQueryError(null);
       const data = await supabaseFinance.getTransactionReviews({
@@ -145,6 +152,67 @@ const TransactionApproval: React.FC = () => {
       toast.error('Error occurred during approval');
     } finally {
       setActioningId(null);
+    }
+  };
+
+  const handleSelectToggle = (reviewId: string) => {
+    const next = new Set(selectedReviewIds);
+    if (next.has(reviewId)) {
+      next.delete(reviewId);
+    } else {
+      next.add(reviewId);
+    }
+    setSelectedReviewIds(next);
+  };
+
+  const handleSelectAll = () => {
+    const pendingIds = reviews.filter(r => r.review_status === 'PENDING').map(r => r.id);
+    if (selectedReviewIds.size === pendingIds.length && pendingIds.length > 0) {
+      setSelectedReviewIds(new Set()); // Deselect all
+    } else {
+      setSelectedReviewIds(new Set(pendingIds)); // Select all pending
+    }
+  };
+
+  const handleBulkApproveConfirm = () => {
+    if (!user?.is_admin) {
+      toast.error('Access Denied: Only administrators can bulk approve transactions.');
+      return;
+    }
+    
+    const targetIds = selectedReviewIds.size > 0 
+      ? Array.from(selectedReviewIds)
+      : reviews.filter(r => r.review_status === 'PENDING').map(r => r.id);
+      
+    if (targetIds.length === 0) {
+      toast.error('No pending transactions available to approve.');
+      return;
+    }
+    
+    setShowBulkConfirmModal(true);
+  };
+
+  const executeBulkApproval = async () => {
+    const targetIds = selectedReviewIds.size > 0 
+      ? Array.from(selectedReviewIds)
+      : reviews.filter(r => r.review_status === 'PENDING').map(r => r.id);
+
+    try {
+      setIsBulkApproving(true);
+      const result = await supabaseFinance.approveTransactionsBulk({
+        transactionIds: targetIds,
+        approvedBy: user?.username || 'System'
+      });
+      
+      setBulkResult(result);
+      fetchReviews();
+      fetchPendingDates();
+    } catch (err: any) {
+      console.error('Bulk approval failed:', err);
+      toast.error(err.message || 'Bulk approval failed unexpectedly');
+    } finally {
+      setIsBulkApproving(false);
+      setShowBulkConfirmModal(false);
     }
   };
 
@@ -346,8 +414,47 @@ const TransactionApproval: React.FC = () => {
           </div>
 
         </form>
-
       </div>
+
+      {/* Bulk Action Bar (Only show on PENDING tab when there are results) */}
+      {statusTab === 'PENDING' && reviews.length > 0 && !loading && !queryError && (
+        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 px-5 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSelectAll}
+              className="w-5 h-5 rounded border border-indigo-300 flex items-center justify-center bg-white text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 transition-all"
+            >
+              {selectedReviewIds.size > 0 && (
+                selectedReviewIds.size === reviews.filter(r => r.review_status === 'PENDING').length 
+                  ? <Check className="w-3.5 h-3.5 font-bold" />
+                  : <div className="w-2.5 h-2.5 bg-indigo-500 rounded-sm" />
+              )}
+            </button>
+            <span className="text-sm font-bold text-indigo-900 uppercase tracking-wide">
+              {selectedReviewIds.size > 0 
+                ? `${selectedReviewIds.size} Selected` 
+                : `${reviews.filter(r => r.review_status === 'PENDING').length} Pending Matches`}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedReviewIds.size > 0 && (
+              <button
+                onClick={() => setSelectedReviewIds(new Set())}
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 uppercase px-3 py-1.5 transition-colors"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              onClick={handleBulkApproveConfirm}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+            >
+              <Check className="w-4 h-4" />
+              {selectedReviewIds.size > 0 ? 'Approve Selected' : 'Approve All Matching'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main List Table / Card */}
       <Card className="shadow-sm border-slate-150 rounded-xl overflow-hidden">
@@ -387,6 +494,7 @@ const TransactionApproval: React.FC = () => {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-150 text-slate-500 font-bold uppercase finance-small-label">
+                  {statusTab === 'PENDING' && <th className="px-6 py-4 text-left w-12"></th>}
                   <th className="px-6 py-4 text-left tracking-wider">Date & Ref</th>
                   <th className="px-6 py-4 text-left tracking-wider">Transaction Details</th>
                   <th className="px-6 py-4 text-left tracking-wider">Source Type</th>
@@ -408,8 +516,20 @@ const TransactionApproval: React.FC = () => {
 
                   return (
                     <React.Fragment key={item.id}>
-                      <tr className="hover:bg-slate-50 transition-colors">
+                      <tr className={`transition-colors ${selectedReviewIds.has(item.id) ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}>
                         
+                        {/* Checkbox */}
+                        {statusTab === 'PENDING' && (
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => handleSelectToggle(item.id)}
+                              className="w-5 h-5 rounded border border-slate-300 flex items-center justify-center bg-white text-indigo-600 focus:outline-none transition-all hover:border-indigo-400"
+                            >
+                              {selectedReviewIds.has(item.id) && <Check className="w-3.5 h-3.5 font-bold" />}
+                            </button>
+                          </td>
+                        )}
+
                         {/* Date & Ref */}
                         <td className="px-6 py-4">
                           <div className="font-bold text-slate-800 finance-header-time">
@@ -619,6 +739,113 @@ const TransactionApproval: React.FC = () => {
           </div>
         )}
       </Card>
+
+      {/* Bulk Confirm Modal */}
+      {showBulkConfirmModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="bg-indigo-600 p-5 text-white flex items-center gap-3">
+              <Check className="w-6 h-6" />
+              <h3 className="font-bold text-lg">Confirm Bulk Approval</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-slate-600 text-sm">
+                You are about to approve <strong>{selectedReviewIds.size > 0 ? selectedReviewIds.size : reviews.filter(r => r.review_status === 'PENDING').length}</strong> transactions simultaneously.
+              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-amber-800 text-xs font-semibold uppercase tracking-wide flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  Warning: Idempotent Ledger Rebuild
+                </p>
+                <p className="text-amber-700 text-xs mt-1">
+                  This action will post all associated financial ledgers and execute chronological CD loan recalculations for affected accounts.
+                </p>
+              </div>
+            </div>
+            <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+              <button
+                onClick={() => setShowBulkConfirmModal(false)}
+                disabled={isBulkApproving}
+                className="px-4 py-2 text-slate-500 hover:text-slate-700 font-bold text-sm uppercase tracking-wider"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeBulkApproval}
+                disabled={isBulkApproving}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-5 py-2 rounded-lg font-bold text-sm uppercase tracking-wider flex items-center gap-2 transition-colors shadow-sm"
+              >
+                {isBulkApproving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {isBulkApproving ? 'Approving...' : 'Confirm Approve'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Result Modal */}
+      {bulkResult && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div className={`p-5 text-white flex items-center justify-between ${bulkResult.failed > 0 ? 'bg-amber-600' : 'bg-emerald-600'}`}>
+              <div className="flex items-center gap-3">
+                {bulkResult.failed > 0 ? <AlertCircle className="w-6 h-6" /> : <Check className="w-6 h-6" />}
+                <h3 className="font-bold text-lg">Bulk Approval Complete</h3>
+              </div>
+              <button onClick={() => setBulkResult(null)} className="text-white/80 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-center">
+                  <div className="text-2xl font-black text-slate-800">{bulkResult.requested}</div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Requested</div>
+                </div>
+                <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 text-center">
+                  <div className="text-2xl font-black text-emerald-700">{bulkResult.approved}</div>
+                  <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mt-1">Approved</div>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-center">
+                  <div className="text-2xl font-black text-slate-500">{bulkResult.skipped}</div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Skipped</div>
+                </div>
+                <div className="bg-rose-50 p-3 rounded-lg border border-rose-100 text-center">
+                  <div className="text-2xl font-black text-rose-700">{bulkResult.failed}</div>
+                  <div className="text-[10px] font-bold text-rose-600 uppercase tracking-wider mt-1">Failed</div>
+                </div>
+              </div>
+
+              {bulkResult.failures.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Failure Details</h4>
+                  <div className="max-h-40 overflow-y-auto bg-rose-50 border border-rose-100 rounded-lg p-2">
+                    <ul className="text-xs text-rose-800 space-y-2">
+                      {bulkResult.failures.map((f: any, i: number) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="font-bold shrink-0">{f.receiptNo}:</span>
+                          <span>{f.reason}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setBulkResult(null)}
+                className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-bold text-sm uppercase tracking-wider transition-colors shadow-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
