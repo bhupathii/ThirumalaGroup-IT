@@ -1511,6 +1511,12 @@ const CDLedger: React.FC = () => {
         }
       }
 
+      // Rebuild CD loan sequential history
+      const rebuildResult = await cdLedgerRebuildService.rebuildCDLoanLifecycle(selectedLoan.id, 'FULL_RECALCULATE');
+      if (!rebuildResult.success) {
+        throw new Error(`Rebuild of CD loan sequential history failed: ${rebuildResult.error || 'Unknown error'}`);
+      }
+
       setTotalAmountPaying('');
       await fetchLedgerData();
       await loadLedgerDetails(selectedLoan.id);

@@ -65,6 +65,10 @@ const parseRemarks = (remarksStr: string) => {
   return result;
 };
 
+const normalizeText = (value: any): string => {
+  return String(value ?? '').trim().toUpperCase();
+};
+
 const EditLoanEntry: React.FC = () => {
   const { user } = useAuth();
   
@@ -495,7 +499,7 @@ const EditLoanEntry: React.FC = () => {
       }
 
       // 2. Update loan record
-      if (loanFieldsChanged) {
+      if (loanFieldsChanged || loanCategory === 'CD') {
         await supabaseFinance.updateLoan(selectedLoan.id, {
           date,
           amount: Number(amount),
@@ -558,10 +562,20 @@ const EditLoanEntry: React.FC = () => {
       }
 
       if (reloaded.customer) {
-        if (reloaded.customer.name !== custName) mismatches.push('Borrower Name');
-        if ((reloaded.customer.phone || '') !== (custPhone || '')) mismatches.push('Borrower Phone');
-        if ((reloaded.customer.address || '') !== (custAddress || '')) mismatches.push('Borrower Address');
-        if ((reloaded.customer.aadhaar || '') !== (custAadhaar || '')) mismatches.push('Borrower Aadhaar');
+        if (normalizeText(reloaded.customer.name) !== normalizeText(custName)) {
+          mismatches.push('Borrower Name');
+        }
+        if (normalizeText(reloaded.customer.phone) !== normalizeText(custPhone)) {
+          mismatches.push('Borrower Phone');
+        }
+        // address payload saves: (custPresentAddress || custAddress || null)?.toUpperCase()
+        const expectedAddress = custPresentAddress || custAddress;
+        if (normalizeText(reloaded.customer.address) !== normalizeText(expectedAddress)) {
+          mismatches.push('Borrower Address');
+        }
+        if (normalizeText(reloaded.customer.aadhaar) !== normalizeText(custAadhaar)) {
+          mismatches.push('Borrower Aadhaar');
+        }
       }
 
       // Verify sync in DB (Correction 6)
@@ -587,8 +601,14 @@ const EditLoanEntry: React.FC = () => {
         const expectedComm = Number(((Number(amount) * (commRate / 100) * pDays) / 30).toFixed(2));
         const expectedDoc = Number(docCharges);
 
-        const commEntry = verEntries.find((e: any) => e.entry_type === 'opening_commission');
-        const docEntry = verEntries.find((e: any) => e.entry_type === 'document_charge');
+        const commEntry = verEntries.find((e: any) => 
+          e.entry_type === 'opening_commission' || 
+          e.entry_type === 'Commission'
+        );
+        const docEntry = verEntries.find((e: any) => 
+          e.entry_type === 'document_charge' || 
+          (e.account_name || '').toLowerCase() === 'cd document charges a/c'
+        );
 
         if (expectedComm > 0 && (!commEntry || Number(commEntry.credit) !== expectedComm)) {
           mismatches.push('CD Ledger Sync (Opening Commission)');

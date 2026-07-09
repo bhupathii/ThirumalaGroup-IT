@@ -359,7 +359,7 @@ class SupabaseDatabase {
   private bypassBookScope: boolean = false;
 
   // New offline support fields
-  isOnline: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  isOnline: boolean = typeof navigator !== 'undefined' && navigator.onLine !== undefined ? navigator.onLine : true;
   isSyncing: boolean = false;
   currentBookName: string = '';
   currentUserId: string = '';
