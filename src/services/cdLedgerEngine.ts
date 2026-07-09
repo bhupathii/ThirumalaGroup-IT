@@ -405,7 +405,7 @@ export function getCDAccountPosition(
   const dailyInterest = vbaRound((principalBalance * (contract.interestRate / 100)) / 30, 5);
   const dailyPenalty = vbaRound((principalBalance * (contract.penaltyRate / 100)) / 30, 2);
 
-  const accruedInterest = exactDueDays <= 0 ? 0 : roundCDMoney(dailyInterest * exactDueDays);
+  const accruedInterest = roundCDMoney(dailyInterest * exactDueDays);
   const penaltyEligible = vbaRound(exactDueDays, 0) > contract.graceDays;
   const accruedPenalty = (exactDueDays <= 0 || !penaltyEligible) ? 0 : roundCDMoney(dailyPenalty * exactDueDays);
 
@@ -501,7 +501,7 @@ export function simulateAccessRenewEventChain(
     : 0.75;
 
   const exactDueDays = position.exactDueDays;
-  const initialInterest = position.accruedInterest;
+  const initialInterest = Math.max(0, position.accruedInterest);
   const initialPenalty = position.accruedPenalty;
 
   // 2. PENALTY ELIGIBILITY & 3. RENEW LOSTFOCUS EVENT SIMULATION
@@ -528,7 +528,7 @@ export function simulateAccessRenewEventChain(
       0
     ) : 0;
 
-    const pDays = exactDueDays > lostFocusRDays ? lostFocusRDays : exactDueDays;
+    const pDays = checkDueDays > lostFocusRDays ? lostFocusRDays : checkDueDays;
 
     penaltyAfterCalculating = vbaRound(
       dailyPenalty * pDays,
@@ -599,7 +599,7 @@ export function allocateCDPayment(
 ): CDPaymentSplit {
   const pAmt = roundMoney(paymentAmount);
   const penDue = position.accruedPenalty;
-  const intDue = position.accruedInterest;
+  const intDue = Math.max(0, position.accruedInterest);
   const prin = position.principalBalance;
   
   const totalDues = roundMoney(penDue + intDue);

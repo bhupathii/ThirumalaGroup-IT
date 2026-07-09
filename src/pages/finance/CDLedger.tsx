@@ -91,6 +91,14 @@ const normalizeCDLedgerEntries = (entries: any[]) => {
   });
 };
 
+const formatCDCurrency = (val: number | undefined): string => {
+  if (val === undefined || isNaN(val)) return '₹0.00';
+  if (val < 0) {
+    return `-₹${Math.abs(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
 const CDLedger: React.FC = () => {
   const { user } = useAuth();
 
@@ -253,7 +261,19 @@ const CDLedger: React.FC = () => {
           .select('id, date, amount, type, remarks, collected_by, receipt_no')
           .eq('loan_id', loanId)
           .order('date', { ascending: true });
-        setLoanTransactions(txs || []);
+        
+        const sortedTxs = [...(txs || [])].sort((a, b) => {
+          const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+          if (dateDiff !== 0) return dateDiff;
+          
+          const aReceipt = a.receipt_no || '';
+          const bReceipt = b.receipt_no || '';
+          const receiptDiff = aReceipt.localeCompare(bReceipt, undefined, { numeric: true, sensitivity: 'base' });
+          if (receiptDiff !== 0) return receiptDiff;
+          
+          return String(a.id).localeCompare(String(b.id));
+        });
+        setLoanTransactions(sortedTxs);
       } else if (tab === 'editHistory') {
         const { data: editLogsData } = await supabase
           .from('finance_cd_transaction_edit_logs')
@@ -2381,13 +2401,13 @@ const CDLedger: React.FC = () => {
                         <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
                           <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Today Due</span>
                           <span className={`text-[20px] font-bold block leading-snug ${ledgerMetrics.todayDue < 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                            ₹{ledgerMetrics.todayDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            {formatCDCurrency(ledgerMetrics.todayDue)}
                           </span>
                         </div>
                         <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
                           <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Accrued Interest</span>
                           <span className={`text-[20px] font-bold block leading-snug ${ledgerMetrics.pendingInterest < 0 ? 'text-emerald-700' : 'text-slate-955'}`}>
-                            ₹{ledgerMetrics.pendingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            {formatCDCurrency(ledgerMetrics.pendingInterest)}
                           </span>
                         </div>
                         <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
@@ -2425,7 +2445,7 @@ const CDLedger: React.FC = () => {
                           <span className="text-[12px] text-slate-400 font-semibold block mt-0.5">Full payoff principal &amp; dues</span>
                         </div>
                         <span className="text-[22px] font-extrabold text-emerald-400">
-                          ₹{ledgerMetrics.totalClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          {formatCDCurrency(ledgerMetrics.totalClose)}
                         </span>
                       </div>
 
@@ -3105,7 +3125,7 @@ const CDLedger: React.FC = () => {
                 <div className="space-y-1.5 text-[11px] font-sans">
                   <span className="text-[10px] font-black uppercase text-slate-800 tracking-wider block border-b pb-1 mb-1.5">Current Balance State</span>
                   <div className="flex justify-between"><span className="text-slate-500">Current Principal Balance:</span> <span className="font-extrabold text-green-700">₹{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Pending Accrued Interest:</span> <span className="font-extrabold text-orange-600">₹{ledgerMetrics.pendingInterest.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Pending Accrued Interest:</span> <span className="font-extrabold text-orange-600">{formatCDCurrency(ledgerMetrics.pendingInterest)}</span></div>
                   <div className="flex justify-between"><span className="text-slate-500">Pending Accrued Penalty:</span> <span className="font-extrabold text-red-650">₹{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
                   <div className="flex justify-between"><span className="text-slate-500">Current Next Due Date:</span> <span className="font-extrabold text-slate-900">{formatDateOld(renewCalculations?.dueDateStr)}</span></div>
                 </div>

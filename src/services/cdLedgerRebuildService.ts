@@ -46,7 +46,7 @@ export const cdLedgerRebuildService = {
       }
 
       // 3. Fetch all transaction records
-      const { data: txs, error: txError } = await supabase
+      const { data: rawTxs, error: txError } = await supabase
         .from('finance_transactions')
         .select('*')
         .eq('loan_id', loanId)
@@ -56,6 +56,23 @@ export const cdLedgerRebuildService = {
       if (txError) {
         throw new Error(txError.message);
       }
+
+      // Chronological stable business sequence sorting
+      const txs = [...(rawTxs || [])].sort((a, b) => {
+        const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+        if (dateDiff !== 0) return dateDiff;
+        
+        const aReceipt = a.receipt_no || '';
+        const bReceipt = b.receipt_no || '';
+        const receiptDiff = aReceipt.localeCompare(bReceipt, undefined, { numeric: true, sensitivity: 'base' });
+        if (receiptDiff !== 0) return receiptDiff;
+        
+        const aTime = new Date(a.created_at || 0).getTime();
+        const bTime = new Date(b.created_at || 0).getTime();
+        if (aTime !== bTime) return aTime - bTime;
+        
+        return String(a.id).localeCompare(String(b.id));
+      });
 
       // Automatic Rebuild Mode Selection via Timeline Hash Comparison
       const collections = (txs || []).filter(t => t.type === 'Collection');
