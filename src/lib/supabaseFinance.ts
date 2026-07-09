@@ -2293,7 +2293,10 @@ class SupabaseFinance {
         }
 
         // opening_commission entry
-        const commEntry = existingEntries.find((e: any) => e.entry_type === 'opening_commission');
+        const commEntry = existingEntries.find((e: any) => 
+          e.entry_type === 'opening_commission' || 
+          e.entry_type === 'Commission'
+        );
         if (commEntry) {
           if (commAmount > 0) {
             await supabase
@@ -2329,7 +2332,10 @@ class SupabaseFinance {
         }
 
         // document_charge entry
-        const docEntry = existingEntries.find((e: any) => e.entry_type === 'document_charge');
+        const docEntry = existingEntries.find((e: any) => 
+          e.entry_type === 'document_charge' || 
+          (e.account_name || '').toLowerCase() === 'cd document charges a/c'
+        );
         if (docEntry) {
           if (docCharges > 0) {
             await supabase
