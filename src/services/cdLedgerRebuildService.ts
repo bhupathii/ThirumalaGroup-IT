@@ -12,6 +12,22 @@ export interface CDReplayState {
   interestDetails: any[];
 }
 
+export function compareReceipts(a: string, b: string): number {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  const matchA = a.match(/^([a-zA-Z]+)?(\d+)?$/);
+  const matchB = b.match(/^([a-zA-Z]+)?(\d+)?$/);
+  if (!matchA || !matchB) return a.localeCompare(b);
+  const prefixA = matchA[1] || '';
+  const prefixB = matchB[1] || '';
+  const prefixDiff = prefixA.localeCompare(prefixB);
+  if (prefixDiff !== 0) return prefixDiff;
+  const numA = matchA[2] ? parseInt(matchA[2], 10) : 0;
+  const numB = matchB[2] ? parseInt(matchB[2], 10) : 0;
+  return numA - numB;
+}
+
 export const cdLedgerRebuildService = {
   /**
    * Performs a complete sequential rebuild of a CD loan's ledger lifecycle
@@ -62,9 +78,7 @@ export const cdLedgerRebuildService = {
         const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
         if (dateDiff !== 0) return dateDiff;
         
-        const aReceipt = a.receipt_no || '';
-        const bReceipt = b.receipt_no || '';
-        const receiptDiff = aReceipt.localeCompare(bReceipt, undefined, { numeric: true, sensitivity: 'base' });
+        const receiptDiff = compareReceipts(a.receipt_no || '', b.receipt_no || '');
         if (receiptDiff !== 0) return receiptDiff;
         
         const aTime = new Date(a.created_at || 0).getTime();
@@ -90,7 +104,7 @@ export const cdLedgerRebuildService = {
         .sort((a, b) => {
           const dateDiff = new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime();
           if (dateDiff !== 0) return dateDiff;
-          return (a.receipt_no || '').localeCompare(b.receipt_no || '');
+          return compareReceipts(a.receipt_no || '', b.receipt_no || '');
         });
       const persistedTimeline = amountPaidEntries.map(e => ({
         loan_id: e.loan_id,
