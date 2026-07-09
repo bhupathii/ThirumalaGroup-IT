@@ -1110,7 +1110,7 @@ const CDLedger: React.FC = () => {
     return {
       totalCredit,
       totalDebit,
-      presentBalance: ledgerMetrics.principalBalance,
+      presentBalance: Number((ledgerMetrics.principalBalance + ledgerMetrics.pendingInterest + ledgerMetrics.pendingPenalty).toFixed(2)),
       totalDues: ledgerMetrics.currentTotalDues,
       paidDues: ledgerMetrics.currentPaidDues,
       pendingDues: ledgerMetrics.currentPendingDues
