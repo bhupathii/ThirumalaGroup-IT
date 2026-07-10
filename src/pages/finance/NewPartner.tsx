@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
-import { supabaseFinance, FinancePartner } from '../../lib/supabaseFinance';
+import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, RotateCcw, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -17,7 +17,7 @@ const NewPartner: React.FC = () => {
   
   // Fields state
   const [partnerId, setPartnerId] = useState<number | string>('...');
-  const [isMd, setIsMd] = useState(false);
+  const [role, setRole] = useState<'MANAGING PARTNER' | 'PARTNER'>('PARTNER');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [homePhone, setHomePhone] = useState('');
@@ -28,6 +28,7 @@ const NewPartner: React.FC = () => {
 
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const nameRef = React.useRef<HTMLInputElement>(null);
+  const phoneRef = React.useRef<HTMLInputElement>(null);
 
   // Fetch data on load depending on mode
   useEffect(() => {
@@ -71,7 +72,7 @@ const NewPartner: React.FC = () => {
       
       if (data) {
         setPartnerId(data.partner_id || '');
-        setIsMd(data.is_md || false);
+        setRole(data.is_md ? 'MANAGING PARTNER' : 'PARTNER');
         setName(data.name || '');
         setPhone(data.phone || '');
         setHomePhone(data.home_phone || '');
@@ -88,7 +89,7 @@ const NewPartner: React.FC = () => {
   const handleReset = () => {
     if (window.confirm('Are you sure you want to clear the form?')) {
       setName('');
-      setIsMd(false);
+      setRole('PARTNER');
       setPhone('');
       setHomePhone('');
       setVillage('');
@@ -105,9 +106,23 @@ const NewPartner: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     if (e && e.preventDefault) e.preventDefault();
+    if (saving) return; // Prevent double submit
 
     const fields: ValidationField[] = [
-      { name: 'name', label: 'Name', value: name, required: true, ref: nameRef }
+      { name: 'name', label: 'Name', value: name, required: true, ref: nameRef },
+      { name: 'role', label: 'Role', value: role, required: true },
+      { 
+        name: 'phone', 
+        label: 'Phone', 
+        value: phone, 
+        customValidation: (val) => {
+          if (val && !/^\d{10}$/.test(val.replace(/[^\d]/g, ''))) {
+            return 'Phone number must be exactly 10 digits';
+          }
+          return null;
+        },
+        ref: phoneRef as any
+      }
     ];
 
     const { isValid, errors: newErrors } = validateFinanceForm(fields);
@@ -119,9 +134,9 @@ const NewPartner: React.FC = () => {
     const savingToastId = toast.loading(editId ? 'Updating partner details...' : 'Registering partner...');
     try {
       const staffName = user?.username || 'Staff';
-      const payload: Partial<FinancePartner> = {
+      const payload = {
         name: name.trim(),
-        is_md: isMd,
+        is_md: role === 'MANAGING PARTNER',
         phone: phone.trim() || null,
         home_phone: homePhone.trim() || null,
         village: village.trim() || null,
@@ -217,21 +232,16 @@ const NewPartner: React.FC = () => {
                 
                 <div>
                   <label className="finance-caption uppercase">
-                    ROLE
+                    ROLE *
                   </label>
-                  <div className="flex items-center h-10 px-3 bg-white border border-slate-200 rounded-lg shadow-sm">
-                    <label className="inline-flex items-center cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={isMd}
-                        onChange={(e) => setIsMd(e.target.checked)}
-                        className="w-4 h-4 text-slate-900 border-slate-300 rounded focus:ring-slate-900 focus:outline-none"
-                      />
-                      <span className="ml-2 text-slate-850 finance-header-time uppercase">
-                        IS MD?
-                      </span>
-                    </label>
-                  </div>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as any)}
+                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg shadow-sm focus:ring-1 focus:ring-slate-950 focus:outline-none text-slate-850 finance-header-time"
+                  >
+                    <option value="PARTNER">PARTNER</option>
+                    <option value="MANAGING PARTNER">MANAGING PARTNER</option>
+                  </select>
                 </div>
               </div>
 
@@ -251,8 +261,10 @@ const NewPartner: React.FC = () => {
                 <Input
                   label="PHONE"
                   value={phone}
-                  onChange={setPhone}
+                  onChange={(val) => { setPhone(val); setErrors(p => ({...p, phone: false})) }}
                   placeholder="Primary contact number"
+                  ref={phoneRef}
+                  error={errors.phone}
                 />
                 <Input
                   label="HOME PHONE"

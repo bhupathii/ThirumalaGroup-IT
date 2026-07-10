@@ -19,6 +19,7 @@ interface CustomCalendarProps {
   entries?: any[];
   dotColor?: 'green' | 'red' | 'dark-red';
   tooltipLabel?: string;
+  onMonthChange?: (month: number, year: number) => void;
 }
 
 const CustomCalendar = ({
@@ -28,6 +29,7 @@ const CustomCalendar = ({
   entries: providedEntries,
   dotColor = 'red',
   tooltipLabel,
+  onMonthChange,
 }: CustomCalendarProps) => {
   const { mode: tableMode } = useTableMode();
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -146,6 +148,12 @@ const CustomCalendar = ({
       direction === 'prev' ? subMonths(prev, 1) : addMonths(prev, 1),
     );
   };
+
+  useEffect(() => {
+    if (onMonthChange) {
+      onMonthChange(currentMonth.getMonth() + 1, currentMonth.getFullYear());
+    }
+  }, [currentMonth, onMonthChange]);
 
   const handleDateClick = (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');

@@ -96,7 +96,6 @@ const FinanceSidebar: React.FC = () => {
     {
       title: 'Reports',
       items: [
-        { icon: BookOpen, label: 'Day Book', path: '/finance/daybook', key: 'daybook' },
         { icon: FileText, label: 'Daily Report', path: '/finance/daily-report', key: 'daily_report' },
         { icon: Book, label: 'Detailed Ledger', path: '/finance/detailed-ledger', key: 'detailed_ledger' },
         { icon: BookOpen, label: 'General Ledger', path: '/finance/general-ledger', key: 'general_ledger' },

@@ -10,22 +10,29 @@ const ModeSelection: React.FC = () => {
   const { setMode } = useTableMode();
   const { user } = useAuth();
 
-
   const handleRegularMode = () => {
     setMode('regular');
+    sessionStorage.setItem('finance_previous_mode', 'regular');
+    localStorage.setItem('finance_previous_mode', 'regular');
     navigate('/', { replace: true });
   };
 
   const handleITRMode = () => {
     setMode('itr');
+    sessionStorage.setItem('finance_previous_mode', 'itr');
+    localStorage.setItem('finance_previous_mode', 'itr');
     navigate('/', { replace: true });
   };
 
   const handleFinanceMode = () => {
+    const prev = sessionStorage.getItem('table_mode') || localStorage.getItem('table_mode');
+    if (prev && prev !== 'finance') {
+      sessionStorage.setItem('finance_previous_mode', prev);
+      localStorage.setItem('finance_previous_mode', prev);
+    }
     setMode('finance');
     navigate('/finance', { replace: true });
   };
-
   // Determine which modes the user can access based on their features
   // Admins have access to all modes
   const isAdmin = user?.is_admin || false;

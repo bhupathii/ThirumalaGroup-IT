@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import { supabaseFinance, FinanceCashbookAccount, FinanceCashbookEntry } from '../../lib/supabaseFinance';
+import { supabase } from '../../lib/supabase';
 import { 
   ArrowLeft, 
   RotateCcw, 
@@ -58,11 +59,19 @@ const CashBook: React.FC = () => {
   // Modal / Dialog Popups States
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [newAccountName, setNewAccountName] = useState('');
-  const [newAccountNumber, setNewAccountNumber] = useState('');
+  const [newAccountClassification, setNewAccountClassification] = useState<'BALANCE_SHEET' | 'PROFIT_AND_LOSS'>('PROFIT_AND_LOSS');
+  const [showDirectoryModal, setShowDirectoryModal] = useState(false);
+  const [editingAccId, setEditingAccId] = useState<string | null>(null);
+  const [editAccountName, setEditAccountName] = useState('');
+  const [editAccountClassification, setEditAccountClassification] = useState<'BALANCE_SHEET' | 'PROFIT_AND_LOSS'>('PROFIT_AND_LOSS');
+  const [directorySearchQuery, setDirectorySearchQuery] = useState('');
   const [savingAccount, setSavingAccount] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
 
-  const [financeMode, setFinanceMode] = useState<'REGULAR' | 'ITR'>('REGULAR');
+  const [financeMode] = useState<'REGULAR' | 'ITR'>(() => {
+    const prev = sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode');
+    return prev === 'itr' ? 'ITR' : 'REGULAR';
+  });
 
   useEffect(() => {
     fetchData();
@@ -254,38 +263,6 @@ const CashBook: React.FC = () => {
     }
   };
 
-  // Delete All Action (authorized check)
-  const handleDeleteAll = async () => {
-    if (!user?.is_admin) {
-      toast.error('Access Denied: Only authorized administrators can clear the Day Book');
-      return;
-    }
-
-    if (!window.confirm('⚠️ WARNING: This will permanently DELETE ALL entries from the Day Book. This action is irreversible. Are you sure you want to proceed?')) {
-      return;
-    }
-    
-    const doubleCheck = window.prompt('Type "DELETE ALL" to confirm clearing the ledger:');
-    if (doubleCheck !== 'DELETE ALL') {
-      toast.error('Confirmation mismatch. Clearing aborted.');
-      return;
-    }
-
-    const deleteToastId = toast.loading('Clearing all Day Book entries...');
-    try {
-      const staffName = user?.username || 'Admin';
-      const success = await supabaseFinance.clearCashbook(staffName);
-      if (success) {
-        toast.success('All Day Book entries deleted successfully', { id: deleteToastId });
-        await fetchData();
-      } else {
-        toast.error('Failed to clear Day Book', { id: deleteToastId });
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Error occurred while clearing Day Book', { id: deleteToastId });
-    }
-  };
 
   // Add New Account Modal Submit
   const handleCreateAccountSubmit = async (e: React.FormEvent) => {
@@ -299,19 +276,27 @@ const CashBook: React.FC = () => {
     setErrors(newErrors);
     if (!isValid) return;
 
+    // Case-insensitive, collapsed spaces, trimmed duplicate detection
+    const normalizedNewName = newAccountName.trim().toUpperCase().replace(/\s+/g, ' ');
+    const isDuplicate = accounts.some(acc => acc.account_name.trim().toUpperCase().replace(/\s+/g, ' ') === normalizedNewName);
+    if (isDuplicate) {
+      toast.error('An account with this name already exists.');
+      return;
+    }
 
     setSavingAccount(true);
     try {
       const payload = {
         account_name: newAccountName.trim(),
-        account_number: newAccountNumber.trim() || null
+        account_number: null, // Removed account number input field
+        report_classification: newAccountClassification
       };
 
       const result = await supabaseFinance.createCashbookAccount(payload);
       if (result) {
         toast.success(`Account "${newAccountName.trim()}" created`);
         setNewAccountName('');
-        setNewAccountNumber('');
+        setNewAccountClassification('PROFIT_AND_LOSS');
         setShowAccountModal(false);
 
         // Fetch updated accounts list
@@ -320,7 +305,7 @@ const CashBook: React.FC = () => {
 
         // Pre-select the newly created account
         setHeadOfAccount(result.id);
-        setAccountNumber(result.account_number || '');
+        setAccountNumber('');
       } else {
         toast.error('Failed to create account. Name might already exist.');
       }
@@ -329,6 +314,78 @@ const CashBook: React.FC = () => {
       toast.error('Error occurred while creating account');
     } finally {
       setSavingAccount(false);
+    }
+  };
+
+  // Edit/Classify existing account submit
+  const handleEditAccountSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAccId) return;
+
+    setSavingAccount(true);
+    try {
+      const payload = {
+        account_name: editAccountName.trim(),
+        account_number: null, // Removed account number input field
+        report_classification: editAccountClassification
+      };
+
+      const result = await supabaseFinance.updateCashbookAccount(editingAccId, payload);
+      if (result) {
+        toast.success(`Account "${editAccountName.trim()}" updated`);
+        setEditingAccId(null);
+        setEditAccountName('');
+        // Refresh accounts
+        const fetchedAccounts = await supabaseFinance.getCashbookAccounts();
+        setAccounts(fetchedAccounts);
+      } else {
+        toast.error('Failed to update account details');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Error occurred while updating account');
+    } finally {
+      setSavingAccount(false);
+    }
+  };
+
+  const handleDeleteAccount = async (account: FinanceCashbookAccount) => {
+    if (!window.confirm(`Are you sure you want to delete the Head of Account: "${account.account_name}"?`)) {
+      return;
+    }
+
+    try {
+      // 1. Dependency check from real database cashbook_entries
+      const { count, error: countError } = await supabase
+        .schema('finance')
+        .from('cashbook_entries')
+        .select('*', { count: 'exact', head: true })
+        .eq('head_of_account', account.account_name);
+
+      if (countError) throw countError;
+
+      if (count && count > 0) {
+        toast.error(`Cannot delete this Head of Account because it has existing transactions.\n(${count} existing transactions)`);
+        return;
+      }
+
+      // 2. Perform delete
+      const deleted = await supabaseFinance.deleteCashbookAccount(account.id);
+      if (deleted) {
+        toast.success(`Head of Account "${account.account_name}" deleted successfully.`);
+        // Refresh accounts
+        const fetchedAccounts = await supabaseFinance.getCashbookAccounts();
+        setAccounts(fetchedAccounts);
+        if (headOfAccount === account.id) {
+          setHeadOfAccount('');
+          setAccountNumber('');
+        }
+      } else {
+        toast.error('Failed to delete Head of Account');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Error occurred while deleting Head of Account');
     }
   };
 
@@ -410,23 +467,6 @@ const CashBook: React.FC = () => {
             <span className="text-slate-600">DAY BOOK ENTRY</span>
           </div>
           <h1 className="mt-1 finance-h1">DAY BOOK ENTRY</h1>
-          {/* Mode Selector Tabs */}
-          <div className="flex gap-2 mt-3">
-            {(['REGULAR', 'ITR'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setFinanceMode(mode)}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase transition-all shadow-sm ${
-                  financeMode === mode
-                    ? 'bg-[#0f172a] text-white'
-                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                {mode} Mode
-              </button>
-            ))}
-          </div>
           <p className="mt-1.5 finance-small-label uppercase">
             DAY-BOOK ENTRIES · CREDIT / DEBIT POSTED TO GENERAL LEDGER
           </p>
@@ -438,13 +478,6 @@ const CashBook: React.FC = () => {
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
-          </button>
-          <button
-            onClick={handleDeleteAll}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white border border-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-sm finance-header-time"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            DELETE ALL ENTRIES
           </button>
           <button
             onClick={() => setShowPrintModal(true)}
@@ -475,21 +508,13 @@ const CashBook: React.FC = () => {
             className="shadow-sm border-slate-150 rounded-xl"
           >
             <form onSubmit={handleSaveEntry} className="space-y-4">
-              
-              {/* Date & Account Number */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Date Input */}
+              <div className="w-full">
                 <Input
                   label="DATE"
                   type="date"
                   ref={entryDateRef} error={errors.entryDate} value={entryDate} onChange={(val) => { setEntryDate(val); setErrors(p => ({...p, entryDate: false})) }}
                   required
-                  
-                />
-                <Input
-                  label="ACCOUNT NUMBER"
-                  value={accountNumber}
-                  onChange={setAccountNumber}
-                  placeholder="OPTIONAL"
                   
                 />
               </div>
@@ -503,27 +528,36 @@ const CashBook: React.FC = () => {
                   value={headOfAccount}
                   onChange={(e) => { handleAccountChange(e.target.value); setErrors(p => ({...p, headOfAccount: false})) }}
                   ref={headOfAccountRef}
-                  className={`w-full bg-white border rounded-lg p-2 text-slate-850 focus:outline-none h-10 shadow-sm finance-header-time ${errors.headOfAccount ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-955'}`}
+                  className={`w-full bg-white border rounded-lg p-2 text-slate-855 focus:outline-none h-10 shadow-sm finance-header-time ${errors.headOfAccount ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-955'}`}
                   required
 
                 >
                   <option value="">SELECT...</option>
                   {accounts.map(acc => (
                     <option key={acc.id} value={acc.id}>
-                      {acc.account_name.toUpperCase()} {acc.account_number ? `(${acc.account_number})` : ''}
+                      {acc.account_name.toUpperCase()} {acc.report_classification ? `[${acc.report_classification.replace(/_/g, ' ')}]` : '[UNCLASSIFIED]'}
                     </option>
                   ))}
                 </select>
                 
-                {/* + New Account trigger */}
-                <button
-                  type="button"
-                  onClick={() => setShowAccountModal(true)}
-                  className="mt-2 inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors finance-small-label uppercase"
-                >
-                  <Plus className="w-3 h-3" />
-                  + New Account
-                </button>
+                {/* Account Triggers */}
+                <div className="flex gap-4 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAccountModal(true)}
+                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors finance-small-label uppercase"
+                  >
+                    <Plus className="w-3 h-3" />
+                    + New Account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDirectoryModal(true)}
+                    className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-800 transition-colors finance-small-label uppercase font-bold"
+                  >
+                    Manage Head of Accounts
+                  </button>
+                </div>
               </div>
 
               {/* Particulars */}
@@ -797,16 +831,20 @@ const CashBook: React.FC = () => {
                 ref={newAccountNameRef} error={errors.newAccountName} value={newAccountName} onChange={(val) => { setNewAccountName(val); setErrors(p => ({...p, newAccountName: false})) }}
                 placeholder="e.g. RENT, SALARY, OFFICE EXPENSE"
                 required
-                uppercase
-                
               />
-              <Input
-                label="ACCOUNT NUMBER"
-                value={newAccountNumber}
-                onChange={setNewAccountNumber}
-                placeholder="e.g. BANK ACC OR GENERAL LEDGER ID (OPTIONAL)"
-                
-              />
+
+              <div>
+                <label className="finance-caption uppercase block mb-1">REPORT CLASSIFICATION *</label>
+                <select
+                  value={newAccountClassification}
+                  onChange={(e) => setNewAccountClassification(e.target.value as any)}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
+                  required
+                >
+                  <option value="PROFIT_AND_LOSS">PROFIT AND LOSS</option>
+                  <option value="BALANCE_SHEET">BALANCE SHEET</option>
+                </select>
+              </div>
 
               <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
@@ -826,6 +864,142 @@ const CashBook: React.FC = () => {
                 </button>
               </div>
             </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Manage Head of Accounts Directory */}
+      {showDirectoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-lg border border-slate-150 max-w-2xl w-full overflow-hidden">
+            
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <h3 className="text-slate-900 finance-header-time uppercase font-bold text-sm">HEAD OF ACCOUNTS DIRECTORY</h3>
+              <button
+                onClick={() => { setShowDirectoryModal(false); setEditingAccId(null); }}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              
+              {/* Account Search input */}
+              <input
+                type="text"
+                value={directorySearchQuery}
+                onChange={(e) => setDirectorySearchQuery(e.target.value)}
+                placeholder="Search accounts by name..."
+                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
+              />
+
+              {/* Edit Form (renders if editingAccId is set) */}
+              {editingAccId && (
+                <form onSubmit={handleEditAccountSubmit} className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase">Edit Account Classification Details</h4>
+                  <div className="grid grid-cols-1 gap-3">
+                    <Input
+                      label="ACCOUNT NAME"
+                      value={editAccountName}
+                      onChange={setEditAccountName}
+                      required
+                      uppercase
+                    />
+                    <div>
+                      <label className="finance-caption uppercase block mb-1">REPORT CLASSIFICATION *</label>
+                      <select
+                        value={editAccountClassification}
+                        onChange={(e) => setEditAccountClassification(e.target.value as any)}
+                        className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
+                        required
+                      >
+                        <option value="PROFIT_AND_LOSS">PROFIT AND LOSS</option>
+                        <option value="BALANCE_SHEET">BALANCE SHEET</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end pt-2 border-t border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setEditingAccId(null)}
+                      className="px-3 py-1 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={savingAccount}
+                      className="px-4 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold uppercase"
+                    >
+                      {savingAccount ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Accounts Directory Table list */}
+              <div className="overflow-y-auto max-h-[40vh] border border-slate-200 rounded-lg">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
+                      <th className="px-4 py-2.5">Account Name</th>
+                      <th className="px-4 py-2.5">Report Classification</th>
+                      <th className="px-4 py-2.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-750">
+                    {accounts
+                      .filter(acc => acc.account_name.toLowerCase().includes(directorySearchQuery.toLowerCase()))
+                      .map(acc => (
+                        <tr key={acc.id} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-2.5 font-bold uppercase">{acc.account_name}</td>
+                          <td className="px-4 py-2.5">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                              acc.report_classification === 'BALANCE_SHEET'
+                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                                : acc.report_classification === 'PROFIT_AND_LOSS'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                : 'bg-rose-50 text-rose-700 border border-rose-100 font-bold'
+                            }`}>
+                              {acc.report_classification ? acc.report_classification.replace(/_/g, ' ') : 'UNCLASSIFIED'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right flex gap-3 justify-end items-center">
+                            <button
+                              onClick={() => {
+                                setEditingAccId(acc.id);
+                                setEditAccountName(acc.account_name);
+                                setEditAccountClassification(acc.report_classification || 'PROFIT_AND_LOSS');
+                              }}
+                              className="text-blue-600 hover:text-blue-800 font-bold uppercase"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAccount(acc)}
+                              className="text-red-600 hover:text-red-800 font-bold uppercase"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+            </div>
+
+            <div className="px-6 py-3 bg-slate-50 border-t flex justify-end">
+              <button
+                onClick={() => { setShowDirectoryModal(false); setEditingAccId(null); }}
+                className="px-4 py-1.5 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors shadow-sm text-xs font-bold uppercase"
+              >
+                CLOSE
+              </button>
+            </div>
 
           </div>
         </div>

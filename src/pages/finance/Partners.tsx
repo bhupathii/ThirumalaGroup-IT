@@ -11,10 +11,6 @@ import {
   Edit2, 
   Trash2, 
   X, 
-  Calendar, 
-  Phone, 
-  MapPin, 
-  User, 
   Info 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -26,7 +22,7 @@ const Partners: React.FC = () => {
   
   // State
   const [partners, setPartners] = useState<FinancePartner[]>([]);
-  const [partnerBalances, setPartnerBalances] = useState<Record<string, number>>({});
+  const [capitalEntries, setCapitalEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Search & Filters State
@@ -49,18 +45,7 @@ const Partners: React.FC = () => {
       setPartners(data);
 
       const entries = await supabaseFinance.getCapitalEntries();
-      const balances: Record<string, number> = {};
-      
-      entries.forEach(entry => {
-        const credit = Number(entry.credit || 0);
-        const debit = Number(entry.debit || 0);
-        if (!balances[entry.partner_id]) {
-          balances[entry.partner_id] = 0;
-        }
-        balances[entry.partner_id] += credit;
-        balances[entry.partner_id] -= debit;
-      });
-      setPartnerBalances(balances);
+      setCapitalEntries(entries);
     } catch (err) {
       console.error('Error fetching partners:', err);
       toast.error('Failed to load partners data');
@@ -371,109 +356,152 @@ const Partners: React.FC = () => {
       )}
 
       {/* Details View Modal */}
-      {selectedPartner && (
-        <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-100">
-            
-            {/* Modal Header */}
-            <div className="px-6 py-4 bg-[#0b1329] text-white flex justify-between items-center">
-              <div>
-                <h3 className="finance-sidebar-link uppercase">Partner Profile Details</h3>
-                <p className="text-slate-400 finance-small-label uppercase">ID: #{selectedPartner.partner_id || 'N/A'}</p>
-              </div>
-              <button
-                onClick={() => setSelectedPartner(null)}
-                className="p-1 hover:bg-slate-800 rounded-lg text-slate-450 hover:text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* Details View Modal */}
+      {selectedPartner && (() => {
+        const partnerTx = capitalEntries.filter(tx => tx.partner_id === selectedPartner.id);
+        const totalCred = partnerTx.reduce((sum, tx) => sum + Number(tx.credit || 0), 0);
+        const totalDeb = partnerTx.reduce((sum, tx) => sum + Number(tx.debit || 0), 0);
+        const netBal = totalCred - totalDeb;
 
-            {/* Modal Body */}
-            <div className="p-6 space-y-4 md:text-sm finance-caption">
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-4xl w-full shadow-2xl overflow-hidden border border-slate-100">
               
-              {/* Name & Role */}
-              <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              {/* Modal Header */}
+              <div className="px-6 py-4 bg-[#0b1329] text-white flex justify-between items-center">
                 <div>
-                  <div className="text-slate-400 finance-small-label uppercase">Partner Name</div>
-                  <div className="text-slate-900 mt-0.5 finance-brand">{selectedPartner.name}</div>
+                  <h3 className="finance-sidebar-link uppercase font-bold text-base">Partner Profile & Capital History</h3>
+                  <p className="text-slate-400 finance-small-label uppercase">ID: #{selectedPartner.partner_id || 'N/A'}</p>
                 </div>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full ${ selectedPartner.is_md ? 'bg-[#0b1329] text-white' : 'bg-slate-100 text-slate-800' } finance-small-label uppercase`}>
-                  {selectedPartner.is_md ? 'MD' : 'Partner'}
-                </span>
+                <button
+                  onClick={() => setSelectedPartner(null)}
+                  className="p-1 hover:bg-slate-800 rounded-lg text-slate-450 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              {/* Info Grid */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-slate-400 flex items-center gap-1 finance-small-label uppercase">
-                    <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Phone
+              {/* Modal Body */}
+              <div className="p-6 space-y-6 md:text-sm finance-caption overflow-y-auto max-h-[75vh]">
+                
+                {/* Profile Section */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <h4 className="text-slate-900 font-bold mb-3 uppercase tracking-wider text-xs">PARTNER MASTER DETAILS</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <div className="text-slate-400 finance-small-label uppercase">Partner Name</div>
+                      <div className="text-slate-900 font-bold">{selectedPartner.name}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 finance-small-label uppercase">Role</div>
+                      <span className={`inline-flex items-center mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${ selectedPartner.is_md ? 'bg-[#0b1329] text-white' : 'bg-slate-200 text-slate-800' } uppercase`}>
+                        {selectedPartner.is_md ? 'MANAGING PARTNER' : 'PARTNER'}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 finance-small-label uppercase">Phone</div>
+                      <div className="text-slate-900 font-bold">{selectedPartner.phone || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 finance-small-label uppercase">Home Phone</div>
+                      <div className="text-slate-900">{selectedPartner.home_phone || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 finance-small-label uppercase">Village</div>
+                      <div className="text-slate-900">{selectedPartner.village || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 finance-small-label uppercase">MD Name</div>
+                      <div className="text-slate-900">{selectedPartner.md_name || '—'}</div>
+                    </div>
                   </div>
-                  <div className="text-slate-900 mt-1 finance-input">{selectedPartner.phone || '—'}</div>
-                </div>
-                <div>
-                  <div className="text-slate-400 flex items-center gap-1 finance-small-label uppercase">
-                    <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Home Phone
+                  <div className="mt-4 pt-3 border-t border-slate-200">
+                    <div className="text-slate-400 finance-small-label uppercase">Address</div>
+                    <div className="text-slate-700 mt-1">{selectedPartner.address || '—'}</div>
                   </div>
-                  <div className="text-slate-900 mt-1 finance-input">{selectedPartner.home_phone || '—'}</div>
                 </div>
-                <div>
-                  <div className="text-slate-400 flex items-center gap-1 finance-small-label uppercase">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Village
+
+                {/* Capital Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-emerald-50 border border-emerald-150 p-4 rounded-xl">
+                    <span className="text-emerald-700 block text-[10px] font-black uppercase">Capital Introduced (Credit)</span>
+                    <span className="text-emerald-800 text-lg font-black block mt-1 font-mono">
+                      ₹{totalCred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
-                  <div className="text-slate-900 mt-1 finance-input">{selectedPartner.village || '—'}</div>
-                </div>
-                <div>
-                  <div className="text-slate-400 flex items-center gap-1 finance-small-label uppercase">
-                    <User className="w-3.5 h-3.5 text-slate-400 shrink-0" /> MD Name
+                  <div className="bg-red-50 border border-red-150 p-4 rounded-xl">
+                    <span className="text-red-700 block text-[10px] font-black uppercase">Capital Withdrawn (Debit)</span>
+                    <span className="text-red-800 text-lg font-black block mt-1 font-mono">
+                      ₹{totalDeb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
-                  <div className="text-slate-900 mt-1 finance-input">{selectedPartner.md_name || '—'}</div>
+                  <div className="bg-slate-100 border border-slate-250 p-4 rounded-xl">
+                    <span className="text-slate-700 block text-[10px] font-black uppercase">Net Capital Balance</span>
+                    <span className={`text-lg font-black block mt-1 font-mono ${netBal >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+                      ₹{netBal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
+
+                {/* Capital History Section */}
+                <div>
+                  <h4 className="text-slate-900 font-bold mb-3 uppercase tracking-wider text-xs">PARTNER TRANSACTION / CAPITAL HISTORY</h4>
+                  {partnerTx.length === 0 ? (
+                    <div className="text-center py-8 bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                      <p className="text-slate-400 font-medium">No capital transactions registered for this partner.</p>
+                    </div>
+                  ) : (
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                            <th className="px-4 py-3">Date</th>
+                            <th className="px-4 py-3">Particulars / Remarks</th>
+                            <th className="px-4 py-3 text-right">Debit (Withdrawal)</th>
+                            <th className="px-4 py-3 text-right">Credit (Intro)</th>
+                            <th className="px-4 py-3">Entered By</th>
+                            <th className="px-4 py-3">Entry Time</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-[12px] font-medium text-slate-700">
+                          {partnerTx.map((tx) => (
+                            <tr key={tx.id} className="hover:bg-slate-50/50">
+                              <td className="px-4 py-2.5 font-mono">{new Date(tx.entry_date).toLocaleDateString('en-GB')}</td>
+                              <td className="px-4 py-2.5">{tx.particulars || 'Capital Entry'}</td>
+                              <td className="px-4 py-2.5 text-right font-mono text-red-600">
+                                {tx.debit > 0 ? `₹${tx.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono text-emerald-600">
+                                {tx.credit > 0 ? `₹${tx.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                              </td>
+                              <td className="px-4 py-2.5">{tx.created_by || 'Staff'}</td>
+                              <td className="px-4 py-2.5 text-slate-400 font-mono text-[11px]">
+                                {tx.created_at ? new Date(tx.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
               </div>
 
-              {/* Capital balance */}
-              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-150 flex flex-col space-y-1 mt-2">
-                <span className="finance-card-title">Capital Invested</span>
-                <span className={`${ (partnerBalances[selectedPartner.id] || 0) >= 0 ? 'text-green-600' : 'text-red-655' } finance-brand`}>
-                  ₹{(partnerBalances[selectedPartner.id] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-
-              {/* Address */}
-              <div>
-                <div className="text-slate-400 flex items-center gap-1 finance-small-label uppercase">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Address Details
-                </div>
-                <div className="text-slate-700 bg-slate-50/50 p-2.5 rounded-lg border border-slate-100 mt-1 h-16 overflow-y-auto finance-input">
-                  {selectedPartner.address || 'No address details registered.'}
-                </div>
-              </div>
-
-              {/* Dates */}
-              <div className="flex justify-between items-center text-slate-450 border-t border-slate-100 pt-3 finance-small-label">
-                <div className="flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5" /> Registered: {new Date(selectedPartner.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                </div>
-                <div>
-                  Updated: {new Date(selectedPartner.updated_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                </div>
+              {/* Modal Footer */}
+              <div className="px-6 py-3 bg-slate-50 border-t flex justify-end">
+                <button
+                  onClick={() => setSelectedPartner(null)}
+                  className="px-4 py-1.5 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors shadow-sm finance-header-time"
+                >
+                  CLOSE
+                </button>
               </div>
 
             </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-3 bg-slate-50 border-t flex justify-end">
-              <button
-                onClick={() => setSelectedPartner(null)}
-                className="px-4 py-1.5 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors shadow-sm finance-header-time"
-              >
-                CLOSE
-              </button>
-            </div>
-
           </div>
-        </div>
-      )}
+        );
+      })()}
 
     </div>
   );

@@ -98,6 +98,7 @@ const CapitalEntry: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return; // Prevent double submit
 
     const creditAmt = Number(credit) || 0;
     const debitAmt = Number(debit) || 0;
@@ -110,7 +111,11 @@ const CapitalEntry: React.FC = () => {
         label: 'Credit or Debit', 
         value: 'checked', 
         required: true, 
-        customValidation: () => (creditAmt > 0 || debitAmt > 0) ? null : 'Please enter a valid Credit or Debit amount greater than zero'
+        customValidation: () => {
+          if (creditAmt > 0 && debitAmt > 0) return 'Cannot enter both Credit and Debit';
+          if (creditAmt < 0 || debitAmt < 0) return 'Amount cannot be negative';
+          return (creditAmt > 0 || debitAmt > 0) ? null : 'Please enter a valid Credit or Debit amount greater than zero';
+        }
       }
     ];
 
@@ -403,7 +408,7 @@ const CapitalEntry: React.FC = () => {
                   >
                     <option value="">SELECT PARTNER</option>
                     {partners.map(p => (
-                      <option key={p.id} value={p.id}>{p.name.toUpperCase()}</option>
+                      <option key={p.id} value={p.id}>{p.name.toUpperCase()} — {p.is_md ? 'MANAGING PARTNER' : 'PARTNER'}</option>
                     ))}
                   </select>
                 </div>

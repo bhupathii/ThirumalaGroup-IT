@@ -209,6 +209,8 @@ export interface FinanceCapitalEntry {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  amount?: number;
+  type?: 'Credit' | 'Debit';
 }
 
 export interface FinanceDue {
@@ -262,6 +264,7 @@ export interface FinanceCashbookAccount {
   id: string;
   account_name: string;
   account_number: string | null;
+  report_classification?: 'BALANCE_SHEET' | 'PROFIT_AND_LOSS' | null;
   created_at: string;
 }
 
@@ -2683,9 +2686,18 @@ class SupabaseFinance {
 
   async createCapitalEntry(entry: Omit<FinanceCapitalEntry, 'id' | 'created_at' | 'updated_at'>): Promise<FinanceCapitalEntry | null> {
     try {
+      const creditAmt = Number(entry.credit) || 0;
+      const debitAmt = Number(entry.debit) || 0;
+      const amount = creditAmt > 0 ? creditAmt : debitAmt;
+      const type = creditAmt > 0 ? 'Credit' : 'Debit';
+      const fullPayload = {
+        ...entry,
+        amount,
+        type
+      };
       const { data, error } = await supabase
         .from('finance_capital_entries')
-        .insert([entry])
+        .insert([fullPayload])
         .select()
         .single();
       if (error) throw error;
@@ -2698,9 +2710,20 @@ class SupabaseFinance {
 
   async createCapitalEntries(entries: Omit<FinanceCapitalEntry, 'id' | 'created_at' | 'updated_at'>[]): Promise<FinanceCapitalEntry[] | null> {
     try {
+      const processed = entries.map(entry => {
+        const creditAmt = Number(entry.credit) || 0;
+        const debitAmt = Number(entry.debit) || 0;
+        const amount = creditAmt > 0 ? creditAmt : debitAmt;
+        const type = creditAmt > 0 ? 'Credit' : 'Debit';
+        return {
+          ...entry,
+          amount,
+          type
+        };
+      });
       const { data, error } = await supabase
         .from('finance_capital_entries')
-        .insert(entries)
+        .insert(processed)
         .select();
       if (error) throw error;
       return data;
@@ -2722,9 +2745,25 @@ class SupabaseFinance {
         .eq('id', id)
         .single();
 
+      let amount = entry.amount;
+      let type = entry.type;
+
+      if (entry.credit !== undefined || entry.debit !== undefined) {
+        const creditAmt = Number(entry.credit !== undefined ? entry.credit : (oldData?.credit || 0)) || 0;
+        const debitAmt = Number(entry.debit !== undefined ? entry.debit : (oldData?.debit || 0)) || 0;
+        amount = creditAmt > 0 ? creditAmt : debitAmt;
+        type = creditAmt > 0 ? 'Credit' : 'Debit';
+      }
+
+      const fullPayload = {
+        ...entry,
+        ...(amount !== undefined ? { amount } : {}),
+        ...(type !== undefined ? { type } : {})
+      };
+
       const { data, error } = await supabase
         .from('finance_capital_entries')
-        .update(entry)
+        .update(fullPayload)
         .eq('id', id)
         .select()
         .single();
@@ -3032,6 +3071,36 @@ class SupabaseFinance {
     } catch (error) {
       console.error('Error creating cashbook account:', error);
       return null;
+    }
+  }
+
+  async updateCashbookAccount(id: string, account: Partial<Omit<FinanceCashbookAccount, 'id' | 'created_at'>>): Promise<FinanceCashbookAccount | null> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_cashbook_accounts')
+        .update(account)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating cashbook account:', error);
+      return null;
+    }
+  }
+
+  async deleteCashbookAccount(id: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('finance_cashbook_accounts')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting cashbook account:', error);
+      return false;
     }
   }
 
