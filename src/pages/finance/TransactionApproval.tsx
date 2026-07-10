@@ -3,7 +3,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseFinance, FinanceTransactionReview } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import Card from '../../components/UI/Card';
-import CustomCalendar from '../../components/UI/CustomCalendar';
 import { 
   Check, 
   Search, 
@@ -11,7 +10,6 @@ import {
   FileCheck, 
   Loader2, 
   User, 
-  Calendar, 
   AlertCircle,
   Book,
   X
@@ -33,43 +31,87 @@ const TransactionApproval: React.FC = () => {
   const [isBulkApproving, setIsBulkApproving] = useState(false);
 
   // Filter States
-  const [statusTab, setStatusTab] = useState<'PENDING' | 'APPROVED' | 'ALL'>('PENDING');
-  const [filterDate, setFilterDate] = useState('');
-  const [filterOperator, setFilterOperator] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('PENDING');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [filterOperator, setFilterOperator] = useState('ALL');
+  const [actionType, setActionType] = useState<'ALL' | 'EDIT' | 'DELETE'>('ALL');
   const [filterLoanType, setFilterLoanType] = useState('ALL');
   const [filterAccountNo, setFilterAccountNo] = useState('');
   const [filterReceiptNo, setFilterReceiptNo] = useState('');
 
-  // Calendar States
-  const [showCalendar, setShowCalendar] = useState(false);
-  const [pendingDates, setPendingDates] = useState<{ c_date: string }[]>([]);
+  // Operators List & Summary Counts States
+  const [operators, setOperators] = useState<string[]>([]);
+  const [summaryCounts, setSummaryCounts] = useState({
+    pending: 0,
+    editPending: 0,
+    deletePending: 0,
+    approvedToday: 0
+  });
 
-  const fetchPendingDates = async () => {
+  const fetchOperators = async () => {
     try {
       const { data, error } = await supabase
-        .from('finance_transaction_reviews')
-        .select('transaction_date')
-        .eq('review_status', 'PENDING');
-      
+        .schema('finance')
+        .from('transaction_reviews')
+        .select('entered_by');
       if (error) throw error;
-      setPendingDates((data || []).map(r => ({ c_date: r.transaction_date })));
+      const uniqueOps = Array.from(new Set((data || []).map(r => r.entered_by).filter(Boolean)));
+      setOperators(uniqueOps as string[]);
     } catch (err) {
-      console.error('Error loading pending dates for calendar:', err);
+      console.error('Error loading operators:', err);
+    }
+  };
+
+  const fetchSummaryCounts = async () => {
+    try {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const { data, error } = await supabase
+        .schema('finance')
+        .from('transaction_reviews')
+        .select('review_status, action_type, approved_at');
+
+      if (error) throw error;
+
+      let pending = 0;
+      let editPending = 0;
+      let deletePending = 0;
+      let approvedToday = 0;
+
+      (data || []).forEach(r => {
+        if (r.review_status === 'PENDING') {
+          pending++;
+          if (r.action_type === 'EDIT') {
+            editPending++;
+          } else if (r.action_type === 'DELETE') {
+            deletePending++;
+          }
+        } else if (r.review_status === 'APPROVED' && r.approved_at && new Date(r.approved_at) >= todayStart) {
+          approvedToday++;
+        }
+      });
+
+      setSummaryCounts({ pending, editPending, deletePending, approvedToday });
+    } catch (err) {
+      console.error('Error fetching summary counts:', err);
     }
   };
 
   const fetchReviews = async () => {
     try {
-      setSelectedReviewIds(new Set());
       setLoading(true);
       setQueryError(null);
       const data = await supabaseFinance.getTransactionReviews({
-        status: statusTab,
-        date: filterDate || undefined,
-        enteredBy: filterOperator.trim() || undefined,
+        status: statusFilter,
+        fromDate: fromDate || undefined,
+        toDate: toDate || undefined,
+        enteredBy: filterOperator !== 'ALL' && filterOperator.trim() ? filterOperator : undefined,
         loanType: filterLoanType !== 'ALL' ? filterLoanType : undefined,
         accountNo: filterAccountNo.trim() || undefined,
-        receiptNo: filterReceiptNo.trim() || undefined
+        receiptNo: filterReceiptNo.trim() || undefined,
+        actionType: actionType !== 'ALL' ? actionType : undefined
       });
       setReviews(data);
     } catch (err: any) {
@@ -81,11 +123,17 @@ const TransactionApproval: React.FC = () => {
     }
   };
 
-  // Fetch reviews and pending dates on dependencies change
+  // Clear stale selections on filter changes
+  useEffect(() => {
+    setSelectedReviewIds(new Set());
+  }, [statusFilter, fromDate, toDate, filterOperator, actionType, filterLoanType]);
+
+  // Fetch reviews on dependencies change
   useEffect(() => {
     fetchReviews();
-    fetchPendingDates();
-  }, [statusTab, filterDate, filterLoanType]);
+    fetchOperators();
+    fetchSummaryCounts();
+  }, [statusFilter, fromDate, toDate, filterOperator, actionType, filterLoanType]);
 
   const handleApplyFilters = (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,8 +141,11 @@ const TransactionApproval: React.FC = () => {
   };
 
   const handleResetFilters = () => {
-    setFilterDate('');
-    setFilterOperator('');
+    setFromDate('');
+    setToDate('');
+    setFilterOperator('ALL');
+    setActionType('ALL');
+    setStatusFilter('PENDING');
     setFilterLoanType('ALL');
     setFilterAccountNo('');
     setFilterReceiptNo('');
@@ -126,6 +177,8 @@ const TransactionApproval: React.FC = () => {
     setExpandedReviewIds(next);
   };
 
+  const [bulkTargetIds, setBulkTargetIds] = useState<string[]>([]);
+
   const handleApprove = async (reviewId: string) => {
     if (!user?.is_admin) {
       toast.error('Access Denied: Only administrators can approve transactions.');
@@ -141,9 +194,9 @@ const TransactionApproval: React.FC = () => {
       const success = await supabaseFinance.approveTransactionReview(reviewId, user.username);
       if (success) {
         toast.success('Transaction approved successfully');
-        // Refresh review list and calendar pending dates
+        // Refresh review list and summary counts
         fetchReviews();
-        fetchPendingDates();
+        fetchSummaryCounts();
       } else {
         toast.error('Failed to approve transaction');
       }
@@ -167,46 +220,50 @@ const TransactionApproval: React.FC = () => {
 
   const handleSelectAll = () => {
     const pendingIds = reviews.filter(r => r.review_status === 'PENDING').map(r => r.id);
-    if (selectedReviewIds.size === pendingIds.length && pendingIds.length > 0) {
-      setSelectedReviewIds(new Set()); // Deselect all
+    const allSelected = pendingIds.every(id => selectedReviewIds.has(id));
+    if (allSelected && pendingIds.length > 0) {
+      const next = new Set(selectedReviewIds);
+      pendingIds.forEach(id => next.delete(id));
+      setSelectedReviewIds(next);
     } else {
-      setSelectedReviewIds(new Set(pendingIds)); // Select all pending
+      const next = new Set(selectedReviewIds);
+      pendingIds.forEach(id => next.add(id));
+      setSelectedReviewIds(next);
     }
   };
 
-  const handleBulkApproveConfirm = () => {
+  const handleBulkApproveConfirm = (mode: 'SELECTED' | 'ALL_FILTERED') => {
     if (!user?.is_admin) {
       toast.error('Access Denied: Only administrators can bulk approve transactions.');
       return;
     }
     
-    const targetIds = selectedReviewIds.size > 0 
+    const targets = mode === 'SELECTED'
       ? Array.from(selectedReviewIds)
       : reviews.filter(r => r.review_status === 'PENDING').map(r => r.id);
       
-    if (targetIds.length === 0) {
+    if (targets.length === 0) {
       toast.error('No pending transactions available to approve.');
       return;
     }
     
+    setBulkTargetIds(targets);
     setShowBulkConfirmModal(true);
   };
 
   const executeBulkApproval = async () => {
-    const targetIds = selectedReviewIds.size > 0 
-      ? Array.from(selectedReviewIds)
-      : reviews.filter(r => r.review_status === 'PENDING').map(r => r.id);
-
     try {
       setIsBulkApproving(true);
       const result = await supabaseFinance.approveTransactionsBulk({
-        transactionIds: targetIds,
+        transactionIds: bulkTargetIds,
         approvedBy: user?.username || 'System'
       });
       
       setBulkResult(result);
+      setSelectedReviewIds(new Set());
+      setBulkTargetIds([]);
       fetchReviews();
-      fetchPendingDates();
+      fetchSummaryCounts();
     } catch (err: any) {
       console.error('Bulk approval failed:', err);
       toast.error(err.message || 'Bulk approval failed unexpectedly');
@@ -232,7 +289,7 @@ const TransactionApproval: React.FC = () => {
       if (success) {
         toast.success('Transaction review status marked as REJECTED');
         fetchReviews();
-        fetchPendingDates();
+        fetchSummaryCounts();
       } else {
         toast.error('Failed to reject transaction');
       }
@@ -253,26 +310,6 @@ const TransactionApproval: React.FC = () => {
     }).format(val);
   };
 
-  const convertToDisplayFormat = (yyyyMMdd: string): string => {
-    if (!yyyyMMdd) return '';
-    const parts = yyyyMMdd.split('-');
-    if (parts.length !== 3) return '';
-    const [year, month, day] = parts;
-    return `${day}/${month}/${year}`;
-  };
-
-  const transactionTypes = [
-    'ALL',
-    'CD Renewal',
-    'CD Partial Payment',
-    'CD Close',
-    'CD Collection',
-    'HP Payment',
-    'STBD Payment',
-    'TBD Payment',
-    'Day Book Entry'
-  ];
-
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto font-outfit select-none">
            {/* Header */}
@@ -289,110 +326,93 @@ const TransactionApproval: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter and Tab Section */}
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 shadow-sm flex flex-col justify-between">
+          <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Pending</span>
+          <span className="text-2xl font-black text-amber-800 mt-2">{summaryCounts.pending}</span>
+        </div>
+        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 shadow-sm flex flex-col justify-between">
+          <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Edit Pending</span>
+          <span className="text-2xl font-black text-blue-800 mt-2">{summaryCounts.editPending}</span>
+        </div>
+        <div className="bg-rose-50 border border-rose-100 rounded-xl p-4 shadow-sm flex flex-col justify-between">
+          <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Delete Pending</span>
+          <span className="text-2xl font-black text-rose-800 mt-2">{summaryCounts.deletePending}</span>
+        </div>
+        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 shadow-sm flex flex-col justify-between">
+          <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Approved Today</span>
+          <span className="text-2xl font-black text-emerald-800 mt-2">{summaryCounts.approvedToday}</span>
+        </div>
+      </div>
+
+      {/* Filter Section */}
       <div className="bg-white rounded-xl border border-slate-150 shadow-sm p-5 space-y-5">
         
-        {/* Tab Controls */}
-        <div className="flex border-b border-slate-100 pb-1">
-          {(['PENDING', 'APPROVED', 'ALL'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setStatusTab(tab)}
-              className={`px-6 py-2.5 font-bold text-sm tracking-wide uppercase transition-all relative ${
-                statusTab === tab
-                  ? 'text-[#0f172a] border-b-2 border-[#0f172a]'
-                  : 'text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
         {/* Filter Inputs Form */}
         <form onSubmit={handleApplyFilters} className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
           
-          {/* Custom Datepicker with CustomCalendar Integration */}
-          <div className="relative">
-            <label className="finance-caption uppercase">Date</label>
-            <div className="relative">
-              <input
-                type="text"
-                value={filterDate ? convertToDisplayFormat(filterDate) : ''}
-                readOnly
-                onClick={() => setShowCalendar(!showCalendar)}
-                placeholder="dd/mm/yyyy"
-                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time cursor-pointer"
-              />
-              <button
-                type="button"
-                onClick={() => setShowCalendar(!showCalendar)}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 rounded text-gray-500"
-              >
-                <Calendar className="w-4 h-4" />
-              </button>
-              {showCalendar && (
-                <CustomCalendar
-                  entries={pendingDates}
-                  onDateSelect={(date) => {
-                    setFilterDate(date);
-                    setShowCalendar(false);
-                  }}
-                  selectedDate={filterDate}
-                  onClose={() => setShowCalendar(false)}
-                  dotColor="red"
-                  tooltipLabel="Pending Approvals"
-                />
-              )}
-            </div>
-          </div>
-
           <div>
-            <label className="finance-caption uppercase">Operator</label>
+            <label className="finance-caption uppercase">From Date</label>
             <input
-              type="text"
-              value={filterOperator}
-              onChange={(e) => setFilterOperator(e.target.value)}
-              placeholder="Operator name"
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time placeholder-slate-300"
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
             />
           </div>
 
           <div>
-            <label className="finance-caption uppercase">Tx Type</label>
+            <label className="finance-caption uppercase">To Date</label>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
+            />
+          </div>
+
+          <div>
+            <label className="finance-caption uppercase">Operator</label>
             <select
-              value={filterLoanType}
-              onChange={(e) => setFilterLoanType(e.target.value)}
+              value={filterOperator}
+              onChange={(e) => setFilterOperator(e.target.value)}
               className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
             >
-              {transactionTypes.map((type) => (
-                <option key={type} value={type}>
-                  {type.toUpperCase()}
+              <option value="ALL">ALL OPERATORS</option>
+              {operators.map((op) => (
+                <option key={op} value={op}>
+                  {op.toUpperCase()}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="finance-caption uppercase">A/c Number</label>
-            <input
-              type="text"
-              value={filterAccountNo}
-              onChange={(e) => setFilterAccountNo(e.target.value)}
-              placeholder="e.g. CD001"
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time placeholder-slate-300"
-            />
+            <label className="finance-caption uppercase">Action Type</label>
+            <select
+              value={actionType}
+              onChange={(e) => setActionType(e.target.value as any)}
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
+            >
+              <option value="ALL">ALL</option>
+              <option value="EDIT">EDIT</option>
+              <option value="DELETE">DELETE</option>
+            </select>
           </div>
 
           <div>
-            <label className="finance-caption uppercase">Receipt / Ref No</label>
-            <input
-              type="text"
-              value={filterReceiptNo}
-              onChange={(e) => setFilterReceiptNo(e.target.value)}
-              placeholder="Receipt No"
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time placeholder-slate-300"
-            />
+            <label className="finance-caption uppercase">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
+            >
+              <option value="PENDING">PENDING</option>
+              <option value="APPROVED">APPROVED</option>
+              <option value="REJECTED">REJECTED</option>
+              <option value="ALL">ALL</option>
+            </select>
           </div>
 
           <div className="flex items-end gap-2">
@@ -417,8 +437,8 @@ const TransactionApproval: React.FC = () => {
       </div>
 
       {/* Bulk Action Bar (Only show on PENDING tab when there are results) */}
-      {statusTab === 'PENDING' && reviews.length > 0 && !loading && !queryError && (
-        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 px-5 flex items-center justify-between shadow-sm">
+      {statusFilter === 'PENDING' && reviews.length > 0 && !loading && !queryError && (
+        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 px-5 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between shadow-sm">
           <div className="flex items-center gap-3">
             <button
               onClick={handleSelectAll}
@@ -438,19 +458,28 @@ const TransactionApproval: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             {selectedReviewIds.size > 0 && (
-              <button
-                onClick={() => setSelectedReviewIds(new Set())}
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 uppercase px-3 py-1.5 transition-colors"
-              >
-                Clear
-              </button>
+              <>
+                <button
+                  onClick={() => setSelectedReviewIds(new Set())}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 uppercase px-3 py-1.5 transition-colors"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={() => handleBulkApproveConfirm('SELECTED')}
+                  className="bg-indigo-600 hover:bg-indigo-750 text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  APPROVE SELECTED ({selectedReviewIds.size})
+                </button>
+              </>
             )}
             <button
-              onClick={handleBulkApproveConfirm}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              onClick={() => handleBulkApproveConfirm('ALL_FILTERED')}
+              className="bg-[#0f172a] hover:bg-slate-800 text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
             >
               <Check className="w-4 h-4" />
-              {selectedReviewIds.size > 0 ? 'Approve Selected' : 'Approve All Matching'}
+              APPROVE ALL FILTERED ({reviews.filter(r => r.review_status === 'PENDING').length})
             </button>
           </div>
         </div>
@@ -494,7 +523,7 @@ const TransactionApproval: React.FC = () => {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-150 text-slate-500 font-bold uppercase finance-small-label">
-                  {statusTab === 'PENDING' && <th className="px-6 py-4 text-left w-12"></th>}
+                  {statusFilter === 'PENDING' && <th className="px-6 py-4 text-left w-12"></th>}
                   <th className="px-6 py-4 text-left tracking-wider">Date & Ref</th>
                   <th className="px-6 py-4 text-left tracking-wider">Transaction Details</th>
                   <th className="px-6 py-4 text-left tracking-wider">Source Type</th>
@@ -516,10 +545,10 @@ const TransactionApproval: React.FC = () => {
 
                   return (
                     <React.Fragment key={item.id}>
-                      <tr className={`transition-colors ${selectedReviewIds.has(item.id) ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}>
+                       <tr className={`transition-colors ${selectedReviewIds.has(item.id) ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}>
                         
                         {/* Checkbox */}
-                        {statusTab === 'PENDING' && (
+                        {statusFilter === 'PENDING' && (
                           <td className="px-6 py-4">
                             <button
                               onClick={() => handleSelectToggle(item.id)}
@@ -542,8 +571,19 @@ const TransactionApproval: React.FC = () => {
 
                         {/* Transaction Details */}
                         <td className="px-6 py-4">
-                          <div className="font-bold text-slate-850 finance-input">
-                            {item.transaction_type.toUpperCase()}
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                              item.action_type === 'EDIT'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : item.action_type === 'DELETE'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                : 'bg-green-100 text-green-800 border border-green-200'
+                            }`}>
+                              {item.action_type || 'CREATE'}
+                            </span>
+                            <div className="font-bold text-slate-850 finance-input">
+                              {item.transaction_type.toUpperCase()}
+                            </div>
                           </div>
                           <div className="text-slate-400 text-xs font-bold mt-0.5">
                             {item.loan_id ? (
@@ -752,6 +792,51 @@ const TransactionApproval: React.FC = () => {
               <p className="text-slate-600 text-sm">
                 You are about to approve <strong>{selectedReviewIds.size > 0 ? selectedReviewIds.size : reviews.filter(r => r.review_status === 'PENDING').length}</strong> transactions simultaneously.
               </p>
+              
+              {/* Detailed breakdown section */}
+              {(() => {
+                const targetIds = selectedReviewIds.size > 0 ? Array.from(selectedReviewIds) : reviews.filter(r => r.review_status === 'PENDING').map(r => r.id);
+                const getBulkBreakdown = (ids: string[]) => {
+                  const targets = reviews.filter(r => ids.includes(r.id));
+                  const editCount = targets.filter(r => r.action_type === 'EDIT').length;
+                  const deleteCount = targets.filter(r => r.action_type === 'DELETE').length;
+                  const createCount = targets.filter(r => !r.action_type || r.action_type === 'CREATE').length;
+                  const distinctOps = Array.from(new Set(targets.map(r => r.entered_by).filter(Boolean)));
+                  const dates = targets.map(r => r.transaction_date).filter(Boolean).sort();
+                  const dateRange = dates.length > 0 
+                    ? (dates[0] === dates[dates.length - 1] ? format(new Date(dates[0]), 'dd MMM yyyy') : `${format(new Date(dates[0]), 'dd MMM yyyy')} to ${format(new Date(dates[dates.length - 1]), 'dd MMM yyyy')}`)
+                    : 'N/A';
+                  return { editCount, deleteCount, createCount, distinctOps, dateRange };
+                };
+                const breakdown = getBulkBreakdown(targetIds);
+                return (
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 text-xs space-y-2 text-slate-700">
+                    <div className="flex justify-between">
+                      <span className="font-bold">CREATE Actions:</span>
+                      <span>{breakdown.createCount}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-bold">EDIT Actions:</span>
+                      <span>{breakdown.editCount}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-bold">DELETE Actions:</span>
+                      <span>{breakdown.deleteCount}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-bold">Operator(s):</span>
+                      <span className="truncate max-w-[200px]" title={breakdown.distinctOps.join(', ')}>
+                        {breakdown.distinctOps.join(', ') || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-bold">Date Range:</span>
+                      <span>{breakdown.dateRange}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <p className="text-amber-800 text-xs font-semibold uppercase tracking-wide flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" />

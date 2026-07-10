@@ -83,9 +83,10 @@ const PaymentFollowUp: React.FC = () => {
 
   // Form Fields
   const [contactedPerson, setContactedPerson] = useState<'CUSTOMER' | 'GUARANTOR_1' | 'GUARANTOR_2' | 'OTHER'>('CUSTOMER');
-  const [result, setResult] = useState<'ANSWERED' | 'NO_ANSWER' | 'PROMISED_PAYMENT' | 'CALL_BACK_LATER' | 'GUARANTOR_CONTACTED' | 'OTHER'>('ANSWERED');
+  const [result, setResult] = useState<'ANSWERED' | 'NO ANSWER' | 'BUSY' | 'SWITCHED OFF' | 'WRONG NUMBER' | 'CALL BACK' | 'PROMISED TO PAY'>('ANSWERED');
   const [narration, setNarration] = useState('');
   const [nextFollowUpDate, setNextFollowUpDate] = useState('');
+  const [promisedAmount, setPromisedAmount] = useState('');
 
   // Print Preview state
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -97,21 +98,70 @@ const PaymentFollowUp: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Followup records
-      const fetchedFollowups = await supabaseFinance.getFollowUps();
+      // 1. Fetch Followups, Dues Summary, and Transactions
+      const [fetchedFollowups, summaryData, transactions] = await Promise.all([
+        supabaseFinance.getFollowUps(),
+        supabaseFinance.getDuesLedgerSummary(),
+        supabaseFinance.getTransactions()
+      ]);
       setFollowUps(fetchedFollowups);
 
-      // 2. Fetch Aggregated Dues Summary via RPC
-      const summaryData = await supabaseFinance.getDuesLedgerSummary();
-
       const calculatedLoans: ActiveDueLoan[] = summaryData.map((row: any) => {
-        // Get this loan's follow-up history
+        // Get this loan's follow-up history sorted oldest to newest
         const loanFollowups = fetchedFollowups
           .filter((f: any) => f.loan_id === row.id)
-          .sort((a, b) => new Date(b.followed_up_at).getTime() - new Date(a.followed_up_at).getTime());
+          .sort((a, b) => {
+            if (a.follow_up_date !== b.follow_up_date) {
+              return a.follow_up_date.localeCompare(b.follow_up_date);
+            }
+            if (a.created_at && b.created_at) {
+              return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            }
+            return a.id.localeCompare(b.id);
+          });
 
-        const lastFollowUp = loanFollowups[0];
-        const nextFollowUpDate = lastFollowUp ? lastFollowUp.next_follow_up_date : null;
+        const lastFollowUp = loanFollowups[loanFollowups.length - 1];
+        let latestUnresolvedPromise: any = null;
+
+        // Process promises in chronological order to find the latest unresolved one
+        for (const f of loanFollowups) {
+          if (f.result === 'PROMISED TO PAY' && f.next_follow_up_date) {
+            const promiseDateStr = f.follow_up_date;
+            const promiseCreatedAt = f.created_at ? new Date(f.created_at).getTime() : null;
+
+            // Find qualifying collections in event window
+            const qualifying = transactions.filter((t: any) => {
+              if (t.loan_id !== row.id) return false;
+              if (t.type !== 'Collection') return false;
+
+              if (t.date > promiseDateStr) {
+                return true;
+              } else if (t.date === promiseDateStr) {
+                if (t.created_at && promiseCreatedAt) {
+                  return new Date(t.created_at).getTime() > promiseCreatedAt;
+                }
+                return false; // Do not resolve if timestamp is missing on same date
+              }
+              return false;
+            });
+
+            const totalPaid = qualifying.reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
+            const amtNeeded = f.promised_amount ? Number(f.promised_amount) : 0;
+
+            let resolved = false;
+            if (amtNeeded > 0) {
+              resolved = totalPaid >= amtNeeded;
+            } else {
+              resolved = qualifying.length > 0;
+            }
+
+            if (!resolved) {
+              latestUnresolvedPromise = f;
+            }
+          }
+        }
+
+        const nextFollowUpDate = latestUnresolvedPromise ? latestUnresolvedPromise.next_follow_up_date : null;
 
         return {
           id: row.id,
@@ -157,15 +207,14 @@ const PaymentFollowUp: React.FC = () => {
     return Array.from(staffSet);
   }, [followUps]);
 
-  // Tab calculations
   const todayDateStr = useMemo(() => getLocalBusinessDateISO(), []);
 
   const categorizedLoans = useMemo(() => {
-    // Only Active Loans are eligible for active queues
-    const activeDueLoans = loans.filter(l => l.status === 'Active' && l.presentDue > 0);
+    // Only Active Loans whose due date has arrived or passed are eligible
+    const activeDueLoans = loans.filter(l => l.status === 'Active' && l.dueDays >= 0);
 
     return {
-      ACTIVE_QUEUE: activeDueLoans,
+      ACTIVE_QUEUE: activeDueLoans.filter(l => !l.nextFollowUpDate),
       TODAYS: activeDueLoans.filter(l => l.nextFollowUpDate === todayDateStr),
       UPCOMING: activeDueLoans.filter(l => l.nextFollowUpDate && l.nextFollowUpDate > todayDateStr),
       MISSED: activeDueLoans.filter(l => l.nextFollowUpDate && l.nextFollowUpDate < todayDateStr)
@@ -246,12 +295,13 @@ const PaymentFollowUp: React.FC = () => {
     setResult('ANSWERED');
     setNarration('');
     setNextFollowUpDate('');
+    setPromisedAmount('');
     setShowModal(true);
   };
 
   // Quick next date calculator helpers
   const handleSetQuickDate = (days: number) => {
-    const d = new Date();
+    const d = new Date(todayDateStr);
     d.setDate(d.getDate() + days);
     setNextFollowUpDate(d.toISOString().split('T')[0]);
   };
@@ -271,12 +321,13 @@ const PaymentFollowUp: React.FC = () => {
 
     const payload = {
       loan_id: selectedLoan.id,
-      follow_up_date: getLocalBusinessDateISO(),
+      follow_up_date: todayDateStr,
       followed_up_by: staffName,
       contacted_person: contactedPerson,
       result: result,
       narration: narration.trim(),
-      next_follow_up_date: nextFollowUpDate || null
+      next_follow_up_date: result === 'PROMISED TO PAY' ? nextFollowUpDate || null : null,
+      promised_amount: result === 'PROMISED TO PAY' && promisedAmount ? Number(promisedAmount) : null
     };
 
     try {
@@ -598,18 +649,18 @@ const PaymentFollowUp: React.FC = () => {
                   {!loading && filteredList.map((due, idx) => (
                     <tr key={due.id} className="hover:bg-slate-50/40">
                       <td className="px-2 py-1.5 border-r border-slate-100 text-slate-500 font-sans text-center text-sm font-semibold">{idx + 1}</td>
-                      <td className="px-2 py-1.5 border-r border-slate-100 font-bold text-blue-655 text-sm whitespace-nowrap">{due.loanId}</td>
-                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-905 font-sans font-bold text-sm">{due.customerName}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-blue-700 text-[16px] font-black whitespace-nowrap">{due.loanId}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-900 font-sans text-[16px] font-black uppercase">{due.customerName}</td>
                       <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-sm font-black whitespace-nowrap">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
                       <td className="px-2 py-1.5 border-r border-slate-100 text-center text-red-655 text-sm font-bold whitespace-nowrap">{due.dueDays}</td>
                       <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-sm font-semibold">{due.currentDueDate.split('-').reverse().join('/')}</td>
-                      <td className="px-2 py-1.5 border-r border-slate-100 font-sans text-sm text-slate-600 space-y-0.5 whitespace-normal">
-                        <div><span className="font-bold text-slate-900">B:</span> {due.phone || '—'}</div>
-                        {due.g1Phone && (
-                          <div><span className="font-bold text-slate-900">G1:</span> {due.g1Name} ({due.g1Phone})</div>
+                      <td className="px-2 py-1.5 border-r border-slate-100 font-sans text-slate-700 space-y-1.5 whitespace-normal">
+                        <div className="text-[13px] font-bold text-slate-900">B: <span className="font-extrabold">{due.phone || '—'}</span></div>
+                        {due.g1Name && (
+                          <div className="text-[13px] font-bold text-slate-800">G1: <span className="font-black">{due.g1Name}</span> - <span className="font-extrabold">{due.g1Phone || '—'}</span></div>
                         )}
-                        {due.g2Phone && (
-                          <div><span className="font-bold text-slate-900">G2:</span> {due.g2Name} ({due.g2Phone})</div>
+                        {due.g2Name && (
+                          <div className="text-[13px] font-bold text-slate-800">G2: <span className="font-black">{due.g2Name}</span> - <span className="font-extrabold">{due.g2Phone || '—'}</span></div>
                         )}
                       </td>
                       <td className="px-2 py-1.5 border-r border-slate-100 text-slate-700 font-sans text-sm leading-relaxed whitespace-normal">
@@ -757,11 +808,12 @@ const PaymentFollowUp: React.FC = () => {
                       className="w-full text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-sm uppercase"
                     >
                       <option value="ANSWERED">Answered</option>
-                      <option value="NO_ANSWER">No Answer</option>
-                      <option value="PROMISED_PAYMENT">Promised Payment</option>
-                      <option value="CALL_BACK_LATER">Call Back Later</option>
-                      <option value="GUARANTOR_CONTACTED">Guarantor Contacted</option>
-                      <option value="OTHER">Other</option>
+                      <option value="NO ANSWER">No Answer</option>
+                      <option value="BUSY">Busy</option>
+                      <option value="SWITCHED OFF">Switched Off</option>
+                      <option value="WRONG NUMBER">Wrong Number</option>
+                      <option value="CALL BACK">Call Back</option>
+                      <option value="PROMISED TO PAY">Promised to Pay</option>
                     </select>
                   </div>
 
@@ -779,64 +831,84 @@ const PaymentFollowUp: React.FC = () => {
                   />
                 </div>
 
-                {/* Next Follow Up Date & Quick Helpers */}
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase text-slate-450 block">Schedule Next Follow-up</span>
-                    <span className="text-[9px] text-indigo-600 font-extrabold uppercase">Optional Callback Reminder</span>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <input
-                      type="date"
-                      value={nextFollowUpDate}
-                      min={getLocalBusinessDateISO()}
-                      onChange={(e) => setNextFollowUpDate(e.target.value)}
-                      className="text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-sm uppercase h-10 w-44"
-                    />
+                {/* Next Follow Up Date & Quick Helpers (Promised to pay only) */}
+                {result === 'PROMISED TO PAY' && (
+                  <div className="space-y-3 p-3 bg-blue-50/50 border border-blue-200 rounded-lg">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[10px] font-black uppercase text-blue-800 block">Promise Date</span>
+                          <span className="text-[9px] text-blue-650 font-extrabold uppercase">Required</span>
+                        </div>
+                        <input
+                          type="date"
+                          value={nextFollowUpDate}
+                          min={getLocalBusinessDateISO()}
+                          onChange={(e) => setNextFollowUpDate(e.target.value)}
+                          className="w-full text-slate-900 border border-blue-300 rounded-lg p-2 focus:ring-blue-600 bg-white font-bold text-sm uppercase h-10"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[10px] font-black uppercase text-blue-800 block">Promised Amount</span>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase">Optional</span>
+                        </div>
+                        <input
+                          type="number"
+                          placeholder="e.g. 10000"
+                          value={promisedAmount}
+                          onChange={(e) => setPromisedAmount(e.target.value)}
+                          className="w-full text-slate-900 border border-blue-300 rounded-lg p-2 focus:ring-blue-600 bg-white font-bold text-sm h-10"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-2">
 
-                    {/* Quick Selector Helpers */}
-                    <div className="flex items-center gap-1.5 flex-1">
-                      <button 
-                        type="button"
-                        onClick={() => handleSetQuickDate(1)}
-                        className="h-10 px-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 font-black text-[9px] uppercase rounded transition-colors"
-                      >
-                        Tomorrow
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => handleSetQuickDate(3)}
-                        className="h-10 px-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 font-black text-[9px] uppercase rounded transition-colors"
-                      >
-                        +3 Days
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => handleSetQuickDate(5)}
-                        className="h-10 px-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 font-black text-[9px] uppercase rounded transition-colors"
-                      >
-                        +5 Days
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => handleSetQuickDate(7)}
-                        className="h-10 px-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 font-black text-[9px] uppercase rounded transition-colors"
-                      >
-                        +7 Days
-                      </button>
-                      {nextFollowUpDate && (
+                      {/* Quick Selector Helpers */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <button 
                           type="button"
-                          onClick={() => setNextFollowUpDate('')}
-                          className="h-10 px-2.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-black text-[9px] uppercase rounded transition-colors"
+                          onClick={() => handleSetQuickDate(1)}
+                          className="h-10 px-2.5 bg-blue-100 hover:bg-blue-200 border border-blue-200 text-blue-800 font-black text-[9px] uppercase rounded transition-colors"
                         >
-                          Clear
+                          Tomorrow
                         </button>
-                      )}
+                        <button 
+                          type="button"
+                          onClick={() => handleSetQuickDate(3)}
+                          className="h-10 px-2.5 bg-blue-100 hover:bg-blue-200 border border-blue-200 text-blue-800 font-black text-[9px] uppercase rounded transition-colors"
+                        >
+                          3 Days
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => handleSetQuickDate(5)}
+                          className="h-10 px-2.5 bg-blue-100 hover:bg-blue-200 border border-blue-200 text-blue-800 font-black text-[9px] uppercase rounded transition-colors"
+                        >
+                          5 Days
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => handleSetQuickDate(7)}
+                          className="h-10 px-2.5 bg-blue-100 hover:bg-blue-200 border border-blue-200 text-blue-800 font-black text-[9px] uppercase rounded transition-colors"
+                        >
+                          7 Days
+                        </button>
+                        {nextFollowUpDate && (
+                          <button 
+                            type="button"
+                            onClick={() => setNextFollowUpDate('')}
+                            className="h-10 px-2.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-black text-[9px] uppercase rounded transition-colors"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Submit Buttons */}
                 <div className="flex justify-end gap-2.5 pt-3 border-t">
@@ -973,8 +1045,8 @@ const PaymentFollowUp: React.FC = () => {
                       <td className="p-1 border print-nowrap">{due.currentDueDate.split('-').reverse().join('/')}</td>
                       <td className="p-1 border font-bold print-nowrap">{due.phone || '—'}</td>
                       <td className="p-1 border leading-tight print-wrap">
-                        {due.g1Phone && <div>G1: {due.g1Name} ({due.g1Phone})</div>}
-                        {due.g2Phone && <div>G2: {due.g2Name} ({due.g2Phone})</div>}
+                        {due.g1Name && <div>G1: {due.g1Name} ({due.g1Phone || '—'})</div>}
+                        {due.g2Name && <div>G2: {due.g2Name} ({due.g2Phone || '—'})</div>}
                       </td>
                       <td className="p-1 border print-wrap">
                         {due.lastFollowUp ? `[${due.lastFollowUp.follow_up_date.split('-').reverse().join('/')} - ${due.lastFollowUp.followed_up_by}] ${due.lastFollowUp.result}: ${due.lastFollowUp.narration}` : 'No previous log'}

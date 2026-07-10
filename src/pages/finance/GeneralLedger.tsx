@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import Button from '../../components/UI/Button';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
-import { supabaseFinance, UnifiedLedgerEntry } from '../../lib/supabaseFinance';
+import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../../services/dailyFinancialTransactionService';
 import { Printer, RefreshCw, ArrowLeft, ChevronRight, X, Calendar, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
@@ -18,23 +18,15 @@ const GeneralLedger: React.FC = () => {
   });
   const [endDate, setEndDate] = useState(() => getLocalBusinessDateISO());
   const [loading, setLoading] = useState(true);
-  const [allEntries, setAllEntries] = useState<UnifiedLedgerEntry[]>([]);
+  const [allEntries, setAllEntries] = useState<DailyFinancialTransaction[]>([]);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [selectedHead, setSelectedHead] = useState<string | null>(null);
   const [drillSearchQuery, setDrillSearchQuery] = useState('');
 
-  const canonicalHeads = [
-    'BANK',
-    'CAPITAL',
-    'CD INTEREST',
-    'CD PRINCIPAL',
-    'HP COMMISSION',
-    'STBD COMMISSION',
-    'TBD COMMISSION',
-    'LIABILITIES',
-    'SALARY',
-    'EXPENDITURE'
-  ];
+  const [financeMode] = useState<'REGULAR' | 'ITR'>(() => {
+    const mode = sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode');
+    return mode === 'itr' ? 'ITR' : 'REGULAR';
+  });
 
   useEffect(() => {
     fetchLedgerData();
@@ -43,9 +35,10 @@ const GeneralLedger: React.FC = () => {
   const fetchLedgerData = async () => {
     setLoading(true);
     try {
-      const data = await supabaseFinance.getUnifiedLedgerEntries({
-        startDate,
-        endDate
+      const data = await dailyFinancialTransactionService.getDailyFinancialTransactions({
+        fromDate: startDate,
+        toDate: endDate,
+        financeMode
       });
       setAllEntries(data);
     } catch (err) {
@@ -56,60 +49,31 @@ const GeneralLedger: React.FC = () => {
     }
   };
 
-  const mapToGeneralLedgerHead = (entry: UnifiedLedgerEntry): string => {
-    const head = (entry.head_of_account || '').toUpperCase();
-    if (head === 'BANK' || head.includes('BANK')) return 'BANK';
-    if (head === 'CAPITAL' || head.includes('CAPITAL')) return 'CAPITAL';
-    
-    if (entry.category === 'CD') {
-      if (head.includes('PRINCIPAL') || head === 'CD PRINCIPAL' || head === 'CD A/C') return 'CD PRINCIPAL';
-      return 'CD INTEREST';
-    }
-    if (entry.category === 'HP') {
-      if (head.includes('COMMISSION') || head.includes('PENALTY') || head.includes('INTEREST')) return 'HP COMMISSION';
-      return 'LIABILITIES';
-    }
-    if (entry.category === 'STBD') {
-      if (head.includes('COMMISSION') || head.includes('PENALTY') || head.includes('INTEREST')) return 'STBD COMMISSION';
-      return 'LIABILITIES';
-    }
-    if (entry.category === 'TBD') {
-      if (head.includes('COMMISSION') || head.includes('PENALTY') || head.includes('INTEREST')) return 'TBD COMMISSION';
-      return 'LIABILITIES';
-    }
-    if (head === 'SALARY' || head.includes('SALARY')) return 'SALARY';
-    if (head === 'EXPENSE' || head === 'EXPENDITURE' || head.includes('EXPENSE') || head.includes('EXPENDITURE')) return 'EXPENDITURE';
-    if (head === 'LIABILITIES' || head.includes('LIABILITY')) return 'LIABILITIES';
-    return 'LIABILITIES';
-  };
-
+  // Group and summarize by normalized Head of Account
   const summaryData = useMemo(() => {
-    // Initialize summary map for canonical heads
-    const map: Record<string, { debit: number; credit: number }> = {};
-    canonicalHeads.forEach(head => {
-      map[head] = { debit: 0, credit: 0 };
-    });
+    const map: Record<string, { debit: number; credit: number; count: number; classification: string }> = {};
 
-    // Aggregate values
     allEntries.forEach(entry => {
-      const head = mapToGeneralLedgerHead(entry);
+      const head = entry.headOfAccount || 'UNCLASSIFIED';
       if (!map[head]) {
-        map[head] = { debit: 0, credit: 0 };
+        map[head] = { debit: 0, credit: 0, count: 0, classification: entry.reportClassification };
       }
       map[head].debit += entry.debit || 0;
       map[head].credit += entry.credit || 0;
+      map[head].count += 1;
     });
 
-    return Object.entries(map).map(([head, totals]) => {
-      // Balance = Credit - Debit
-      const balance = totals.credit - totals.debit;
+    return Object.entries(map).map(([head, data]) => {
+      const balance = data.credit - data.debit;
       return {
         head,
-        debit: totals.debit,
-        credit: totals.credit,
-        balance
+        debit: data.debit,
+        credit: data.credit,
+        balance,
+        count: data.count,
+        classification: data.classification
       };
-    });
+    }).sort((a, b) => a.head.localeCompare(b.head));
   }, [allEntries]);
 
   // Totals for the entire general ledger
@@ -130,14 +94,15 @@ const GeneralLedger: React.FC = () => {
   // Drilldown entries
   const drillDownEntries = useMemo(() => {
     if (!selectedHead) return [];
-    let list = allEntries.filter(entry => mapToGeneralLedgerHead(entry) === selectedHead);
+    let list = allEntries.filter(entry => entry.headOfAccount === selectedHead);
 
     if (drillSearchQuery.trim()) {
       const q = drillSearchQuery.toLowerCase().trim();
       list = list.filter(entry => 
-        (entry.account_number || '').toLowerCase().includes(q) ||
+        (entry.accountOrLoanNo || '').toLowerCase().includes(q) ||
         (entry.particulars || '').toLowerCase().includes(q) ||
-        (entry.user || '').toLowerCase().includes(q) ||
+        (entry.customerName || '').toLowerCase().includes(q) ||
+        (entry.userName || '').toLowerCase().includes(q) ||
         String(entry.debit).includes(q) ||
         String(entry.credit).includes(q)
       );
@@ -221,6 +186,7 @@ const GeneralLedger: React.FC = () => {
                   <thead>
                     <tr className="bg-slate-50">
                       <th className="finance-small-label uppercase">Head of Account</th>
+                      <th className="finance-small-label uppercase">Classification</th>
                       <th className="text-right finance-small-label uppercase">Debit (Dr)</th>
                       <th className="text-right finance-small-label uppercase">Credit (Cr)</th>
                       <th className="text-right finance-small-label uppercase">Balance</th>
@@ -235,6 +201,7 @@ const GeneralLedger: React.FC = () => {
                         className="hover:bg-slate-50/50 cursor-pointer transition-colors"
                       >
                         <td className="px-4 py-3.5 text-slate-900 font-bold uppercase finance-input">{s.head}</td>
+                        <td className="px-4 py-3.5 text-slate-500 font-semibold uppercase">{s.classification}</td>
                         <td className="px-4 py-3.5 text-right text-rose-600 font-semibold whitespace-nowrap">
                           {s.debit > 0 ? `₹${s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                         </td>
@@ -251,7 +218,7 @@ const GeneralLedger: React.FC = () => {
                     ))}
                     {/* Overall totals */}
                     <tr className="bg-slate-50 font-black border-t-2 border-slate-200">
-                      <td className="px-4 py-4 text-slate-800 uppercase finance-input">Grand Total:</td>
+                      <td colSpan={2} className="px-4 py-4 text-slate-800 uppercase finance-input">Grand Total:</td>
                       <td className="px-4 py-4 text-right text-rose-700 font-extrabold whitespace-nowrap">
                         ₹{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
@@ -344,9 +311,9 @@ const GeneralLedger: React.FC = () => {
                         <tr key={e.id} className="hover:bg-slate-50/30">
                           <td className="px-3 py-2.5 text-slate-500 finance-input">{idx + 1}</td>
                           <td className="px-3 py-2.5 text-slate-650 whitespace-nowrap finance-input">
-                            {e.date.split('-').reverse().join('/')}
+                            {e.transactionDate.split('-').reverse().join('/')}
                           </td>
-                          <td className="px-3 py-2.5 font-mono text-slate-900 font-black">{e.account_number}</td>
+                          <td className="px-3 py-2.5 font-mono text-slate-900 font-black">{e.accountOrLoanNo || '—'}</td>
                           <td className="px-3 py-2.5 text-right text-rose-600 whitespace-nowrap font-medium">
                             {e.debit > 0 ? `₹${e.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
@@ -354,7 +321,7 @@ const GeneralLedger: React.FC = () => {
                             {e.credit > 0 ? `₹${e.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
                           <td className="px-3 py-2.5 text-slate-700 max-w-xs break-words finance-input">{e.particulars}</td>
-                          <td className="px-3 py-2.5 text-slate-500 uppercase finance-input">{e.user}</td>
+                          <td className="px-3 py-2.5 text-slate-500 uppercase finance-input">{e.userName || 'Staff'}</td>
                         </tr>
                       ))
                     )}

@@ -930,6 +930,7 @@ const EditLoanEntry: React.FC = () => {
                   value={amount} 
                   onChange={setAmount} 
                   required 
+                  disabled={loanCategory === 'CD' && hasLedgerActivity}
                 />
                 
                 <div className="grid grid-cols-2 gap-2">
@@ -939,6 +940,7 @@ const EditLoanEntry: React.FC = () => {
                     value={interestRate} 
                     onChange={setInterestRate} 
                     required 
+                    disabled={loanCategory === 'CD' && hasLedgerActivity}
                   />
                   
                   <Input 
@@ -947,6 +949,7 @@ const EditLoanEntry: React.FC = () => {
                     value={penaltyPercent} 
                     onChange={setPenaltyPercent} 
                     required 
+                    disabled={loanCategory === 'CD' && hasLedgerActivity}
                   />
                 </div>
 

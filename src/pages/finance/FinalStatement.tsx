@@ -1,18 +1,19 @@
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState } from 'react';
 import Button from '../../components/UI/Button';
+import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../../services/dailyFinancialTransactionService';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer, ArrowLeft, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useNavigate } from 'react-router-dom';
 
-interface AccountBalanceItem {
+interface BSAccountBalanceItem {
   accountName: string;
+  opening: number;
   credit: number;
   debit: number;
-  balance: number;
-  result: 'CR' | 'DR' | 'NIL';
+  closing: number;
 }
 
 const FinalStatement: React.FC = () => {
@@ -30,10 +31,15 @@ const FinalStatement: React.FC = () => {
 
   const [partnerCount, setPartnerCount] = useState(1);
   const [openingCash, setOpeningCash] = useState(0);
+  const [closingCash, setClosingCash] = useState(0);
   const [creditTotal, setCreditTotal] = useState(0);
   const [debitTotal, setDebitTotal] = useState(0);
-  const [capital, setCapital] = useState(0);
-  const [accountBalances, setAccountBalances] = useState<AccountBalanceItem[]>([]);
+  const [accountBalances, setAccountBalances] = useState<BSAccountBalanceItem[]>([]);
+
+  const [financeMode] = useState<'REGULAR' | 'ITR'>(() => {
+    const mode = sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode');
+    return mode === 'itr' ? 'ITR' : 'REGULAR';
+  });
 
   useEffect(() => {
     fetchStatementData();
@@ -42,74 +48,80 @@ const FinalStatement: React.FC = () => {
   const fetchStatementData = async () => {
     setLoading(true);
     try {
-      const [cashbookEntries, capitalEntries, partners] = await Promise.all([
-        supabaseFinance.getCashbookEntries(),
-        supabaseFinance.getCapitalEntries(),
-        supabaseFinance.getPartners()
-      ]);
+      // 1. Calculate opening cash: fetch all historical entries before startDate
+      const prevDateLimit = new Date(startDate);
+      prevDateLimit.setDate(prevDateLimit.getDate() - 1);
+      const prevDateLimitStr = prevDateLimit.toISOString().split('T')[0];
 
-      setPartnerCount(partners.length || 1); // Avoid division by zero
+      let prevTxs: DailyFinancialTransaction[] = [];
+      if (startDate > '1970-01-01') {
+        prevTxs = await dailyFinancialTransactionService.getDailyFinancialTransactions({
+          fromDate: '1970-01-01',
+          toDate: prevDateLimitStr,
+          financeMode
+        });
+      }
 
-      // 1. Calculate Opening Cash (All entries before startDate)
-      let prevCredit = 0;
-      let prevDebit = 0;
-      
-      const previousEntries = cashbookEntries.filter(c => c.entry_date < startDate);
-      previousEntries.forEach(entry => {
-        prevCredit += Number(entry.credit) || 0;
-        prevDebit += Number(entry.debit) || 0;
+      // 2. Fetch date range entries
+      const rangeTxs = await dailyFinancialTransactionService.getDailyFinancialTransactions({
+        fromDate: startDate,
+        toDate: endDate,
+        financeMode
       });
-      setOpeningCash(prevCredit - prevDebit);
 
-      // 2. Calculate Current Date Range Values
-      const currentEntries = cashbookEntries.filter(c => c.entry_date >= startDate && c.entry_date <= endDate);
-      
+      const partners = await supabaseFinance.getPartners();
+      setPartnerCount(partners.length || 1);
+
+      // Compute cash balances (net system flows)
+      let prevCash = 0;
+      prevTxs.forEach(t => {
+        prevCash += (t.credit - t.debit);
+      });
+      setOpeningCash(prevCash);
+
       let currCredit = 0;
       let currDebit = 0;
-      const accountMap = new Map<string, { credit: number, debit: number }>();
-
-      currentEntries.forEach(entry => {
-        const credit = Number(entry.credit) || 0;
-        const debit = Number(entry.debit) || 0;
-        currCredit += credit;
-        currDebit += debit;
-
-        const head = entry.head_of_account || 'Miscellaneous';
-        const existing = accountMap.get(head) || { credit: 0, debit: 0 };
-        accountMap.set(head, { 
-          credit: existing.credit + credit, 
-          debit: existing.debit + debit 
-        });
+      rangeTxs.forEach(t => {
+        currCredit += t.credit;
+        currDebit += t.debit;
       });
-
       setCreditTotal(currCredit);
       setDebitTotal(currDebit);
+      setClosingCash(prevCash + currCredit - currDebit);
 
-      // Format Account Balances
-      const balances: AccountBalanceItem[] = Array.from(accountMap.entries()).map(([name, data]) => {
-        const balance = data.credit - data.debit;
+      // 3. Compute balance sheet account balances
+      const bsHeads = new Set<string>();
+      prevTxs.forEach(t => {
+        if (t.reportClassification === 'BALANCE_SHEET') bsHeads.add(t.headOfAccount);
+      });
+      rangeTxs.forEach(t => {
+        if (t.reportClassification === 'BALANCE_SHEET') bsHeads.add(t.headOfAccount);
+      });
+
+      const balances: BSAccountBalanceItem[] = Array.from(bsHeads).map(head => {
+        let op = 0;
+        prevTxs.filter(t => t.headOfAccount === head).forEach(t => {
+          op += (t.credit - t.debit);
+        });
+
+        let cr = 0;
+        let dr = 0;
+        rangeTxs.filter(t => t.headOfAccount === head).forEach(t => {
+          cr += t.credit;
+          dr += t.debit;
+        });
+
         return {
-          accountName: name,
-          credit: data.credit,
-          debit: data.debit,
-          balance: Math.abs(balance),
-          result: balance > 0 ? 'CR' : balance < 0 ? 'DR' : 'NIL'
+          accountName: head,
+          opening: op,
+          credit: cr,
+          debit: dr,
+          closing: op + cr - dr
         };
       });
 
-      // Sort alphabetically by account name
       balances.sort((a, b) => a.accountName.localeCompare(b.accountName));
       setAccountBalances(balances);
-
-      // 3. Calculate Capital within date range
-      const currentCapitalEntries = capitalEntries.filter(c => c.entry_date >= startDate && c.entry_date <= endDate);
-      let capSum = 0;
-      currentCapitalEntries.forEach(entry => {
-        const credit = Number(entry.credit) || 0;
-        const debit = Number(entry.debit) || 0;
-        capSum += (credit - debit);
-      });
-      setCapital(capSum);
 
     } catch (err) {
       console.error(err);
@@ -120,13 +132,12 @@ const FinalStatement: React.FC = () => {
   };
 
   const grandTotal = creditTotal - debitTotal;
-  const closingCash = openingCash + grandTotal;
   const shareValue = grandTotal / partnerCount;
 
   return (
-    <div className="space-y-6 max-w-[1400px] mx-auto print:hidden">
+    <div className="space-y-6 max-w-[1400px] mx-auto p-6 print:p-0">
       {/* Header */}
-      <div className="flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
+      <div className={`flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
           <h1 className="finance-h1">Final Statement</h1>
           <p className="finance-small-label uppercase">
@@ -147,7 +158,7 @@ const FinalStatement: React.FC = () => {
       </div>
 
       {/* Top Filter & Share Row */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row overflow-hidden">
+      <div className={`bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row overflow-hidden ${showPrintPreview ? 'print:hidden' : ''}`}>
         {/* Date Filters */}
         <div className="flex-1 grid grid-cols-3 divide-x divide-slate-100 border-b md:border-b-0 md:border-r border-slate-100">
           <div className="px-6 py-4 flex flex-col justify-center">
@@ -184,67 +195,39 @@ const FinalStatement: React.FC = () => {
       </div>
 
       {/* Summary Cards Row 1 */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 sm:grid-cols-4 gap-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         {/* Credit Total */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
           <span className="text-slate-400 block finance-small-label uppercase">Credit Total</span>
-          <span className="text-emerald-600 mt-1 finance-money">₹{creditTotal.toLocaleString('en-IN')}</span>
+          <span className="text-emerald-600 mt-1 finance-money">₹{creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
         
         {/* Debit Total */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
           <span className="text-slate-400 block finance-small-label uppercase">Debit Total</span>
-          <span className="text-red-600 mt-1 finance-money">₹{debitTotal.toLocaleString('en-IN')}</span>
+          <span className="text-red-600 mt-1 finance-money">₹{debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
 
         {/* Opening Cash */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
           <span className="text-slate-400 block finance-small-label uppercase">Opening Cash</span>
-          <span className="text-slate-900 mt-1 finance-money">₹{openingCash.toLocaleString('en-IN')}</span>
+          <span className="text-slate-900 mt-1 finance-money">₹{openingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
 
         {/* Closing Cash */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
           <span className="text-slate-400 block finance-small-label uppercase">Closing Cash</span>
-          <span className="text-slate-900 mt-1 finance-money">₹{closingCash.toLocaleString('en-IN')}</span>
-        </div>
-      </div>
-
-      {/* Summary Cards Row 2 */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Capital */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-slate-400 block finance-small-label uppercase">Capital</span>
-          <span className={`mt-1 ${capital >= 0 ? 'text-emerald-600' : 'text-red-600'} finance-money`}>
-            ₹{Math.abs(capital).toLocaleString('en-IN')} {capital < 0 ? '(DR)' : ''}
-          </span>
-        </div>
-        
-        {/* Grand Total */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-slate-400 block finance-small-label uppercase">Grand Total</span>
-          <span className={`mt-1 ${grandTotal >= 0 ? 'text-[#0b1329]' : 'text-red-600'} finance-money`}>
-            ₹{grandTotal.toLocaleString('en-IN')}
-          </span>
-        </div>
-
-        {/* Accounts Count */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-          <span className="text-slate-400 block finance-small-label uppercase">Accounts</span>
-          <span className="text-slate-900 mt-1 finance-money">{accountBalances.length}</span>
+          <span className="text-slate-900 mt-1 finance-money">₹{closingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
       </div>
 
       {/* Account Balances Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[400px]">
+      <div className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[400px] ${showPrintPreview ? 'print:hidden' : ''}`}>
         {/* Table Header */}
         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 relative">
           <div>
-            <h2 className="text-slate-900 finance-brand">Account Balances</h2>
+            <h2 className="text-slate-900 finance-brand">Balance Sheet Accounts</h2>
             <p className="text-slate-500 mt-1 finance-small-label uppercase">{accountBalances.length} Accounts</p>
-          </div>
-          <div className="absolute top-4 right-4 bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 finance-small-label uppercase">
-            LIVE
           </div>
         </div>
 
@@ -257,40 +240,37 @@ const FinalStatement: React.FC = () => {
           <div className="flex-1 flex items-center justify-center p-8">
             <div className="text-center border border-dashed border-slate-200 rounded-xl p-12 w-full max-w-md bg-slate-50">
               <p className="text-slate-900 mb-2 finance-sidebar-link uppercase">No Accounts</p>
-              <p className="text-slate-500 finance-header-time uppercase">No cashbook entries found for this date range.</p>
             </div>
           </div>
         ) : (
           <div className="overflow-x-auto flex-1">
-            <table className="w-full text-left border-collapse min-w-[600px]">
+            <table className="w-full text-left border-collapse min-w-[600px] finance-caption">
               <thead>
                 <tr className="bg-white border-b border-slate-200">
                   <th className="px-6 py-4 text-slate-400 finance-small-label uppercase">S.No</th>
-                  <th className="px-6 py-4 text-slate-400 w-1/3 finance-small-label uppercase">Account Name</th>
+                  <th className="px-6 py-4 text-slate-400 w-1/4 finance-small-label uppercase">Account Name</th>
+                  <th className="px-6 py-4 text-slate-400 text-right finance-small-label uppercase">Opening</th>
                   <th className="px-6 py-4 text-slate-400 text-right finance-small-label uppercase">Credit</th>
                   <th className="px-6 py-4 text-slate-400 text-right finance-small-label uppercase">Debit</th>
-                  <th className="px-6 py-4 text-slate-400 text-right finance-small-label uppercase">Balance</th>
-                  <th className="px-6 py-4 text-slate-400 text-center finance-small-label uppercase">Result</th>
+                  <th className="px-6 py-4 text-slate-400 text-right finance-small-label uppercase">Closing</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {accountBalances.map((acc, idx) => (
                   <tr key={idx} className="transition-colors hover:bg-slate-50">
                     <td className="px-6 py-4 text-slate-500 finance-sidebar-link">{idx + 1}</td>
-                    <td className="px-6 py-4 text-slate-900 finance-sidebar-link uppercase">{acc.accountName}</td>
-                    <td className="px-6 py-4 text-emerald-600 text-right finance-sidebar-link">
-                      {acc.credit > 0 ? `₹${acc.credit.toLocaleString('en-IN')}` : '-'}
+                    <td className="px-6 py-4 text-slate-900 font-bold uppercase finance-sidebar-link">{acc.accountName}</td>
+                    <td className={`px-6 py-4 text-right font-medium ${acc.opening >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      ₹{Math.abs(acc.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {acc.opening >= 0 ? 'Cr' : 'Dr'}
                     </td>
-                    <td className="px-6 py-4 text-red-600 text-right finance-sidebar-link">
-                      {acc.debit > 0 ? `₹${acc.debit.toLocaleString('en-IN')}` : '-'}
+                    <td className="px-6 py-4 text-emerald-600 text-right font-medium">
+                      {acc.credit > 0 ? `₹${acc.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
-                    <td className="px-6 py-4 text-slate-800 text-right finance-sidebar-link">
-                      ₹{acc.balance.toLocaleString('en-IN')}
+                    <td className="px-6 py-4 text-rose-600 text-right font-medium">
+                      {acc.debit > 0 ? `₹${acc.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`px-2 py-1 rounded border ${ acc.result === 'CR' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : acc.result === 'DR' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-100 text-slate-500 border-slate-200' } finance-small-label uppercase`}>
-                        {acc.result}
-                      </span>
+                    <td className={`px-6 py-4 text-right font-black ${acc.closing >= 0 ? 'text-emerald-850' : 'text-rose-850'}`}>
+                      ₹{Math.abs(acc.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {acc.closing >= 0 ? 'Cr' : 'Dr'}
                     </td>
                   </tr>
                 ))}
@@ -309,57 +289,40 @@ const FinalStatement: React.FC = () => {
       >
         <div className="space-y-6 pb-12">
           {/* Print Summary Metrics */}
-          <div className="grid grid-cols-4 gap-4 border-b border-t border-slate-900 py-4 mb-6 text-center">
+          <div className="grid grid-cols-4 gap-4 border-b border-t border-slate-900 py-4 mb-6 text-center text-[11px]">
             <div>
               <p className="text-slate-500 finance-small-label uppercase">Opening Cash</p>
-              <p className="text-slate-900 finance-sidebar-link">₹{openingCash.toLocaleString('en-IN')}</p>
+              <p className="text-slate-900 finance-sidebar-link font-bold">₹{openingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
             </div>
             <div>
               <p className="text-slate-500 finance-small-label uppercase">Closing Cash</p>
-              <p className="text-slate-900 finance-sidebar-link">₹{closingCash.toLocaleString('en-IN')}</p>
+              <p className="text-slate-900 finance-sidebar-link font-bold">₹{closingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
             </div>
             <div>
               <p className="text-slate-500 finance-small-label uppercase">Grand Total</p>
-              <p className="text-slate-900 finance-sidebar-link">₹{grandTotal.toLocaleString('en-IN')}</p>
+              <p className="text-slate-900 finance-sidebar-link font-bold">₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
             </div>
             <div>
               <p className="text-slate-500 finance-small-label uppercase">Share Value ({partnerCount})</p>
-              <p className="text-[#0b1329] finance-sidebar-link">₹{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4 mb-6 border-b border-slate-300 pb-6 text-center">
-            <div>
-              <p className="text-slate-500 finance-small-label uppercase">Credit Total</p>
-              <p className="text-emerald-700 finance-header-time">₹{creditTotal.toLocaleString('en-IN')}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 finance-small-label uppercase">Debit Total</p>
-              <p className="text-red-700 finance-header-time">₹{debitTotal.toLocaleString('en-IN')}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 finance-small-label uppercase">Capital (Net)</p>
-              <p className={`${capital >= 0 ? 'text-emerald-700' : 'text-red-700'} finance-header-time`}>
-                ₹{Math.abs(capital).toLocaleString('en-IN')} {capital < 0 ? '(DR)' : '(CR)'}
-              </p>
+              <p className="text-[#0b1329] finance-sidebar-link font-bold">₹{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
             </div>
           </div>
 
           {/* Account Balances Print Table */}
-          <div className="border border-slate-900">
+          <div className="border border-slate-900 text-[10px]">
             <div className="bg-slate-100 border-b border-slate-900 px-4 py-2 flex justify-between">
-              <h4 className="text-slate-900 finance-small-label uppercase">Account Balances</h4>
+              <h4 className="text-slate-900 finance-small-label uppercase font-black">Balance Sheet Accounts Position</h4>
               <span className="text-slate-500 finance-small-label">{accountBalances.length} ACCOUNTS</span>
             </div>
-            <table className="w-full text-left finance-small-label">
+            <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-900 bg-slate-50">
-                  <th className="px-2 py-2 text-slate-800 border-r border-slate-300 finance-input">S.No</th>
-                  <th className="px-2 py-2 text-slate-800 border-r border-slate-300 finance-input">Account Name</th>
-                  <th className="px-2 py-2 text-slate-800 text-right border-r border-slate-300 finance-input">Credit</th>
-                  <th className="px-2 py-2 text-slate-800 text-right border-r border-slate-300 finance-input">Debit</th>
-                  <th className="px-2 py-2 text-slate-900 text-right border-r border-slate-300 finance-input">Balance</th>
-                  <th className="px-2 py-2 text-slate-800 text-center finance-input">Result</th>
+                  <th className="p-2 border-r border-slate-300 text-slate-800">S.No</th>
+                  <th className="p-2 border-r border-slate-300 text-slate-800">Account Name</th>
+                  <th className="p-2 border-r border-slate-300 text-slate-800 text-right">Opening</th>
+                  <th className="p-2 border-r border-slate-300 text-slate-800 text-right">Credit</th>
+                  <th className="p-2 border-r border-slate-300 text-slate-850 text-right">Debit</th>
+                  <th className="p-2 text-right text-slate-900">Closing</th>
                 </tr>
               </thead>
               <tbody className="font-mono">
@@ -370,12 +333,12 @@ const FinalStatement: React.FC = () => {
                 ) : (
                   accountBalances.map((acc, idx) => (
                     <tr key={idx} className="border-b border-slate-200 last:border-0">
-                      <td className="px-2 py-1 border-r border-slate-200 text-center">{idx + 1}</td>
-                      <td className="px-2 py-1 text-slate-900 border-r border-slate-200 finance-input uppercase">{acc.accountName}</td>
-                      <td className="px-2 py-1 text-right text-slate-700 border-r border-slate-200">{acc.credit > 0 ? acc.credit.toLocaleString('en-IN') : '-'}</td>
-                      <td className="px-2 py-1 text-right text-slate-700 border-r border-slate-200">{acc.debit > 0 ? acc.debit.toLocaleString('en-IN') : '-'}</td>
-                      <td className="px-2 py-1 text-right text-slate-900 border-r border-slate-200 finance-input">₹{acc.balance.toLocaleString('en-IN')}</td>
-                      <td className="px-2 py-1 text-center finance-input">{acc.result}</td>
+                      <td className="p-1 border-r border-slate-200 text-center">{idx + 1}</td>
+                      <td className="p-1 text-slate-900 border-r border-slate-200 uppercase font-bold">{acc.accountName}</td>
+                      <td className="p-1 text-right border-r border-slate-200">₹{acc.opening.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="p-1 text-right border-r border-slate-200">{acc.credit > 0 ? acc.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}</td>
+                      <td className="p-1 text-right border-r border-slate-200">{acc.debit > 0 ? acc.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}</td>
+                      <td className="p-1 text-right font-black">₹{acc.closing.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     </tr>
                   ))
                 )}

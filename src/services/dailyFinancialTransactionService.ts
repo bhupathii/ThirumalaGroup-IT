@@ -1,5 +1,22 @@
 import { supabase } from '../lib/supabaseDatabase';
 
+export const normalizeHeadOfAccount = (name: string): string => {
+  const clean = (name || '').trim().toUpperCase();
+  if (clean === 'CD COMMISSION A/C' || clean === 'CD COMMISSION' || clean === 'CD INTEREST' || clean === 'CD INTEREST A/C') {
+    return 'CD INTEREST';
+  }
+  if (clean === 'CD A/C' || clean === 'CD PRINCIPAL') {
+    return 'CD PRINCIPAL';
+  }
+  if (clean === 'CD DOCUMENT CHARGES A/C' || clean === 'CD DOCUMENT CHARGES') {
+    return 'CD DOCUMENT CHARGES';
+  }
+  if (clean === 'PENALTY A/C' || clean === 'CD PENALTY' || clean === 'PENALTY CD A/C') {
+    return 'CD PENALTY';
+  }
+  return clean;
+};
+
 export interface DailyFinancialTransaction {
   id: string;
   sourceType: 'CD_LEDGER' | 'CAPITAL_ENTRY' | 'DAY_BOOK_ENTRY';
@@ -18,6 +35,8 @@ export interface DailyFinancialTransaction {
   createdAt?: string | null;
   reportClassification: 'BALANCE_SHEET' | 'PROFIT_AND_LOSS' | 'UNCLASSIFIED';
   customerName?: string | null;
+  partnerId?: string | null;
+  category?: 'CD' | 'CAPITAL' | 'HP' | 'STBD' | 'TBD' | 'BANK' | 'SALARY' | 'EXPENSE' | 'OTHER' | null;
 }
 
 export const dailyFinancialTransactionService = {
@@ -43,12 +62,13 @@ export const dailyFinancialTransactionService = {
     }
 
     const getClassification = (headName: string): 'BALANCE_SHEET' | 'PROFIT_AND_LOSS' | 'UNCLASSIFIED' => {
-      if (headName === 'CAPITAL') return 'BALANCE_SHEET';
-      if (headName === 'CD PRINCIPAL') return 'BALANCE_SHEET';
-      if (headName === 'CD INTEREST' || headName === 'CD DOCUMENT CHARGES' || headName === 'CD PENALTY') {
+      const cleanHead = normalizeHeadOfAccount(headName);
+      if (cleanHead === 'CAPITAL') return 'BALANCE_SHEET';
+      if (cleanHead === 'CD PRINCIPAL') return 'BALANCE_SHEET';
+      if (cleanHead === 'CD INTEREST' || cleanHead === 'CD DOCUMENT CHARGES' || cleanHead === 'CD PENALTY') {
         return 'PROFIT_AND_LOSS';
       }
-      const acc = accountsMap.get(headName.toUpperCase());
+      const acc = accountsMap.get(cleanHead.toUpperCase()) || accountsMap.get(headName.toUpperCase());
       if (acc?.report_classification) {
         return acc.report_classification;
       }
@@ -110,12 +130,14 @@ export const dailyFinancialTransactionService = {
         else if (head === 'CD DOCUMENT CHARGES A/C') head = 'CD DOCUMENT CHARGES';
         else if (head === 'PENALTY A/C') head = 'CD PENALTY';
 
+        const normHead = normalizeHeadOfAccount(head);
+
         normalizedList.push({
           id: `CD_LEDGER:${entry.id}`,
           sourceType: 'CD_LEDGER',
           sourceRecordId: entry.id,
           transactionDate: entry.entry_date,
-          headOfAccount: head,
+          headOfAccount: normHead,
           particulars: entry.particulars || '',
           receiptOrVoucherNo: entry.receipt_no || null,
           accountOrLoanNo: entry.loan?.loan_id || 'CD',
@@ -124,8 +146,9 @@ export const dailyFinancialTransactionService = {
           userName: entry.user_name || 'Staff',
           entryTime: entry.created_at,
           createdAt: entry.created_at,
-          reportClassification: getClassification(head),
-          customerName: entry.customer?.name || null
+          reportClassification: getClassification(normHead),
+          customerName: entry.customer?.name || null,
+          category: 'CD'
         });
       });
     }
@@ -146,7 +169,9 @@ export const dailyFinancialTransactionService = {
           userName: cap.created_by || 'Staff',
           entryTime: cap.created_at,
           createdAt: cap.created_at,
-          reportClassification: getClassification('CAPITAL')
+          reportClassification: getClassification('CAPITAL'),
+          partnerId: cap.partner_id || null,
+          category: 'CAPITAL'
         });
       });
     }
@@ -154,12 +179,20 @@ export const dailyFinancialTransactionService = {
     // Process Day Book entries
     if (cbEntries) {
       cbEntries.forEach((cb: any) => {
+        const head = cb.head_of_account;
+        const normHead = normalizeHeadOfAccount(head);
+        
+        let cat: 'BANK' | 'SALARY' | 'EXPENSE' | 'OTHER' = 'OTHER';
+        if (normHead.toUpperCase().includes('BANK')) cat = 'BANK';
+        else if (normHead.toUpperCase().includes('SALARY')) cat = 'SALARY';
+        else if (getClassification(normHead) === 'PROFIT_AND_LOSS' && Number(cb.debit) > 0) cat = 'EXPENSE';
+
         normalizedList.push({
           id: `DAY_BOOK_ENTRY:${cb.id}`,
           sourceType: 'DAY_BOOK_ENTRY',
           sourceRecordId: cb.id,
           transactionDate: cb.entry_date,
-          headOfAccount: cb.head_of_account,
+          headOfAccount: normHead,
           particulars: cb.particulars || '',
           accountOrLoanNo: cb.account_number || '—',
           debit: Number(cb.debit) || 0,
@@ -167,7 +200,8 @@ export const dailyFinancialTransactionService = {
           userName: cb.created_by || 'Staff',
           entryTime: cb.created_at,
           createdAt: cb.created_at,
-          reportClassification: getClassification(cb.head_of_account)
+          reportClassification: getClassification(normHead),
+          category: cat
         });
       });
     }

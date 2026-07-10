@@ -449,6 +449,18 @@ const CDLedger: React.FC = () => {
             edited_by: username,
             reason: editTxReason.trim()
           });
+
+        await supabaseFinance.logTransactionForReview({
+          loanId: selectedLoan.id,
+          sourceType: 'Loan Payment',
+          sourceId: editingTx.id,
+          receiptNo: newData.receipt_no,
+          transactionType: 'CD Collection Edition',
+          transactionDate: newData.date,
+          amount: newData.amount,
+          enteredBy: username,
+          actionType: 'EDIT'
+        });
       } catch (logErr) {
         console.error('Failed to write audit log:', logErr);
       }
@@ -513,6 +525,18 @@ const CDLedger: React.FC = () => {
             edited_by: username,
             reason: reason.trim()
           });
+
+        await supabaseFinance.logTransactionForReview({
+          loanId: selectedLoan.id,
+          sourceType: 'Loan Payment',
+          sourceId: tx.id,
+          receiptNo: tx.receipt_no,
+          transactionType: 'CD Collection Deletion',
+          transactionDate: tx.date,
+          amount: Number(tx.amount),
+          enteredBy: username,
+          actionType: 'DELETE'
+        });
       } catch (logErr) {
         console.error('Failed to log delete audit:', logErr);
       }
@@ -1923,15 +1947,13 @@ const CDLedger: React.FC = () => {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gray-50 text-left">
-                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">#</th>
-                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">A/C Number</th>
-                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer Name</th>
-                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
-                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Loan Amount</th>
-                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Rate %</th>
-                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">#</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">CD Number</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Borrower Name</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Loan Amount</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -1944,14 +1966,12 @@ const CDLedger: React.FC = () => {
                             setListSearchQuery('');
                           }}
                         >
-                          <td className="px-6 py-3.5 text-gray-400 font-mono text-xs">{idx + 1}</td>
-                          <td className="px-6 py-3.5 font-bold text-green-700 font-mono">{loan.loan_id}</td>
-                          <td className="px-6 py-3.5 font-semibold text-gray-900">{loan.customer?.name || 'N/A'}</td>
-                          <td className="px-6 py-3.5 text-gray-600 font-mono">{loan.customer?.phone || '-'}</td>
-                          <td className="px-6 py-3.5 font-semibold text-gray-800">₹{Number(loan.amount || 0).toLocaleString('en-IN')}</td>
-                          <td className="px-6 py-3.5 text-gray-600">{loan.interest_rate}%</td>
-                          <td className="px-6 py-3.5 text-gray-500 text-xs">{loan.date ? new Date(loan.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '-'}</td>
-                          <td className="px-6 py-3.5">
+                          <td className="px-4 py-3.5 text-gray-400 font-mono text-xs">{idx + 1}</td>
+                          <td className="px-4 py-3.5 font-black text-base text-green-700 font-mono tracking-wide">{loan.loan_id}</td>
+                          <td className="px-4 py-3.5 font-black text-base text-gray-900">{loan.customer?.name || 'N/A'}</td>
+                          <td className="px-4 py-3.5 text-gray-600 font-mono">{loan.customer?.phone || '-'}</td>
+                          <td className="px-4 py-3.5 font-semibold text-gray-800">₹{Number(loan.amount || 0).toLocaleString('en-IN')}</td>
+                          <td className="px-4 py-3.5">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${loan.status === 'Active' ? 'bg-green-100 text-green-700'
                               : loan.status === 'Closed' ? 'bg-gray-100 text-gray-500'
                                 : loan.status === 'NPA_CLOSED' ? 'bg-orange-100 text-orange-700'
@@ -1960,7 +1980,7 @@ const CDLedger: React.FC = () => {
                               {(loan.status || 'Active').toUpperCase()}
                             </span>
                           </td>
-                          <td className="px-6 py-3.5">
+                          <td className="px-4 py-3.5">
                             <span className="text-green-600 text-xs font-semibold group-hover:underline">Open →</span>
                           </td>
                         </tr>
@@ -2030,9 +2050,14 @@ const CDLedger: React.FC = () => {
               const guarantor1PhotoUrl = guarantor1?.photo_url || guarantor1?.customer_photo_url || selectedLoan.surety_photo_url;
               const guarantor2PhotoUrl = guarantor2?.photo_url || guarantor2?.customer_photo_url;
 
+              // Determine which columns to show
+              const showG1 = !!selectedLoan.guarantor_1_id;
+              const showG2 = !!selectedLoan.guarantor_2_id;
+              const gridCols = showG1 && showG2 ? 'grid-cols-3' : showG1 || showG2 ? 'grid-cols-2' : 'grid-cols-1';
+
               return (
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-sm print:hidden overflow-hidden">
-                  <div className="grid grid-cols-3 divide-x divide-gray-100">
+                  <div className={`grid ${gridCols} divide-x divide-gray-100`}>
 
                     {/* BORROWER column */}
                     <div className="p-3">
@@ -2049,62 +2074,66 @@ const CDLedger: React.FC = () => {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-extrabold text-[16px] text-slate-900 leading-tight truncate">{selectedLoan.customer?.name}</div>
-                          <div className="text-[14px] text-slate-500 leading-tight truncate">{selectedLoan.customer?.father_husband_name || '—'}</div>
-                          <div className="text-[14px] font-semibold text-slate-700 mt-0.5">☎ {selectedLoan.customer?.phone || 'N/A'}{selectedLoan.customer?.phone2 ? ` / ${selectedLoan.customer.phone2}` : ''}</div>
-                          <div className="text-[14px] font-mono text-slate-600 mt-0.5">{selectedLoan.customer?.aadhaar || 'No Aadhaar'}</div>
-                          <div className="text-[14px] text-slate-500 truncate" title={selectedLoan.customer?.address || undefined}>{selectedLoan.customer?.address || 'No address'}</div>
+                          <div className="font-black text-[18px] text-slate-900 leading-tight truncate">{selectedLoan.customer?.name}</div>
+                          <div className="text-[13px] text-slate-500 leading-tight truncate">{selectedLoan.customer?.father_husband_name || '—'}</div>
+                          <div className="text-[15px] font-bold text-slate-800 mt-0.5">☎ {selectedLoan.customer?.phone || 'N/A'}{selectedLoan.customer?.phone2 ? ` / ${selectedLoan.customer.phone2}` : ''}</div>
+                          {selectedLoan.customer?.aadhaar && <div className="text-[13px] font-mono text-slate-600 mt-0.5">{selectedLoan.customer.aadhaar}</div>}
+                          {selectedLoan.customer?.address && <div className="text-[13px] text-slate-500 truncate" title={selectedLoan.customer.address}>{selectedLoan.customer.address}</div>}
                         </div>
                       </div>
                     </div>
 
-                    {/* GUARANTOR 1 column */}
-                    <div className="p-3">
-                      <div className="text-[13px] font-bold uppercase text-slate-500 tracking-wider mb-2">Guarantor 1</div>
-                      {guarantor1 ? (
-                        <div className="flex gap-2.5 items-start">
-                          <div className="w-12 h-14 shrink-0 rounded-lg bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center shadow-sm">
-                            {guarantor1PhotoUrl ? (
-                              <img src={guarantor1PhotoUrl} alt="Guarantor 1" className="w-full h-full object-cover" />
-                            ) : (
-                              <User className="w-5 h-5 text-gray-300" />
-                            )}
+                    {/* GUARANTOR 1 column — only if exists */}
+                    {showG1 && (
+                      <div className="p-3">
+                        <div className="text-[13px] font-bold uppercase text-slate-500 tracking-wider mb-2">Guarantor 1</div>
+                        {guarantor1 ? (
+                          <div className="flex gap-2.5 items-start">
+                            <div className="w-12 h-14 shrink-0 rounded-lg bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center shadow-sm">
+                              {guarantor1PhotoUrl ? (
+                                <img src={guarantor1PhotoUrl} alt="Guarantor 1" className="w-full h-full object-cover" />
+                              ) : (
+                                <User className="w-5 h-5 text-gray-300" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-black text-[18px] text-slate-900 leading-tight truncate">{guarantor1.name}</div>
+                              <div className="text-[15px] font-bold text-slate-800 mt-0.5">☎ {guarantor1.phone || 'N/A'}</div>
+                              {guarantor1.aadhaar && <div className="text-[13px] font-mono text-slate-600 mt-0.5">{guarantor1.aadhaar}</div>}
+                              {guarantor1.address && <div className="text-[13px] text-slate-500 truncate" title={guarantor1.address}>{guarantor1.address}</div>}
+                            </div>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-extrabold text-[16px] text-slate-900 leading-tight truncate">{guarantor1.name}</div>
-                            <div className="text-[14px] font-semibold text-slate-700 mt-0.5">☎ {guarantor1.phone || 'N/A'}</div>
-                            <div className="text-[14px] font-mono text-slate-600 mt-0.5">{guarantor1.aadhaar || 'No Aadhaar'}</div>
-                            <div className="text-[14px] text-slate-500 truncate" title={guarantor1.address || undefined}>{guarantor1.address || 'No address'}</div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center h-14 text-[14px] text-slate-400 italic">No guarantor added</div>
-                      )}
-                    </div>
+                        ) : (
+                          <div className="flex items-center justify-center h-14 text-[13px] text-slate-400 italic">Loading…</div>
+                        )}
+                      </div>
+                    )}
 
-                    {/* GUARANTOR 2 column */}
-                    <div className="p-3">
-                      <div className="text-[13px] font-bold uppercase text-slate-500 tracking-wider mb-2">Guarantor 2</div>
-                      {guarantor2 ? (
-                        <div className="flex gap-2.5 items-start">
-                          <div className="w-12 h-14 shrink-0 rounded-lg bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center shadow-sm">
-                            {guarantor2PhotoUrl ? (
-                              <img src={guarantor2PhotoUrl} alt="Guarantor 2" className="w-full h-full object-cover" />
-                            ) : (
-                              <User className="w-5 h-5 text-gray-300" />
-                            )}
+                    {/* GUARANTOR 2 column — only if exists */}
+                    {showG2 && (
+                      <div className="p-3">
+                        <div className="text-[13px] font-bold uppercase text-slate-500 tracking-wider mb-2">Guarantor 2</div>
+                        {guarantor2 ? (
+                          <div className="flex gap-2.5 items-start">
+                            <div className="w-12 h-14 shrink-0 rounded-lg bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center shadow-sm">
+                              {guarantor2PhotoUrl ? (
+                                <img src={guarantor2PhotoUrl} alt="Guarantor 2" className="w-full h-full object-cover" />
+                              ) : (
+                                <User className="w-5 h-5 text-gray-300" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-black text-[18px] text-slate-900 leading-tight truncate">{guarantor2.name}</div>
+                              <div className="text-[15px] font-bold text-slate-800 mt-0.5">☎ {guarantor2.phone || 'N/A'}</div>
+                              {guarantor2.aadhaar && <div className="text-[13px] font-mono text-slate-600 mt-0.5">{guarantor2.aadhaar}</div>}
+                              {guarantor2.address && <div className="text-[13px] text-slate-500 truncate" title={guarantor2.address}>{guarantor2.address}</div>}
+                            </div>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-extrabold text-[16px] text-slate-900 leading-tight truncate">{guarantor2.name}</div>
-                            <div className="text-[14px] font-semibold text-slate-700 mt-0.5">☎ {guarantor2.phone || 'N/A'}</div>
-                            <div className="text-[14px] font-mono text-slate-600 mt-0.5">{guarantor2.aadhaar || 'No Aadhaar'}</div>
-                            <div className="text-[14px] text-slate-500 truncate" title={guarantor2.address || undefined}>{guarantor2.address || 'No address'}</div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center h-14 text-[14px] text-slate-400 italic">No guarantor added</div>
-                      )}
-                    </div>
+                        ) : (
+                          <div className="flex items-center justify-center h-14 text-[13px] text-slate-400 italic">Loading…</div>
+                        )}
+                      </div>
+                    )}
 
                   </div>
                 </div>

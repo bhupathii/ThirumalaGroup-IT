@@ -195,6 +195,7 @@ export interface FinanceTransactionReview {
   approved_at?: string | null;
   created_at: string;
   updated_at: string;
+  action_type?: 'CREATE' | 'EDIT' | 'DELETE';
 }
 
 
@@ -359,6 +360,7 @@ export interface FinanceLoanPaymentFollowup {
   result: string;
   narration: string;
   next_follow_up_date: string | null;
+  promised_amount?: number | null;
   created_at: string;
   updated_at: string;
   loan?: any;
@@ -2563,6 +2565,19 @@ class SupabaseFinance {
 
       await this.logDelete('finance_transactions', id, oldData, deletedBy);
 
+      // Log transaction review for deletion
+      await this.logTransactionForReview({
+        loanId: oldData.loan_id,
+        sourceType: 'Loan Payment',
+        sourceId: id,
+        receiptNo: oldData.receipt_no,
+        transactionType: (oldData.type || 'Collection') + ' Deletion',
+        transactionDate: oldData.date,
+        amount: Number(oldData.amount),
+        enteredBy: deletedBy,
+        actionType: 'DELETE'
+      }).catch(err => console.error('Failed to log delete review:', err));
+
       // Recalculate dues allocation if deleting a collection
       if (oldData.type === 'Collection') {
         await this.recalculateDuesForLoan(oldData.loan_id);
@@ -3298,6 +3313,7 @@ class SupabaseFinance {
     enteredBy: string;
     bookId?: string | null;
     financeMode?: 'REGULAR' | 'ITR';
+    actionType?: 'CREATE' | 'EDIT' | 'DELETE';
   }): Promise<boolean> {
     try {
       let bookId = params.bookId || null;
@@ -3346,7 +3362,8 @@ class SupabaseFinance {
         interest_amount: params.interestAmount || 0,
         principal_amount: params.principalAmount || 0,
         entered_by: params.enteredBy,
-        review_status: 'PENDING'
+        review_status: 'PENDING',
+        action_type: params.actionType || 'CREATE'
       };
       
       const { error } = await supabase
@@ -3367,12 +3384,15 @@ class SupabaseFinance {
   }
 
   async getTransactionReviews(filters?: {
-    status?: 'PENDING' | 'APPROVED' | 'ALL';
+    status?: 'PENDING' | 'APPROVED' | 'ALL' | 'REJECTED';
     date?: string;
     enteredBy?: string;
     loanType?: string;
     accountNo?: string;
     receiptNo?: string;
+    actionType?: 'ALL' | 'EDIT' | 'DELETE' | 'CREATE';
+    fromDate?: string;
+    toDate?: string;
   }): Promise<FinanceTransactionReview[]> {
     try {
       let query = supabase.from('finance_transaction_reviews').select('*, finance_loans(loan_id, loan_category, customer:finance_customers(name))');
@@ -3384,6 +3404,12 @@ class SupabaseFinance {
         if (filters.date) {
           query = query.eq('transaction_date', filters.date);
         }
+        if (filters.fromDate) {
+          query = query.gte('transaction_date', filters.fromDate);
+        }
+        if (filters.toDate) {
+          query = query.lte('transaction_date', filters.toDate);
+        }
         if (filters.enteredBy) {
           query = query.ilike('entered_by', `%${filters.enteredBy}%`);
         }
@@ -3392,6 +3418,9 @@ class SupabaseFinance {
         }
         if (filters.loanType) {
           query = query.eq('transaction_type', filters.loanType);
+        }
+        if (filters.actionType && filters.actionType !== 'ALL') {
+          query = query.eq('action_type', filters.actionType);
         }
       }
       

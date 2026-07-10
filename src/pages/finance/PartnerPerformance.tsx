@@ -1,29 +1,34 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { Printer } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { Printer, RefreshCw, ChevronRight, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
+
 interface PartnerPerfRow {
   id: string;
   name: string;
   phone: string | null;
+  role: string;
+  totalCredit: number;
+  totalDebit: number;
   netCapital: number;
-  sharePercentage: number;
-  realisedProfitShare: number;
-  accruedProfitShare: number;
+  txCount: number;
+  lastEntryDate: string;
 }
 
 const PartnerPerformance: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<PartnerPerfRow[]>([]);
+  const [capitalEntries, setCapitalEntries] = useState<any[]>([]);
   const [totals, setTotals] = useState({
     netCapital: 0,
-    realisedInterest: 0,
-    accruedInterest: 0
+    txCount: 0
   });
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPerformanceData();
@@ -33,82 +38,59 @@ const PartnerPerformance: React.FC = () => {
     setLoading(true);
     try {
       const partners = await supabaseFinance.getPartners();
-      const capEntries = await supabaseFinance.getCapitalEntries();
-      const loans = await supabaseFinance.getLoans();
-      const txs = await supabaseFinance.getTransactions();
+      
+      const { data: fetchedCapEntries } = await supabase
+        .from('finance_capital_entries')
+        .select('*');
 
-      // 1. Calculate net capital contributions per partner
-      const partnerCapitals: Record<string, number> = {};
+      const capEntries = fetchedCapEntries || [];
+      setCapitalEntries(capEntries);
+
       let totalNetCapital = 0;
+      let totalTxCount = 0;
 
-      capEntries.forEach(entry => {
-        if (!partnerCapitals[entry.partner_id]) {
-          partnerCapitals[entry.partner_id] = 0;
-        }
-        const credit = Number(entry.credit) || 0;
-        const debit = Number(entry.debit) || 0;
-
-        partnerCapitals[entry.partner_id] += credit;
-        totalNetCapital += credit;
-
-        partnerCapitals[entry.partner_id] -= debit;
-        totalNetCapital -= debit;
-      });
-
-      // 2. Calculate Total Accrued Interest (Revenue)
-      let accruedInterest = 0;
-      loans.forEach(loan => {
-        const P = Number(loan.amount);
-        const I = (P * (Number(loan.interest_rate) / 100) * Number(loan.duration_months));
-        accruedInterest += I;
-      });
-
-      // 3. Calculate Total Realised Interest (Cash basis interest collected)
-      let realisedInterest = 0;
-      txs.forEach(tx => {
-        if (tx.type === 'Collection') {
-          const loan = loans.find(l => l.id === tx.loan_id);
-          if (loan) {
-            const P = Number(loan.amount);
-            const I = (P * (Number(loan.interest_rate) / 100) * Number(loan.duration_months));
-            const totalRepayable = P + I;
-            if (totalRepayable > 0) {
-              const interestRatio = I / totalRepayable;
-              realisedInterest += Number(tx.amount) * interestRatio;
-            }
-          }
-        }
-      });
-
-      // 4. Calculate shares
       const perfRows: PartnerPerfRow[] = partners.map(partner => {
-        const capital = partnerCapitals[partner.id] || 0;
-        // Share of capital
-        const sharePercentage = totalNetCapital > 0 ? (capital / totalNetCapital) * 100 : 0;
+        const partnerTxs = capEntries.filter(c => c.partner_id === partner.id);
         
-        // Share of profits based on capital percentage
-        const realisedProfitShare = realisedInterest * (sharePercentage / 100);
-        const accruedProfitShare = accruedInterest * (sharePercentage / 100);
+        let cr = 0;
+        let dr = 0;
+        let lastDate = '—';
+        let latestTime = 0;
+
+        partnerTxs.forEach(t => {
+          cr += Number(t.credit) || 0;
+          dr += Number(t.debit) || 0;
+          
+          const tTime = new Date(t.entry_date).getTime();
+          if (tTime > latestTime) {
+            latestTime = tTime;
+            lastDate = t.entry_date;
+          }
+        });
+
+        const net = cr - dr;
+        totalNetCapital += net;
+        totalTxCount += partnerTxs.length;
 
         return {
           id: partner.id,
           name: partner.name,
           phone: partner.phone,
-          netCapital: capital,
-          sharePercentage: parseFloat(sharePercentage.toFixed(2)),
-          realisedProfitShare: parseFloat(realisedProfitShare.toFixed(2)),
-          accruedProfitShare: parseFloat(accruedProfitShare.toFixed(2))
+          role: partner.is_md ? 'MD' : 'Partner',
+          totalCredit: cr,
+          totalDebit: dr,
+          netCapital: net,
+          txCount: partnerTxs.length,
+          lastEntryDate: lastDate
         };
       });
 
-      // Sort partners by capital share descending
       perfRows.sort((a, b) => b.netCapital - a.netCapital);
 
       setRows(perfRows);
       setTotals({
         netCapital: totalNetCapital,
-        realisedInterest: parseFloat(realisedInterest.toFixed(2)),
-        accruedInterest: parseFloat(accruedInterest.toFixed(2))
+        txCount: totalTxCount
       });
 
     } catch (err) {
@@ -119,17 +101,38 @@ const PartnerPerformance: React.FC = () => {
     }
   };
 
+  // TODO: Partner profit sharing ratios are not finalized by the client yet.
+  // When business rules are finalized, implement profit ratio calculation here.
+
+  // Drilldown entries
+  const drillDownEntries = useMemo(() => {
+    if (!selectedPartnerId) return [];
+    return capitalEntries
+      .filter(c => c.partner_id === selectedPartnerId)
+      .sort((a, b) => b.entry_date.localeCompare(a.entry_date));
+  }, [capitalEntries, selectedPartnerId]);
+
+  const selectedPartner = useMemo(() => {
+    if (!selectedPartnerId) return null;
+    return rows.find(r => r.id === selectedPartnerId);
+  }, [rows, selectedPartnerId]);
+
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
       {/* Header */}
       <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
-          <h1 className="finance-h1">Partner Performance Sheet</h1>
-          <p className="finance-small-label uppercase">Review capital share holding percentages and estimated interest profit distribution</p>
+          <h1 className="finance-h1">Partner Performance</h1>
+          <p className="finance-small-label uppercase font-black text-slate-500">Review capital contributions and transaction logs per partner</p>
         </div>
-        <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
-          Print Statement
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={fetchPerformanceData} variant="secondary" size="sm" icon={RefreshCw}>
+            Refresh
+          </Button>
+          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
+            Print Statement
+          </Button>
+        </div>
       </div>
 
       {loading ? (
@@ -139,62 +142,54 @@ const PartnerPerformance: React.FC = () => {
       ) : (
         <div className={`space-y-6 ${showPrintPreview ? 'print:hidden' : ''}`}>
           {/* Summary Box */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-3 bg-gray-50 rounded border">
-              <span className="text-gray-500 block finance-header-time uppercase">Total Capital Pools</span>
-              <span className="text-gray-900 finance-brand">₹{totals.netCapital.toLocaleString('en-IN')}</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="p-4 bg-slate-50 rounded-xl border shadow-xs">
+              <span className="text-slate-500 block finance-header-time uppercase">Total Capital Pools</span>
+              <span className="text-slate-900 finance-brand">₹{totals.netCapital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </div>
-            <div className="p-3 bg-green-50 rounded border border-green-100">
-              <span className="text-green-700 block finance-header-time uppercase">Total Cash Interest Earned (Realised)</span>
-              <span className="text-green-800 finance-brand">₹{totals.realisedInterest.toLocaleString('en-IN')}</span>
-            </div>
-            <div className="p-3 bg-blue-50 rounded border border-blue-100">
-              <span className="text-blue-700 block finance-header-time uppercase">Total Book Interest Earned (Accrued)</span>
-              <span className="text-blue-800 finance-brand">₹{totals.accruedInterest.toLocaleString('en-IN')}</span>
+            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 shadow-xs">
+              <span className="text-blue-700 block finance-header-time uppercase">Total Transactions</span>
+              <span className="text-blue-800 finance-brand">{totals.txCount} Entries</span>
             </div>
           </div>
 
-          <Card title="Shareholder Capital Ledger" subtitle="Profit allocations based on net contributions ratios" className="shadow-md">
+          <Card title="Partner Capital Registry" subtitle="Factual net contributions and ledger status. Click row to view ledger details." className="shadow-md">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 md:text-sm finance-caption">
                 <thead>
-                  <tr className="bg-gray-100">
+                  <tr className="bg-gray-150 text-slate-400">
                     <th className="finance-small-label uppercase">Partner Name</th>
-                    <th className="text-right finance-small-label uppercase">Net Contribution</th>
-                    <th className="text-center finance-small-label uppercase">Share holding</th>
-                    <th className="text-right finance-small-label uppercase">Realised Profit Share (Cash)</th>
-                    <th className="px-3 py-3 text-right text-blue-700 finance-input uppercase">Accrued Profit Share (Accrual)</th>
+                    <th className="finance-small-label uppercase">Role</th>
+                    <th className="text-right finance-small-label uppercase">Total Credit</th>
+                    <th className="text-right finance-small-label uppercase">Total Debit</th>
+                    <th className="text-right finance-small-label uppercase">Net Capital</th>
+                    <th className="text-center finance-small-label uppercase">Tx Count</th>
+                    <th className="finance-small-label uppercase">Last Entry Date</th>
+                    <th className="w-10"></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {rows.map((row) => (
-                    <tr key={row.id} className="hover:bg-gray-50/50">
-                      <td className="px-3 py-3 text-gray-900 finance-input">
+                    <tr 
+                      key={row.id} 
+                      onClick={() => setSelectedPartnerId(row.id)}
+                      className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+                    >
+                      <td className="px-3 py-3 text-gray-900 font-bold uppercase finance-input">
                         {row.name}
-                        {row.phone && <div className="text-gray-400 finance-small-label">{row.phone}</div>}
+                        {row.phone && <div className="text-gray-400 finance-small-label font-normal">{row.phone}</div>}
                       </td>
-                      <td className="px-3 py-3 text-right text-gray-900 finance-input">
+                      <td className="px-3 py-3 text-slate-600 font-semibold uppercase">{row.role}</td>
+                      <td className="px-3 py-3 text-right text-emerald-600 font-medium">₹{row.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-3 text-right text-rose-650 font-medium">₹{row.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className={`px-3 py-3 text-right font-black ${row.netCapital >= 0 ? 'text-emerald-850' : 'text-rose-850'}`}>
                         ₹{row.netCapital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-3 py-3 text-center text-gray-700 finance-input">
-                        {row.sharePercentage}%
-                      </td>
-                      <td className="px-3 py-3 text-right text-green-600 finance-input">
-                        ₹{row.realisedProfitShare.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-3 py-3 text-right text-blue-600 finance-input">
-                        ₹{row.accruedProfitShare.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
+                      <td className="px-3 py-3 text-center font-bold text-slate-700">{row.txCount}</td>
+                      <td className="px-3 py-3 text-slate-650 font-mono">{row.lastEntryDate.split('-').reverse().join('/')}</td>
+                      <td className="px-3 py-3 text-slate-400 text-center"><ChevronRight className="w-4 h-4" /></td>
                     </tr>
                   ))}
-                  {/* Totals row */}
-                  <tr className="bg-gray-50 finance-input">
-                    <td className="px-3 py-3 text-gray-800 finance-input uppercase">Total:</td>
-                    <td className="px-3 py-3 text-right">₹{totals.netCapital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-3 text-center">100.00%</td>
-                    <td className="px-3 py-3 text-right text-green-700">₹{totals.realisedInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-3 text-right text-blue-700">₹{totals.accruedInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  </tr>
                 </tbody>
               </table>
             </div>
@@ -202,75 +197,98 @@ const PartnerPerformance: React.FC = () => {
         </div>
       )}
 
+      {/* Drill Down Modal */}
+      {selectedPartnerId && selectedPartner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-4xl w-full h-[75vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="text-lg font-black text-slate-900 uppercase">
+                  Capital History: {selectedPartner.name} ({selectedPartner.role})
+                </h3>
+                <p className="text-xs text-slate-500 font-semibold uppercase mt-0.5">Net capital: ₹{selectedPartner.netCapital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+              </div>
+              <button 
+                onClick={() => setSelectedPartnerId(null)}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 flex-1 overflow-y-auto">
+              <div className="overflow-x-auto border border-slate-150 rounded-xl">
+                <table className="min-w-full divide-y divide-slate-150 finance-caption">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="finance-small-label uppercase">Sl</th>
+                      <th className="finance-small-label uppercase">Date</th>
+                      <th className="text-right finance-small-label uppercase">Credit (Cr)</th>
+                      <th className="text-right finance-small-label uppercase">Debit (Dr)</th>
+                      <th className="finance-small-label uppercase">Particulars</th>
+                      <th className="finance-small-label uppercase">Entered By</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-slate-100">
+                    {drillDownEntries.map((e, idx) => (
+                      <tr key={e.id} className="hover:bg-slate-50/20">
+                        <td className="px-3 py-2.5 text-slate-500">{idx + 1}</td>
+                        <td className="px-3 py-2.5 text-slate-650 font-mono">{e.entry_date.split('-').reverse().join('/')}</td>
+                        <td className="px-3 py-2.5 text-right text-emerald-600 font-medium">
+                          {Number(e.credit) > 0 ? `₹${Number(e.credit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-rose-600 font-medium">
+                          {Number(e.debit) > 0 ? `₹${Number(e.debit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-800 finance-input">{e.particulars}</td>
+                        <td className="px-3 py-2.5 text-slate-500 uppercase">{e.created_by || 'Staff'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PRINT PREVIEW */}
       <FinancePrintPreview
         isOpen={showPrintPreview}
         onClose={() => setShowPrintPreview(false)}
         title="Partner Performance Sheet"
         documentTitle="PARTNER PERFORMANCE REPORT"
       >
-        <div className="space-y-6 mt-6">
-          {/* Summary Box */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-3 bg-gray-50 rounded border">
-              <span className="text-gray-500 block finance-header-time uppercase">Total Capital Pools</span>
-              <span className="text-gray-900 finance-brand">₹{totals.netCapital.toLocaleString('en-IN')}</span>
-            </div>
-            <div className="p-3 bg-green-50 rounded border border-green-100">
-              <span className="text-green-700 block finance-header-time uppercase">Total Cash Interest Earned (Realised)</span>
-              <span className="text-green-800 finance-brand">₹{totals.realisedInterest.toLocaleString('en-IN')}</span>
-            </div>
-            <div className="p-3 bg-blue-50 rounded border border-blue-100">
-              <span className="text-blue-700 block finance-header-time uppercase">Total Book Interest Earned (Accrued)</span>
-              <span className="text-blue-800 finance-brand">₹{totals.accruedInterest.toLocaleString('en-IN')}</span>
-            </div>
+        {!loading && (
+          <div className="space-y-6 mt-6 text-[10px]">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-100 border-b-2 border-slate-900">
+                  <th className="p-2 text-left">Partner Name</th>
+                  <th className="p-2 text-left">Role</th>
+                  <th className="p-2 text-right">Total Credit</th>
+                  <th className="p-2 text-right">Total Debit</th>
+                  <th className="p-2 text-right">Net Capital</th>
+                  <th className="p-2 text-center">Tx Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="border-b">
+                    <td className="p-2 uppercase font-bold">{row.name}</td>
+                    <td className="p-2 uppercase font-semibold">{row.role}</td>
+                    <td className="p-2 text-right">₹{row.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-2 text-right">₹{row.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-2 text-right font-black">₹{row.netCapital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-2 text-center">{row.txCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-
-          <Card title="Shareholder Capital Ledger" subtitle="Profit allocations based on net contributions ratios" className="shadow-none border-0">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 md:text-sm finance-caption">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="finance-small-label uppercase">Partner Name</th>
-                    <th className="text-right finance-small-label uppercase">Net Contribution</th>
-                    <th className="text-center finance-small-label uppercase">Share holding</th>
-                    <th className="text-right finance-small-label uppercase">Realised Profit Share (Cash)</th>
-                    <th className="px-3 py-3 text-right text-blue-700 finance-input uppercase">Accrued Profit Share (Accrual)</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {rows.map((row) => (
-                    <tr key={row.id}>
-                      <td className="px-3 py-3 text-gray-900 finance-input">
-                        {row.name}
-                        {row.phone && <div className="text-gray-400 finance-small-label">{row.phone}</div>}
-                      </td>
-                      <td className="px-3 py-3 text-right text-gray-900 finance-input">
-                        ₹{row.netCapital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-3 py-3 text-center text-gray-700 finance-input">
-                        {row.sharePercentage}%
-                      </td>
-                      <td className="px-3 py-3 text-right text-green-600 finance-input">
-                        ₹{row.realisedProfitShare.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-3 py-3 text-right text-blue-600 finance-input">
-                        ₹{row.accruedProfitShare.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  ))}
-                  {/* Totals row */}
-                  <tr className="bg-gray-50 finance-input">
-                    <td className="px-3 py-3 text-gray-800 finance-input uppercase">Total:</td>
-                    <td className="px-3 py-3 text-right">₹{totals.netCapital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-3 text-center">100.00%</td>
-                    <td className="px-3 py-3 text-right text-green-700">₹{totals.realisedInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-3 text-right text-blue-700">₹{totals.accruedInterest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
+        )}
       </FinancePrintPreview>
     </div>
   );
