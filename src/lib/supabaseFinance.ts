@@ -4061,7 +4061,7 @@ class SupabaseFinance {
     }
   }
 
-  async getActiveCDDuePositions(asOfDate: string): Promise<any[]> {
+  async getActiveCDDuePositions(asOfDate: string): Promise<{ positions: any[], integrityErrors: any[] }> {
     const { data: cdLoans, error: loansErr } = await supabase
       .from('finance_loans')
       .select('*')
@@ -4069,7 +4069,7 @@ class SupabaseFinance {
       .like('loan_id', 'CD%');
       
     if (loansErr) throw loansErr;
-    if (!cdLoans || cdLoans.length === 0) return [];
+    if (!cdLoans || cdLoans.length === 0) return { positions: [], integrityErrors: [] };
 
     const loanIds = cdLoans.map(l => l.id);
 
@@ -4093,6 +4093,30 @@ class SupabaseFinance {
         } else {
           hasMore = false;
         }
+      }
+    }
+
+    // Fetch Disbursement transactions from finance_transactions.
+    // For legacy loans like CD119, the true disbursement date lives here, not in
+    // finance_cd_ledger_entries. getCDLedgerEntries already reconciles these; we
+    // must do the same here so both paths resolve the canonical loan date identically.
+    let disbursementTransactions: any[] = [];
+    for (let i = 0; i < loanIds.length; i += chunkSize) {
+      const chunk = loanIds.slice(i, i + chunkSize);
+      const { data, error } = await supabase
+        .from('finance_transactions')
+        .select('id, loan_id, date, amount, type, collected_by, created_at')
+        .in('loan_id', chunk)
+        .eq('type', 'Disbursement');
+      if (error) throw error;
+      if (data) disbursementTransactions = disbursementTransactions.concat(data);
+    }
+    // Build a lookup: loanId -> first disbursement transaction (earliest date)
+    const disbursementByLoan = new Map<string, any>();
+    for (const tx of disbursementTransactions) {
+      const existing = disbursementByLoan.get(tx.loan_id);
+      if (!existing || tx.date < existing.date) {
+        disbursementByLoan.set(tx.loan_id, tx);
       }
     }
 
@@ -4128,10 +4152,55 @@ class SupabaseFinance {
     }
     const borrowerMap = new Map<string, any>(borrowers.map(b => [b.id, b]));
 
-    return cdLoans.reduce((acc, loan) => {
+    const results = cdLoans.reduce((acc, loan) => {
       try {
-        const entries = cdLedgerEntries.filter(e => e.loan_id === loan.id);
+        const nativeEntries = cdLedgerEntries.filter(e => e.loan_id === loan.id);
         const interests = cdInterestDetails.filter(d => d.loan_id === loan.id);
+
+        // Mirror getCDLedgerEntries reconciliation: if no original_loan/Disbursement row
+        // exists in finance_cd_ledger_entries, synthesize one from finance_transactions.
+        // This is exactly the MASTER_DATE_DRIFT case (loan.date is stale; the
+        // canonical date is the Disbursement transaction date).
+        const hasNativeOriginalLoan = nativeEntries.some(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
+        const syntheticEntries: any[] = [];
+        if (!hasNativeOriginalLoan) {
+          const disbTx = disbursementByLoan.get(loan.id);
+          if (disbTx) {
+            // Inject as original_loan so getCDAccountPosition overrides loan.date
+            syntheticEntries.push({
+              id: `synthetic-disb-${disbTx.id}`,
+              loan_id: loan.id,
+              customer_id: loan.customer_id,
+              account_name: 'CD A/C',
+              entry_date: disbTx.date,
+              credit: 0,
+              debit: Number(disbTx.amount),
+              receipt_no: null,
+              particulars: 'Original Loan Disbursement (reconciled from finance_transactions)',
+              user_name: disbTx.collected_by || 'System',
+              entry_type: 'original_loan',
+              created_at: disbTx.created_at || disbTx.date,
+            });
+          } else {
+            // No Disbursement tx either — synthesize from loan master as getCDLedgerEntries does
+            syntheticEntries.push({
+              id: `synthetic-loan-${loan.id}`,
+              loan_id: loan.id,
+              customer_id: loan.customer_id,
+              account_name: 'CD A/C',
+              entry_date: loan.date,
+              credit: 0,
+              debit: Number(loan.amount),
+              receipt_no: null,
+              particulars: 'Original Loan Disbursement',
+              user_name: 'System',
+              entry_type: 'original_loan',
+              created_at: loan.created_at || loan.date,
+            });
+          }
+        }
+
+        const entries = [...nativeEntries, ...syntheticEntries];
         
         const borrower = borrowerMap.get(loan.customer_id) || {};
         const g1 = borrowerMap.get(loan.guarantor_1_id) || {};
@@ -4152,7 +4221,7 @@ class SupabaseFinance {
 
         const pos = financeCalculationService.getCDAccountPosition(loan, entries, interests, asOfDate);
 
-        acc.push({
+        acc.positions.push({
           id: loan.id,
           loan_id: loan.loan_id,
           customer_name: borrower.name || '',
@@ -4165,7 +4234,7 @@ class SupabaseFinance {
           interest_paid: interestPaid,
           pending_interest: pos.accruedInterest,
           penalty: pos.accruedPenalty,
-          present_due: pos.totalToRegularize,
+          present_due: pos.todayDue, // Preserving signed accrued interest + penalty
           due_days: pos.displayDueDays,
           is_npa: pos.displayDueDays > 90,
           phone,
@@ -4176,15 +4245,29 @@ class SupabaseFinance {
           partner_name: borrower.partner_name || 'Unassigned',
           status: loan.status
         });
-      } catch (err) {
+      } catch (err: any) {
         console.error(`Error calculating CD Account Position for loan ${loan.loan_id} (${loan.id}):`, err);
-        // Surfacing error without failing the entire batch
+        const disbEntry = cdLedgerEntries.filter(e => e.loan_id === loan.id).find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
+        const borrower = borrowerMap.get(loan.customer_id) || {};
+        acc.integrityErrors.push({
+          loanId: loan.id,
+          loanNumber: loan.loan_id,
+          borrowerName: borrower.name || 'Unknown',
+          errorCode: err.code || 'CALCULATION_ERROR',
+          message: err.message || 'Unknown error during CD calculations',
+          loanDate: disbEntry ? disbEntry.entry_date.split('T')[0] : loan.date.split('T')[0],
+          earliestTransactionDate: cdLedgerEntries
+            .filter(e => e.loan_id === loan.id && (e.credit > 0 || e.debit > 0))
+            .reduce((min, e) => !min || e.entry_date.split('T')[0] < min ? e.entry_date.split('T')[0] : min, '')
+        });
       }
       return acc;
-    }, [] as any[]);
+    }, { positions: [], integrityErrors: [] } as { positions: any[], integrityErrors: any[] });
+
+    return results as any;
   }
 
-  async getDuesLedgerSummary(todayDate?: string): Promise<any[]> {
+  async getDuesLedgerSummary(todayDate?: string): Promise<{ dues: any[], integrityErrors: any[] }> {
     try {
       const targetDate = todayDate || getLocalBusinessDateISO();
 
@@ -4306,10 +4389,13 @@ class SupabaseFinance {
         });
       }
 
-      return [...cdPositions, ...nonCdResults];
+      return {
+        dues: [...cdPositions.positions, ...nonCdResults],
+        integrityErrors: cdPositions.integrityErrors
+      };
     } catch (error) {
       console.error('Error fetching dues ledger summary:', error);
-      return [];
+      return { dues: [], integrityErrors: [] };
     }
   }
 }

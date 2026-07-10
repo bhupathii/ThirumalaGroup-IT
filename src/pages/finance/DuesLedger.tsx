@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { Printer, ArrowLeft, Search } from 'lucide-react';
+import { Printer, ArrowLeft, Search, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useNavigate } from 'react-router-dom';
@@ -35,6 +35,7 @@ const DuesLedger: React.FC = () => {
   const navigate = useNavigate();
   
   const [dues, setDues] = useState<OverdueDueItem[]>([]);
+  const [integrityErrors, setIntegrityErrors] = useState<any[]>([]);
   const [partners, setPartners] = useState<{ id: string; name: string }[]>([]);
   
   const [activeReport, setActiveReport] = useState<ReportType>('OUTSTANDING');
@@ -60,7 +61,9 @@ const DuesLedger: React.FC = () => {
       setPartners(partnersData.map(p => ({ id: p.id, name: p.name })));
 
       // 2. Fetch Aggregated Dues Summary via RPC
-      const summaryData = await supabaseFinance.getDuesLedgerSummary();
+      const summaryResult = await supabaseFinance.getDuesLedgerSummary();
+      const summaryData = summaryResult.dues || [];
+      const errorsData = summaryResult.integrityErrors || [];
       
       const formatted: OverdueDueItem[] = summaryData.map((row: any) => ({
         id: row.id,
@@ -87,6 +90,7 @@ const DuesLedger: React.FC = () => {
       }));
 
       setDues(formatted);
+      setIntegrityErrors(errorsData);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load dues ledger');
@@ -98,9 +102,19 @@ const DuesLedger: React.FC = () => {
 
   const filteredDues = useMemo(() => {
     return dues.filter(due => {
+      // Enforce: CD loans must have dueDays >= 0 to appear in Dues List reports (Outstanding, Total, CD, A->B)
+      if (due.loanType === 'CD') {
+        if (due.dueDays < 0) return false;
+      }
+
       // 1. Report Type Filter
       if (activeReport === 'OUTSTANDING') {
-        if (due.presentDue <= 0 && due.dueDays <= 0) return false;
+        if (due.loanType === 'CD') {
+          // Keep showing if dueDays > 0 even if presentDue <= 0 (e.g. penalty only or exact 0 due)
+          if (due.presentDue <= 0 && due.dueDays <= 0) return false;
+        } else {
+          if (due.presentDue <= 0 && due.dueDays <= 0) return false;
+        }
       } else if (activeReport === 'NPA LIST') {
         if (!due.isNPA) return false;
       } else if (activeReport === 'CD DUE LIST') {
@@ -255,6 +269,44 @@ const DuesLedger: React.FC = () => {
         </div>
       </div>
 
+      {/* CD DATA INTEGRITY ISSUES WARNING CARD */}
+      {integrityErrors.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm space-y-2">
+          <div className="flex items-center gap-2 text-red-700 font-extrabold text-[13px] uppercase">
+            <AlertTriangle className="w-4 h-4 text-red-600" />
+            <span>CD Data Issues ({integrityErrors.length})</span>
+          </div>
+          <p className="text-slate-600 text-xs font-semibold leading-relaxed">
+            The following active CD accounts failed validation constraints (e.g. loan date falls after earliest transaction date). They are excluded from financial totals but listed here for inspection.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+            {integrityErrors.map((err, index) => (
+              <div key={index} className="bg-white border border-red-100 rounded-lg p-3 flex flex-col justify-between hover:border-red-300 transition-colors shadow-sm">
+                <div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-mono font-black text-red-700 text-[14px]">{err.loanNumber}</span>
+                    <span className="text-slate-400 font-mono text-[11px]">ID: {err.loanId.slice(0, 8)}...</span>
+                  </div>
+                  <div className="font-extrabold text-slate-800 text-[13px] mt-1">{err.borrowerName}</div>
+                  <div className="text-[11px] font-semibold text-slate-500 mt-1">
+                    Master Date: <span className="font-mono text-slate-700">{err.loanDate}</span> | Earliest Pay: <span className="font-mono text-slate-700">{err.earliestTransactionDate || 'None'}</span>
+                  </div>
+                  <div className="text-[11px] text-red-650 bg-red-50/50 p-1.5 rounded border border-red-100/55 font-semibold mt-2 break-words">
+                    {err.message}
+                  </div>
+                </div>
+                <button
+                  onClick={() => navigate(`/finance/cd-ledger?search=${err.loanNumber}`)}
+                  className="mt-3 text-center w-full py-1 bg-red-100 hover:bg-red-200 text-red-700 font-bold uppercase rounded text-[11px] transition-colors"
+                >
+                  Inspect Loan Profile
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── ROW 3: Report Type Tabs ──────────────────────────────────────────── */}
       <div className="bg-slate-100 px-1.5 py-1 rounded-xl border border-slate-200">
         <div className="flex flex-wrap gap-1.5">
@@ -317,12 +369,24 @@ const DuesLedger: React.FC = () => {
                     <td className="px-2 py-1.5 border-r border-slate-100 font-bold text-blue-650 text-[13px] whitespace-nowrap">{due.loanId}</td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-slate-905 font-sans font-bold text-[13px]">{due.customerName}</td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans text-center text-[13px] font-semibold">{due.loanType}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-700 text-[13px] font-semibold whitespace-nowrap">₹{Math.round(due.currentPrincipal).toLocaleString('en-IN')}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-emerald-700 text-[13px] font-semibold whitespace-nowrap">₹{Math.round(due.interestPaid).toLocaleString('en-IN')}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-orange-600 text-[13px] font-semibold whitespace-nowrap">₹{Math.round(due.pendingInterest).toLocaleString('en-IN')}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-red-650 text-[13px] font-semibold whitespace-nowrap">₹{Math.round(due.penalty).toLocaleString('en-IN')}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-[13px] font-bold whitespace-nowrap">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-blue-900 font-sans text-[13px] font-bold whitespace-nowrap">₹{Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-700 text-[13px] font-semibold whitespace-nowrap">
+                      {due.currentPrincipal < 0 ? `-₹${Math.abs(Math.round(due.currentPrincipal)).toLocaleString('en-IN')}` : `₹${Math.round(due.currentPrincipal).toLocaleString('en-IN')}`}
+                    </td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-emerald-700 text-[13px] font-semibold whitespace-nowrap">
+                      {due.interestPaid < 0 ? `-₹${Math.abs(Math.round(due.interestPaid)).toLocaleString('en-IN')}` : `₹${Math.round(due.interestPaid).toLocaleString('en-IN')}`}
+                    </td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-orange-600 text-[13px] font-semibold whitespace-nowrap">
+                      {due.pendingInterest < 0 ? `-₹${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : `₹${Math.round(due.pendingInterest).toLocaleString('en-IN')}`}
+                    </td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-red-650 text-[13px] font-semibold whitespace-nowrap">
+                      {due.penalty < 0 ? `-₹${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : `₹${Math.round(due.penalty).toLocaleString('en-IN')}`}
+                    </td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-[13px] font-bold whitespace-nowrap">
+                      {due.presentDue < 0 ? `-₹${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : `₹${Math.round(due.presentDue).toLocaleString('en-IN')}`}
+                    </td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-blue-900 font-sans text-[13px] font-bold whitespace-nowrap">
+                      {due.currentPrincipal + due.pendingInterest + due.penalty < 0 ? `-₹${Math.abs(Math.round(due.currentPrincipal + due.pendingInterest + due.penalty)).toLocaleString('en-IN')}` : `₹${Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}`}
+                    </td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-[13px] font-semibold">{due.currentDueDate.split('-').reverse().join('/')}</td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-center text-red-650 text-[13px] font-bold whitespace-nowrap">{due.dueDays}</td>
                     <td className="px-2 py-1.5 font-sans text-[13px] text-slate-600 space-y-0.5">
@@ -417,12 +481,24 @@ const DuesLedger: React.FC = () => {
                       {due.customerName}
                     </td>
                     <td className="p-1 border text-center print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.loanType}</td>
-                    <td className="p-1 border text-right print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{Math.round(due.currentPrincipal).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right text-green-700 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{Math.round(due.interestPaid).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right text-orange-700 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{Math.round(due.pendingInterest).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right text-red-600 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{Math.round(due.penalty).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right font-bold text-red-750 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
-                    <td className="p-1 border text-right font-bold text-blue-900 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>₹{Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}</td>
+                    <td className="p-1 border text-right print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {due.currentPrincipal < 0 ? `-₹${Math.abs(Math.round(due.currentPrincipal)).toLocaleString('en-IN')}` : `₹${Math.round(due.currentPrincipal).toLocaleString('en-IN')}`}
+                    </td>
+                    <td className="p-1 border text-right text-green-700 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {due.interestPaid < 0 ? `-₹${Math.abs(Math.round(due.interestPaid)).toLocaleString('en-IN')}` : `₹${Math.round(due.interestPaid).toLocaleString('en-IN')}`}
+                    </td>
+                    <td className="p-1 border text-right text-orange-700 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {due.pendingInterest < 0 ? `-₹${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : `₹${Math.round(due.pendingInterest).toLocaleString('en-IN')}`}
+                    </td>
+                    <td className="p-1 border text-right text-red-600 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {due.penalty < 0 ? `-₹${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : `₹${Math.round(due.penalty).toLocaleString('en-IN')}`}
+                    </td>
+                    <td className="p-1 border text-right font-bold text-red-750 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {due.presentDue < 0 ? `-₹${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : `₹${Math.round(due.presentDue).toLocaleString('en-IN')}`}
+                    </td>
+                    <td className="p-1 border text-right font-bold text-blue-900 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {due.currentPrincipal + due.pendingInterest + due.penalty < 0 ? `-₹${Math.abs(Math.round(due.currentPrincipal + due.pendingInterest + due.penalty)).toLocaleString('en-IN')}` : `₹${Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}`}
+                    </td>
                     <td className="p-1 border print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.currentDueDate.split('-').reverse().join('/')}</td>
                     <td className="p-1 border text-center text-red-600 font-bold print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.dueDays}</td>
                     <td className="p-1 border font-sans leading-tight print-nowrap" style={{ whiteSpace: 'nowrap', fontSize: '8.5px' }}>

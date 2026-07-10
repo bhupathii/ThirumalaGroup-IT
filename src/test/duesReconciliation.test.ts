@@ -3,7 +3,8 @@ import { supabaseFinance } from '../lib/supabaseFinance';
 
 describe('Dues Reconciliation Verification', () => {
   it('verifies that all active non-closed loans with presentDue > 0 are eligible for follow-up', async () => {
-    const summary = await supabaseFinance.getDuesLedgerSummary();
+    const summaryResult = await supabaseFinance.getDuesLedgerSummary();
+    const summary = summaryResult.dues;
     console.log(`\nReconciling ${summary.length} active dues list accounts...`);
 
     const diagnosticTable = summary.map(row => {
