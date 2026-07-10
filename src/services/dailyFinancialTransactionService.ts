@@ -106,7 +106,6 @@ export const dailyFinancialTransactionService = {
     let cbQuery = supabase
       .from('finance_cashbook_entries')
       .select('*')
-      .eq('status', 'APPROVED')
       .gte('entry_date', fromDate)
       .lte('entry_date', toDate);
 
@@ -263,7 +262,6 @@ export const dailyFinancialTransactionService = {
         const { data: fetchedCb } = await supabase
           .from('finance_cashbook_entries')
           .select('entry_date')
-          .eq('status', 'APPROVED')
           .eq('book_id', bookData.id)
           .gte('entry_date', startStr)
           .lte('entry_date', endFormatted);

@@ -3816,13 +3816,9 @@ class SupabaseFinance {
   async getAllFinanceEntryDates(): Promise<{ c_date: string }[]> {
     try {
       const results = await Promise.all([
-        supabase.from('finance_loans').select('date'),
-        supabase.from('finance_transactions').select('date'),
+        supabase.from('finance_cd_ledger_entries').select('entry_date').neq('account_name', 'CD Amount Paid'),
         supabase.from('finance_cashbook_entries').select('entry_date'),
-        supabase.from('finance_capital_entries').select('entry_date'),
-        supabase.from('finance_customers').select('created_at'),
-        supabase.from('finance_edited_logs').select('edited_at'),
-        supabase.from('finance_deleted_logs').select('deleted_at')
+        supabase.from('finance_capital_entries').select('entry_date')
       ]);
 
       const datesSet = new Set<string>();
@@ -3846,13 +3842,9 @@ class SupabaseFinance {
         }
       };
 
-      results[0].data?.forEach(r => addDate(r.date));
-      results[1].data?.forEach(r => addDate(r.date));
+      results[0].data?.forEach(r => addDate(r.entry_date));
+      results[1].data?.forEach(r => addDate(r.entry_date));
       results[2].data?.forEach(r => addDate(r.entry_date));
-      results[3].data?.forEach(r => addDate(r.entry_date));
-      results[4].data?.forEach(r => addDate(r.created_at));
-      results[5].data?.forEach(r => addDate(r.edited_at));
-      results[6].data?.forEach(r => addDate(r.deleted_at));
 
       return Array.from(datesSet).map(d => ({ c_date: d }));
     } catch (error) {
@@ -3860,6 +3852,7 @@ class SupabaseFinance {
       return [];
     }
   }
+
 
   async getUnifiedLedgerEntries(filters?: { startDate?: string; endDate?: string }): Promise<UnifiedLedgerEntry[]> {
     try {
@@ -3872,8 +3865,7 @@ class SupabaseFinance {
       // 2. Fetch Cashbook Entries (Approved only)
       let cbQuery = supabase
         .from('finance_cashbook_entries')
-        .select('*')
-        .eq('status', 'APPROVED');
+        .select('*');
         
       // 3. Fetch Capital Entries
       let capQuery = supabase
@@ -4039,7 +4031,7 @@ class SupabaseFinance {
       });
     } catch (error) {
       console.error('Error fetching follow-ups:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -4219,6 +4211,13 @@ class SupabaseFinance {
           .filter(e => e.account_name === 'CD COMMISSION A/C' || e.entry_type === 'interest_payment')
           .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
+        const penaltyPaid = entries
+          .filter(e => {
+            const cleanAcc = (e.account_name || '').trim().toUpperCase();
+            return cleanAcc === 'PENALTY A/C' || cleanAcc === 'CD PENALTY' || e.entry_type === 'penalty_payment';
+          })
+          .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
         const pos = financeCalculationService.getCDAccountPosition(loan, entries, interests, asOfDate);
 
         acc.positions.push({
@@ -4234,6 +4233,7 @@ class SupabaseFinance {
           interest_paid: interestPaid,
           pending_interest: pos.accruedInterest,
           penalty: pos.accruedPenalty,
+          penalty_paid: penaltyPaid,
           present_due: pos.todayDue, // Preserving signed accrued interest + penalty
           due_days: pos.displayDueDays,
           is_npa: pos.displayDueDays > 90,
@@ -4243,7 +4243,10 @@ class SupabaseFinance {
           g2_name,
           g2_phone,
           partner_name: borrower.partner_name || 'Unassigned',
-          status: loan.status
+          status: loan.status,
+          customer_id: loan.customer_id,
+          guarantor_1_id: loan.guarantor_1_id,
+          guarantor_2_id: loan.guarantor_2_id
         });
       } catch (err: any) {
         console.error(`Error calculating CD Account Position for loan ${loan.loan_id} (${loan.id}):`, err);
@@ -4376,6 +4379,7 @@ class SupabaseFinance {
             interest_paid: interestPaid,
             pending_interest: pendingInterest,
             penalty: penalty,
+            penalty_paid: 0,
             present_due: presentDuePrincipalAndInterest + penalty,
             due_days: dueDays,
             is_npa: isNpa,
@@ -4384,7 +4388,10 @@ class SupabaseFinance {
             g1_phone,
             g2_name,
             g2_phone,
-            partner_name: borrower.partner_name || 'Unassigned'
+            partner_name: borrower.partner_name || 'Unassigned',
+            customer_id: loan.customer_id,
+            guarantor_1_id: loan.guarantor_1_id,
+            guarantor_2_id: loan.guarantor_2_id
           };
         });
       }
@@ -4395,7 +4402,7 @@ class SupabaseFinance {
       };
     } catch (error) {
       console.error('Error fetching dues ledger summary:', error);
-      return { dues: [], integrityErrors: [] };
+      throw error;
     }
   }
 }

@@ -2,6 +2,7 @@ import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabaseFinance, FinanceLoanPaymentFollowup } from '../../lib/supabaseFinance';
+import { supabase } from '../../lib/supabase';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -36,9 +37,13 @@ interface ActiveDueLoan {
   g2Phone: string;
   partnerName: string;
   status: string;
+  customerId?: string;
+  guarantor1Id?: string;
+  guarantor2Id?: string;
   // Follow up state
   lastFollowUp?: FinanceLoanPaymentFollowup;
   nextFollowUpDate: string | null;
+  activePendingAction?: any;
 }
 
 type FollowUpTab = 'ACTIVE_QUEUE' | 'TODAYS' | 'UPCOMING' | 'MISSED' | 'HISTORY';
@@ -66,6 +71,9 @@ const PaymentFollowUp: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loans, setLoans] = useState<ActiveDueLoan[]>([]);
   const [followUps, setFollowUps] = useState<FinanceLoanPaymentFollowup[]>([]);
+  const [duesError, setDuesError] = useState<string | null>(null);
+  const [followUpsError, setFollowUpsError] = useState<string | null>(null);
+  const [transactionsError, setTransactionsError] = useState<string | null>(null);
 
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<FollowUpTab>('ACTIVE_QUEUE');
@@ -80,6 +88,11 @@ const PaymentFollowUp: React.FC = () => {
   const [selectedLoan, setSelectedLoan] = useState<ActiveDueLoan | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const [borrowerDetails, setBorrowerDetails] = useState<any>(null);
+  const [g1Details, setG1Details] = useState<any>(null);
+  const [g2Details, setG2Details] = useState<any>(null);
+  const [loadingContactDetails, setLoadingContactDetails] = useState(false);
 
   // Form Fields
   const [contactedPerson, setContactedPerson] = useState<'CUSTOMER' | 'GUARANTOR_1' | 'GUARANTOR_2' | 'OTHER'>('CUSTOMER');
@@ -97,16 +110,76 @@ const PaymentFollowUp: React.FC = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    try {
-      // 1. Fetch Followups, Dues Summary, and Transactions
-      const [fetchedFollowups, summaryData, transactions] = await Promise.all([
-        supabaseFinance.getFollowUps(),
-        supabaseFinance.getDuesLedgerSummary(),
-        supabaseFinance.getTransactions()
-      ]);
-      setFollowUps(fetchedFollowups);
+    setDuesError(null);
+    setFollowUpsError(null);
+    setTransactionsError(null);
 
-      const calculatedLoans: ActiveDueLoan[] = summaryData.map((row: any) => {
+    let fetchedFollowups: FinanceLoanPaymentFollowup[] = [];
+    let summaryData: { dues: any[]; integrityErrors: any[] } = { dues: [], integrityErrors: [] };
+    let transactions: any[] = [];
+
+    // 1. Fetch Dues Summary
+    try {
+      summaryData = await supabaseFinance.getDuesLedgerSummary();
+    } catch (err: any) {
+      console.error('[PAYMENT_FOLLOWUP_FETCH_ERROR] Dues query failed:', {
+        message: err?.message,
+        details: err?.details,
+        hint: err?.hint,
+        code: err?.code,
+        raw: err
+      });
+      setDuesError(err?.message || 'Failed to load dues summary');
+      toast.error('Failed to load collection follow-ups data', { id: 'payment-followup-fetch-error' });
+    }
+
+    // 2. Fetch Followups
+    try {
+      fetchedFollowups = await supabaseFinance.getFollowUps();
+      setFollowUps(fetchedFollowups);
+    } catch (err: any) {
+      console.error('[PAYMENT_FOLLOWUP_FETCH_ERROR] Follow-ups query failed:', {
+        message: err?.message,
+        details: err?.details,
+        hint: err?.hint,
+        code: err?.code,
+        raw: err
+      });
+      setFollowUpsError(err?.message || 'Failed to load follow-up history');
+      toast.error('Failed to load collection follow-ups data', { id: 'payment-followup-fetch-error' });
+    }
+
+    // 3. Fetch Transactions
+    try {
+      const { data, error } = await supabase
+        .from('finance_transactions')
+        .select(`
+          id, date, amount, type, remarks, collected_by, receipt_no, loan_id,
+          loan:finance_loans(
+            id, loan_id, loan_category, amount, customer_id,
+            customer:finance_customers!customer_id(id, name, phone)
+          )
+        `)
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      transactions = data || [];
+    } catch (err: any) {
+      console.error('[PAYMENT_FOLLOWUP_FETCH_ERROR] Transactions query failed:', {
+        message: err?.message,
+        details: err?.details,
+        hint: err?.hint,
+        code: err?.code,
+        raw: err
+      });
+      setTransactionsError(err?.message || 'Failed to load transactions');
+      toast.error('Failed to load collection follow-ups data', { id: 'payment-followup-fetch-error' });
+    }
+
+    if (summaryData && summaryData.dues) {
+      const dues = summaryData.dues;
+      const calculatedLoans: ActiveDueLoan[] = dues.map((row: any) => {
         // Get this loan's follow-up history sorted oldest to newest
         const loanFollowups = fetchedFollowups
           .filter((f: any) => f.loan_id === row.id)
@@ -121,11 +194,17 @@ const PaymentFollowUp: React.FC = () => {
           });
 
         const lastFollowUp = loanFollowups[loanFollowups.length - 1];
-        let latestUnresolvedPromise: any = null;
+        let activePendingAction: any = null;
 
-        // Process promises in chronological order to find the latest unresolved one
+        // Process follow-ups in chronological order to find the active pending action (promise or callback)
         for (const f of loanFollowups) {
-          if (f.result === 'PROMISED TO PAY' && f.next_follow_up_date) {
+          if (f.result === 'CALL BACK' && f.next_follow_up_date) {
+            activePendingAction = f;
+          } else if (f.result === 'PROMISED TO PAY' && f.next_follow_up_date) {
+            // A newer logged call (promise) completes older pending callback schedules
+            if (activePendingAction && activePendingAction.result === 'CALL BACK') {
+              activePendingAction = null;
+            }
             const promiseDateStr = f.follow_up_date;
             const promiseCreatedAt = f.created_at ? new Date(f.created_at).getTime() : null;
 
@@ -156,12 +235,21 @@ const PaymentFollowUp: React.FC = () => {
             }
 
             if (!resolved) {
-              latestUnresolvedPromise = f;
+              activePendingAction = f;
+            } else {
+              if (activePendingAction === f) {
+                activePendingAction = null;
+              }
+            }
+          } else {
+            // Any other call completes older pending callback schedules
+            if (activePendingAction && activePendingAction.result === 'CALL BACK') {
+              activePendingAction = null;
             }
           }
         }
 
-        const nextFollowUpDate = latestUnresolvedPromise ? latestUnresolvedPromise.next_follow_up_date : null;
+        const nextFollowUpDate = activePendingAction ? activePendingAction.next_follow_up_date : null;
 
         return {
           id: row.id,
@@ -184,18 +272,20 @@ const PaymentFollowUp: React.FC = () => {
           g2Phone: row.g2_phone || '',
           partnerName: row.partner_name || 'Unassigned',
           status: 'Active',
+          customerId: row.customer_id,
+          guarantor1Id: row.guarantor_1_id,
+          guarantor2Id: row.guarantor_2_id,
           lastFollowUp,
-          nextFollowUpDate
+          nextFollowUpDate,
+          activePendingAction
         };
       });
 
       setLoans(calculatedLoans);
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to load collection follow-ups data');
-    } finally {
-      setLoading(false);
+    } else {
+      setLoans([]);
     }
+    setLoading(false);
   };
 
   // Staff list for filter
@@ -289,7 +379,7 @@ const PaymentFollowUp: React.FC = () => {
   }, [followUps, activeTab, staffFilter, dateFilter, searchQuery, loanTypeFilter]);
 
   // Open Log Modal
-  const handleOpenFollowUpModal = (loan: ActiveDueLoan) => {
+  const handleOpenFollowUpModal = async (loan: ActiveDueLoan) => {
     setSelectedLoan(loan);
     setContactedPerson('CUSTOMER');
     setResult('ANSWERED');
@@ -297,6 +387,33 @@ const PaymentFollowUp: React.FC = () => {
     setNextFollowUpDate('');
     setPromisedAmount('');
     setShowModal(true);
+
+    setBorrowerDetails(null);
+    setG1Details(null);
+    setG2Details(null);
+    setLoadingContactDetails(true);
+
+    try {
+      const ids = [loan.customerId, loan.guarantor1Id, loan.guarantor2Id].filter(Boolean) as string[];
+      if (ids.length > 0) {
+        const { data, error } = await supabase
+          .from('finance_customers')
+          .select('*')
+          .in('id', ids);
+        if (!error && data) {
+          const b = data.find(c => c.id === loan.customerId);
+          const g1 = data.find(c => c.id === loan.guarantor1Id);
+          const g2 = data.find(c => c.id === loan.guarantor2Id);
+          setBorrowerDetails(b || null);
+          setG1Details(g1 || null);
+          setG2Details(g2 || null);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching contact details for modal:", err);
+    } finally {
+      setLoadingContactDetails(false);
+    }
   };
 
   // Quick next date calculator helpers
@@ -304,6 +421,17 @@ const PaymentFollowUp: React.FC = () => {
     const d = new Date(todayDateStr);
     d.setDate(d.getDate() + days);
     setNextFollowUpDate(d.toISOString().split('T')[0]);
+  };
+
+  const formatAddress = (details: any) => {
+    if (!details) return '';
+    const parts = [
+      details.address || details.present_address || details.aadhaar_address,
+      details.village || details.present_village || details.aadhaar_village,
+      details.mandal || details.present_mandal || details.aadhaar_mandal,
+      details.district || details.present_district || details.aadhaar_district
+    ].filter(Boolean);
+    return parts.join(', ');
   };
 
   // Save followup record
@@ -326,7 +454,7 @@ const PaymentFollowUp: React.FC = () => {
       contacted_person: contactedPerson,
       result: result,
       narration: narration.trim(),
-      next_follow_up_date: result === 'PROMISED TO PAY' ? nextFollowUpDate || null : null,
+      next_follow_up_date: (result === 'PROMISED TO PAY' || result === 'CALL BACK') ? nextFollowUpDate || null : null,
       promised_amount: result === 'PROMISED TO PAY' && promisedAmount ? Number(promisedAmount) : null
     };
 
@@ -379,6 +507,28 @@ const PaymentFollowUp: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Warning banner for partial failures */}
+      {(followUpsError || transactionsError) && !duesError && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider print:hidden">
+          Warning: Partial database loading issues. 
+          {followUpsError && ` [Schedules/History: ${followUpsError}]`}
+          {transactionsError && ` [Collections Resolution: ${transactionsError}]`}
+        </div>
+      )}
+
+      {duesError ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center bg-rose-50 border border-rose-200 rounded-lg p-6 my-4">
+          <span className="text-red-700 font-black uppercase text-sm tracking-wider">Failed to Load Active Due Accounts</span>
+          <p className="text-red-650 text-xs mt-2 uppercase font-semibold">{duesError}</p>
+          <button 
+            onClick={fetchData} 
+            className="mt-4 px-4 py-2 bg-red-700 text-white rounded-lg text-xs font-black uppercase hover:bg-red-800 transition-colors shadow-sm"
+          >
+            Retry Fetch
+          </button>
+        </div>
+      ) : null}
 
       {/* ── ROW 2: Filters + KPI Status Counts (single horizontal bar) ───────── */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm px-3 py-2.5 print:hidden">
@@ -503,12 +653,11 @@ const PaymentFollowUp: React.FC = () => {
               <span className="text-[16px] font-black font-mono mt-0.5 leading-none">{categorizedLoans.MISSED.length}</span>
             </div>
 
-            {/* Upcoming */}
             <div 
               onClick={() => setActiveTab('UPCOMING')}
               className={`cursor-pointer px-3 py-1 flex flex-col justify-center text-center rounded-lg border transition-all min-w-[85px] h-[38px] ${
                 activeTab === 'UPCOMING' 
-                  ? 'bg-blue-650 text-white border-blue-650 shadow-sm' 
+                  ? 'bg-blue-700 text-white border-blue-700 shadow-sm' 
                   : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
               }`}
             >
@@ -664,18 +813,37 @@ const PaymentFollowUp: React.FC = () => {
                         )}
                       </td>
                       <td className="px-2 py-1.5 border-r border-slate-100 text-slate-700 font-sans text-sm leading-relaxed whitespace-normal">
-                        {due.lastFollowUp ? (
+                        {due.activePendingAction || due.lastFollowUp ? (
                           <div>
-                            <div className="text-[11px] text-slate-400 font-bold mb-0.5 flex gap-1 items-center font-sans">
-                              <span>{due.lastFollowUp.follow_up_date.split('-').reverse().join('/')}</span>
-                              <span>•</span>
-                              <span>{due.lastFollowUp.followed_up_by}</span>
-                              <span>•</span>
-                              <span className="text-indigo-650 font-extrabold">{due.lastFollowUp.result}</span>
+                            <div className="text-[11px] font-black uppercase tracking-wider mb-0.5 flex flex-wrap gap-1 items-center">
+                              {activeTab === 'MISSED' && due.activePendingAction ? (
+                                due.activePendingAction.result === 'CALL BACK' ? (
+                                  <span className="text-red-700 font-black">CALL OVERDUE • Scheduled {due.activePendingAction.next_follow_up_date.split('-').reverse().join('/')}</span>
+                                ) : (
+                                  <span className="text-red-700 font-black">PAYMENT PROMISE MISSED • Due {due.activePendingAction.next_follow_up_date.split('-').reverse().join('/')}</span>
+                                )
+                              ) : due.activePendingAction ? (
+                                due.activePendingAction.result === 'CALL BACK' ? (
+                                  <span className="text-amber-700 font-black">CALL BACK • Next call {due.activePendingAction.next_follow_up_date.split('-').reverse().join('/')}</span>
+                                ) : (
+                                  <span className="text-blue-700 font-black">
+                                    PROMISED TO PAY • {due.activePendingAction.promised_amount ? '₹' + Number(due.activePendingAction.promised_amount).toLocaleString('en-IN') + ' ' : ''}by {due.activePendingAction.next_follow_up_date.split('-').reverse().join('/')}
+                                  </span>
+                                )
+                              ) : due.lastFollowUp ? (
+                                <span className="text-slate-500 font-black">
+                                  {due.lastFollowUp.result} • {due.lastFollowUp.follow_up_date.split('-').reverse().join('/')}
+                                </span>
+                              ) : null}
+                              {due.lastFollowUp && (
+                                <span className="text-slate-400 font-normal">by {due.lastFollowUp.followed_up_by}</span>
+                              )}
                             </div>
-                            <div className="font-semibold text-slate-800 text-sm leading-snug" title={due.lastFollowUp.narration}>
-                              {due.lastFollowUp.narration}
-                            </div>
+                            {due.lastFollowUp && (
+                              <div className="font-semibold text-slate-800 text-sm leading-snug" title={due.lastFollowUp.narration}>
+                                {due.lastFollowUp.narration}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span className="italic text-gray-400 text-sm">No callbacks logged</span>
@@ -722,6 +890,81 @@ const PaymentFollowUp: React.FC = () => {
 
             <div className="p-6 overflow-y-auto space-y-5 flex-1 scrollbar-thin">
               
+              {loadingContactDetails ? (
+                <div className="flex flex-col items-center justify-center py-6 text-slate-500 font-sans text-xs">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-900 mb-2"></div>
+                  Loading Contact Details...
+                </div>
+              ) : (
+                <>
+                  {/* Account + Borrower Details Card */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex justify-between items-start border-b border-slate-200 pb-2">
+                      <div>
+                        <span className="text-[9px] text-slate-450 uppercase font-black tracking-wider">Account Number</span>
+                        <div className="text-base font-black text-slate-900">{selectedLoan.loanId}</div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[9px] text-slate-450 uppercase font-black tracking-wider">Borrower Name</span>
+                        <div className="text-base font-black text-slate-900">{selectedLoan.customerName}</div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4 pt-1">
+                      <div>
+                        <span className="text-[9px] text-slate-450 uppercase font-black tracking-wider">Borrower Phone</span>
+                        <div className="text-sm font-bold text-[#0b1329] font-mono tracking-wide">{borrowerDetails?.phone || selectedLoan.phone || '—'}</div>
+                      </div>
+                      <div>
+                        <span className="text-[9px] text-slate-450 uppercase font-black tracking-wider">Borrower Address</span>
+                        <div className="text-[11px] font-semibold text-slate-700 leading-normal">{formatAddress(borrowerDetails) || '—'}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Guarantor Details */}
+                  {(selectedLoan.g1Name || selectedLoan.g2Name) && (
+                    <div className="grid grid-cols-2 gap-3.5">
+                      {selectedLoan.g1Name && (
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
+                          <span className="text-[9px] text-[#0b1329] uppercase font-black tracking-wider border-b pb-0.5 block">Guarantor 1</span>
+                          <div>
+                            <span className="text-[8px] text-slate-400 uppercase font-bold">Name</span>
+                            <div className="text-xs font-bold text-slate-800">{selectedLoan.g1Name}</div>
+                          </div>
+                          <div>
+                            <span className="text-[8px] text-slate-400 uppercase font-bold">Phone</span>
+                            <div className="text-xs font-bold text-slate-800 font-mono">{selectedLoan.g1Phone || g1Details?.phone || '—'}</div>
+                          </div>
+                          <div>
+                            <span className="text-[8px] text-slate-400 uppercase font-bold">Address</span>
+                            <div className="text-[10px] text-slate-600 font-medium leading-tight">{formatAddress(g1Details) || '—'}</div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {selectedLoan.g2Name && (
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
+                          <span className="text-[9px] text-[#0b1329] uppercase font-black tracking-wider border-b pb-0.5 block">Guarantor 2</span>
+                          <div>
+                            <span className="text-[8px] text-slate-400 uppercase font-bold">Name</span>
+                            <div className="text-xs font-bold text-slate-800">{selectedLoan.g2Name}</div>
+                          </div>
+                          <div>
+                            <span className="text-[8px] text-slate-400 uppercase font-bold">Phone</span>
+                            <div className="text-xs font-bold text-slate-800 font-mono">{selectedLoan.g2Phone || g2Details?.phone || '—'}</div>
+                          </div>
+                          <div>
+                            <span className="text-[8px] text-slate-400 uppercase font-bold">Address</span>
+                            <div className="text-[10px] text-slate-600 font-medium leading-tight">{formatAddress(g2Details) || '—'}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
               {/* Account Quick Metrics Summary */}
               <div className="grid grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                 <div className="flex flex-col">
@@ -765,12 +1008,24 @@ const PaymentFollowUp: React.FC = () => {
                             {h.contacted_person}
                           </span>
                           <span className="px-1.5 py-0.5 bg-green-50 text-green-700 text-[8px] font-black uppercase rounded border border-green-200">
-                            {h.result.replace('_', ' ')}
+                            {h.result}
                           </span>
-                          {h.next_follow_up_date && (
-                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[8px] font-black uppercase rounded border border-blue-200 font-mono">
-                              Next: {h.next_follow_up_date.split('-').reverse().join('/')}
+                          {h.result === 'CALL BACK' && h.next_follow_up_date && (
+                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[8px] font-black uppercase rounded border border-amber-200 font-mono">
+                              NEXT CALL: {h.next_follow_up_date.split('-').reverse().join('/')}
                             </span>
+                          )}
+                          {h.result === 'PROMISED TO PAY' && h.next_follow_up_date && (
+                            <>
+                              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[8px] font-black uppercase rounded border border-blue-200 font-mono">
+                                PROMISE DATE: {h.next_follow_up_date.split('-').reverse().join('/')}
+                              </span>
+                              {h.promised_amount !== null && (
+                                <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[8px] font-black uppercase rounded border border-emerald-200 font-mono">
+                                  PROMISED AMOUNT: ₹{Number(h.promised_amount).toLocaleString('en-IN')}
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
                         <p className="text-slate-700 font-sans">{h.narration}</p>
@@ -790,11 +1045,15 @@ const PaymentFollowUp: React.FC = () => {
                     <select
                       value={contactedPerson}
                       onChange={(e) => setContactedPerson(e.target.value as any)}
-                      className="w-full text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-sm uppercase"
+                      className="w-full text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-xs uppercase"
                     >
-                      <option value="CUSTOMER">Customer (Borrower)</option>
-                      <option value="GUARANTOR_1">Guarantor 1</option>
-                      <option value="GUARANTOR_2">Guarantor 2</option>
+                      <option value="CUSTOMER">Customer (Borrower) — {selectedLoan.customerName}</option>
+                      {selectedLoan.g1Name && (
+                        <option value="GUARANTOR_1">Guarantor 1 — {selectedLoan.g1Name}</option>
+                      )}
+                      {selectedLoan.g2Name && (
+                        <option value="GUARANTOR_2">Guarantor 2 — {selectedLoan.g2Name}</option>
+                      )}
                       <option value="OTHER">Other</option>
                     </select>
                   </div>
@@ -831,6 +1090,68 @@ const PaymentFollowUp: React.FC = () => {
                   />
                 </div>
 
+                {/* Reschedule Next Call section */}
+                {result === 'CALL BACK' && (
+                  <div className="space-y-3 p-3 bg-amber-50/50 border border-amber-200 rounded-lg">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[10px] font-black uppercase text-amber-800 block">Next Call Date</span>
+                          <span className="text-[9px] text-amber-650 font-extrabold uppercase">Required</span>
+                        </div>
+                        <input
+                          type="date"
+                          value={nextFollowUpDate}
+                          min={getLocalBusinessDateISO()}
+                          onChange={(e) => setNextFollowUpDate(e.target.value)}
+                          className="w-full text-slate-900 border border-amber-300 rounded-lg p-2 focus:ring-amber-600 bg-white font-bold text-sm uppercase h-10"
+                          required
+                        />
+                      </div>
+                      <div className="flex flex-col justify-end">
+                        <span className="text-[9px] text-slate-400 font-bold uppercase mb-1">Quick Reschedule</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          <button 
+                            type="button"
+                            onClick={() => handleSetQuickDate(0)}
+                            className="h-10 px-2 bg-amber-100 hover:bg-amber-200 border border-amber-200 text-amber-800 font-black text-[9px] uppercase rounded transition-colors"
+                          >
+                            Today
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handleSetQuickDate(1)}
+                            className="h-10 px-2 bg-amber-100 hover:bg-amber-200 border border-amber-200 text-amber-800 font-black text-[9px] uppercase rounded transition-colors"
+                          >
+                            Tomorrow
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handleSetQuickDate(3)}
+                            className="h-10 px-2 bg-amber-100 hover:bg-amber-200 border border-amber-200 text-amber-800 font-black text-[9px] uppercase rounded transition-colors"
+                          >
+                            +3 Days
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handleSetQuickDate(5)}
+                            className="h-10 px-2 bg-amber-100 hover:bg-amber-200 border border-amber-200 text-amber-800 font-black text-[9px] uppercase rounded transition-colors"
+                          >
+                            +5 Days
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handleSetQuickDate(7)}
+                            className="h-10 px-2 bg-amber-100 hover:bg-amber-200 border border-amber-200 text-amber-800 font-black text-[9px] uppercase rounded transition-colors"
+                          >
+                            +7 Days
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Next Follow Up Date & Quick Helpers (Promised to pay only) */}
                 {result === 'PROMISED TO PAY' && (
                   <div className="space-y-3 p-3 bg-blue-50/50 border border-blue-200 rounded-lg">
@@ -865,8 +1186,6 @@ const PaymentFollowUp: React.FC = () => {
                     </div>
                     
                     <div className="flex flex-wrap gap-2">
-
-                      {/* Quick Selector Helpers */}
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <button 
                           type="button"

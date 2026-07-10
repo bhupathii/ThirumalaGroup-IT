@@ -1,0 +1,880 @@
+<USER_REQUEST>
+[stay in caveman mode — ULTRA]
+
+We had a live client review.
+
+Implement ONLY the issues proven from the client call below.
+
+This is production finance software.
+
+Do not redesign the application.
+Do not touch HP/STBD/TBD.
+Do not change CD calculation formulas.
+Do not change CD payment allocation.
+Do not change the already-fixed CD119 canonical disbursement logic.
+Do not create mock/sample data.
+Do not hardcode CD numbers or financial values.
+Use live database-backed logic.
+
+FIRST AUDIT CURRENT IMPLEMENTATION.
+THEN FIX.
+THEN VERIFY WITH LIVE READ-ONLY DATA + TESTS.
+
+==================================================
+CRITICAL ACCOUNTING RULE DISCOVERED FROM CLIENT
+==================================================
+
+TRANSACTION APPROVAL IS NOMINAL AUDIT/SUPERVISION ONLY.
+
+Approval status MUST NOT control whether a transaction participates in accounting reports.
+
+Client explicitly confirmed:
+
+- staff saves entry
+- transaction must immediately enter accounting data
+- Daily Report must immediately show it
+- Detailed Ledger must immediately show it
+- General Ledger must immediately show it
+- Profit & Loss must immediately include it when classified as P&L
+- Final Statement must immediately include it when classified as Balance Sheet
+- approval screen remains for admin supervision
+- PENDING / APPROVED / REJECTED is an audit workflow
+- it is NOT an accounting posting gate
+
+Example:
+
+Staff enters:
+
+HEAD OF ACCOUNT = EXPENSES
+PARTICULARS = TEST EXPENSE
+DEBIT = ₹200
+CLASSIFICATION = PROFIT_AND_LOSS
+
+Immediately after successful save:
+
+Daily Report = must show ₹200 debit
+Detailed Ledger = must show transaction
+General Ledger = must aggregate transaction
+Profit & Loss = must include ₹200 expense
+
+This must happen even when transaction_reviews.review_status = PENDING.
+
+Approval may change:
+- audit status
+- approval color/badge
+- approved_by
+- approved_at
+
+Approval MUST NOT determine accounting inclusion.
+
+IMPORTANT:
+
+Do not delete Transaction Approval.
+Do not auto-approve entries.
+Do not fake APPROVED status.
+
+Keep actual review status PENDING.
+
+Accounting source rows are authoritative immediately after successful DB save.
+
+REJECTED behavior:
+
+Do not invent behavior.
+
+Audit existing production logic and schema.
+
+If REJECTED currently means transaction is reversed/deleted/voided through an explicit mutation flow, preserve that.
+
+Do not simply filter every REJECTED review row from reports by source_id unless the underlying transaction itself is actually voided/deleted.
+
+Accounting reports must derive from persisted financial transaction rows, not transaction review status.
+
+==================================================
+BUG 1 — CAPITAL ENTRY NOT SAVING
+==================================================
+
+Client says Capital Entry form accepts values but SAVE does not persist.
+
+Audit end-to-end:
+
+CapitalEntry.tsx
+supabaseFinance.ts
+finance capital entry table/schema
+partner selection
+application_id/business context
+regular finance schema
+insert payload
+legacy NOT NULL constraints
+RLS
+returned Supabase errors
+double-submit guard
+
+Reproduce using a valid existing partner.
+
+Test:
+
+DATE
+PARTNER
+PARTICULARS
+CREDIT only
+
+and separately:
+
+DATE
+PARTNER
+PARTICULARS
+DEBIT only
+
+Rules:
+
+credit and debit mutually exclusive
+one positive amount required
+partner_id required
+partner must be real persisted partner
+save exactly once
+no duplicate insert
+successful save must refetch UI
+partner capital history must update
+Daily Report must update immediately
+Detailed Ledger must update immediately
+General Ledger must update immediately
+Final Statement must update immediately if classified Balance Sheet
+Transaction Approval may remain PENDING
+
+Do not swallow Supabase errors.
+
+If save fails, print exact DB error in audit output and fix root cause.
+
+Verify with a temporary test fixture or transaction rollback strategy.
+
+Do not leave fake production capital entries.
+
+==================================================
+BUG 2 — DAILY REPORT UI MUST MATCH CLIENT EXPECTATION
+==================================================
+
+Client does NOT want these visible in Daily Report table:
+
+- PROFIT AND LOSS classification text
+- BALANCE SHEET classification text
+- SOURCE LEDGER badge/text
+
+These classifications are BACKGROUND ACCOUNTING METADATA.
+
+They are needed for routing to reports but must not clutter Daily Report.
+
+Daily Report is a DAY TRANSACTION BOOK.
+
+Client wants old-software-style transaction presentation.
+
+For a selected single business date display columns in this logical order:
+
+SL NO
+HEAD OF ACCOUNT
+PARTICULARS
+CREDIT
+DEBIT
+
+If receipt/voucher number is genuinely useful and already persisted, it may remain as a compact column.
+
+Do not show:
+SOURCE LEDGER
+REPORT CLASSIFICATION
+CATEGORY
+
+The selected report date is already shown above.
+
+Therefore do not repeat DATE on every row for a single-day Daily Report.
+
+Serial number must be generated from displayed chronological rows:
+
+1
+2
+3
+...
+
+Do not use database IDs as serial numbers.
+
+Sort deterministic:
+
+business date ASC
+stable receipt/voucher numeric sequence when available
+created_at ASC
+id ASC
+
+==================================================
+BUG 3 — DAILY REPORT CREDIT / DEBIT COLUMN ORDER
+==================================================
+
+Client explicitly says:
+
+FIRST CREDIT
+THEN DEBIT
+
+Current Daily Report shows:
+
+DEBIT | CREDIT
+
+Wrong.
+
+Change Daily Report screen to:
+
+CREDIT | DEBIT
+
+Change print layout also:
+
+CREDIT | DEBIT
+
+Change totals/summary presentation where these two are side-by-side to follow the same order.
+
+Do not swap the actual accounting values.
+
+Only fix presentation order.
+
+Credit remains inflow/jama.
+Debit remains outflow/payment/expense.
+
+Add regression test proving a ₹200 expense appears:
+
+CREDIT = ₹0
+DEBIT = ₹200
+
+and is displayed under the correct Debit column.
+
+==================================================
+BUG 4 — DAILY REPORT MUST SHOW PENDING-APPROVAL ENTRY
+==================================================
+
+Reproduce exact client case:
+
+Create Day Book Entry:
+
+HEAD = EXPENSES
+DEBIT = ₹200
+classification = PROFIT_AND_LOSS
+
+Transaction review status = PENDING.
+
+Expected BEFORE admin approval:
+
+Daily Report = INCLUDED
+Detailed Ledger = INCLUDED
+General Ledger = INCLUDED
+Profit & Loss = INCLUDED
+
+Then approve review.
+
+Expected AFTER approval:
+
+Financial totals remain EXACTLY identical.
+
+Only review metadata/status changes.
+
+Prove:
+
+beforeApprovalCredit === afterApprovalCredit
+beforeApprovalDebit === afterApprovalDebit
+beforeApprovalPnL === afterApprovalPnL
+
+No accounting row may be duplicated after approval.
+
+This is critical.
+
+==================================================
+BUG 5 — CALENDAR RED DOTS ARE FALSE / MISLEADING
+==================================================
+
+Client noticed red dots in July on dates where no actual financial transaction exists.
+
+He suspects edit/delete activity may be creating dots.
+
+Audit:
+
+CustomCalendar.tsx
+getDailyReportActivityDates
+DailyReport.tsx
+DetailedLedger.tsx
+GeneralLedger.tsx
+
+Calendar activity dots must be based ONLY on actual canonical financial transaction business dates relevant to that report.
+
+DO NOT use:
+
+transaction_reviews.created_at
+edit audit logs
+delete audit logs
+follow-up logs
+approval dates
+updated_at
+created_at as business activity date
+calendar selection state
+
+Daily Report dots:
+
+A date gets a red dot only if canonical Daily Report has >= 1 actual accounting transaction for that business date.
+
+Detailed Ledger dots:
+
+A date gets a dot only if an actual canonical accounting transaction exists on that date.
+
+General Ledger dots:
+
+Same rule.
+
+IMPORTANT:
+
+Calendar selected-date styling is separate from activity dot styling.
+
+A selected date must not look like it contains a transaction merely because it is selected.
+
+Audit CSS/rendering carefully.
+
+For every dotted date in July 2026:
+
+query canonical financial transactions for that business date.
+
+Print:
+
+DATE
+CANONICAL ROW COUNT
+CD COUNT
+CAPITAL COUNT
+DAY BOOK COUNT
+DOT EXPECTED YES/NO
+
+If row count = 0:
+dot must not render.
+
+Add tests:
+
+no financial rows => no dot
+edit audit only => no dot
+delete audit only => no dot
+approval only => no dot
+follow-up only => no dot
+one CD financial row => dot
+one capital row => dot
+one Day Book row => dot
+
+==================================================
+BUG 6 — DETAILED LEDGER DATE RANGE AUDIT
+==================================================
+
+Client suspected FROM DATE selection may be loading only the first selected day instead of the complete FROM → TO range.
+
+Do not assume this bug exists.
+
+Prove it.
+
+Audit DetailedLedger.tsx and canonical service.
+
+For:
+
+FROM = 01-Jul-2026
+TO = 10-Jul-2026
+
+query all canonical accounting transactions where:
+
+transaction.businessDate >= fromDate
+AND transaction.businessDate <= toDate
+
+Both boundaries inclusive.
+
+Do not compare timestamps if business date exists.
+
+Print all matching dates and row counts.
+
+Verify UI row count exactly equals canonical filtered row count for selected head/account.
+
+Test:
+
+transaction on FROM date => included
+transaction between dates => included
+transaction on TO date => included
+transaction before FROM => excluded
+transaction after TO => excluded
+
+Also inspect calendar dots separately from range filtering.
+
+A calendar dot does not mean the current selected ledger/account has a matching row.
+
+If dots are global but ledger data is account-filtered, document this clearly and decide whether the dot query should respect selected head/account.
+
+Prefer intuitive behavior:
+
+Detailed Ledger calendar dots should reflect dates containing transactions for the currently selected Head of Account.
+
+General Ledger calendar dots may reflect canonical financial activity for the visible report context.
+
+==================================================
+BUG 7 — DETAILED LEDGER COLUMN FONT / SIZE
+==================================================
+
+Client says CD NUMBER column/header text appears smaller than DATE and other columns.
+
+Audit DetailedLedger.tsx table header and cell classes.
+
+Use consistent typography for:
+
+DATE
+SL NO
+CD/ACCOUNT NUMBER
+HEAD/NAME
+PARTICULARS
+DEBIT
+CREDIT
+RUNNING BALANCE
+
+CD number must not use a smaller text class accidentally.
+
+Do not enlarge the entire UI.
+
+Make column header and important account number cell consistent with adjacent table typography.
+
+==================================================
+BUG 8 — DUES LIST REMOVE TYPE COLUMN
+==================================================
+
+Client already requested this.
+
+Remove TYPE / CD TYPE column from:
+
+Dues List screen
+all Dues List tabs where it appears
+Dues List print layout
+
+Because the report context already identifies CD accounts.
+
+After removal rebalance widths.
+
+Do not remove loan type internally from data/filter logic.
+
+Only remove visible redundant column.
+
+==================================================
+BUG 9 — DUES LIST ADD PAID PENALTY
+==================================================
+
+Current visible columns include approximately:
+
+PRINCIPAL
+INT. PAID
+PEND. INT
+PENALTY
+PRESENT DUE
+CLOSE AMT
+DUE DATE
+DAYS
+CONTACT
+
+Client explicitly wants PAID PENALTY also visible.
+
+Use canonical persisted financial rows.
+
+Add:
+
+PAID PENALTY
+
+Do not derive paid penalty from:
+
+total paid × fixed ratio
+
+if actual CD interest detail / ledger split rows exist.
+
+Use actual posted penalty payment rows.
+
+Expected logical order:
+
+PRINCIPAL
+PAID INTEREST
+PENDING INTEREST
+PAID PENALTY
+PENDING PENALTY
+PRESENT DUE
+CLOSE AMOUNT
+DUE DATE
+DAYS
+CONTACT / GUARANTOR
+
+Rename current generic PENALTY header to PENDING PENALTY if that value is accrued/pending penalty.
+
+Verify semantics from canonical engine before renaming.
+
+Screen and print must match.
+
+For each audited CD loan print:
+
+LOAN
+PAID INTEREST
+PENDING INTEREST
+PAID PENALTY
+PENDING PENALTY
+PRESENT DUE
+SUM CHECK
+
+Present Due must match canonical todayDue/presentDue rule already implemented.
+
+Do not change formulas.
+
+==================================================
+BUG 10 — PAYMENT FOLLOW-UP FAILS TO LOAD
+==================================================
+
+Client saw:
+
+FAILED TO LOAD FOLLOW-UP DATA
+
+This is a real runtime bug.
+
+Audit live fetch sequence in PaymentFollowUp.tsx.
+
+Inspect every query:
+
+loans
+customers
+guarantors
+follow-ups
+promised_amount
+CD positions
+collection transactions
+
+Do not hide the failure with an empty array.
+
+Capture exact Supabase error:
+
+message
+code
+details
+hint
+table/query stage
+
+Find exact failing stage.
+
+Important recent changes:
+
+promised_amount migration
+finance schema
+same-date promise resolution
+canonical CD due positions
+CD119 Disbursement synthesis
+
+Verify active remote finance database contains promised_amount.
+
+Verify browser anon/RLS access, not only service-role script access.
+
+A service-role query passing does NOT prove browser client query passes.
+
+Test using the same Supabase client/schema path used by PaymentFollowUp.tsx.
+
+Fix root cause.
+
+After fix verify:
+
+CD119 eligible if Active and dueDays >= 0
+CD127 excluded if dueDays < 0
+future due accounts excluded
+promise tabs load
+no console fetch error
+refresh works
+
+Print per-stage fetch result:
+
+STAGE
+ROWS
+ERROR CODE
+STATUS
+
+==================================================
+BUG 11 — FINAL STATEMENT IS WRONG / INCOMPLETE
+==================================================
+
+Client clarified Final Statement requirements.
+
+Final Statement must show ALL HEADS OF ACCOUNT with debit and credit positions.
+
+This is not merely a Balance Sheet-classified account report.
+
+Client said:
+
+"all head of accounts must come, debit and credit"
+
+Audit current FinalStatement.tsx.
+
+Current implementation reportedly filters only BALANCE_SHEET classifications.
+
+That does NOT match client requirement.
+
+Rebuild Final Statement from the canonical transaction engine.
+
+For selected date range show every normalized Head of Account that has:
+
+opening balance != 0
+OR range credit != 0
+OR range debit != 0
+OR closing balance != 0
+
+Columns:
+
+SL NO
+HEAD OF ACCOUNT
+OPENING BALANCE
+CREDIT
+DEBIT
+CLOSING BALANCE
+
+FIRST CREDIT
+THEN DEBIT.
+
+Do not show report classification as a visible column unless genuinely required.
+
+Classification remains background metadata.
+
+All heads may appear:
+
+CD INTEREST
+CD PENALTY
+DOCUMENT CHARGES
+EXPENSES
+SALARIES
+CAPITAL
+BANK
+CASH
+and any user-created Head of Account
+
+No hardcoded list.
+
+Use normalized canonical head names.
+
+Opening balance:
+
+sum canonical credits - debits strictly BEFORE fromDate.
+
+Range credit:
+
+sum credits from fromDate through toDate inclusive.
+
+Range debit:
+
+sum debits from fromDate through toDate inclusive.
+
+Closing:
+
+opening + credit - debit
+
+Use one sign convention consistently.
+
+Print layout must use the same source rows and totals.
+
+Add reconciliation:
+
+SUM(Final Statement range credits)
+===
+canonical range total credits
+
+SUM(Final Statement range debits)
+===
+canonical range total debits
+
+Difference must be ₹0.00.
+
+==================================================
+HEAD OF ACCOUNT CLASSIFICATION RULE
+==================================================
+
+When creating/editing a Head of Account:
+
+BALANCE SHEET / PROFIT AND LOSS classification remains required background metadata.
+
+This classification routes the account to P&L and accounting analysis.
+
+But do not display these labels unnecessarily in Daily Report.
+
+Client explicitly said classification is selected at entry/account setup and should work in background.
+
+==================================================
+CANONICAL SOURCE RULE
+==================================================
+
+All reports must continue to use:
+
+dailyFinancialTransactionService
+
+as canonical transaction source.
+
+Daily Report
+Detailed Ledger
+General Ledger
+Profit & Loss
+Final Statement
+
+must not each independently query and reinterpret raw tables.
+
+Approval status must not create a second accounting truth.
+
+Flow:
+
+RAW PERSISTED FINANCIAL TRANSACTION
+        ↓
+CANONICAL TRANSACTION SERVICE
+        ↓
+Daily Report
+Detailed Ledger
+General Ledger
+Profit & Loss
+Final Statement
+
+Parallel audit flow:
+
+TRANSACTION SAVE
+        ↓
+transaction_reviews = PENDING
+        ↓
+Admin Approval UI
+        ↓
+APPROVED / REJECTED review metadata
+
+The audit flow must not block canonical report visibility.
+
+==================================================
+LIVE READ-ONLY RECONCILIATION
+==================================================
+
+After fixes, audit one business date containing:
+
+CD transaction
+Capital transaction if available
+Day Book expense
+
+Print:
+
+SOURCE
+HEAD OF ACCOUNT
+PARTICULARS
+CREDIT
+DEBIT
+REVIEW STATUS
+DAILY REPORT INCLUDED
+DETAILED LEDGER INCLUDED
+GENERAL LEDGER INCLUDED
+PNL INCLUDED
+FINAL STATEMENT INCLUDED
+
+Then print:
+
+CANONICAL TOTAL CREDIT
+DAILY REPORT CREDIT
+DETAILED LEDGER CREDIT
+GENERAL LEDGER CREDIT
+FINAL STATEMENT RANGE CREDIT
+
+CREDIT PARITY DIFFERENCE
+
+CANONICAL TOTAL DEBIT
+DAILY REPORT DEBIT
+DETAILED LEDGER DEBIT
+GENERAL LEDGER DEBIT
+FINAL STATEMENT RANGE DEBIT
+
+DEBIT PARITY DIFFERENCE
+
+Both parity differences must be ₹0.00.
+
+P&L is classification-filtered, so do not compare its total against all canonical totals.
+
+==================================================
+REGRESSION TESTS REQUIRED
+==================================================
+
+Add tests for:
+
+1. pending review transaction immediately visible in Daily Report
+2. pending review transaction visible in Detailed Ledger
+3. pending review transaction visible in General Ledger
+4. pending P&L expense visible in Profit & Loss
+5. approval does not change financial totals
+6. approval does not duplicate canonical row
+7. capital credit save mapping
+8. capital debit save mapping
+9. capital partner_id preserved
+10. Daily Report hides classification presentation metadata
+11. Daily Report hides source ledger presentation metadata
+12. Daily Report Credit before Debit
+13. expense ₹200 maps to Debit, not Credit
+14. audit-only date does not create calendar dot
+15. approval-only date does not create calendar dot
+16. real financial transaction creates calendar dot
+17. Detailed Ledger FROM boundary inclusive
+18. Detailed Ledger middle date included
+19. Detailed Ledger TO boundary inclusive
+20. Dues List paid penalty uses actual posted penalty rows
+21. Dues List pending penalty remains canonical accrued penalty
+22. Payment Follow-up fetch succeeds through browser client path
+23. Final Statement includes P&L-classified heads
+24. Final Statement includes Balance Sheet-classified heads
+25. Final Statement credit parity
+26. Final Statement debit parity
+
+==================================================
+VERIFY
+==================================================
+
+Run:
+
+npx vitest run
+npx tsc --noEmit
+npm run build
+
+Also test browser runtime.
+
+Do not claim PASS based only on Vitest.
+
+FINAL REPORT:
+
+1. CAPITAL ENTRY ROOT CAUSE
+2. CAPITAL ENTRY SAVE STATUS
+3. APPROVAL GATING FOUND YES/NO
+4. APPROVAL GATING REMOVED FROM WHICH PATHS
+5. DAILY REPORT UI CHANGES
+6. CREDIT/DEBIT ORDER
+7. CALENDAR FALSE DOT ROOT CAUSE
+8. JULY DOT AUDIT TABLE
+9. DETAILED LEDGER RANGE STATUS
+10. DETAILED LEDGER FONT FIX
+11. DUES TYPE COLUMN REMOVED
+12. PAID PENALTY SOURCE + VALUES
+13. PAYMENT FOLLOW-UP EXACT FAILURE ROOT CAUSE
+14. PAYMENT FOLLOW-UP BROWSER STATUS
+15. FINAL STATEMENT BEFORE RULE
+16. FINAL STATEMENT AFTER RULE
+17. CROSS-REPORT CREDIT PARITY
+18. CROSS-REPORT DEBIT PARITY
+19. PRODUCTION DATA MUTATED YES/NO
+20. TESTS
+21. TYPECHECK
+22. BUILD
+23. PRODUCTION VERDICT = PASS/FAIL
+
+Do not say PASS if:
+- Capital Entry still does not save
+- pending Day Book entries are hidden until approval
+- calendar shows dots for audit-only dates
+- Payment Follow-up throws fetch error
+- Final Statement excludes valid heads of account
+- Credit/Debit parity differs by even ₹0.01
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-07-10T21:08:00+05:30.
+
+The user's current state is as follows:
+Active Document: /Users/karthikmac/Documents/GitHub/ThirumalaGroup-IT/src/lib/supabaseFinance.ts (LANGUAGE_TYPESCRIPT)
+Cursor is on line: 895
+Other open documents:
+- /Users/karthikmac/Documents/GitHub/ThirumalaGroup-IT/scratch/test_chintha_calculation.js (LANGUAGE_JAVASCRIPT)
+- /Users/karthikmac/Documents/GitHub/ThirumalaGroup-IT/scratch/solve_swamy_vba.cjs (LANGUAGE_JAVASCRIPT)
+- /Users/karthikmac/Documents/GitHub/ThirumalaGroup-IT/src/components/Layout/Sidebar.tsx (LANGUAGE_TSX)
+- /Users/karthikmac/Documents/GitHub/ThirumalaGroup-IT/src/pages/ApproveRecords.tsx (LANGUAGE_TSX)
+- /Users/karthikmac/Documents/GitHub/ThirumalaGroup-IT/scratch/test_calc.js (LANGUAGE_JAVASCRIPT)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.5 Flash (Low). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>
