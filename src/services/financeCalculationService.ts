@@ -6,7 +6,8 @@ import {
   getCDHistoricalEvents,
   getCDContractualPosition,
   getCDPrincipalBalance,
-  dateOrdinal
+  dateOrdinal,
+  shouldApplyPenalty
 } from './cdLedgerEngine';
 
 export const financeCalculationService = {
@@ -221,7 +222,7 @@ export const financeCalculationService = {
    * Calculates penalty (overdue) interest based on setting
    */
   calculatePenaltyFromSetting(principal: number, overdueDays: number, setting: FinanceLedgerSetting): number {
-    const penaltyDays = this.bankersRound(overdueDays) <= 5 ? 0 : overdueDays;
+    const penaltyDays = shouldApplyPenalty(overdueDays) ? overdueDays : 0;
     if (penaltyDays <= 0) return 0;
     return this.calculateSimpleInterest(principal, setting.overdue, penaltyDays, setting.days_per_year);
   },
@@ -334,7 +335,7 @@ export const financeCalculationService = {
     periodDays: number,
     interestRate: number,
     penaltyRate: number,
-    graceDays: number,
+    _graceDays: number,
     totalRenewedDays: number,
     paymentDate: string
   ) {
@@ -345,7 +346,7 @@ export const financeCalculationService = {
       pendingInterest = Number(((principal * interestRate * rawDueDays) / periodDays / 100).toFixed(2));
     }
     let penalty = 0;
-    if (rawDueDays > graceDays) {
+    if (shouldApplyPenalty(rawDueDays)) {
       penalty = Number(((principal * penaltyRate * rawDueDays) / periodDays / 100).toFixed(2));
     }
     const presentDue = Number((pendingInterest + penalty).toFixed(2));
@@ -727,7 +728,7 @@ export const financeCalculationService = {
       displayDays: pos.displayDays,
       daysRemaining: pos.exactDueDays < 0 ? Math.abs(pos.exactDueDays) : 0,
       nextDueDate: null,
-      penaltyDays: Math.round(pos.exactDueDays) > loan.grace_days ? pos.exactDueDays : 0,
+      penaltyDays: shouldApplyPenalty(pos.exactDueDays) ? pos.exactDueDays : 0,
       interest: pos.accruedInterest,
       penalty: pos.accruedPenalty,
       outstandingInterest: pos.accruedInterest,

@@ -148,6 +148,7 @@ describe('cdLedgerEngine Unit Tests', () => {
       contractualPositionDate: '2026-05-27',
       currentDueDate: '2026-05-28',
       fractionalCarry: 0.81,
+      displayDays: 39.19,
       displayDueDays: 39,
       exactDueDays: 39.19,
       dailyInterest: 750,
@@ -179,6 +180,7 @@ describe('cdLedgerEngine Unit Tests', () => {
       contractualPositionDate: '2026-05-27',
       currentDueDate: '2026-05-28',
       fractionalCarry: 0.81,
+      displayDays: 39.19,
       displayDueDays: 39,
       exactDueDays: 39.19,
       dailyInterest: 750,
@@ -212,6 +214,7 @@ describe('cdLedgerEngine Unit Tests', () => {
       contractualPositionDate: '2026-05-27',
       currentDueDate: '2026-05-28',
       fractionalCarry: 0.81,
+      displayDays: 39.19,
       displayDueDays: 39,
       exactDueDays: 39.19,
       dailyInterest: 750,
@@ -243,6 +246,7 @@ describe('cdLedgerEngine Unit Tests', () => {
       contractualPositionDate: '2026-05-27',
       currentDueDate: '2026-05-28',
       fractionalCarry: 0.81,
+      displayDays: 39.19,
       displayDueDays: 39,
       exactDueDays: 39.19,
       dailyInterest: 750,
@@ -274,6 +278,7 @@ describe('cdLedgerEngine Unit Tests', () => {
       contractualPositionDate: '2026-05-27',
       currentDueDate: '2026-05-28',
       fractionalCarry: 0.81,
+      displayDays: 39.19,
       displayDueDays: 39,
       exactDueDays: 39.19,
       dailyInterest: 750,
@@ -318,6 +323,7 @@ describe('cdLedgerEngine Unit Tests', () => {
       contractualPositionDate: '2026-05-27',
       currentDueDate: '2026-05-28',
       fractionalCarry: 0.81,
+      displayDays: 39.19,
       displayDueDays: 39,
       exactDueDays: 39.19,
       dailyInterest: 750,
@@ -334,5 +340,12 @@ describe('cdLedgerEngine Unit Tests', () => {
     expect(() => {
       cdEngine.allocateCDPayment(mockPos, 22500.00, 'Unsupported' as any, 30);
     }).toThrow('Unsupported CD payment action: Unsupported');
+  });
+
+  it('verifies shouldApplyPenalty edge cases correctly', () => {
+    expect(cdEngine.shouldApplyPenalty(5.49)).toBe(false);
+    expect(cdEngine.shouldApplyPenalty(5.50)).toBe(false);
+    expect(cdEngine.shouldApplyPenalty(5.51)).toBe(true);
+    expect(cdEngine.shouldApplyPenalty(6.00)).toBe(true);
   });
 });

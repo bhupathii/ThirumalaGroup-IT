@@ -85,6 +85,10 @@ export function roundCDMoney(value: number): number {
   return Math.round((value + 1e-9) * 100) / 100;
 }
 
+export function shouldApplyPenalty(dueDays: number): boolean {
+  return dueDays > 5.50;
+}
+
 export function roundRenewedDays(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -406,7 +410,7 @@ export function getCDAccountPosition(
   const dailyPenalty = vbaRound((principalBalance * (contract.penaltyRate / 100)) / 30, 2);
 
   const accruedInterest = roundCDMoney(dailyInterest * exactDueDays);
-  const penaltyEligible = vbaRound(exactDueDays, 0) > contract.graceDays;
+  const penaltyEligible = shouldApplyPenalty(exactDueDays);
   const accruedPenalty = (exactDueDays <= 0 || !penaltyEligible) ? 0 : roundCDMoney(dailyPenalty * exactDueDays);
 
   const todayDue = roundCDMoney(accruedInterest + accruedPenalty);
@@ -450,10 +454,10 @@ export function allocateCDRenewalPayment(
   displayDueDaysBeforePayment: number,
   dailyInterest: number,
   dailyPenalty: number,
-  graceDays: number
+  _graceDays: number
 ): { renewedDays: number, interestPaidExact: number, penaltyPaidExact: number, interestLedgerCredit: number, penaltyLedgerCredit: number } {
   
-  const penaltyEligible = displayDueDaysBeforePayment > graceDays;
+  const penaltyEligible = shouldApplyPenalty(displayDueDaysBeforePayment);
   const initialPenalty = penaltyEligible ? vbaRound(dailyPenalty * displayDueDaysBeforePayment, 2) : 0;
 
   const renewedDays = vbaRound((cash - initialPenalty) / dailyInterest, 2);
@@ -506,7 +510,6 @@ export function simulateAccessRenewEventChain(
 
   // 2. PENALTY ELIGIBILITY & 3. RENEW LOSTFOCUS EVENT SIMULATION
   const checkDueDays = vbaRound(exactDueDays, 0);
-  const graceDays = position.periodDays === 45 ? 5 : 5; // standard grace is 5
   
   let penaltyAfterCalculating = 0;
   let lostFocusRDays = 0;
@@ -514,7 +517,7 @@ export function simulateAccessRenewEventChain(
   const dailyInterestLostFocus = vbaRound(principal * rate / 100 / 30, 2);
   const dailyPenalty = vbaRound(principal * penaltyRate / 100 / 30, 2);
   
-  if (checkDueDays <= graceDays) {
+  if (!shouldApplyPenalty(exactDueDays)) {
     penaltyAfterCalculating = 0;
     lostFocusRDays = dailyInterestLostFocus > 0 ? vbaRound(cash / dailyInterestLostFocus, 0) : 0;
   } else {
