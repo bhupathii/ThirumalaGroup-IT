@@ -237,8 +237,8 @@ const DetailedLedgerFinance: React.FC = () => {
           title={
             <div className="flex justify-between items-center w-full">
               <span className="text-[17px] font-bold uppercase">Ledger Transactions</span>
-              <span className="font-mono text-slate-500 text-sm font-bold uppercase">
-                {new Date(fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })} to {new Date(toDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+              <span className="font-mono text-slate-400 text-[12px] font-bold uppercase">
+                {filteredEntries.length} entries
               </span>
             </div>
           }
@@ -293,7 +293,7 @@ const DetailedLedgerFinance: React.FC = () => {
                           </td>
                           <td className="px-2 py-1 font-mono text-slate-900 font-bold truncate text-[12px] max-w-[128px]">{entry.accountOrLoanNo || '—'}</td>
                           <td className="px-2 py-1 text-slate-800 uppercase truncate text-[12px] max-w-[144px]">{entry.headOfAccount}</td>
-                          <td className="px-2 py-1 text-slate-700 uppercase truncate text-[12px] max-w-[160px]">{entry.customerName || entry.accountOrLoanNo || '—'}</td>
+                          <td className="px-2 py-1 text-slate-700 uppercase text-[12px] break-words">{entry.customerName || entry.accountOrLoanNo || '—'}</td>
                           <td className="px-2 py-1 text-right text-red-700 font-bold whitespace-nowrap font-mono text-[12px]">
                             {entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
