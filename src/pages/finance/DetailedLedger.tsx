@@ -234,14 +234,7 @@ const DetailedLedgerFinance: React.FC = () => {
       {/* Detailed Ledger Sheet */}
       <div className={showPrintPreview ? 'print:hidden' : ''}>
         <Card
-          title={
-            <div className="flex justify-between items-center w-full">
-              <span className="text-[17px] font-bold uppercase">Ledger Transactions</span>
-              <span className="font-mono text-slate-400 text-[12px] font-bold uppercase">
-                {filteredEntries.length} entries
-              </span>
-            </div>
-          }
+          title={<span className="text-[17px] font-bold uppercase">Ledger Transactions</span>}
           subtitle={`Showing ${filteredEntries.length} entries matching filters`}
           className="shadow-sm border-slate-200 rounded"
         >
