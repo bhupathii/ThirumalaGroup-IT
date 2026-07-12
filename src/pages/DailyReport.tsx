@@ -896,7 +896,7 @@ const DailyReport: React.FC = () => {
                               {entry.users || 'Unknown User'}
                             </div>
                             <div className='text-gray-500'>
-                              {entry.entry_time ? format(new Date(entry.entry_time), 'dd/MM/yyyy HH:mm') : 'N/A'}
+                              {entry.entry_time ? format(new Date(entry.entry_time), 'dd/MM/yyyy hh:mm aa') : 'N/A'}
                             </div>
                           </div>
                         ) : (

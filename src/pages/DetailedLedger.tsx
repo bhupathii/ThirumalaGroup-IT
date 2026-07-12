@@ -1612,7 +1612,7 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
                       {entry.user}
                     </td>
                     <td className='px-0.5 py-1 text-gray-500 font-medium'>
-                      {format(new Date(entry.entryTime), 'dd/MM/yyyy HH:mm:ss')}
+                      {format(new Date(entry.entryTime), 'dd/MM/yyyy hh:mm:ss aa')}
                     </td>
                   </tr>
                 ))}

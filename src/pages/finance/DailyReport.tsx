@@ -264,7 +264,7 @@ const DailyReportFinance: React.FC = () => {
       tx.credit,
       tx.debit,
       tx.userName || '',
-      tx.createdAt ? new Date(tx.createdAt).toLocaleTimeString('en-GB') : ''
+      tx.createdAt ? new Date(tx.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : ''
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -287,7 +287,7 @@ const DailyReportFinance: React.FC = () => {
         <h2 className="text-center text-lg border-b pb-2 mb-4">DAILY TRANSACTION LOG</h2>
         <div className="flex justify-between text-[11px] mb-4">
           <div>DATE: {displayDate}</div>
-          <div>GENERATED TIME: {new Date().toLocaleTimeString('en-IN')}</div>
+          <div>GENERATED TIME: {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</div>
         </div>
 
         {/* Totals Grid */}
@@ -504,7 +504,7 @@ const DailyReportFinance: React.FC = () => {
                         </td>
                         <td className="px-4 py-3 uppercase text-slate-500">{tx.userName || 'Staff'}</td>
                         <td className="px-4 py-3 font-mono text-slate-400 text-[10px]">
-                          {tx.createdAt ? new Date(tx.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          {tx.createdAt ? new Date(tx.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}
                         </td>
                       </tr>
                     ))}
@@ -594,7 +594,7 @@ const DailyReportFinance: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-3 border-t pt-2 text-[10px] text-slate-450">
                 <div><span>Entered By: {selectedTx.userName || 'Staff'}</span></div>
-                <div><span>Time: {selectedTx.createdAt ? new Date(selectedTx.createdAt).toLocaleTimeString('en-GB') : '—'}</span></div>
+                <div><span>Time: {selectedTx.createdAt ? new Date(selectedTx.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) : '—'}</span></div>
               </div>
             </div>
           </div>
