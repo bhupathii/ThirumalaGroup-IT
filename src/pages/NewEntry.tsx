@@ -217,8 +217,17 @@ const NewEntry: React.FC = () => {
     quantityChecked: false,
   });
 
-  // Recent entries hook - moved after entry state declaration
   const { data: recentEntries, isLoading: recentLoading } = useRecentEntriesByDate(entry.date);
+
+  const totalCredit = React.useMemo(() => {
+    return Array.isArray(recentEntries) ? recentEntries.reduce((sum, r) => sum + (Number(r.credit) || 0), 0) : 0;
+  }, [recentEntries]);
+
+  const totalDebit = React.useMemo(() => {
+    return Array.isArray(recentEntries) ? recentEntries.reduce((sum, r) => sum + (Number(r.debit) || 0), 0) : 0;
+  }, [recentEntries]);
+
+  const netBalance = totalCredit - totalDebit;
 
   const [dualEntryEnabled, setDualEntryEnabled] = useState(false);
   const [showAllRecent, setShowAllRecent] = useState(false);
@@ -1979,15 +1988,24 @@ const NewEntry: React.FC = () => {
         </div>
       )}
 
-      {/* Main Content - Vertical Layout */}
-      <div className='flex-1 p-1'>
-        <div className='w-full max-w-7xl mx-auto flex flex-col'>
+      {/* Main Content - Side-by-Side: 40% Form, 60% Recent Entries */}
+      <div className='flex-1 p-2 w-full'>
+        <div className='w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-3 items-start'>
           {/* Recent Transactions Section */}
-          <div className='w-full mb-4'>
+          <div className='lg:col-span-7 lg:order-2 w-full space-y-2'>
+            {/* Totals Ribbon */}
+            <div className='flex gap-3 p-3 bg-white border border-gray-250 rounded shadow-sm text-sm font-bold uppercase items-center justify-between'>
+              <div className='flex items-center gap-1'>Total Cr: <span className='text-green-750 font-mono'>₹{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+              <div className='w-px h-4 bg-gray-300'></div>
+              <div className='flex items-center gap-1'>Total Dr: <span className='text-red-755 font-mono'>₹{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+              <div className='w-px h-4 bg-gray-300'></div>
+              <div className='flex items-center gap-1'>Balance: <span className={`${netBalance >= 0 ? 'text-green-800' : 'text-red-800'} font-mono`}>₹{netBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+            </div>
+
             <Card
               title='Recent Transactions'
-              subtitle={`Entries for ${format(new Date(entry.date), 'dd-MMM-yyyy')} (LIFO - Last In First Out)`}
-              className='bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-md'
+              subtitle={`Entries for ${format(new Date(entry.date), 'dd-MMM-yyyy')} (LIFO)`}
+              className='bg-white border-gray-250 shadow-sm'
             >
               {recentLoading ? (
                 <div className='text-center py-8'>
@@ -2114,10 +2132,10 @@ const NewEntry: React.FC = () => {
             </Card>
           </div>
 
-          {/* Entry Form - Full Panel */}
-          <div className='w-full'>
+          {/* Entry Form - 40% Panel */}
+          <div className='lg:col-span-5 lg:order-1 w-full'>
             <Card
-              className='p-2 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg'
+              className='p-3 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg'
             >
               <form ref={formRef} onSubmit={handleSubmit} className='space-y-2 text-xs' style={{ fontFamily: 'Times New Roman', fontSize: '12px' }}>
                 {/* Dual Entry Toggle */}

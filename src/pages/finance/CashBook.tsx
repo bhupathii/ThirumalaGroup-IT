@@ -535,7 +535,7 @@ const CashBook: React.FC = () => {
                   <option value="">SELECT...</option>
                   {accounts.map(acc => (
                     <option key={acc.id} value={acc.id}>
-                      {acc.account_name.toUpperCase()} {acc.report_classification ? `[${acc.report_classification.replace(/_/g, ' ')}]` : '[UNCLASSIFIED]'}
+                      {acc.account_name.toUpperCase()}
                     </option>
                   ))}
                 </select>
@@ -833,7 +833,7 @@ const CashBook: React.FC = () => {
                 required
               />
 
-              <div>
+              <div className="hidden">
                 <label className="finance-caption uppercase block mb-1">REPORT CLASSIFICATION *</label>
                 <select
                   value={newAccountClassification}
@@ -907,7 +907,7 @@ const CashBook: React.FC = () => {
                       required
                       uppercase
                     />
-                    <div>
+                    <div className="hidden">
                       <label className="finance-caption uppercase block mb-1">REPORT CLASSIFICATION *</label>
                       <select
                         value={editAccountClassification}
@@ -945,7 +945,6 @@ const CashBook: React.FC = () => {
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
                       <th className="px-4 py-2.5">Account Name</th>
-                      <th className="px-4 py-2.5">Report Classification</th>
                       <th className="px-4 py-2.5 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -955,17 +954,6 @@ const CashBook: React.FC = () => {
                       .map(acc => (
                         <tr key={acc.id} className="hover:bg-slate-50/50">
                           <td className="px-4 py-2.5 font-bold uppercase">{acc.account_name}</td>
-                          <td className="px-4 py-2.5">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                              acc.report_classification === 'BALANCE_SHEET'
-                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                                : acc.report_classification === 'PROFIT_AND_LOSS'
-                                ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                                : 'bg-rose-50 text-rose-700 border border-rose-100 font-bold'
-                            }`}>
-                              {acc.report_classification ? acc.report_classification.replace(/_/g, ' ') : 'UNCLASSIFIED'}
-                            </span>
-                          </td>
                           <td className="px-4 py-2.5 text-right flex gap-3 justify-end items-center">
                             <button
                               onClick={() => {

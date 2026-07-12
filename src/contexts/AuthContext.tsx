@@ -218,6 +218,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           const sessionAge = Date.now() - parseInt(sessionTime);
           const SESSION_DURATION = 24 * 60 * 60 * 1000;
           if (sessionAge < SESSION_DURATION) {
+            // Check if user is active in DB
+            const { data: dbUserCheck, error: checkError } = await supabase
+              .from('users')
+              .select('is_active')
+              .eq('id', parsedUser.id)
+              .single();
+
+            if (checkError || !dbUserCheck || dbUserCheck.is_active === false) {
+              sessionStorage.removeItem('thirumala_user');
+              sessionStorage.removeItem('thirumala_session_time');
+              supabaseDB.setUserId('');
+              setUser(null);
+              setLoading(false);
+              return;
+            }
+
             try {
               const { featuresByMode } = await loadFeaturesForUser(
                 parsedUser.id,

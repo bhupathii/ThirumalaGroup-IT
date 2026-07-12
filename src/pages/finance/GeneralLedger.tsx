@@ -2,9 +2,8 @@ import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo } from 'react';
 import Button from '../../components/UI/Button';
 import Card from '../../components/UI/Card';
-import Input from '../../components/UI/Input';
 import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../../services/dailyFinancialTransactionService';
-import { Printer, RefreshCw, ArrowLeft, ChevronRight, X, Calendar, Search } from 'lucide-react';
+import { Printer, RefreshCw, ArrowLeft, ChevronRight, X, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useNavigate } from 'react-router-dom';
@@ -84,33 +83,33 @@ const GeneralLedger: React.FC = () => {
       debit += s.debit;
       credit += s.credit;
     });
-    return {
-      debit,
-      credit,
-      balance: credit - debit
-    };
+    return { debit, credit, balance: credit - debit };
   }, [summaryData]);
 
-  // Drilldown entries
+  // Filter entries for drill-down view modal
   const drillDownEntries = useMemo(() => {
     if (!selectedHead) return [];
-    let list = allEntries.filter(entry => entry.headOfAccount === selectedHead);
+    let list = allEntries.filter(e => e.headOfAccount === selectedHead);
 
     if (drillSearchQuery.trim()) {
       const q = drillSearchQuery.toLowerCase().trim();
-      list = list.filter(entry => 
-        (entry.accountOrLoanNo || '').toLowerCase().includes(q) ||
-        (entry.particulars || '').toLowerCase().includes(q) ||
-        (entry.customerName || '').toLowerCase().includes(q) ||
-        (entry.userName || '').toLowerCase().includes(q) ||
-        String(entry.debit).includes(q) ||
-        String(entry.credit).includes(q)
+      list = list.filter(e => 
+        (e.particulars && e.particulars.toLowerCase().includes(q)) ||
+        (e.accountOrLoanNo && e.accountOrLoanNo.toLowerCase().includes(q)) ||
+        (e.customerName && e.customerName.toLowerCase().includes(q))
       );
     }
-    return list;
+
+    return list.sort((a, b) => {
+      if (a.transactionDate !== b.transactionDate) {
+        return a.transactionDate.localeCompare(b.transactionDate);
+      }
+      return (a.createdAt || '').localeCompare(b.createdAt || '');
+    });
   }, [allEntries, selectedHead, drillSearchQuery]);
 
-  const drillDownTotals = useMemo(() => {
+  // Compute live drill-down summary
+  const drillTotals = useMemo(() => {
     let debit = 0;
     let credit = 0;
     drillDownEntries.forEach(e => {
@@ -123,42 +122,47 @@ const GeneralLedger: React.FC = () => {
   const displayDateRange = `${new Date(startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-')} TO ${new Date(endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-')}`;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-6 print:p-0">
+    <div className="space-y-3 w-full select-none text-slate-800 p-2 font-outfit">
+      
       {/* Header */}
-      <div className={`flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <div className={`flex justify-between items-center bg-white border border-slate-200 p-3 rounded-lg shadow-sm ${showPrintPreview ? 'print:hidden' : ''}`}>
         <div>
-          <h1 className="finance-h1">General Ledger</h1>
-          <p className="finance-small-label uppercase">Summary of accounts with absolute drill-down capabilities</p>
+          <h1 className="text-[24px] font-bold uppercase tracking-tight text-slate-900 leading-none">General Ledger</h1>
+          <p className="text-[14px] text-slate-400 font-bold uppercase mt-1">Summary of accounts with absolute drill-down capabilities</p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 finance-header-time uppercase">
+        <div className="flex gap-1.5 items-center">
+          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-250 font-bold text-xs h-[48px] px-3 uppercase">
             Back
           </Button>
-          <Button onClick={fetchLedgerData} variant="secondary" size="sm" icon={RefreshCw} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 finance-header-time uppercase">
+          <Button onClick={fetchLedgerData} variant="secondary" size="sm" icon={RefreshCw} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-250 font-bold text-xs h-[48px] px-3 uppercase">
             Refresh
           </Button>
-          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white finance-header-time uppercase">
+          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white font-bold text-xs h-[48px] px-4 uppercase">
             Print Summary
           </Button>
         </div>
       </div>
 
-      {/* Date Filters */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl ${showPrintPreview ? 'print:hidden' : ''}`}>
-        <Input
-          label="FROM DATE"
-          type="date"
-          value={startDate}
-          onChange={setStartDate}
-          icon={Calendar}
-        />
-        <Input
-          label="TO DATE"
-          type="date"
-          value={endDate}
-          onChange={setEndDate}
-          icon={Calendar}
-        />
+      {/* Date Filters in One Row */}
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-white border border-slate-200 rounded-lg shadow-sm ${showPrintPreview ? 'print:hidden' : ''}`}>
+        <div className="space-y-1">
+          <label className="text-[15px] font-bold text-slate-500 uppercase block">FROM DATE</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] focus:outline-none h-[48px] font-bold"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[15px] font-bold text-slate-500 uppercase block">TO DATE</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] focus:outline-none h-[48px] font-bold"
+          />
+        </div>
       </div>
 
       {/* Summary Table */}
@@ -166,66 +170,65 @@ const GeneralLedger: React.FC = () => {
         <Card
           title={
             <div className="flex justify-between items-center w-full">
-              <span className="finance-card-title uppercase">Accounts Summary</span>
-              <span className="font-mono text-slate-500 text-right finance-small-label uppercase">
+              <span className="text-[17px] font-bold uppercase">Accounts Summary</span>
+              <span className="font-mono text-slate-500 text-sm font-bold uppercase">
                 {displayDateRange}
               </span>
             </div>
           }
           subtitle="Click any row to drill down into transaction details"
-          className="shadow-md border-slate-150 rounded-xl overflow-hidden"
+          className="shadow-sm border-slate-200 rounded overflow-hidden"
         >
           {loading ? (
             <div className="flex justify-center py-16">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-[#0b1329]"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-slate-900"></div>
             </div>
           ) : (
-            <div className="space-y-6">
-              <div className="overflow-x-auto border border-slate-150 rounded-xl">
-                <table className="min-w-full divide-y divide-slate-150 finance-caption">
-                  <thead>
-                    <tr className="bg-slate-50">
-                      <th className="finance-small-label uppercase">Head of Account</th>
-                      <th className="finance-small-label uppercase">Classification</th>
-                      <th className="text-right finance-small-label uppercase">Debit (Dr)</th>
-                      <th className="text-right finance-small-label uppercase">Credit (Cr)</th>
-                      <th className="text-right finance-small-label uppercase">Balance</th>
-                      <th className="text-center finance-small-label uppercase w-20">Drill</th>
+            <div className="space-y-3">
+              <div className="overflow-x-auto border border-slate-200 rounded max-h-[550px] overflow-y-auto custom-scrollbar">
+                <table className="w-full text-[16px] divide-y divide-slate-200 table-fixed">
+                  <thead className="bg-slate-100 sticky top-0 z-10 text-slate-700">
+                    <tr className="divide-x divide-slate-200">
+                      <th className="px-3 py-2 text-left font-bold text-[15px] uppercase">Head of Account</th>
+                      <th className="w-48 px-3 py-2 text-right font-bold text-[15px] uppercase">Debit (Dr)</th>
+                      <th className="w-48 px-3 py-2 text-right font-bold text-[15px] uppercase">Credit (Cr)</th>
+                      <th className="w-48 px-3 py-2 text-right font-bold text-[15px] uppercase">Balance</th>
+                      <th className="w-20 px-2 py-2 text-center font-bold text-[15px] uppercase">Drill</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-slate-100">
+                  <tbody className="bg-white divide-y divide-slate-100 divide-x divide-slate-55 font-semibold text-slate-800">
                     {summaryData.map(s => (
                       <tr 
                         key={s.head} 
                         onClick={() => setSelectedHead(s.head)}
                         className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+                        style={{ height: '38px' }}
                       >
-                        <td className="px-4 py-3.5 text-slate-900 font-bold uppercase finance-input">{s.head}</td>
-                        <td className="px-4 py-3.5 text-slate-500 font-semibold uppercase">{s.classification}</td>
-                        <td className="px-4 py-3.5 text-right text-rose-600 font-semibold whitespace-nowrap">
+                        <td className="px-3 py-1.5 text-slate-900 font-bold uppercase truncate">{s.head}</td>
+                        <td className="px-3 py-1.5 text-right text-red-700 font-bold font-mono whitespace-nowrap">
                           {s.debit > 0 ? `₹${s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                         </td>
-                        <td className="px-4 py-3.5 text-right text-emerald-600 font-semibold whitespace-nowrap">
+                        <td className="px-3 py-1.5 text-right text-emerald-700 font-bold font-mono whitespace-nowrap">
                           {s.credit > 0 ? `₹${s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                         </td>
-                        <td className={`px-4 py-3.5 text-right font-black whitespace-nowrap ${s.balance >= 0 ? 'text-emerald-800' : 'text-rose-850'}`}>
+                        <td className={`px-3 py-1.5 text-right font-black font-mono whitespace-nowrap ${s.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
                           ₹{Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}
                         </td>
-                        <td className="px-4 py-3.5 text-center text-slate-400">
+                        <td className="px-2 py-1.5 text-center text-slate-400">
                           <ChevronRight className="w-4 h-4 mx-auto" />
                         </td>
                       </tr>
                     ))}
                     {/* Overall totals */}
-                    <tr className="bg-slate-50 font-black border-t-2 border-slate-200">
-                      <td colSpan={2} className="px-4 py-4 text-slate-800 uppercase finance-input">Grand Total:</td>
-                      <td className="px-4 py-4 text-right text-rose-700 font-extrabold whitespace-nowrap">
+                    <tr className="bg-slate-50 font-black divide-x divide-slate-150 border-t-2 border-slate-200" style={{ height: '42px' }}>
+                      <td className="px-3 py-2 text-slate-800 uppercase text-[15px]">Grand Total:</td>
+                      <td className="px-3 py-2 text-right text-red-755 font-black font-mono whitespace-nowrap">
                         ₹{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-4 py-4 text-right text-emerald-700 font-extrabold whitespace-nowrap">
+                      <td className="px-3 py-2 text-right text-emerald-755 font-black font-mono whitespace-nowrap">
                         ₹{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className={`px-4 py-4 text-right font-black whitespace-nowrap ${overallTotals.balance >= 0 ? 'text-emerald-900' : 'text-rose-900'}`}>
+                      <td className={`px-3 py-2 text-right font-black font-mono whitespace-nowrap ${overallTotals.balance >= 0 ? 'text-emerald-900' : 'text-rose-905'}`}>
                         ₹{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}
                       </td>
                       <td></td>
@@ -240,94 +243,113 @@ const GeneralLedger: React.FC = () => {
 
       {/* Drill Down Modal */}
       {selectedHead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-5xl w-full h-[85vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-2xl border border-slate-200 max-w-5xl w-full h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-900 text-white">
               <div>
-                <h3 className="text-lg font-black text-slate-900 uppercase">
+                <h3 className="text-sm font-bold uppercase tracking-tight leading-none text-slate-100">
                   Drill Down: {selectedHead}
                 </h3>
-                <p className="text-xs text-slate-500 font-semibold uppercase mt-0.5">{displayDateRange}</p>
+                <p className="text-[12px] text-slate-350 font-semibold uppercase mt-1 leading-none">{displayDateRange}</p>
               </div>
               <button 
                 onClick={() => { setSelectedHead(null); setDrillSearchQuery(''); }}
-                className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 rounded-lg hover:bg-slate-100"
+                className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <Input 
-                    label="Search Drill Down Entries" 
-                    value={drillSearchQuery} 
-                    onChange={setDrillSearchQuery}
-                    placeholder="Search by account number, amount, particulars..." 
-                    icon={Search}
-                  />
-                </div>
-                <div className="flex gap-4 items-end pb-1.5 text-center text-xs">
-                  <div className="px-4 py-2 bg-red-50 border border-red-100 rounded-lg">
-                    <span className="text-red-600 block uppercase font-bold text-[9px]">Drill Debit</span>
-                    <span className="font-bold text-red-800">₹{drillDownTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="px-4 py-2 bg-green-50 border border-green-100 rounded-lg">
-                    <span className="text-green-600 block uppercase font-bold text-[9px]">Drill Credit</span>
-                    <span className="font-bold text-green-800">₹{drillDownTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className={`px-4 py-2 border rounded-lg ${drillDownTotals.balance >= 0 ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-rose-50 border-rose-100 text-rose-800'}`}>
-                    <span className="block uppercase font-bold text-[9px]">Drill Net</span>
-                    <span className="font-bold">₹{Math.abs(drillDownTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {drillDownTotals.balance >= 0 ? 'Cr' : 'Dr'}</span>
-                  </div>
-                </div>
+            {/* Modal Filters */}
+            <div className="p-3 bg-slate-50 border-b border-slate-100 flex gap-4 items-center">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+                <input
+                  type="text"
+                  value={drillSearchQuery}
+                  onChange={(e) => setDrillSearchQuery(e.target.value)}
+                  placeholder="Filter drill transactions by account or particulars..."
+                  className="w-full pl-8 pr-3 bg-white border border-slate-250 rounded text-sm h-9 focus:outline-none font-bold"
+                />
+              </div>
+              {drillSearchQuery && (
+                <button
+                  onClick={() => setDrillSearchQuery('')}
+                  className="text-xs font-bold text-slate-500 uppercase hover:underline"
+                >
+                  Clear filter
+                </button>
+              )}
+            </div>
+
+            {/* Modal Body & Table */}
+            <div className="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-3">
+              {/* Compact Ribbon for Drilldown */}
+              <div className="flex gap-4 p-2 bg-slate-100 border border-slate-200 rounded text-xs font-bold uppercase items-center justify-between">
+                <div>Drill Dr: <span className="text-red-700 font-mono">₹{drillTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                <div className="w-px h-4 bg-slate-300"></div>
+                <div>Drill Cr: <span className="text-emerald-700 font-mono">₹{drillTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                <div className="w-px h-4 bg-slate-300"></div>
+                <div>Net Balance: <span className={`${drillTotals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'} font-mono`}>₹{drillTotals.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
               </div>
 
-              <div className="overflow-x-auto border border-slate-150 rounded-xl flex-1">
-                <table className="min-w-full divide-y divide-slate-150 finance-caption">
-                  <thead>
-                    <tr className="bg-slate-50">
-                      <th className="finance-small-label uppercase">Sl No</th>
-                      <th className="finance-small-label uppercase">Date</th>
-                      <th className="finance-small-label uppercase">Account / Loan</th>
-                      <th className="text-right finance-small-label uppercase">Debit (Dr)</th>
-                      <th className="text-right finance-small-label uppercase">Credit (Cr)</th>
-                      <th className="finance-small-label uppercase">Particulars</th>
-                      <th className="finance-small-label uppercase">User</th>
+              <div className="border border-slate-200 rounded overflow-hidden">
+                <table className="w-full text-xs divide-y divide-slate-200">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-bold text-slate-600 uppercase">Date</th>
+                      <th className="px-3 py-2 text-left font-bold text-slate-600 uppercase">Account/Loan</th>
+                      <th className="px-3 py-2 text-left font-bold text-slate-600 uppercase">Customer</th>
+                      <th className="px-3 py-2 text-left font-bold text-slate-600 uppercase">Particulars</th>
+                      <th className="px-3 py-2 text-right font-bold text-slate-600 uppercase">Debit (Dr)</th>
+                      <th className="px-3 py-2 text-right font-bold text-slate-600 uppercase">Credit (Cr)</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 bg-white">
                     {drillDownEntries.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-slate-400 finance-input">
-                          No transactions found.
+                        <td colSpan={6} className="px-4 py-8 text-center text-slate-400 font-bold uppercase">
+                          No transaction records matching filter.
                         </td>
                       </tr>
                     ) : (
-                      drillDownEntries.map((e, idx) => (
-                        <tr key={e.id} className="hover:bg-slate-50/30">
-                          <td className="px-3 py-2.5 text-slate-500 finance-input">{idx + 1}</td>
-                          <td className="px-3 py-2.5 text-slate-650 whitespace-nowrap finance-input">
+                      drillDownEntries.map(e => (
+                        <tr key={e.id} className="hover:bg-slate-50/50">
+                          <td className="px-3 py-1.5 font-mono text-[13px]">
                             {e.transactionDate.split('-').reverse().join('/')}
                           </td>
-                          <td className="px-3 py-2.5 font-mono text-slate-900 font-black">{e.accountOrLoanNo || '—'}</td>
-                          <td className="px-3 py-2.5 text-right text-rose-600 whitespace-nowrap font-medium">
+                          <td className="px-3 py-1.5 font-mono text-[13px] font-bold text-slate-900 uppercase">
+                            {e.accountOrLoanNo || '—'}
+                          </td>
+                          <td className="px-3 py-1.5 text-slate-800 uppercase text-[13px] font-bold">
+                            {e.customerName || e.accountOrLoanNo || '—'}
+                          </td>
+                          <td className="px-3 py-1.5 text-slate-600 uppercase text-[13px]">
+                            {e.particulars || '—'}
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono text-red-600 text-[13px] font-bold">
                             {e.debit > 0 ? `₹${e.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
-                          <td className="px-3 py-2.5 text-right text-emerald-600 whitespace-nowrap font-medium">
+                          <td className="px-3 py-1.5 text-right font-mono text-emerald-600 text-[13px] font-bold">
                             {e.credit > 0 ? `₹${e.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
-                          <td className="px-3 py-2.5 text-slate-700 max-w-xs break-words finance-input">{e.particulars}</td>
-                          <td className="px-3 py-2.5 text-slate-500 uppercase finance-input">{e.userName || 'Staff'}</td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3 border-t border-slate-200 flex justify-end bg-slate-50">
+              <button
+                onClick={() => { setSelectedHead(null); setDrillSearchQuery(''); }}
+                className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 font-bold text-xs uppercase rounded transition-colors"
+              >
+                Close View
+              </button>
             </div>
           </div>
         </div>
@@ -337,58 +359,66 @@ const GeneralLedger: React.FC = () => {
       <FinancePrintPreview
         isOpen={showPrintPreview}
         onClose={() => setShowPrintPreview(false)}
-        title="General Ledger Summary"
+        title="General Ledger Report"
         documentTitle={`GENERAL LEDGER SUMMARY: ${displayDateRange}`}
       >
-        {!loading && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-end border-b border-slate-900 pb-2">
-              <div>
-                <h2 className="text-xl font-bold uppercase text-slate-900">Thirumala Group Finance</h2>
-                <p className="text-[13px] uppercase text-slate-500">General Ledger Summary Statement</p>
-              </div>
-              <div className="text-right text-[13px] text-slate-600">
-                <p>Period: {startDate.split('-').reverse().join('/')} to {endDate.split('-').reverse().join('/')}</p>
-              </div>
-            </div>
+        <div className="text-center pb-6 border-b-2 border-slate-900">
+          <h2 className="finance-brand">TIRUMALA FINANCE</h2>
+          <p className="mt-1 finance-header-time uppercase">GENERAL LEDGER STATEMENT OF ACCOUNT SUMMARY</p>
+          <p className="text-slate-550 text-[10px] mt-0.5 uppercase">
+            PERIOD: {displayDateRange}
+          </p>
+        </div>
 
-            <table className="w-full border-collapse text-[11px]">
-              <thead>
-                <tr className="border-b-2 border-slate-800 bg-slate-100">
-                  <th className="p-2 text-left border">Head of Account</th>
-                  <th className="p-2 text-right border">Debit (Dr)</th>
-                  <th className="p-2 text-right border">Credit (Cr)</th>
-                  <th className="p-2 text-right border">Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summaryData.map(s => (
-                  <tr key={s.head} className="border-b">
-                    <td className="p-2 border font-bold uppercase">{s.head}</td>
-                    <td className="p-2 border text-right text-red-650">
-                      {s.debit > 0 ? `₹${s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                    </td>
-                    <td className="p-2 border text-right text-green-650">
-                      {s.credit > 0 ? `₹${s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                    </td>
-                    <td className={`p-2 border text-right font-black ${s.balance >= 0 ? 'text-emerald-800' : 'text-rose-850'}`}>
-                      ₹{Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="font-bold bg-slate-50 border-t-2 border-slate-800">
-                  <td className="p-2 border uppercase">Grand Total:</td>
-                  <td className="p-2 border text-right text-red-700">₹{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td className="p-2 border text-right text-green-700">₹{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td className={`p-2 border text-right font-black ${overallTotals.balance >= 0 ? 'text-emerald-900' : 'text-rose-900'}`}>
-                    ₹{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        {/* Overall summary numbers */}
+        <div className="grid grid-cols-3 gap-4 py-6 border-b border-slate-350 finance-caption">
+          <div>
+            <span className="text-slate-500 text-[9px] uppercase font-bold block">GRAND TOTAL DEBITS (Dr)</span>
+            <span className="text-red-700 text-lg font-black font-mono">₹{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
           </div>
-        )}
+          <div>
+            <span className="text-slate-500 text-[9px] uppercase font-bold block">GRAND TOTAL CREDITS (Cr)</span>
+            <span className="text-emerald-700 text-lg font-black font-mono">₹{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div>
+            <span className="text-slate-500 text-[9px] uppercase font-bold block">NET LEDGER VALUE</span>
+            <span className="text-slate-900 text-lg font-black font-mono">
+              {overallTotals.balance >= 0 ? 'Cr ' : 'Dr '}₹{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+
+        {/* Summary Table */}
+        <div className="py-6">
+          <table className="min-w-full divide-y divide-slate-300 finance-caption">
+            <thead>
+              <tr className="bg-slate-50">
+                <th className="py-2 px-3 text-left font-bold text-slate-700 uppercase">Head of Account</th>
+                <th className="py-2 px-3 text-right font-bold text-slate-700 uppercase">Dr</th>
+                <th className="py-2 px-3 text-right font-bold text-slate-700 uppercase">Cr</th>
+                <th className="py-2 px-3 text-right font-bold text-slate-700 uppercase">Net Balance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {summaryData.map(s => (
+                <tr key={s.head}>
+                  <td className="py-2 px-3 text-slate-800 font-bold uppercase">{s.head}</td>
+                  <td className="py-2 px-3 text-right font-mono text-red-600">{s.debit > 0 ? `₹${s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
+                  <td className="py-2 px-3 text-right font-mono text-emerald-600">{s.credit > 0 ? `₹${s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
+                  <td className="py-2 px-3 text-right font-mono font-bold">₹{Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}</td>
+                </tr>
+              ))}
+              <tr className="bg-slate-100 font-black border-t border-slate-350">
+                <td className="py-2.5 px-3 text-slate-900 uppercase">Grand Total:</td>
+                <td className="py-2.5 px-3 text-right font-mono">₹{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-2.5 px-3 text-right font-mono">₹{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-2.5 px-3 text-right font-mono">₹{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </FinancePrintPreview>
+
     </div>
   );
 };

@@ -24,6 +24,7 @@ import {
   Settings,
   RefreshCw,
   Phone,
+  PhoneCall,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -73,7 +74,6 @@ const FinanceSidebar: React.FC = () => {
       items: [
         { icon: PlusCircle, label: 'New Loan', path: '/finance/loan-entry', key: 'loan_entry' },
         { icon: Edit, label: 'Edit Loan', path: '/finance/edit-loan-entry', key: 'edit_loan_entry' },
-        { icon: FileText, label: 'Old-Data Entry', path: '/finance/old-data-entry', key: 'loan_entry' },
         { icon: UserPlus, label: 'New Customer', path: '/finance/new-customer', key: 'new_customers' },
         { icon: Users, label: 'Customers', path: '/finance/customers', key: 'new_customers' },
         { icon: UserPlus, label: 'New Partner', path: '/finance/new-partner', key: 'partners' },
@@ -101,6 +101,7 @@ const FinanceSidebar: React.FC = () => {
         { icon: BookOpen, label: 'General Ledger', path: '/finance/general-ledger', key: 'general_ledger' },
         { icon: AlertCircle, label: 'Dues List', path: '/finance/dues-ledger', key: 'dues_ledger' },
         { icon: Phone, label: 'Payment Follow-up', path: '/finance/payment-followup', key: 'payment_followup' },
+        { icon: PhoneCall, label: 'Call History', path: '/finance/call-history', key: 'payment_followup' },
         { icon: TrendingUp, label: 'Profit & Loss', path: '/finance/pl', key: 'pl' },
         { icon: FileCheck, label: 'Final Statement', path: '/finance/final-statement', key: 'final_statement' },
         { icon: Briefcase, label: 'Business Details', path: '/finance/business-report', key: 'business_report' },

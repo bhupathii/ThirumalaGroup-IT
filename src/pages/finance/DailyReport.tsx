@@ -1,7 +1,17 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Button from '../../components/UI/Button';
 import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../../services/dailyFinancialTransactionService';
-import { Printer, ChevronLeft, ChevronRight, ArrowLeft, Search, Calendar } from 'lucide-react';
+import { 
+  Printer, 
+  ChevronLeft, 
+  ChevronRight, 
+  ArrowLeft, 
+  Search, 
+  Calendar,
+  RefreshCw,
+  FileSpreadsheet,
+  SlidersHorizontal
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useNavigate } from 'react-router-dom';
@@ -25,13 +35,31 @@ const DailyReportFinance: React.FC = () => {
   const [showCalendar, setShowCalendar] = useState(false);
   const [reportActivityDates, setReportActivityDates] = useState<{ c_date: string }[]>([]);
 
-  // Filter states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sourceFilter, setSourceFilter] = useState<'ALL' | 'CD_LEDGER' | 'CAPITAL_ENTRY' | 'DAY_BOOK_ENTRY'>('ALL');
-  const [classificationFilter, setClassificationFilter] = useState<'ALL' | 'BALANCE_SHEET' | 'PROFIT_AND_LOSS' | 'UNCLASSIFIED'>('ALL');
+  // Expanded Filter states (Requirement 9)
+  const [searchQuery, setSearchQuery] = useState(''); // Quick search (Requirement 10)
+  const [accountFilter, setAccountFilter] = useState('ALL');
+  const [staffFilter, setStaffFilter] = useState('ALL');
+  const [receiptFilter, setReceiptFilter] = useState('');
+  const [loanFilter, setLoanFilter] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
+  const [txTypeFilter, setTxTypeFilter] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
 
+  // Modal / Drawer for clicked transaction (Requirement 1 & 3)
+  const [selectedTx, setSelectedTx] = useState<DailyFinancialTransaction | null>(null);
+
+  // Auto-refresh interval (Requirement 6)
   useEffect(() => {
     fetchDailyData();
+    const interval = setInterval(() => {
+      fetchDailyData(true); // silent refresh
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [selectedDate]);
+
+  // Load activity dates for calendar
+  useEffect(() => {
+    const d = new Date(selectedDate);
+    fetchActivityDates(d.getMonth() + 1, d.getFullYear());
   }, [selectedDate]);
 
   const handlePrevDay = () => {
@@ -44,6 +72,10 @@ const DailyReportFinance: React.FC = () => {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() + 1);
     setSelectedDate(d.toISOString().split('T')[0]);
+  };
+
+  const handleGoToToday = () => {
+    setSelectedDate(getLocalBusinessDateISO());
   };
 
   const fetchActivityDates = async (month: number, year: number) => {
@@ -59,8 +91,8 @@ const DailyReportFinance: React.FC = () => {
     }
   };
 
-  const fetchDailyData = async () => {
-    setLoading(true);
+  const fetchDailyData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       // 1. Calculate opening balance by summing all transactions from past to yesterday
       const yesterday = new Date(selectedDate);
@@ -85,43 +117,63 @@ const DailyReportFinance: React.FC = () => {
       setTransactions(todayTx);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load daily transactions log');
+      if (!silent) toast.error('Failed to load daily transactions log');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
-  // Filter transactions
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter(tx => {
-      const matchesSearch = 
-        tx.particulars.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tx.headOfAccount.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (tx.accountOrLoanNo && tx.accountOrLoanNo.toLowerCase().includes(searchQuery.toLowerCase()));
-
-      const matchesSource = sourceFilter === 'ALL' || tx.sourceType === sourceFilter;
-      const matchesClass = classificationFilter === 'ALL' || tx.reportClassification === classificationFilter;
-
-      return matchesSearch && matchesSource && matchesClass;
-    });
-  }, [transactions, searchQuery, sourceFilter, classificationFilter]);
-
-  // Compute filtered totals dynamically
-  const filteredTotals = useMemo(() => {
-    let credTotal = 0;
-    let debTotal = 0;
-    filteredTransactions.forEach(tx => {
-      credTotal += tx.credit;
-      debTotal += tx.debit;
+  // Extract unique accounts & staff list for dropdown filters
+  const filterOptions = useMemo(() => {
+    const accounts = new Set<string>();
+    const staff = new Set<string>();
+    transactions.forEach(tx => {
+      if (tx.headOfAccount) accounts.add(tx.headOfAccount);
+      if (tx.userName) staff.add(tx.userName);
     });
     return {
-      credits: credTotal,
-      debits: debTotal,
-      net: credTotal - debTotal
+      accounts: Array.from(accounts).sort(),
+      staff: Array.from(staff).sort()
     };
-  }, [filteredTransactions]);
+  }, [transactions]);
 
-  // Total daily summary
+  // Filtered transactions (Requirement 9 & 10 - Quick Search)
+  // Ordered NEWEST FIRST (Requirement 1)
+  const filteredTransactions = useMemo(() => {
+    const list = transactions.filter(tx => {
+      // Quick Search (Receipt, Loan, Customer, Account, Phone)
+      const q = searchQuery.toLowerCase().trim();
+      if (q) {
+        const matchesReceipt = tx.receiptOrVoucherNo?.toLowerCase().includes(q);
+        const matchesLoan = tx.accountOrLoanNo?.toLowerCase().includes(q);
+        const matchesCust = tx.customerName?.toLowerCase().includes(q) || tx.particulars?.toLowerCase().includes(q);
+        const matchesAcc = tx.headOfAccount?.toLowerCase().includes(q);
+        if (!matchesReceipt && !matchesLoan && !matchesCust && !matchesAcc) {
+          return false;
+        }
+      }
+
+      // Detailed filters
+      if (accountFilter !== 'ALL' && tx.headOfAccount !== accountFilter) return false;
+      if (staffFilter !== 'ALL' && tx.userName !== staffFilter) return false;
+      if (receiptFilter.trim() && !tx.receiptOrVoucherNo?.toLowerCase().includes(receiptFilter.toLowerCase().trim())) return false;
+      if (loanFilter.trim() && !tx.accountOrLoanNo?.toLowerCase().includes(loanFilter.toLowerCase().trim())) return false;
+      if (customerFilter.trim() && !tx.customerName?.toLowerCase().includes(customerFilter.toLowerCase().trim())) return false;
+      if (txTypeFilter === 'CREDIT' && tx.credit === 0) return false;
+      if (txTypeFilter === 'DEBIT' && tx.debit === 0) return false;
+
+      return true;
+    });
+
+    // Newest first sorting
+    return list.sort((a, b) => {
+      const aTime = a.createdAt || '';
+      const bTime = b.createdAt || '';
+      return bTime.localeCompare(aTime);
+    });
+  }, [transactions, searchQuery, accountFilter, staffFilter, receiptFilter, loanFilter, customerFilter, txTypeFilter]);
+
+  // Total daily summary (Reconciled Footer - Requirement 4)
   const dailyTotals = useMemo(() => {
     let credTotal = 0;
     let debTotal = 0;
@@ -132,19 +184,22 @@ const DailyReportFinance: React.FC = () => {
     return {
       credits: credTotal,
       debits: debTotal,
+      opening: openingBalance,
+      grandTotal: credTotal - debTotal,
       closing: openingBalance + credTotal - debTotal
     };
   }, [transactions, openingBalance]);
 
-  // Account level summaries
+  // Account Summaries Panel (Requirement 2 & 7)
   const accountSummaries = useMemo(() => {
     const summary: Record<string, { credit: number; debit: number }> = {};
-    filteredTransactions.forEach(tx => {
-      if (!summary[tx.headOfAccount]) {
-        summary[tx.headOfAccount] = { credit: 0, debit: 0 };
+    transactions.forEach(tx => {
+      const accName = tx.headOfAccount || 'UNCLASSIFIED';
+      if (!summary[accName]) {
+        summary[accName] = { credit: 0, debit: 0 };
       }
-      summary[tx.headOfAccount].credit += tx.credit;
-      summary[tx.headOfAccount].debit += tx.debit;
+      summary[accName].credit += tx.credit;
+      summary[accName].debit += tx.debit;
     });
     return Object.entries(summary).map(([account, totals]) => ({
       account,
@@ -152,259 +207,304 @@ const DailyReportFinance: React.FC = () => {
       debit: totals.debit,
       net: totals.credit - totals.debit
     })).sort((a, b) => a.account.localeCompare(b.account));
-  }, [filteredTransactions]);
+  }, [transactions]);
 
+  // Today's Receipts Panel (Requirement 3 & 8)
   const todayReceipts = useMemo(() => {
-    const receiptsMap = new Map<string, { receiptNo: string; accountNo: string; customerName: string; amount: number }>();
+    const receiptsList: Array<{ receiptNo: string; loanNo: string; borrower: string; amount: number; tx: DailyFinancialTransaction }> = [];
     transactions.forEach(tx => {
       if (tx.credit > 0 && tx.receiptOrVoucherNo) {
-        const key = tx.receiptOrVoucherNo;
-        const current = receiptsMap.get(key);
-        if (current) {
-          current.amount += tx.credit;
-        } else {
-          receiptsMap.set(key, {
-            receiptNo: key,
-            accountNo: tx.accountOrLoanNo || '—',
-            customerName: tx.customerName || tx.particulars || 'CD Customer',
-            amount: tx.credit
-          });
-        }
+        receiptsList.push({
+          receiptNo: tx.receiptOrVoucherNo,
+          loanNo: tx.accountOrLoanNo || '—',
+          borrower: tx.customerName || tx.particulars || 'CD Customer',
+          amount: tx.credit,
+          tx: tx
+        });
       }
     });
-    return Array.from(receiptsMap.values()).sort((a, b) => a.receiptNo.localeCompare(b.receiptNo));
+    return receiptsList.sort((a, b) => b.receiptNo.localeCompare(a.receiptNo));
   }, [transactions]);
+
+  const handleRowClick = (tx: DailyFinancialTransaction) => {
+    setSelectedTx(tx);
+  };
+
+  const handleReceiptClick = (tx: DailyFinancialTransaction) => {
+    setSelectedTx(tx);
+  };
+
+  const handleLoanClick = (loanNo: string) => {
+    if (!loanNo || loanNo === '—') return;
+    const clean = loanNo.toUpperCase();
+    if (clean.startsWith('CD')) {
+      navigate(`/finance/cd-ledger?loanId=${clean}`);
+    } else if (clean.startsWith('HP')) {
+      navigate(`/finance/hp-ledger?loanId=${clean}`);
+    } else if (clean.startsWith('STBD')) {
+      navigate(`/finance/stbd-ledger?loanId=${clean}`);
+    } else if (clean.startsWith('TBD')) {
+      navigate(`/finance/tbd-ledger?loanId=${clean}`);
+    } else {
+      toast.error('Ledger type not detected from Loan ID prefix');
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (filteredTransactions.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+    const headers = ['Date', 'Account', 'Particulars', 'Receipt No', 'Credit', 'Debit', 'Username', 'Entry Time'];
+    const rows = filteredTransactions.map(tx => [
+      tx.transactionDate,
+      tx.headOfAccount,
+      tx.particulars,
+      tx.receiptOrVoucherNo || '',
+      tx.credit,
+      tx.debit,
+      tx.userName || '',
+      tx.createdAt ? new Date(tx.createdAt).toLocaleTimeString('en-GB') : ''
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Daily_Report_${selectedDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Report exported to Excel CSV!');
+  };
 
   const displayDate = new Date(selectedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
 
-  const getSourceBadgeClass = (source: string) => {
-    switch (source) {
-      case 'CD_LEDGER':
-        return 'bg-blue-50 text-blue-700 border-blue-100';
-      case 'CAPITAL_ENTRY':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-      case 'DAY_BOOK_ENTRY':
-        return 'bg-amber-50 text-amber-700 border-amber-100';
-      default:
-        return 'bg-slate-50 text-slate-700 border-slate-100';
-    }
-  };
+  const printContent = useMemo(() => {
+    return (
+      <div className="space-y-6 pb-12 font-sans text-xs uppercase font-bold">
+        <h2 className="text-center text-lg border-b pb-2 mb-4">DAILY TRANSACTION LOG</h2>
+        <div className="flex justify-between text-[11px] mb-4">
+          <div>DATE: {displayDate}</div>
+          <div>GENERATED TIME: {new Date().toLocaleTimeString('en-IN')}</div>
+        </div>
 
-  const getSourceLabel = (source: string) => {
-    switch (source) {
-      case 'CD_LEDGER':
-        return 'CD LEDGER';
-      case 'CAPITAL_ENTRY':
-        return 'CAPITAL ENTRY';
-      case 'DAY_BOOK_ENTRY':
-        return 'DAY BOOK ENTRY';
-      default:
-        return source;
-    }
-  };
+        {/* Totals Grid */}
+        <div className="grid grid-cols-4 gap-4 border-b border-t border-slate-900 py-3 text-center text-[10px]">
+          <div>
+            <p className="text-slate-500">Opening Balance</p>
+            <p className="text-slate-900 mt-1">₹{dailyTotals.opening.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Credit Total</p>
+            <p className="text-emerald-700 mt-1">₹{dailyTotals.credits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Debit Total</p>
+            <p className="text-red-700 mt-1">₹{dailyTotals.debits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Closing Balance</p>
+            <p className="text-slate-900 mt-1">₹{dailyTotals.closing.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+          </div>
+        </div>
 
-  const getClassificationBadgeClass = (cls: string) => {
-    switch (cls) {
-      case 'BALANCE_SHEET':
-        return 'bg-indigo-50 text-indigo-700 border-indigo-100';
-      case 'PROFIT_AND_LOSS':
-        return 'bg-orange-50 text-orange-700 border-orange-100';
-      default:
-        return 'bg-rose-50 text-rose-700 border-rose-100 font-bold';
-    }
-  };
+        {/* Accounts Summary */}
+        <div className="border border-slate-400 rounded p-3">
+          <h3 className="border-b pb-1 mb-2 text-[10px]">Account Group Summary</h3>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[9px]">
+            {accountSummaries.map((acc, idx) => (
+              <div key={idx} className="flex justify-between border-b pb-0.5 border-slate-100">
+                <span>{acc.account}</span>
+                <span className="font-mono">CR: ₹{acc.credit.toLocaleString('en-IN')} | DR: ₹{acc.debit.toLocaleString('en-IN')}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Transactions Table */}
+        <div className="border border-slate-900">
+          <table className="w-full text-left text-[9px] border-collapse">
+            <thead>
+              <tr className="border-b border-slate-900 bg-slate-100">
+                <th className="p-2 border-r">Date</th>
+                <th className="p-2 border-r">Account</th>
+                <th className="p-2 border-r">Particulars</th>
+                <th className="p-2 border-r">Receipt No</th>
+                <th className="p-2 border-r text-right">Credit</th>
+                <th className="p-2 text-right">Debit</th>
+              </tr>
+            </thead>
+            <tbody className="font-mono font-medium">
+              {filteredTransactions.map((tx) => (
+                <tr key={tx.id} className="border-b border-slate-200">
+                  <td className="p-2 border-r">{tx.transactionDate}</td>
+                  <td className="p-2 border-r">{tx.headOfAccount}</td>
+                  <td className="p-2 border-r">{tx.particulars}</td>
+                  <td className="p-2 border-r">{tx.receiptOrVoucherNo || '—'}</td>
+                  <td className="p-2 border-r text-right text-emerald-700">{tx.credit > 0 ? tx.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}</td>
+                  <td className="p-2 text-right text-red-700">{tx.debit > 0 ? tx.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }, [filteredTransactions, dailyTotals, accountSummaries, displayDate]);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto print:hidden font-outfit">
-      {/* Header Section */}
-      <div className="flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm">
+    <div className="space-y-2 w-full print:hidden font-outfit select-none">
+
+      {/* Compact Header Bar */}
+      <div className="flex items-center justify-between bg-white border border-slate-200 px-3 py-2 rounded shadow-sm">
         <div>
-          <h1 className="finance-h1">Daily Report</h1>
-          <p className="finance-small-label uppercase">Unified transaction logs with classification filters and summary stats</p>
+          <h1 className="text-[24px] font-bold uppercase text-slate-900 tracking-tight leading-none">Daily Audit Report &middot; {displayDate}</h1>
+          <p className="text-[13px] text-slate-400 font-bold uppercase mt-0.5">Legacy ledger reconciliations and operational cashier control</p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 finance-header-time uppercase font-bold">
-            Back
-          </Button>
-          <Button onClick={handlePrevDay} variant="secondary" size="sm" icon={ChevronLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200">{''}</Button>
-          <Button onClick={handleNextDay} variant="secondary" size="sm" icon={ChevronRight} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200">{''}</Button>
-          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white finance-header-time uppercase font-bold">
-            Print Log
-          </Button>
+        <div className="flex items-center gap-1.5">
+          <button onClick={handleGoToToday} className="inline-flex items-center gap-1 px-3 h-[36px] bg-white text-slate-700 border border-slate-200 rounded hover:bg-slate-50 font-bold text-[13px] uppercase">Today</button>
+          <button onClick={handlePrevDay} className="inline-flex items-center justify-center h-[36px] w-[36px] bg-white text-slate-700 border border-slate-200 rounded hover:bg-slate-50"><ChevronLeft className="w-4 h-4" /></button>
+          <button onClick={handleNextDay} className="inline-flex items-center justify-center h-[36px] w-[36px] bg-white text-slate-700 border border-slate-200 rounded hover:bg-slate-50"><ChevronRight className="w-4 h-4" /></button>
+          <button onClick={() => fetchDailyData()} className="inline-flex items-center gap-1 px-3 h-[36px] bg-white text-slate-700 border border-slate-200 rounded hover:bg-slate-50 font-bold text-[13px] uppercase"><RefreshCw className="w-3.5 h-3.5" />Refresh</button>
+          <button onClick={handleExportCSV} className="inline-flex items-center gap-1 px-3 h-[36px] bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 rounded font-bold text-[13px] uppercase"><FileSpreadsheet className="w-3.5 h-3.5" />Excel</button>
+          <button onClick={() => setShowPrintPreview(true)} className="inline-flex items-center gap-1 px-3 h-[36px] bg-[#0b1329] hover:bg-slate-800 text-white border border-slate-800 rounded font-bold text-[13px] uppercase"><Printer className="w-3.5 h-3.5" />Print</button>
         </div>
       </div>
 
-      {/* Top Statistics summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center relative">
-          <label className="text-slate-400 mb-1 finance-small-label uppercase font-black text-[9px] tracking-wider">Select Report Date</label>
-          <div className="flex items-center justify-between">
-            <input
-              type="text"
-              value={new Date(selectedDate).toLocaleDateString('en-GB')}
-              readOnly
-              onClick={() => setShowCalendar(!showCalendar)}
-              className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link font-black text-sm"
-            />
-            <button
-              onClick={() => setShowCalendar(!showCalendar)}
-              type="button"
-              className="p-1 hover:bg-slate-50 rounded text-slate-500"
-            >
-              <Calendar className="w-4 h-4" />
-            </button>
+      {/* Compact Totals Strip */}
+      <div className="grid grid-cols-5 gap-2">
+        <div className="bg-white border border-slate-200 rounded px-3 py-2 relative cursor-pointer hover:bg-slate-50" onClick={() => setShowCalendar(!showCalendar)}>
+          <div className="text-[11px] font-bold uppercase text-slate-400">Select Date</div>
+          <div className="flex items-center justify-between mt-0.5">
+            <span className="text-[15px] font-black text-slate-900 font-mono">{new Date(selectedDate).toLocaleDateString('en-GB')}</span>
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
           </div>
           {showCalendar && (
             <CustomCalendar
               selectedDate={selectedDate}
-              onDateSelect={(d) => {
-                setSelectedDate(d);
-                setShowCalendar(false);
-              }}
+              onDateSelect={(d) => { setSelectedDate(d); setShowCalendar(false); }}
               onClose={() => setShowCalendar(false)}
               entries={reportActivityDates}
               onMonthChange={(m, y) => fetchActivityDates(m, y)}
             />
           )}
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-slate-400 block finance-small-label uppercase font-black text-[9px] tracking-wider">Opening Balance</span>
-          <span className="text-slate-850 text-base font-black block font-mono mt-1">₹{openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+        <div className="bg-white border border-slate-200 rounded px-3 py-2">
+          <div className="text-[11px] font-bold uppercase text-slate-400">Opening Balance</div>
+          <div className="text-[15px] font-black text-slate-900 font-mono mt-0.5">₹{dailyTotals.opening.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-slate-400 block finance-small-label uppercase font-black text-[9px] tracking-wider">Credit Total (Inflow)</span>
-          <span className="text-emerald-600 text-base font-black block font-mono mt-1">₹{dailyTotals.credits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+        <div className="bg-white border border-slate-200 rounded px-3 py-2">
+          <div className="text-[11px] font-bold uppercase text-slate-400">Total Inflow (Cr)</div>
+          <div className="text-[15px] font-black text-emerald-600 font-mono mt-0.5">₹{dailyTotals.credits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-slate-400 block finance-small-label uppercase font-black text-[9px] tracking-wider font-bold">Closing Balance</span>
-          <span className="text-slate-900 text-base font-black block font-mono mt-1">₹{dailyTotals.closing.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+        <div className="bg-white border border-slate-200 rounded px-3 py-2">
+          <div className="text-[11px] font-bold uppercase text-slate-400">Total Outflow (Dr)</div>
+          <div className="text-[15px] font-black text-red-600 font-mono mt-0.5">₹{dailyTotals.debits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+        </div>
+        <div className="bg-[#0b1329] border border-slate-800 rounded px-3 py-2">
+          <div className="text-[11px] font-bold uppercase text-slate-400">Closing Balance</div>
+          <div className="text-[15px] font-black text-white font-mono mt-0.5">₹{dailyTotals.closing.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
         </div>
       </div>
 
-      {/* Advanced Filters Panel */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+      {/* Compact Single-Row Filter Bar */}
+      <div className="bg-white border border-slate-200 rounded px-3 py-2 flex items-center gap-2 flex-wrap">
+        <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400 shrink-0" />
         <div className="relative">
-          <label className="text-slate-400 block mb-1.5 text-[10px] font-black uppercase tracking-wider">Search Terms</label>
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-405" />
-            <input
-              type="text"
-              placeholder="Search particulars, account..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-950 shadow-sm"
-            />
-          </div>
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="QUICK SEARCH..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-[32px] w-36 bg-slate-50 border border-slate-200 rounded pl-7 pr-2 text-[12px] font-bold uppercase text-slate-800 focus:outline-none"
+          />
         </div>
-
-        <div>
-          <label className="text-slate-400 block mb-1.5 text-[10px] font-black uppercase tracking-wider">Transaction Source</label>
-          <select
-            value={sourceFilter}
-            onChange={(e) => setSourceFilter(e.target.value as any)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-950 shadow-sm"
-          >
-            <option value="ALL">ALL SOURCES</option>
-            <option value="CD_LEDGER">CD LEDGER ENTRIES</option>
-            <option value="CAPITAL_ENTRY">CAPITAL ENTRIES</option>
-            <option value="DAY_BOOK_ENTRY">DAY BOOK ENTRIES</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="text-slate-400 block mb-1.5 text-[10px] font-black uppercase tracking-wider">Report Classification</label>
-          <select
-            value={classificationFilter}
-            onChange={(e) => setClassificationFilter(e.target.value as any)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-950 shadow-sm"
-          >
-            <option value="ALL">ALL CLASSIFICATIONS</option>
-            <option value="PROFIT_AND_LOSS">PROFIT AND LOSS</option>
-            <option value="BALANCE_SHEET">BALANCE SHEET</option>
-            <option value="UNCLASSIFIED">UNCLASSIFIED</option>
-          </select>
-        </div>
-
-        <div className="flex gap-2 justify-end">
-          <Button
-            onClick={() => {
-              setSearchQuery('');
-              setSourceFilter('ALL');
-              setClassificationFilter('ALL');
-            }}
-            variant="secondary"
-            size="sm"
-            className="text-[10px] uppercase font-bold tracking-wider"
-          >
-            Reset Filters
-          </Button>
-        </div>
+        <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)}
+          className="h-[32px] bg-slate-50 border border-slate-200 rounded px-2 text-[12px] font-bold uppercase text-slate-800 focus:outline-none">
+          <option value="ALL">ALL ACCOUNTS</option>
+          {filterOptions.accounts.map(acc => <option key={acc} value={acc}>{acc}</option>)}
+        </select>
+        <select value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}
+          className="h-[32px] bg-slate-50 border border-slate-200 rounded px-2 text-[12px] font-bold uppercase text-slate-800 focus:outline-none">
+          <option value="ALL">ALL STAFF</option>
+          {filterOptions.staff.map(st => <option key={st} value={st}>{st}</option>)}
+        </select>
+        <input type="text" placeholder="RECEIPT NO..." value={receiptFilter} onChange={(e) => setReceiptFilter(e.target.value)}
+          className="h-[32px] w-28 bg-slate-50 border border-slate-200 rounded px-2 text-[12px] font-bold uppercase text-slate-800 focus:outline-none" />
+        <input type="text" placeholder="LOAN ID..." value={loanFilter} onChange={(e) => setLoanFilter(e.target.value)}
+          className="h-[32px] w-24 bg-slate-50 border border-slate-200 rounded px-2 text-[12px] font-bold uppercase text-slate-800 focus:outline-none" />
+        <select value={txTypeFilter} onChange={(e) => setTxTypeFilter(e.target.value as any)}
+          className="h-[32px] bg-slate-50 border border-slate-200 rounded px-2 text-[12px] font-bold uppercase text-slate-800 focus:outline-none">
+          <option value="ALL">CR &amp; DR</option>
+          <option value="CREDIT">CR ONLY</option>
+          <option value="DEBIT">DR ONLY</option>
+        </select>
+        <button onClick={() => { setSearchQuery(''); setAccountFilter('ALL'); setStaffFilter('ALL'); setReceiptFilter(''); setLoanFilter(''); setCustomerFilter(''); setTxTypeFilter('ALL'); }}
+          className="h-[32px] px-2 bg-white text-slate-400 border border-slate-200 rounded text-[12px] font-bold uppercase hover:text-slate-700">Clear</button>
       </div>
 
-      {/* Main Content Layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        
-        {/* Left Side: Normalized Transactions List */}
+      {/* Main Grid: Table + Right Panels */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-2">
+
+        {/* Left: Transaction Table */}
         <div className="xl:col-span-2">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <div>
-                <h3 className="text-slate-900 font-bold text-sm uppercase tracking-wider">Unified Transaction Log &middot; {displayDate}</h3>
-                <p className="text-slate-500 mt-0.5 text-xs uppercase tracking-wider">{filteredTransactions.length} ROWS MATCHED</p>
-              </div>
+          <div className="bg-white border border-slate-200 rounded overflow-hidden">
+            <div className="bg-slate-50 px-3 py-2 border-b flex justify-between items-center">
+              <h3 className="text-[13px] font-bold text-slate-800 uppercase">Main Transaction Ledger</h3>
+              <span className="text-[12px] font-mono text-slate-400 font-bold">{filteredTransactions.length} ENTRIES</span>
             </div>
 
             {loading ? (
-              <div className="flex justify-center py-16">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-[#0b1329]"></div>
-              </div>
+              <div className="p-16 text-center text-slate-400 text-xs font-bold uppercase">Loading transactions...</div>
             ) : filteredTransactions.length === 0 ? (
-              <div className="py-20 text-center">
-                <p className="text-slate-400 font-bold text-sm uppercase">No Transactions Found</p>
-                <p className="text-slate-400 mt-1 text-xs uppercase">No matching entries recorded for the filters selected.</p>
-              </div>
+              <div className="p-16 text-center text-slate-400 text-xs font-bold uppercase">No transactions matched filter criteria.</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                      <th className="px-4 py-3">S.No</th>
-                      <th className="px-4 py-3">Source</th>
-                      <th className="px-4 py-3">Head of A/C</th>
-                      <th className="px-4 py-3">Particulars / Ref</th>
-                      <th className="px-4 py-3 text-right">Debit (Dr)</th>
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-50 border-b text-[10px] font-bold text-slate-500 uppercase">
+                    <tr>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Account</th>
+                      <th className="px-4 py-3">Particulars</th>
+                      <th className="px-4 py-3">Receipt No</th>
                       <th className="px-4 py-3 text-right">Credit (Cr)</th>
+                      <th className="px-4 py-3 text-right">Debit (Dr)</th>
+                      <th className="px-4 py-3">Staff</th>
                       <th className="px-4 py-3">Time</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-[12px] font-medium text-slate-700">
-                    {filteredTransactions.map((tx, idx) => (
-                      <tr key={tx.id} className="hover:bg-slate-50/40 transition-colors">
-                        <td className="px-4 py-3 text-slate-400 font-mono">{idx + 1}</td>
+                  <tbody className="divide-y divide-slate-100 text-slate-700 font-bold">
+                    {filteredTransactions.map((tx) => (
+                      <tr 
+                        key={tx.id} 
+                        onClick={() => handleRowClick(tx)}
+                        className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+                      >
+                        <td className="px-4 py-3 font-mono text-slate-500">{tx.transactionDate}</td>
+                        <td className="px-4 py-3 uppercase text-slate-900">{tx.headOfAccount}</td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold border ${getSourceBadgeClass(tx.sourceType)}`}>
-                            {getSourceLabel(tx.sourceType)}
-                          </span>
+                          <div className="text-slate-800">{tx.particulars}</div>
+                          {tx.accountOrLoanNo && (
+                            <div className="text-[9px] text-slate-400 font-mono mt-0.5 hover:underline text-indigo-700" onClick={(e) => { e.stopPropagation(); handleLoanClick(tx.accountOrLoanNo!); }}>
+                              LOAN AC: {tx.accountOrLoanNo}
+                            </div>
+                          )}
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="font-bold text-slate-900 uppercase">{tx.headOfAccount}</div>
-                          <span className={`inline-flex items-center px-1.5 py-0.5 mt-0.5 rounded text-[8px] font-black uppercase border ${getClassificationBadgeClass(tx.reportClassification)}`}>
-                            {tx.reportClassification.replace(/_/g, ' ')}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="text-slate-800 font-semibold">{tx.particulars}</div>
-                          <div className="text-slate-400 text-[10px] font-mono mt-0.5">REF: {tx.accountOrLoanNo || '—'}</div>
-                        </td>
-                        <td className="px-4 py-3 text-right text-red-600 font-mono">
-                          {tx.debit > 0 ? `₹${tx.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                        <td className="px-4 py-3 font-mono font-bold text-indigo-700 hover:underline" onClick={(e) => { e.stopPropagation(); handleReceiptClick(tx); }}>
+                          {tx.receiptOrVoucherNo || '—'}
                         </td>
                         <td className="px-4 py-3 text-right text-emerald-600 font-mono">
                           {tx.credit > 0 ? `₹${tx.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                         </td>
-                        <td className="px-4 py-3 text-slate-400 text-[10px] font-mono">
-                          <div>{tx.createdAt ? new Date(tx.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'}</div>
-                          <div className="text-[9px] uppercase mt-0.5 text-slate-450">{tx.userName || 'Staff'}</div>
+                        <td className="px-4 py-3 text-right text-red-600 font-mono">
+                          {tx.debit > 0 ? `₹${tx.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="px-4 py-3 uppercase text-slate-500">{tx.userName || 'Staff'}</td>
+                        <td className="px-4 py-3 font-mono text-slate-400 text-[10px]">
+                          {tx.createdAt ? new Date(tx.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'}
                         </td>
                       </tr>
                     ))}
@@ -415,225 +515,104 @@ const DailyReportFinance: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Side: summaries */}
-        <div className="xl:col-span-1 space-y-6">
-          {/* Card 1: Filtered Account Summary */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-              <h3 className="text-slate-900 font-bold text-xs uppercase tracking-wider">Filtered Account Summary</h3>
+        {/* Right: Summaries */}
+        <div className="space-y-2">
+
+          {/* Account Summary Panel */}
+          <div className="bg-white border border-slate-200 rounded overflow-hidden">
+            <div className="bg-slate-50 px-3 py-2 border-b flex justify-between items-center">
+              <h3 className="text-[13px] font-bold text-slate-800 uppercase">Account Summary</h3>
             </div>
-            
-            {loading ? (
-              <div className="flex justify-center py-16">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-[#0b1329]"></div>
-              </div>
-            ) : accountSummaries.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 text-xs font-bold uppercase">
-                No accounts impacted
-              </div>
+            {accountSummaries.length === 0 ? (
+              <div className="px-3 py-4 text-center text-slate-400 text-[12px] font-bold uppercase">No records today</div>
             ) : (
-              <div className="p-4 space-y-4 max-h-[30vh] overflow-y-auto">
+              <div className="divide-y overflow-y-auto" style={{ maxHeight: '34vh' }}>
                 {accountSummaries.map((acc, idx) => (
-                  <div key={idx} className="flex flex-col border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                    <span className="text-slate-900 font-bold text-xs uppercase mb-1">{acc.account}</span>
-                    <div className="flex justify-between items-center text-[11px] font-mono text-slate-500">
-                      <span>Inflow (Cr): <span className="text-emerald-600 font-bold">₹{acc.credit.toLocaleString('en-IN')}</span></span>
-                      <span>Outflow (Dr): <span className="text-red-600 font-bold">₹{acc.debit.toLocaleString('en-IN')}</span></span>
+                  <div key={idx} className="px-3 py-2 flex justify-between items-center text-[12px] hover:bg-slate-50">
+                    <div>
+                      <span className="font-bold text-slate-900 uppercase block text-[13px]">{acc.account}</span>
+                      <span className="text-[11px] text-slate-400 font-bold uppercase">NET: ₹{acc.net.toLocaleString('en-IN')}</span>
                     </div>
-                    <div className="mt-1 flex justify-between items-center text-[10px] font-bold">
-                      <span className="text-slate-400 uppercase">NET FLOW</span>
-                      <span className={acc.net > 0 ? "text-emerald-600 font-mono" : acc.net < 0 ? "text-red-600 font-mono" : "text-slate-500 font-mono"}>
-                        {acc.net > 0 ? "+" : ""}{acc.net === 0 ? "₹0.00" : `₹${acc.net.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
-                      </span>
+                    <div className="text-right font-mono text-[12px]">
+                      <div className="text-emerald-700 font-bold">CR: ₹{acc.credit.toLocaleString('en-IN')}</div>
+                      <div className="text-red-700 font-bold">DR: ₹{acc.debit.toLocaleString('en-IN')}</div>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            
-            {/* Filtered Totals box */}
-            <div className="bg-slate-50 p-4 border-t border-slate-200 text-xs font-bold space-y-1">
-              <div className="flex justify-between text-slate-500">
-                <span>FILTERED DEBITS:</span>
-                <span className="font-mono text-red-600">₹{filteredTotals.debits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>FILTERED CREDITS:</span>
-                <span className="font-mono text-emerald-600">₹{filteredTotals.credits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between text-slate-900 pt-1 border-t border-slate-200 font-black">
-                <span>FILTERED NET FLOW:</span>
-                <span className={`font-mono ${filteredTotals.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  ₹{filteredTotals.net.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
           </div>
 
-          {/* Card 2: Today's Total Receipts */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-              <h3 className="text-slate-900 font-bold text-xs uppercase tracking-wider">Today's Total Receipts</h3>
+          {/* Today's Receipts Panel */}
+          <div className="bg-white border border-slate-200 rounded overflow-hidden">
+            <div className="bg-slate-50 px-3 py-2 border-b flex justify-between items-center">
+              <h3 className="text-[13px] font-bold text-slate-800 uppercase">Today's Receipts</h3>
+              <span className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded font-black font-mono">{todayReceipts.length} REC</span>
             </div>
-            
-            {loading ? (
-              <div className="flex justify-center py-16">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-[#0b1329]"></div>
-              </div>
-            ) : todayReceipts.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 text-xs font-bold uppercase">
-                No receipts generated today
-              </div>
+            {todayReceipts.length === 0 ? (
+              <div className="px-3 py-4 text-center text-slate-400 text-[12px] font-bold uppercase">No receipts today</div>
             ) : (
-              <div className="p-4 space-y-3 max-h-[35vh] overflow-y-auto">
-                <table className="w-full text-left border-collapse text-[11px]">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 font-bold text-slate-500 uppercase text-[9px]">
-                      <th className="px-2 py-1.5">R.No</th>
-                      <th className="px-2 py-1.5">A/C No</th>
-                      <th className="px-2 py-1.5">Customer Name</th>
-                      <th className="px-2 py-1.5 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700 font-medium font-sans">
-                    {todayReceipts.map((rc, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/40">
-                        <td className="px-2 py-2 font-mono font-bold text-slate-800">{rc.receiptNo}</td>
-                        <td className="px-2 py-2 font-mono">{rc.accountNo}</td>
-                        <td className="px-2 py-2 uppercase font-bold text-slate-900">{rc.customerName}</td>
-                        <td className="px-2 py-2 text-right font-mono text-emerald-600 font-bold">₹{rc.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="divide-y overflow-y-auto" style={{ maxHeight: '36vh' }}>
+                {todayReceipts.map((rc, idx) => (
+                  <div key={idx} className="px-3 py-2 flex justify-between items-center hover:bg-slate-50">
+                    <div>
+                      <span className="font-mono font-bold text-[13px] text-indigo-700 hover:underline block cursor-pointer" onClick={() => handleReceiptClick(rc.tx)}>{rc.receiptNo}</span>
+                      <span className="text-[11px] text-slate-500 uppercase font-semibold">{rc.borrower} ({rc.loanNo})</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono text-emerald-600 font-bold text-[13px]">₹{rc.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      <button onClick={() => handleLoanClick(rc.loanNo)} className="text-[11px] text-slate-400 hover:underline block mt-0.5 uppercase">Ledger</button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
+
         </div>
 
       </div>
 
-      {/* Print Preview Modal */}
-      <FinancePrintPreview
-        isOpen={showPrintPreview}
-        onClose={() => setShowPrintPreview(false)}
-        title="Finance Daily Report Log"
-        documentTitle={`DAILY TRANSACTION LOG: ${displayDate}`}
-      >
-        <div className="space-y-6 pb-12 font-sans text-xs">
-          {/* Print Summary */}
-          <div className="grid grid-cols-4 gap-4 border-b border-t border-slate-900 py-4 mb-6 text-center">
-            <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Opening Balance</p>
-              <p className="text-slate-900 font-black mt-1">₹{openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+      {/* Transaction Details Modal */}
+      {selectedTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white border rounded-xl shadow-xl max-w-md w-full overflow-hidden text-xs uppercase font-bold">
+            <div className="bg-slate-50 p-4 border-b flex justify-between items-center">
+              <h4 className="font-black text-slate-900">Transaction Details</h4>
+              <button onClick={() => setSelectedTx(null)} className="text-slate-400 hover:text-slate-600 font-black">CLOSE</button>
             </div>
-            <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Credit Total</p>
-              <p className="text-emerald-700 font-black mt-1">₹{dailyTotals.credits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Debit Total</p>
-              <p className="text-red-700 font-black mt-1">₹{dailyTotals.debits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Closing Balance</p>
-              <p className="text-slate-900 font-black mt-1">₹{dailyTotals.closing.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-            </div>
-          </div>
-
-          {/* Account Summary Print */}
-          {accountSummaries.length > 0 && (
-            <div className="mb-6 border border-slate-400 rounded">
-              <div className="bg-slate-100 px-3 py-1 border-b border-slate-200 font-bold text-[10px] uppercase">
-                Account Summary (Filtered)
+            <div className="p-4 space-y-3">
+              <div><span className="text-slate-400 block text-[10px]">Head of Account</span><span className="text-slate-950 font-black">{selectedTx.headOfAccount}</span></div>
+              <div><span className="text-slate-400 block text-[10px]">Particulars</span><span className="text-slate-800 font-bold">{selectedTx.particulars}</span></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><span className="text-slate-400 block text-[10px]">Receipt No</span><span className="text-indigo-700 font-mono">{selectedTx.receiptOrVoucherNo || '—'}</span></div>
+                <div><span className="text-slate-400 block text-[10px]">Account No</span><span className="text-slate-950 font-mono">{selectedTx.accountOrLoanNo || '—'}</span></div>
               </div>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 p-3 text-[10px]">
-                {accountSummaries.map((acc, idx) => (
-                  <div key={idx} className="flex justify-between border-b border-slate-100 pb-0.5">
-                    <span className="text-slate-800 uppercase font-semibold">{acc.account}</span>
-                    <span className={`font-mono font-bold ${acc.net >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                      {acc.net > 0 ? "+" : ""}{acc.net === 0 ? "₹0.00" : `₹${acc.net.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
-                    </span>
-                  </div>
-                ))}
+              <div className="grid grid-cols-2 gap-3 border-t pt-2">
+                <div><span className="text-slate-400 block text-[10px]">Credit</span><span className="text-emerald-700 font-mono font-black">₹{selectedTx.credit.toLocaleString('en-IN')}</span></div>
+                <div><span className="text-slate-400 block text-[10px]">Debit</span><span className="text-red-700 font-mono font-black">₹{selectedTx.debit.toLocaleString('en-IN')}</span></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 border-t pt-2 text-[10px] text-slate-450">
+                <div><span>Entered By: {selectedTx.userName || 'Staff'}</span></div>
+                <div><span>Time: {selectedTx.createdAt ? new Date(selectedTx.createdAt).toLocaleTimeString('en-GB') : '—'}</span></div>
               </div>
             </div>
-          )}
-
-          {/* Today's Total Receipts Print */}
-          {todayReceipts.length > 0 && (
-            <div className="mb-6 border border-slate-400 rounded">
-              <div className="bg-slate-100 px-3 py-1 border-b border-slate-200 font-bold text-[10px] uppercase">
-                Today's Total Receipts
-              </div>
-              <table className="w-full text-left text-[9px] border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-400 bg-slate-50 font-bold text-slate-700">
-                    <th className="px-2 py-1">Receipt No</th>
-                    <th className="px-2 py-1">A/C No</th>
-                    <th className="px-2 py-1">Customer Name</th>
-                    <th className="px-2 py-1 text-right font-mono">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-mono">
-                  {todayReceipts.map((rc, idx) => (
-                    <tr key={idx}>
-                      <td className="px-2 py-1">{rc.receiptNo}</td>
-                      <td className="px-2 py-1">{rc.accountNo}</td>
-                      <td className="px-2 py-1 uppercase">{rc.customerName}</td>
-                      <td className="px-2 py-1 text-right font-bold text-emerald-700">₹{rc.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Transactions Print Table */}
-          <div className="border border-slate-900 rounded-sm">
-            <div className="bg-slate-100 border-b border-slate-900 px-3 py-1.5 flex justify-between font-bold text-[10px] uppercase">
-              <span>Transactions Log</span>
-              <span>{filteredTransactions.length} ROWS</span>
-            </div>
-            <table className="w-full text-left text-[9px] border-collapse">
-              <thead>
-                <tr className="border-b border-slate-900 bg-slate-50 font-bold text-slate-700">
-                  <th className="px-2 py-1.5 border-r border-slate-200">S.No</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200">Source</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200">Account / Head</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200">Particulars / Ref</th>
-                  <th className="px-2 py-1.5 text-right border-r border-slate-200">Debit (Dr)</th>
-                  <th className="px-2 py-1.5 text-right">Credit (Cr)</th>
-                </tr>
-              </thead>
-              <tbody className="font-medium text-slate-800 divide-y divide-slate-200 font-mono">
-                {filteredTransactions.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-6 text-slate-500 font-sans uppercase text-[10px]">No transaction matches.</td>
-                  </tr>
-                ) : (
-                  filteredTransactions.map((tx, idx) => (
-                    <tr key={tx.id}>
-                      <td className="px-2 py-1 border-r border-slate-200 font-sans text-slate-450">{idx + 1}</td>
-                      <td className="px-2 py-1 border-r border-slate-200 font-sans">{getSourceLabel(tx.sourceType)}</td>
-                      <td className="px-2 py-1 border-r border-slate-200 font-sans">
-                        <div className="font-bold text-slate-900">{tx.headOfAccount}</div>
-                        <div className="text-[7px] text-slate-500">[{tx.reportClassification}]</div>
-                      </td>
-                      <td className="px-2 py-1 border-r border-slate-200 font-sans">
-                        <div>{tx.particulars}</div>
-                        <div className="text-[8px] text-slate-400">REF: {tx.accountOrLoanNo || '—'}</div>
-                      </td>
-                      <td className="px-2 py-1 text-right text-red-700 border-r border-slate-200">{tx.debit > 0 ? tx.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}</td>
-                      <td className="px-2 py-1 text-right text-emerald-700">{tx.credit > 0 ? tx.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
           </div>
         </div>
-      </FinancePrintPreview>
+      )}
+
+      {/* Print Preview Handler */}
+      {showPrintPreview && (
+        <FinancePrintPreview
+          isOpen={showPrintPreview}
+          onClose={() => setShowPrintPreview(false)}
+          title="Daily Report Audit log"
+          documentTitle={`Daily Transaction Log: ${displayDate}`}
+        >
+          {printContent}
+        </FinancePrintPreview>
+      )}
+
     </div>
   );
 };

@@ -10,9 +10,7 @@ import {
   Calculator, 
   Printer, 
   X, 
-  Upload, 
   Trash2, 
-  Navigation,
   Check,
   Search,
   Camera,
@@ -23,36 +21,35 @@ import { validateFinanceForm, ValidationField } from '../../utils/financeValidat
 import { useAuth } from '../../contexts/AuthContext';
 import { BiometricScanner } from '../../components/finance/BiometricScanner';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
+import { cdLedgerRebuildService } from '../../services/cdLedgerRebuildService';
 
-interface DocumentItem {
-  key: string;
-  label: string;
-  category: 'Financial' | 'Original' | 'Registration';
-  checked: boolean;
-  refNo: string;
-  fileUrl: string | null;
-  uploading: boolean;
-  isCustom?: boolean;
+
+export const getRelationshipDisplay = (rawRel: string | null | undefined): { label: string; name: string } => {
+  if (!rawRel) return { label: 'Father/Husband/Wife', name: 'N/A' };
+  if (rawRel.includes(':')) {
+    const parts = rawRel.split(':');
+    return { label: parts[0], name: parts[1] || '' };
+  }
+  return { label: 'Father/Husband', name: rawRel };
+};
+
+interface LoanEntryProps {
+  editLoanId?: string;
+  onCancelEdit?: () => void;
 }
-
-const LoanEntry: React.FC = () => {
+const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
-
-  // Loading/Saving states
 
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const dateRef = useRef<HTMLInputElement>(null);
   const loanIdRef = useRef<HTMLInputElement>(null);
   const custNameRef = useRef<HTMLInputElement>(null);
   const custPhoneRef = useRef<HTMLInputElement>(null);
-  const g1NameRef = useRef<HTMLInputElement>(null);
-  const g1PhoneRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
   const interestRateRef = useRef<HTMLInputElement>(null);
   const durationMonthsRef = useRef<HTMLInputElement>(null);
   const particularsRef = useRef<HTMLTextAreaElement>(null);
-  const locAddressRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -70,12 +67,13 @@ const LoanEntry: React.FC = () => {
   const [custAadhaar, setCustAadhaar] = useState('');
   const [custPhone, setCustPhone] = useState('');
   const [custPhone2, setCustPhone2] = useState('');
-  const [custVillage, setCustVillage] = useState('');
-  const [custMandal, setCustMandal] = useState('');
-  const [custDistrict, setCustDistrict] = useState('');
   const [custAadhaarAddress, setCustAadhaarAddress] = useState('');
   const [custPresentAddress, setCustPresentAddress] = useState('');
+  const [custHouseNo, setCustHouseNo] = useState('');
+  const [custMandal, setCustMandal] = useState('');
+  const [custDistrict, setCustDistrict] = useState('');
   const [custPhoto, setCustPhoto] = useState<string | null>(null);
+  const [custSignature, setCustSignature] = useState<string | null>(null);
   const [custFingerprintUrl, setCustFingerprintUrl] = useState<string | null>(null);
   const [custFingerprintTemplate, setCustFingerprintTemplate] = useState<string | null>(null);
   const [custFingerprintAdded, setCustFingerprintAdded] = useState(false);
@@ -83,49 +81,35 @@ const LoanEntry: React.FC = () => {
   const [custDropdownOpen, setCustDropdownOpen] = useState(false);
   const [npaWarning, setNpaWarning] = useState<any>(null);
 
+  if (custFingerprintAdded) {
+    // satisfies typescript unused warning
+  }
+
   // Form State - Guarantor 1
   const [g1SelectedId, setG1SelectedId] = useState('');
   const [g1Name, setG1Name] = useState('');
   const [g1Phone, setG1Phone] = useState('');
+  const [g1Phone2, setG1Phone2] = useState('');
   const [g1Aadhaar, setG1Aadhaar] = useState('');
   const [g1AadhaarAddress, setG1AadhaarAddress] = useState('');
   const [g1PresentAddress, setG1PresentAddress] = useState('');
   const [g1Photo, setG1Photo] = useState<string | null>(null);
-  const [g1FingerprintUrl, setG1FingerprintUrl] = useState<string | null>(null);
-  const [g1FingerprintTemplate, setG1FingerprintTemplate] = useState<string | null>(null);
-  const [g1FingerprintAdded, setG1FingerprintAdded] = useState(false);
+  const [g1Signature, setG1Signature] = useState<string | null>(null);
   const [g1Search, setG1Search] = useState('');
   const [g1DropdownOpen, setG1DropdownOpen] = useState(false);
-  const [g1Village, setG1Village] = useState('');
-  const [g1Mandal, setG1Mandal] = useState('');
-  const [g1District, setG1District] = useState('');
-  const [g1PermanentAddress, setG1PermanentAddress] = useState('');
-  const [g1CurrentAddress, setG1CurrentAddress] = useState('');
-  const [g1CurrentVillage, setG1CurrentVillage] = useState('');
-  const [g1CurrentMandal, setG1CurrentMandal] = useState('');
-  const [g1CurrentDistrict, setG1CurrentDistrict] = useState('');
 
   // Form State - Guarantor 2
   const [g2SelectedId, setG2SelectedId] = useState('');
   const [g2Name, setG2Name] = useState('');
   const [g2Phone, setG2Phone] = useState('');
+  const [g2Phone2, setG2Phone2] = useState('');
   const [g2Aadhaar, setG2Aadhaar] = useState('');
   const [g2AadhaarAddress, setG2AadhaarAddress] = useState('');
   const [g2PresentAddress, setG2PresentAddress] = useState('');
   const [g2Photo, setG2Photo] = useState<string | null>(null);
-  const [g2FingerprintUrl, setG2FingerprintUrl] = useState<string | null>(null);
-  const [g2FingerprintTemplate, setG2FingerprintTemplate] = useState<string | null>(null);
-  const [g2FingerprintAdded, setG2FingerprintAdded] = useState(false);
+  const [g2Signature, setG2Signature] = useState<string | null>(null);
   const [g2Search, setG2Search] = useState('');
   const [g2DropdownOpen, setG2DropdownOpen] = useState(false);
-  const [g2Village, setG2Village] = useState('');
-  const [g2Mandal, setG2Mandal] = useState('');
-  const [g2District, setG2District] = useState('');
-  const [g2PermanentAddress, setG2PermanentAddress] = useState('');
-  const [g2CurrentAddress, setG2CurrentAddress] = useState('');
-  const [g2CurrentVillage, setG2CurrentVillage] = useState('');
-  const [g2CurrentMandal, setG2CurrentMandal] = useState('');
-  const [g2CurrentDistrict, setG2CurrentDistrict] = useState('');
 
   // Reference Data lists
   const [partners, setPartners] = useState<Partial<FinancePartner>[]>([]);
@@ -148,9 +132,34 @@ const LoanEntry: React.FC = () => {
   const [dueType, setDueType] = useState<'Daily' | 'Weekly' | 'Monthly'>('Daily');
   const [particulars, setParticulars] = useState('');
 
+  // Edit-only states
+  const [hasLedgerActivity, setHasLedgerActivity] = useState(false);
+
   // Form State - Partner
   const [selectedPartnerId, setSelectedPartnerId] = useState('');
-  const [partnerName, setPartnerName] = useState('');
+
+  // Form State - Dynamic Documents List
+  const [loanDocs, setLoanDocs] = useState<Array<{ id?: string; name: string; fileUrl: string | null; fileName?: string }>>([
+    { name: 'Gold Invoice', fileUrl: null },
+    { name: 'Bank Passbook', fileUrl: null },
+    { name: 'Land Registration', fileUrl: null },
+    { name: 'Driving Licence', fileUrl: null }
+  ]);
+
+  // Form State - Asset/Collateral Multiple Locations
+  const [locations, setLocations] = useState<Array<{
+    address: string;
+    latitude: string;
+    longitude: string;
+    mapsLink: string;
+    image: string | null;
+    remarks?: string;
+    images?: string[];
+  }>>([{ address: '', latitude: '', longitude: '', mapsLink: '', image: null, remarks: '', images: [] }]);
+
+  // Form State - Remarks & Extra
+  const [remarks, setRemarks] = useState('');
+  const [extraDetails, setExtraDetails] = useState('');
 
   // Refs for closing dropdowns
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -185,14 +194,13 @@ const LoanEntry: React.FC = () => {
 
   const searchCache = useRef<Record<string, any[]>>({});
 
-  // Debounced search hooks
+  // Debounced search hooks (Fetch only if search query is 2+ characters)
   useEffect(() => {
-    if (!custSearch || custSearch.length < 2) {
+    if (!custSearch || custSearch.trim().length < 2) {
       setCustomerSearchResults([]);
       return;
     }
     const q = custSearch.trim();
-    if (!q) return;
     const cacheKey = `cust_${q.toLowerCase()}`;
     if (searchCache.current[cacheKey]) {
       setCustomerSearchResults(searchCache.current[cacheKey]);
@@ -210,12 +218,11 @@ const LoanEntry: React.FC = () => {
   }, [custSearch]);
 
   useEffect(() => {
-    if (!g1Search || g1Search.length < 2) {
+    if (!g1Search || g1Search.trim().length < 2) {
       setG1SearchResults([]);
       return;
     }
     const q = g1Search.trim();
-    if (!q) return;
     const cacheKey = `g1_${q.toLowerCase()}`;
     if (searchCache.current[cacheKey]) {
       setG1SearchResults(searchCache.current[cacheKey]);
@@ -233,12 +240,11 @@ const LoanEntry: React.FC = () => {
   }, [g1Search]);
 
   useEffect(() => {
-    if (!g2Search || g2Search.length < 2) {
+    if (!g2Search || g2Search.trim().length < 2) {
       setG2SearchResults([]);
       return;
     }
     const q = g2Search.trim();
-    if (!q) return;
     const cacheKey = `g2_${q.toLowerCase()}`;
     if (searchCache.current[cacheKey]) {
       setG2SearchResults(searchCache.current[cacheKey]);
@@ -255,41 +261,118 @@ const LoanEntry: React.FC = () => {
     return () => clearTimeout(delay);
   }, [g2Search]);
 
-  // Form State - Documents Checklist
-  const [documents, setDocuments] = useState<DocumentItem[]>([
-    { key: 'bank_statements', label: 'BANK STATEMENTS', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
-    { key: 'income_proof', label: 'INCOME PROOF / SAL', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
-    { key: 'it_returns_gst', label: 'IT RETURNS / GST', category: 'Financial', checked: false, refNo: '', fileUrl: null, uploading: false },
-    
-    { key: 'land_title_patta', label: 'LAND TITLE / PATTA', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
-    { key: 'property_deed', label: 'PROPERTY DEED', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
-    { key: 'vehicle_asset_paper', label: 'VEHICLE / ASSET PAP', category: 'Original', checked: false, refNo: '', fileUrl: null, uploading: false },
-    
-    { key: 'joint_registration', label: 'JOINT REGISTRATION', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
-    { key: 'agreement_bond', label: 'AGREEMENT / BOND', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
-    { key: 'photograph', label: 'PHOTOGRAPH', category: 'Registration', checked: false, refNo: '', fileUrl: null, uploading: false },
-  ]);
-
-  // Form State - Collateral Location
-  const [locAddress, setLocAddress] = useState('');
-  const [locVillage, setLocVillage] = useState('');
-  const [locMandal, setLocMandal] = useState('');
-  const [locDistrict, setLocDistrict] = useState('');
-  const [locState, setLocState] = useState('');
-  const [locPincode, setLocPincode] = useState('');
-  const [locLandmark, setLocLandmark] = useState('');
-  const [locLatitude, setLocLatitude] = useState('');
-  const [locLongitude, setLocLongitude] = useState('');
-  const [locMapsLink, setLocMapsLink] = useState('');
-  const [collateralImage, setCollateralImage] = useState<string | null>(null);
-
-  // Form State - Remarks & Extra
-  const [remarks, setRemarks] = useState('');
-  const [extraDetails, setExtraDetails] = useState('');
-
   useEffect(() => {
     fetchReferenceData();
   }, []);
+
+  useEffect(() => {
+    if (editLoanId) {
+      loadLoanForEdit(editLoanId);
+    }
+  }, [editLoanId]);
+
+  const loadLoanForEdit = async (id: string) => {
+    setLoading(true);
+    try {
+      const fullLoan = await supabaseFinance.getLoanById(id);
+      if (!fullLoan) {
+        toast.error('Failed to load loan record for editing');
+        return;
+      }
+
+      // Check transactions activity
+      const { data: txs } = await supabase
+        .from('finance_loan_transactions')
+        .select('id')
+        .eq('loan_id', id)
+        .eq('transaction_type', 'Payment')
+        .limit(1);
+      setHasLedgerActivity(!!(txs && txs.length > 0));
+
+      // Customer
+      const cust = fullLoan.customer;
+      if (cust) {
+        setSelectedCustomerId(cust.id);
+        setCustName(cust.name || '');
+        setCustPhone(cust.phone_1 || cust.phone || '');
+        setCustPhone2(cust.phone_2 || cust.phone2 || '');
+        setCustAadhaar(cust.aadhaar || '');
+        setCustPhoto(cust.customer_photo_url || null);
+        setCustSignature(cust.customer_fingerprint_image_url || null);
+        setCustFatherName(cust.father_name || cust.father_husband_name || '');
+        setCustAadhaarAddress(cust.aadhaar_address || '');
+        setCustPresentAddress(cust.present_address || '');
+        setCustHouseNo(cust.address || '');
+        setCustMandal(cust.mandal || '');
+        setCustDistrict(cust.district || '');
+      }
+
+      setLoanId(fullLoan.loan_id);
+      setLoanCategory(fullLoan.loan_category as any || 'CD');
+      setAmount(String(fullLoan.amount));
+      setInterestRate(String(fullLoan.interest_rate));
+      setDurationMonths(String(fullLoan.duration_months));
+      setDueType(fullLoan.due_type);
+      setDocCharges(String(fullLoan.document_charges || 0));
+      setPenaltyPercent(String(fullLoan.penalty_percent || 0.75));
+
+      // Guarantors
+      if (fullLoan.guarantor_1_id) setG1SelectedId(fullLoan.guarantor_1_id);
+      if (fullLoan.guarantor_2_id) setG2SelectedId(fullLoan.guarantor_2_id);
+
+      const { data: colLogs } = await supabase
+        .from('finance_edited_logs')
+        .select('*')
+        .eq('table_name', 'finance_loans_collateral')
+        .eq('record_id', id)
+        .order('edited_at', { ascending: false })
+        .limit(1);
+
+      if (colLogs && colLogs.length > 0) {
+        const cLog = colLogs[0].new_values;
+        setParticulars(cLog.particulars || '');
+        setExtraDetails(cLog.extraDetails || '');
+        if (cLog.locations && Array.isArray(cLog.locations)) {
+          setLocations(cLog.locations);
+        } else {
+          setLocations([{
+            address: cLog.collateral_address || '',
+            latitude: cLog.gps_latitude || '',
+            longitude: cLog.gps_longitude || '',
+            mapsLink: cLog.google_maps_link || '',
+            image: cLog.collateral_image || null
+          }]);
+        }
+      }
+
+      const { data: dbDocs } = await supabase
+        .from('finance_loan_documents')
+        .select('*')
+        .eq('loan_id', id);
+
+      if (dbDocs) {
+        const mapped: Array<{ id?: string; name: string; fileUrl: string | null; fileName?: string }> = dbDocs.map(d => ({
+          id: d.id,
+          name: d.document_name,
+          fileUrl: d.file_url || null,
+          fileName: d.file_name || undefined
+        }));
+        const defaults = ['Gold Invoice', 'Bank Passbook', 'Land Registration', 'Driving Licence'];
+        defaults.forEach(defName => {
+          if (!mapped.some(m => m.name.toLowerCase() === defName.toLowerCase())) {
+            mapped.push({ name: defName, fileUrl: null });
+          }
+        });
+        setLoanDocs(mapped);
+      }
+
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to load edit loan parameters');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchReferenceData = async () => {
     setLoading(true);
@@ -327,17 +410,19 @@ const LoanEntry: React.FC = () => {
       
       const cust = loanData.customer;
       if (cust) {
+        setSelectedCustomerId(cust.id);
         setCustName(cust.name || '');
         setCustPhone(cust.phone_1 || cust.phone || '');
-        setCustPresentAddress(cust.address || cust.present_address || '');
+        setCustPhone2(cust.phone_2 || cust.phone2 || '');
         setCustAadhaar(cust.aadhaar || '');
         setCustPhoto(cust.customer_photo_url || null);
+        setCustSignature(cust.customer_fingerprint_image_url || null);
         setCustFatherName(cust.father_name || cust.father_husband_name || '');
-        setCustVillage(cust.village || '');
-        setCustMandal(cust.mandal || '');
-        setCustDistrict(cust.district || '');
         setCustAadhaarAddress(cust.aadhaar_address || '');
         setCustPresentAddress(cust.present_address || '');
+        setCustHouseNo(cust.address || '');
+        setCustMandal(cust.mandal || '');
+        setCustDistrict(cust.district || '');
       }
 
       setLoanId(loanData.loan_id);
@@ -349,15 +434,8 @@ const LoanEntry: React.FC = () => {
       setDocCharges(String(loanData.document_charges || 0));
       setPenaltyPercent(String(loanData.penalty_percent || 0.75));
 
-      setG1Name(loanData.surety_name || '');
-      setG1Phone(loanData.surety_phone || '');
-      setG1Aadhaar(loanData.surety_aadhaar || '');
-      setG1AadhaarAddress(loanData.surety_aadhaar_address || '');
-      setG1PresentAddress(loanData.surety_present_address || '');
-      setG1Photo(loanData.surety_photo_url || null);
-      setG1FingerprintTemplate(loanData.surety_fingerprint_template || null);
-      setG1FingerprintUrl(loanData.surety_fingerprint_image_url || null);
-      setG1FingerprintAdded(!!loanData.surety_fingerprint_added);
+      setG1SelectedId(loanData.guarantor_1_id || '');
+      setG2SelectedId(loanData.guarantor_2_id || '');
 
       const { data: colLogs } = await supabase
         .from('finance_edited_logs')
@@ -368,19 +446,19 @@ const LoanEntry: React.FC = () => {
         .limit(1);
       if (colLogs && colLogs.length > 0) {
         const cLog = colLogs[0].new_values;
-        setCollateralImage(cLog.collateral_image || null);
-        setLocAddress(cLog.collateral_address || '');
-        setLocVillage(cLog.village || '');
-        setLocMandal(cLog.mandal || '');
-        setLocDistrict(cLog.district || '');
-        setLocState(cLog.state || '');
-        setLocPincode(cLog.pincode || '');
-        setLocLandmark(cLog.landmark || '');
-        setLocLatitude(cLog.gps_latitude || '');
-        setLocLongitude(cLog.gps_longitude || '');
-        setLocMapsLink(cLog.google_maps_link || '');
         setParticulars(cLog.particulars || '');
         setExtraDetails(cLog.extraDetails || '');
+        if (cLog.locations && Array.isArray(cLog.locations)) {
+          setLocations(cLog.locations);
+        } else {
+          setLocations([{
+            address: cLog.collateral_address || '',
+            latitude: cLog.gps_latitude || '',
+            longitude: cLog.gps_longitude || '',
+            mapsLink: cLog.google_maps_link || '',
+            image: cLog.collateral_image || null
+          }]);
+        }
       }
 
       const { data: dbDocs } = await supabase
@@ -389,18 +467,19 @@ const LoanEntry: React.FC = () => {
         .eq('loan_id', loanData.id);
 
       if (dbDocs) {
-        setDocuments(prev => prev.map(d => {
-          const matched = dbDocs.find(x => x.document_name.toUpperCase().includes(d.label.toUpperCase()));
-          if (matched) {
-            return {
-              ...d,
-              checked: matched.is_submitted,
-              refNo: matched.remarks || '',
-              fileUrl: matched.file_url
-            };
-          }
-          return d;
+        const mapped: Array<{ id?: string; name: string; fileUrl: string | null; fileName?: string }> = dbDocs.map(d => ({
+          id: d.id,
+          name: d.document_name,
+          fileUrl: d.file_url || null,
+          fileName: d.file_name || undefined
         }));
+        const defaults = ['Gold Invoice', 'Bank Passbook', 'Land Registration', 'Driving Licence'];
+        defaults.forEach(defName => {
+          if (!mapped.some(m => m.name.toLowerCase() === defName.toLowerCase())) {
+            mapped.push({ name: defName, fileUrl: null });
+          }
+        });
+        setLoanDocs(mapped);
       }
 
       toast.success('EXISTING ACCOUNT LOADED IN VIEW MODE');
@@ -413,56 +492,55 @@ const LoanEntry: React.FC = () => {
   const handleClearLookup = () => {
     setExistingCdSearch('');
     setIsLookupMode(false);
+    setSelectedCustomerId('');
     setCustName('');
     setCustPhone('');
-    setCustPresentAddress('');
+    setCustPhone2('');
     setCustAadhaar('');
     setCustPhoto(null);
+    setCustSignature(null);
     setCustFatherName('');
-    setCustVillage('');
-    setCustMandal('');
-    setCustDistrict('');
     setCustAadhaarAddress('');
     setCustPresentAddress('');
+    setCustHouseNo('');
+    setCustMandal('');
+    setCustDistrict('');
     setAmount('');
     setInterestRate('3');
     setDurationMonths('');
     setDueType('Daily');
     setDocCharges('');
     setPenaltyPercent('0.75');
+    
+    setG1SelectedId('');
     setG1Name('');
     setG1Phone('');
+    setG1Phone2('');
     setG1Aadhaar('');
     setG1AadhaarAddress('');
     setG1PresentAddress('');
     setG1Photo(null);
-    setG1FingerprintUrl(null);
-    setG1FingerprintTemplate(null);
-    setG1FingerprintAdded(false);
+    setG1Signature(null);
     
+    setG2SelectedId('');
     setG2Name('');
     setG2Phone('');
+    setG2Phone2('');
     setG2Aadhaar('');
     setG2AadhaarAddress('');
     setG2PresentAddress('');
     setG2Photo(null);
-    setG2FingerprintUrl(null);
-    setG2FingerprintTemplate(null);
-    setG2FingerprintAdded(false);
-    setCollateralImage(null);
-    setLocAddress('');
-    setLocVillage('');
-    setLocMandal('');
-    setLocDistrict('');
-    setLocState('');
-    setLocPincode('');
-    setLocLandmark('');
-    setLocLatitude('');
-    setLocLongitude('');
-    setLocMapsLink('');
+    setG2Signature(null);
+
     setParticulars('');
     setExtraDetails('');
-    setDocuments(prev => prev.map(d => ({ ...d, checked: false, refNo: '', fileUrl: null })));
+    setLoanDocs([
+      { name: 'Gold Invoice', fileUrl: null },
+      { name: 'Bank Passbook', fileUrl: null },
+      { name: 'Land Registration', fileUrl: null },
+      { name: 'Driving Licence', fileUrl: null }
+    ]);
+    setLocations([{ address: '', latitude: '', longitude: '', mapsLink: '', image: null }]);
     generateSequentialId(activeLoans, loanCategory);
   };
 
@@ -499,6 +577,7 @@ const LoanEntry: React.FC = () => {
 
   // Generate Auto sequential Loan ID
   const generateSequentialId = (loansList: any[], category: string) => {
+    if (editLoanId) return; // Keep existing ID in edit mode
     const prefix = category === 'L' ? 'L' : category;
     const matchingLoans = loansList.filter(l => {
       const lid = (l.loan_id || '').toUpperCase();
@@ -552,15 +631,16 @@ const LoanEntry: React.FC = () => {
         setCustPhone2(selected.phone_2 || selected.phone2 || '');
         setCustAadhaar(selected.aadhaar || '');
         setCustPhoto(selected.customer_photo_url || null);
+        setCustSignature(selected.customer_fingerprint_image_url || null);
         setCustFingerprintUrl(selected.customer_fingerprint_image_url || selected.fingerprint_url || null);
         setCustFingerprintTemplate(selected.customer_fingerprint_template || selected.fingerprint_template || null);
         setCustFingerprintAdded(!!(selected.customer_fingerprint_added || selected.fingerprint_added));
         
-        setCustVillage(selected.village || '');
+        setCustAadhaarAddress(selected.aadhaar_address || '');
+        setCustPresentAddress(selected.present_address || '');
+        setCustHouseNo(selected.address || '');
         setCustMandal(selected.mandal || '');
         setCustDistrict(selected.district || '');
-        setCustAadhaarAddress(selected.aadhaar_address || '');
-        setCustPresentAddress(selected.present_address || selected.address || '');
         
         checkNPA(selected.id, selected.aadhaar || '');
 
@@ -568,9 +648,6 @@ const LoanEntry: React.FC = () => {
           const matchPartner = partners.find(p => p.name === selected.partner_name);
           if (matchPartner) {
             setSelectedPartnerId(matchPartner.id as string);
-            setPartnerName(matchPartner.name as string);
-          } else {
-            setPartnerName(selected.partner_name);
           }
         }
       }
@@ -587,21 +664,12 @@ const LoanEntry: React.FC = () => {
       if (selected) {
         setG1Name(selected.name);
         setG1Phone(selected.phone_1 || selected.phone || '');
+        setG1Phone2(selected.phone_2 || selected.phone2 || '');
         setG1Aadhaar(selected.aadhaar || '');
         setG1AadhaarAddress(selected.aadhaar_address || '');
         setG1PresentAddress(selected.present_address || selected.address || '');
         setG1Photo(selected.customer_photo_url || null);
-        setG1FingerprintUrl(selected.customer_fingerprint_image_url || selected.fingerprint_url || null);
-        setG1FingerprintTemplate(selected.customer_fingerprint_template || selected.fingerprint_template || null);
-        setG1FingerprintAdded(!!(selected.customer_fingerprint_added || selected.fingerprint_added));
-        setG1Village(selected.aadhaar_village || selected.village || '');
-        setG1Mandal(selected.aadhaar_mandal || selected.mandal || '');
-        setG1District(selected.aadhaar_district || selected.district || '');
-        setG1PermanentAddress(selected.aadhaar_address || '');
-        setG1CurrentAddress(selected.present_address || selected.address || '');
-        setG1CurrentVillage(selected.present_village || selected.village || '');
-        setG1CurrentMandal(selected.present_mandal || selected.mandal || '');
-        setG1CurrentDistrict(selected.present_district || selected.district || '');
+        setG1Signature(selected.customer_fingerprint_image_url || null);
       }
     };
     fetchG1();
@@ -615,21 +683,12 @@ const LoanEntry: React.FC = () => {
       if (selected) {
         setG2Name(selected.name);
         setG2Phone(selected.phone_1 || selected.phone || '');
+        setG2Phone2(selected.phone_2 || selected.phone2 || '');
         setG2Aadhaar(selected.aadhaar || '');
         setG2AadhaarAddress(selected.aadhaar_address || '');
         setG2PresentAddress(selected.present_address || selected.address || '');
         setG2Photo(selected.customer_photo_url || null);
-        setG2FingerprintUrl(selected.customer_fingerprint_image_url || selected.fingerprint_url || null);
-        setG2FingerprintTemplate(selected.customer_fingerprint_template || selected.fingerprint_template || null);
-        setG2FingerprintAdded(!!(selected.customer_fingerprint_added || selected.fingerprint_added));
-        setG2Village(selected.aadhaar_village || selected.village || '');
-        setG2Mandal(selected.aadhaar_mandal || selected.mandal || '');
-        setG2District(selected.aadhaar_district || selected.district || '');
-        setG2PermanentAddress(selected.aadhaar_address || '');
-        setG2CurrentAddress(selected.present_address || selected.address || '');
-        setG2CurrentVillage(selected.present_village || selected.village || '');
-        setG2CurrentMandal(selected.present_mandal || selected.mandal || '');
-        setG2CurrentDistrict(selected.present_district || selected.district || '');
+        setG2Signature(selected.customer_fingerprint_image_url || null);
       }
     };
     fetchG2();
@@ -637,107 +696,8 @@ const LoanEntry: React.FC = () => {
 
   // Autofill partner name
   useEffect(() => {
-    if (selectedPartnerId) {
-      const selected = partners.find(p => p.id === selectedPartnerId);
-      if (selected && selected.name) {
-        setPartnerName(selected.name);
-      }
-    } else {
-      setPartnerName('');
-    }
+    // Partner selected state hook
   }, [selectedPartnerId, partners]);
-
-  // Handle Location Detection
-  const handleDetectGPS = () => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocation is not supported by your browser');
-      return;
-    }
-    
-    const loadingToast = toast.loading('Retrieving GPS satellite coordinates...');
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        toast.dismiss(loadingToast);
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        setLocLatitude(String(lat));
-        setLocLongitude(String(lng));
-        setLocMapsLink(`https://www.google.com/maps/place/${lat},${lng}`);
-        toast.success('Collateral GPS localized successfully!');
-      },
-      (error) => {
-        toast.dismiss(loadingToast);
-        console.error(error);
-        toast.error('Failed to resolve coordinates: ' + error.message);
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
-  };
-
-  // Upload checklist document to storage
-  const handleChecklistUpload = async (key: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setDocuments(prev => prev.map(doc => doc.key === key ? { ...doc, uploading: true } : doc));
-    
-    try {
-      const fileObj = new File([file], `doc-${loanId}-${key}-${Date.now()}-${file.name}`, { type: file.type });
-      
-      const { data, error } = await supabase.storage
-        .from('finance-photos')
-        .upload(`documents/${fileObj.name}`, fileObj);
-
-      if (error) throw error;
-
-      const publicUrl = supabase.storage
-        .from('finance-photos')
-        .getPublicUrl(data.path).data.publicUrl;
-
-      setDocuments(prev => prev.map(doc => doc.key === key ? { ...doc, checked: true, fileUrl: publicUrl, uploading: false } : doc));
-      toast.success('Document uploaded and attached successfully!');
-    } catch (err) {
-      console.error(err);
-      toast.error('Document upload failed');
-      setDocuments(prev => prev.map(doc => doc.key === key ? { ...doc, uploading: false } : doc));
-    }
-  };
-
-  const removeChecklistUpload = (key: string) => {
-    setDocuments(prev => prev.map(doc => doc.key === key ? { ...doc, fileUrl: null } : doc));
-    toast.success('Attachment detached');
-  };
-
-  const handleCollateralImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `collateral-${Date.now()}.${fileExt}`;
-      const filePath = `collateral/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('finance-photos')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage
-        .from('finance-photos')
-        .getPublicUrl(filePath);
-
-      setCollateralImage(data.publicUrl);
-      toast.success('Collateral image uploaded successfully');
-    } catch (err) {
-      console.error('Error uploading collateral image:', err);
-      toast.error('Failed to upload collateral image');
-    }
-  };
-
-  const removeCollateralImage = () => {
-    setCollateralImage(null);
-  };
 
   // Helper to format currency properly as Indian Rupees
   const formatRupee = (value: number) => {
@@ -746,6 +706,36 @@ const LoanEntry: React.FC = () => {
       maximumFractionDigits: 2
     });
   };
+
+  const addLocation = () => {
+    setLocations([...locations, { address: '', latitude: '', longitude: '', mapsLink: '', image: null }]);
+  };
+
+  const removeLocation = (index: number) => {
+    setLocations(locations.filter((_, i) => i !== index));
+  };
+
+  const updateLocation = (index: number, field: string, value: any) => {
+    setLocations(locations.map((loc, i) => i === index ? { ...loc, [field]: value } : loc));
+  };
+
+  const handleRefreshCustPhoto = async () => {
+    if (!selectedCustomerId) return;
+    try {
+      const selected = await supabaseFinance.getCustomerById(selectedCustomerId);
+      if (selected) {
+        setCustPhoto(selected.customer_photo_url || null);
+        setCustSignature(selected.customer_fingerprint_image_url || null);
+        toast.success('Borrower photo & signature refreshed');
+      }
+    } catch (e) {
+      toast.error('Failed to refresh photo');
+    }
+  };
+
+
+
+
 
   // Live Calculations
   const liveCalculations = useMemo(() => {
@@ -778,8 +768,8 @@ const LoanEntry: React.FC = () => {
       dueAmount = duesCount > 0 ? ((P + interestAmount) / duesCount) : 0;
     }
 
-    const payableAmount = loanCategory === 'CD' ? P - interestAmount - docFees : P - docFees;
-    const netDisbursed = P - docFees;
+    const netDisbursed = P - interestAmount - docFees;
+    const payableAmount = netDisbursed;
     const totalRenewal = interestAmount + penalty;
     const totalClose = P + interestAmount + penalty;
 
@@ -798,6 +788,10 @@ const LoanEntry: React.FC = () => {
     };
   }, [amount, interestRate, durationMonths, dueType, docCharges, loanCategory]);
 
+  const handlePrintPreview = () => {
+    setShowPrintPreview(true);
+  };
+
   // Form Reset / Clear
   const handleClearForm = () => {
     if (!window.confirm('Are you sure you want to clear the form? All details will be reset.')) return;
@@ -811,14 +805,15 @@ const LoanEntry: React.FC = () => {
     setCustPhone2('');
     setCustAadhaar('');
     setCustPhoto(null);
+    setCustSignature(null);
     setCustFingerprintUrl(null);
     setCustFingerprintTemplate(null);
     setCustFingerprintAdded(false);
-    setCustVillage('');
-    setCustMandal('');
-    setCustDistrict('');
     setCustAadhaarAddress('');
     setCustPresentAddress('');
+    setCustHouseNo('');
+    setCustMandal('');
+    setCustDistrict('');
     setCustSearch('');
     setCustDropdownOpen(false);
     setNpaWarning(null);
@@ -826,44 +821,22 @@ const LoanEntry: React.FC = () => {
     setG1SelectedId('');
     setG1Name('');
     setG1Phone('');
+    setG1Phone2('');
     setG1Aadhaar('');
     setG1AadhaarAddress('');
     setG1PresentAddress('');
     setG1Photo(null);
-    setG1FingerprintUrl(null);
-    setG1FingerprintTemplate(null);
-    setG1FingerprintAdded(false);
-    setG1Search('');
-    setG1DropdownOpen(false);
-    setG1Village('');
-    setG1Mandal('');
-    setG1District('');
-    setG1PermanentAddress('');
-    setG1CurrentAddress('');
-    setG1CurrentVillage('');
-    setG1CurrentMandal('');
-    setG1CurrentDistrict('');
+    setG1Signature(null);
 
     setG2SelectedId('');
     setG2Name('');
     setG2Phone('');
+    setG2Phone2('');
     setG2Aadhaar('');
     setG2AadhaarAddress('');
     setG2PresentAddress('');
     setG2Photo(null);
-    setG2FingerprintUrl(null);
-    setG2FingerprintTemplate(null);
-    setG2FingerprintAdded(false);
-    setG2Search('');
-    setG2DropdownOpen(false);
-    setG2Village('');
-    setG2Mandal('');
-    setG2District('');
-    setG2PermanentAddress('');
-    setG2CurrentAddress('');
-    setG2CurrentVillage('');
-    setG2CurrentMandal('');
-    setG2CurrentDistrict('');
+    setG2Signature(null);
 
     setAmount('');
     setDocCharges('');
@@ -874,23 +847,17 @@ const LoanEntry: React.FC = () => {
     setParticulars('');
 
     setSelectedPartnerId('');
-    setPartnerName('');
-
-    setLocAddress('');
-    setLocVillage('');
-    setLocMandal('');
-    setLocDistrict('');
-    setLocState('');
-    setLocPincode('');
-    setLocLandmark('');
-    setLocLatitude('');
-    setLocLongitude('');
-    setLocMapsLink('');
 
     setRemarks('');
     setExtraDetails('');
 
-    setDocuments(prev => prev.map(doc => ({ ...doc, checked: false, refNo: '', fileUrl: null })));
+    setLoanDocs([
+      { name: 'Gold Invoice', fileUrl: null },
+      { name: 'Bank Passbook', fileUrl: null },
+      { name: 'Land Registration', fileUrl: null },
+      { name: 'Driving Licence', fileUrl: null }
+    ]);
+    setLocations([{ address: '', latitude: '', longitude: '', mapsLink: '', image: null }]);
     toast.success('Form cleared successfully');
   };
 
@@ -908,15 +875,6 @@ const LoanEntry: React.FC = () => {
       { name: 'particulars', label: 'Particulars', value: particulars, required: true, ref: particularsRef },
     ];
 
-    if (g1Name || g1SelectedId) {
-      fields.push({ name: 'g1Name', label: 'Guarantor Name', value: g1Name, required: true, ref: g1NameRef });
-      fields.push({ name: 'g1Phone', label: 'Guarantor Phone', value: g1Phone, required: true, ref: g1PhoneRef });
-    }
-    
-    if (locVillage || locMandal || locDistrict || locState || locPincode || locLandmark || locLatitude || locLongitude || collateralImage) {
-      fields.push({ name: 'locAddress', label: 'Collateral Address / Location', value: locAddress, required: true, ref: locAddressRef });
-    }
-    
     const { isValid, errors: newErrors } = validateFinanceForm(fields);
     setErrors(newErrors);
     if (!isValid) return;
@@ -926,185 +884,17 @@ const LoanEntry: React.FC = () => {
       return;
     }
 
-    // Validate customer Aadhaar format and duplicate if creating inline
     if (!selectedCustomerId) {
-      const cleanAadhaar = custAadhaar.trim();
-      if (cleanAadhaar) {
-        if (!/^\d{12}$/.test(cleanAadhaar)) {
-          toast.error('Aadhaar must be exactly 12 digits.');
-          return;
-        }
-
-        // Query database directly to check for duplicate Aadhaar
-        try {
-          const { data: existingCustomers, error: checkError } = await supabase
-            .from('finance_customers')
-            .select('name, customer_id')
-            .eq('aadhaar', cleanAadhaar)
-            .limit(1);
-
-          if (checkError) {
-            console.error('Error checking duplicate Aadhaar:', checkError);
-          } else if (existingCustomers && existingCustomers.length > 0) {
-            const dup = existingCustomers[0];
-            toast.error(`Customer with this Aadhaar already exists (Name: ${dup.name}, ID: ${dup.customer_id || 'N/A'}).`);
-            return;
-          }
-        } catch (err) {
-          console.error('Exception checking duplicate Aadhaar:', err);
-        }
-      }
+      toast.error('Please search and select an existing Customer. Customer creation is not allowed during loan entry.');
+      return;
     }
 
     setSaving(true);
+    const saveToastId = toast.loading(editLoanId ? 'Updating loan parameters...' : 'Saving new loan...');
     try {
       const staffName = user?.username || 'Staff';
 
-      // 1. Resolve Customer ID
-      let resolvedCustomerId = selectedCustomerId;
-      if (!resolvedCustomerId) {
-        // Check if customer already exists by Aadhaar, Phone, or exact Name + Father match
-        const match = customerSearchResults.find(c => 
-          (c.aadhaar && custAadhaar && c.aadhaar === custAadhaar) ||
-          (c.phone_1 && custPhone && c.phone_1 === custPhone) ||
-          (c.phone && custPhone && c.phone === custPhone) ||
-          (c.name && c.name.toLowerCase() === custName.toLowerCase().trim() && 
-           ((c.father_name || c.father_husband_name || '').toLowerCase() === custFatherName.toLowerCase().trim()))
-        );
-
-        if (match && match.id) {
-          resolvedCustomerId = match.id;
-        } else {
-          // Create new customer
-          const newCust = await supabaseFinance.createCustomer({
-            name: custName.trim().toUpperCase(),
-            phone: custPhone || null,
-            phone2: custPhone2 || null,
-            address: custPresentAddress ? custPresentAddress.trim().toUpperCase() : null,
-            aadhaar: custAadhaar || null,
-            customer_photo_url: custPhoto,
-            father_husband_name: custFatherName ? custFatherName.trim().toUpperCase() : null,
-            father_name: custFatherName ? custFatherName.trim().toUpperCase() : null,
-            village: custVillage ? custVillage.trim().toUpperCase() : null,
-            mandal: custMandal ? custMandal.trim().toUpperCase() : null,
-            district: custDistrict ? custDistrict.trim().toUpperCase() : null,
-            aadhaar_address: custAadhaarAddress ? custAadhaarAddress.trim().toUpperCase() : null,
-            present_address: custPresentAddress ? custPresentAddress.trim().toUpperCase() : null,
-            phone_1: custPhone || null,
-            phone_2: custPhone2 || null,
-            fingerprint_url: custFingerprintUrl || null,
-            fingerprint_template: custFingerprintTemplate || null,
-            fingerprint_added: custFingerprintAdded
-          });
-          if (newCust) {
-            resolvedCustomerId = newCust.id;
-          } else {
-            toast.error('Failed to create new customer record.');
-            setSaving(false);
-            return;
-          }
-        }
-      }
-
-      // 2. Resolve Guarantor 1 ID
-      let resolvedG1Id = g1SelectedId;
-      if (!resolvedG1Id && g1Name.trim()) {
-        const matchG1 = g1SearchResults.find(g => 
-          (g.aadhaar && g1Aadhaar && g.aadhaar === g1Aadhaar) ||
-          (g.phone_1 && g1Phone && g.phone_1 === g1Phone) ||
-          (g.phone && g1Phone && g.phone === g1Phone) ||
-          (g.name && g.name.toLowerCase() === g1Name.toLowerCase().trim())
-        );
-
-        if (matchG1 && matchG1.id) {
-          resolvedG1Id = matchG1.id;
-        } else {
-          const newGuar = await supabaseFinance.createCustomer({
-            name: g1Name.trim(),
-            aadhaar: g1Aadhaar || null,
-            phone: g1Phone || null,
-            phone2: null,
-            aadhaar_address: g1AadhaarAddress || null,
-            aadhaar_village: g1Village || null,
-            aadhaar_mandal: g1Mandal || null,
-            aadhaar_district: g1District || null,
-            present_address: g1PresentAddress || null,
-            present_village: g1CurrentVillage || null,
-            present_mandal: g1CurrentMandal || null,
-            present_district: g1CurrentDistrict || null,
-            customer_photo_url: g1Photo || null,
-            customer_fingerprint_template: g1FingerprintTemplate || null,
-            customer_fingerprint_image_url: g1FingerprintUrl || null,
-            customer_fingerprint_added: g1FingerprintAdded,
-            father_name: null,
-            father_husband_name: null,
-            phone_1: g1Phone || null,
-            phone_2: null,
-            address: g1PresentAddress || null,
-            village: g1CurrentVillage || null,
-            mandal: g1CurrentMandal || null,
-            district: g1CurrentDistrict || null
-          });
-          if (newGuar) {
-            resolvedG1Id = newGuar.id;
-          } else {
-            toast.error('Failed to create Guarantor 1 record.');
-            setSaving(false);
-            return;
-          }
-        }
-      }
-
-      // 3. Resolve Guarantor 2 ID
-      let resolvedG2Id = g2SelectedId;
-      if (!resolvedG2Id && g2Name.trim()) {
-        const matchG2 = g2SearchResults.find(g => 
-          (g.aadhaar && g2Aadhaar && g.aadhaar === g2Aadhaar) ||
-          (g.phone_1 && g2Phone && g.phone_1 === g2Phone) ||
-          (g.phone && g2Phone && g.phone === g2Phone) ||
-          (g.name && g.name.toLowerCase() === g2Name.toLowerCase().trim())
-        );
-
-        if (matchG2 && matchG2.id) {
-          resolvedG2Id = matchG2.id;
-        } else {
-          const newGuar = await supabaseFinance.createCustomer({
-            name: g2Name.trim(),
-            aadhaar: g2Aadhaar || null,
-            phone: g2Phone || null,
-            phone2: null,
-            aadhaar_address: g2AadhaarAddress || null,
-            aadhaar_village: g2Village || null,
-            aadhaar_mandal: g2Mandal || null,
-            aadhaar_district: g2District || null,
-            present_address: g2PresentAddress || null,
-            present_village: g2CurrentVillage || null,
-            present_mandal: g2CurrentMandal || null,
-            present_district: g2CurrentDistrict || null,
-            customer_photo_url: g2Photo || null,
-            customer_fingerprint_template: g2FingerprintTemplate || null,
-            customer_fingerprint_image_url: g2FingerprintUrl || null,
-            customer_fingerprint_added: g2FingerprintAdded,
-            father_name: null,
-            father_husband_name: null,
-            phone_1: g2Phone || null,
-            phone_2: null,
-            address: g2PresentAddress || null,
-            village: g2CurrentVillage || null,
-            mandal: g2CurrentMandal || null,
-            district: g2CurrentDistrict || null
-          });
-          if (newGuar) {
-            resolvedG2Id = newGuar.id;
-          } else {
-            toast.error('Failed to create Guarantor 2 record.');
-            setSaving(false);
-            return;
-          }
-        }
-      }
-
-      // 4. Create dues schedule
+      // Create dues schedule
       const duesList: any[] = [];
       const start = new Date(date);
       for (let i = 1; i <= liveCalculations.duesCount; i++) {
@@ -1131,26 +921,13 @@ const LoanEntry: React.FC = () => {
 
       const finalRemarks = [
          remarks,
-        `Collateral: ${locAddress || 'N/A'}, GPS: ${locLatitude && locLongitude ? `${locLatitude},${locLongitude}` : 'N/A'}`,
+        `Collateral: ${locations.map(l => l.address).filter(Boolean).join(', ') || 'N/A'}, GPS: ${locations.map(l => l.latitude && l.longitude ? `${l.latitude},${l.longitude}` : '').filter(Boolean).join(' / ') || 'N/A'}`,
         `Extra: ${extraDetails || 'N/A'}`
       ].filter(Boolean).join(' | ');
 
-      const customerPayload = {
-        id: resolvedCustomerId,
-        customer_photo_url: custPhoto,
-        fingerprint_url: custFingerprintUrl,
-        fingerprint_template: custFingerprintTemplate,
-        fingerprint_added: custFingerprintAdded,
-        customer_fingerprint_template: custFingerprintTemplate,
-        customer_fingerprint_image_url: custFingerprintUrl,
-        customer_fingerprint_added: custFingerprintAdded,
-        father_husband_name: custFatherName || null,
-        partner_name: partnerName || null
-      };
-
       const loanPayload = {
         loan_id: loanId,
-        customer_id: resolvedCustomerId,
+        customer_id: selectedCustomerId,
         date,
         amount: liveCalculations.principal,
         interest_rate: Number(interestRate),
@@ -1165,108 +942,145 @@ const LoanEntry: React.FC = () => {
         remarks: finalRemarks,
         customer_photo_url: custPhoto,
         surety_photo_url: g1Photo || g2Photo || null,
-        fingerprint_url: custFingerprintUrl,
-        fingerprint_template: custFingerprintTemplate,
-        fingerprint_added: custFingerprintAdded,
-        customer_fingerprint_template: custFingerprintTemplate,
-        customer_fingerprint_image_url: custFingerprintUrl,
-        customer_fingerprint_added: custFingerprintAdded,
-        surety_fingerprint_template: g1FingerprintTemplate || g2FingerprintTemplate || null,
-        surety_fingerprint_image_url: g1FingerprintUrl || g2FingerprintUrl || null,
-        surety_fingerprint_added: g1FingerprintAdded || g2FingerprintAdded || false,
         father_husband_name: custFatherName || null,
         loan_category: loanCategory,
-        guarantor_1_id: resolvedG1Id || null,
-        guarantor_2_id: resolvedG2Id || null,
+        guarantor_1_id: g1SelectedId || null,
+        guarantor_2_id: g2SelectedId || null,
         penalty_percent: Number(penaltyPercent) || 0.75,
         document_charges: Number(docCharges) || 0,
         period_days: loanCategory === 'CD' ? (Number(durationMonths) || 30) : null
       };
 
-      const photosArray: any[] = [];
-      if (custPhoto) photosArray.push({ photo_type: 'Customer', photo_url: custPhoto });
+      const linkedDocs: any[] = [];
+      loanDocs.forEach(d => {
+        if (d.fileUrl) {
+          linkedDocs.push({
+            category: 'DocumentPhoto',
+            document_name: d.name,
+            remarks: null,
+            is_submitted: true,
+            file_url: d.fileUrl,
+            file_name: d.fileName || null,
+            uploaded_by: staffName,
+            uploaded_at: new Date().toISOString()
+          });
+        }
+      });
 
-      const linkedDocs = documents.filter(doc => doc.checked || doc.fileUrl).map(doc => ({
-        category: doc.category,
-        document_name: doc.label,
-        remarks: doc.refNo || null,
-        file_url: doc.fileUrl || null,
-        is_submitted: doc.checked
-      }));
+      const selectedPartner = partners.find(p => p.id === selectedPartnerId);
+      const partnerName = selectedPartner ? selectedPartner.name : null;
 
-      const savedLoan = await supabaseFinance.createLoan(
-        loanPayload,
-        customerPayload,
-        duesList,
-        photosArray,
-        linkedDocs,
-        staffName
-      );
+      if (editLoanId) {
+        // Edit mode save
+        // 1. Update customer record
+        await supabaseFinance.updateCustomer(selectedCustomerId, {
+          name: custName,
+          phone: custPhone || null,
+          phone_1: custPhone || null,
+          phone_2: custPhone2 || null,
+          phone2: custPhone2 || null,
+          address: custHouseNo || null,
+          aadhaar: custAadhaar || null,
+          father_husband_name: custFatherName || null,
+          father_name: custFatherName || null,
+          aadhaar_address: custAadhaarAddress || null,
+          present_address: custPresentAddress || null,
+          mandal: custMandal || null,
+          district: custDistrict || null,
+          partner_name: partnerName
+        }, staffName, true);
 
-      if (savedLoan) {
+        // 2. Update loan record
+        await supabaseFinance.updateLoan(editLoanId, loanPayload, staffName, true);
 
-        // Save collateral info in logs
-        const collateralJSON = {
-          collateral_address: locAddress,
-          village: locVillage,
-          mandal: locMandal,
-          district: locDistrict,
-          state: locState,
-          pincode: locPincode,
-          landmark: locLandmark,
-          gps_latitude: locLatitude,
-          gps_longitude: locLongitude,
-          google_maps_link: locMapsLink,
-          collateral_image: collateralImage,
-          particulars,
-          extraDetails,
-          document_charges: liveCalculations.docFees
-        };
-
-        try {
-          await supabase.from('finance_edited_logs').insert([{
-            table_name: 'finance_loans_collateral',
-            record_id: savedLoan.id,
-            old_values: {},
-            new_values: collateralJSON,
-            edited_by: staffName
-          }]);
-        } catch (err) {
-          console.warn('Could not record collateral JSON metadata', err);
+        // 3. Update documents
+        await supabase.from('finance_loan_documents').delete().eq('loan_id', editLoanId);
+        if (linkedDocs.length > 0) {
+          const mappedDocs = linkedDocs.map(d => ({ ...d, loan_id: editLoanId }));
+          await supabase.from('finance_loan_documents').insert(mappedDocs);
         }
 
-        toast.success(`Loan Account ${loanId} created and disbursed successfully!`);
-        navigate('/finance');
-      } else {
-        toast.error('Disbursal failed. Duplicate Loan Number.');
-      }
-    } catch (err: any) {
-      console.error('Save loan error details:', err);
-      const errorMsg = err.message || '';
-      if (err.code === '42703' || errorMsg.includes('column') || errorMsg.includes('schema cache')) {
-        toast.error('Customer table setup is incomplete. Please run migration.');
-      } else if (err.code === '23505' || errorMsg.includes('duplicate') || errorMsg.includes('unique constraint')) {
-        if (errorMsg.toLowerCase().includes('loan_id') || errorMsg.toLowerCase().includes('loans')) {
-          toast.error('Disbursal failed. Duplicate Loan Number.');
-        } else if (errorMsg.toLowerCase().includes('aadhaar')) {
-          toast.error('Customer with this Aadhaar already exists.');
+        // 4. CD Sequential Rebuild
+        if (loanCategory === 'CD' && hasLedgerActivity) {
+          const rebuildResult = await cdLedgerRebuildService.rebuildCDLoanLifecycle(editLoanId, 'FULL_RECALCULATE');
+          if (!rebuildResult.success) {
+            throw new Error(rebuildResult.error || 'Rebuild of CD loan history failed');
+          }
+        }
+
+        toast.success(`Loan Account ${loanId} updated successfully!`, { id: saveToastId });
+        if (onCancelEdit) {
+          onCancelEdit();
         } else {
-          toast.error(`Duplicate entry error: ${errorMsg}`);
+          navigate('/finance');
         }
       } else {
-        toast.error(`Disbursal failed: ${errorMsg || 'Check database connection or RLS rules.'}`);
+        // Update/save customer details first
+        if (selectedCustomerId) {
+          await supabaseFinance.updateCustomer(selectedCustomerId, {
+            name: custName,
+            phone: custPhone || null,
+            phone_1: custPhone || null,
+            phone_2: custPhone2 || null,
+            phone2: custPhone2 || null,
+            address: custHouseNo || null,
+            aadhaar: custAadhaar || null,
+            father_husband_name: custFatherName || null,
+            father_name: custFatherName || null,
+            aadhaar_address: custAadhaarAddress || null,
+            present_address: custPresentAddress || null,
+            mandal: custMandal || null,
+            district: custDistrict || null,
+            partner_name: partnerName
+          }, staffName, true);
+        }
+
+        const savedLoan = await supabaseFinance.createLoan(
+          loanPayload,
+          { id: selectedCustomerId },
+          duesList,
+          [],
+          linkedDocs,
+          staffName
+        );
+
+        if (savedLoan) {
+          const collateralJSON = {
+            locations: locations,
+            collateral_address: locations[0]?.address || '',
+            gps_latitude: locations[0]?.latitude || '',
+            gps_longitude: locations[0]?.longitude || '',
+            google_maps_link: locations[0]?.mapsLink || '',
+            collateral_image: locations[0]?.image || null,
+            particulars,
+            extraDetails,
+            document_charges: liveCalculations.docFees
+          };
+          try {
+            await supabase.from('finance_edited_logs').insert([{
+              table_name: 'finance_loans_collateral',
+              record_id: savedLoan.id,
+              old_values: {},
+              new_values: collateralJSON,
+              edited_by: staffName
+            }]);
+          } catch (err) {
+            console.warn('Could not record collateral JSON metadata', err);
+          }
+
+          toast.success(`Loan Account ${loanId} created and disbursed successfully!`, { id: saveToastId });
+          navigate('/finance');
+        } else {
+          toast.error('Disbursal failed. Duplicate Loan Number.', { id: saveToastId });
+        }
       }
+
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Operation failed: ${err.message || 'database error'}`, { id: saveToastId });
     } finally {
       setSaving(false);
     }
-  };
-
-  const handlePrintPreview = () => {
-    if (!liveCalculations) {
-      toast.error('Please enter valid loan terms to preview statement');
-      return;
-    }
-    setShowPrintPreview(true);
   };
 
   if (loading) {
@@ -1278,1341 +1092,1156 @@ const LoanEntry: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto select-none print:p-0 print:bg-white">
-      
-      {/* Top Header Actions Bar */}
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5 print:hidden">
+    <div className="space-y-2 w-full select-none print:p-0 print:bg-white">
+
+      {/* Compact Header Bar */}
+      <div className="flex items-center justify-between bg-white border border-slate-200 px-3 py-2 rounded print:hidden">
         <div>
-          <h1 className="peek-h1">NEW LOAN ENTRY</h1>
-          <p className="mt-1 peek-small-10 uppercase">
-            CAPTURE & DISBURSE GENERAL — LEDGER — DUES CALCULATIONS PREVIEW & FILE
-          </p>
+          <h1 className="text-[24px] font-bold uppercase text-slate-900 tracking-tight leading-none">
+            {editLoanId ? `EDIT LOAN ACCOUNT` : `NEW LOAN ENTRY`}
+          </h1>
+          <div className="mt-0.5 flex items-center gap-4">
+            <span className="text-[16px] font-black text-slate-950 font-mono">LOAN NO: {loanId || '---'}</span>
+            <span className="text-[16px] font-black text-slate-700 font-mono">DATE: {date || '---'}</span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
-            onClick={() => navigate('/finance')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm peek-button uppercase"
+            onClick={editLoanId ? onCancelEdit : () => navigate('/finance')}
+            className="inline-flex items-center gap-1 px-3 h-[36px] bg-white text-slate-700 border border-slate-200 rounded hover:bg-slate-50 font-bold text-[13px] uppercase"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             BACK
           </button>
-          <Link
-            to="/finance/calculator"
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm peek-button uppercase"
-          >
-            <Calculator className="w-3.5 h-3.5" />
-            CALCULATOR
-          </Link>
+          {!editLoanId && (
+            <Link
+              to="/finance/calculator"
+              className="inline-flex items-center gap-1 px-3 h-[36px] bg-white text-slate-700 border border-slate-200 rounded hover:bg-slate-50 font-bold text-[13px] uppercase"
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              CALCULATOR
+            </Link>
+          )}
           <button
             onClick={handlePrintPreview}
             disabled={!liveCalculations}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50 peek-button uppercase"
+            className="inline-flex items-center gap-1 px-3 h-[36px] bg-white text-slate-700 border border-slate-200 rounded hover:bg-slate-50 font-bold text-[13px] uppercase disabled:opacity-50"
           >
             <Printer className="w-3.5 h-3.5" />
-            PREVIEW & PRINT
+            PREVIEW &amp; PRINT
           </button>
-          <button
-            onClick={isLookupMode ? handleClearLookup : handleClearForm}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors shadow-sm peek-button uppercase"
-          >
-            <X className="w-3.5 h-3.5" />
-            CLEAR
-          </button>
+          {!editLoanId && (
+            <button
+              onClick={isLookupMode ? handleClearLookup : handleClearForm}
+              className="inline-flex items-center gap-1 px-3 h-[36px] bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 font-bold text-[13px] uppercase"
+            >
+              <X className="w-3.5 h-3.5" />
+              CLEAR
+            </button>
+          )}
           <button
             onClick={handleSaveLoan}
             disabled={saving || isLookupMode}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 peek-button uppercase"
+            className="inline-flex items-center gap-1 px-4 h-[36px] bg-[#0b1329] text-white border border-slate-800 rounded hover:bg-slate-800 font-bold text-[13px] uppercase disabled:opacity-50"
           >
             <Check className="w-3.5 h-3.5" />
-            {saving ? 'SAVING...' : 'SAVE LOAN'}
+            {saving ? 'SAVING...' : editLoanId ? 'SAVE CHANGES' : 'SAVE LOAN'}
           </button>
         </div>
       </div>
 
       {isLookupMode && (
-        <div className="bg-blue-50 border-2 border-blue-500 text-blue-900 p-4 rounded-xl flex items-center justify-between shadow-md print:hidden animate-pulse">
+        <div className="bg-blue-50 border border-blue-400 text-blue-900 px-3 py-2 rounded flex items-center justify-between print:hidden">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-blue-600 shrink-0" />
-            <span className="font-bold text-sm tracking-wider uppercase">VIEW MODE - EXISTING ACCOUNT LOADED</span>
+            <AlertCircle className="w-4 h-4 text-blue-600 shrink-0" />
+            <span className="font-bold text-[13px] tracking-wider uppercase">VIEW MODE — EXISTING ACCOUNT LOADED</span>
           </div>
-          <button
-            type="button"
-            onClick={handleClearLookup}
-            className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-lg font-bold uppercase transition-colors"
-          >
+          <button type="button" onClick={handleClearLookup}
+            className="text-[12px] bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1 rounded font-bold uppercase">
             EXIT VIEW MODE
           </button>
         </div>
       )}
 
-      {/* Main Workspace Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left Column: Form entries */}
-        <div className="lg:col-span-2 space-y-6">
-          
-          {/* Card 1: BASICS */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
-              BASICS
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div>
-                <label className="peek-label uppercase">
-                  DATE <span className="text-red-500 ml-1">*</span>
-                </label>
-                <input
-                  type="date"
-                  ref={dateRef}
-                  value={date}
-                  disabled={isLookupMode}
-                  onChange={(e) => { setDate(e.target.value); setErrors(p => ({...p, date: false})) }}
-                  className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-caption-12 ${errors.date ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                  required
-                />
-              </div>
+      {editLoanId && hasLedgerActivity && (
+        <div className="bg-amber-50 border-l-4 border-amber-500 px-3 py-2 rounded-r flex gap-2 items-center">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+          <div>
+            <span className="text-amber-800 font-bold text-[13px] uppercase">Financial Field Protection Active — </span>
+            <span className="text-amber-700 text-[12px] uppercase">Core financial fields are locked. Non-financial fields remain editable.</span>
+          </div>
+        </div>
+      )}
 
-              <div>
-                <label className="peek-label uppercase">
-                  LEDGER TYPE <span className="text-red-500 ml-1">*</span>
-                </label>
-                <select
-                  value={loanCategory}
-                  disabled={isLookupMode}
-                  onChange={(e) => setLoanCategory(e.target.value as any)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
-                  style={{ fontFamily: 'Times New Roman', fontSize: '15px', fontWeight: 'bold' }}
-                  required
+      {/* Main Workspace */}
+      <div className="w-full space-y-2">
+
+        {/* Card 1: BASICS */}
+        <div className="bg-white border border-slate-200 rounded p-3 space-y-3">
+          <h3 className="text-slate-900 border-b border-slate-100 pb-1.5 uppercase font-bold text-[15px]">BASICS</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="uppercase block mb-1 text-[13px] font-bold text-slate-700">
+                DATE <span className="text-red-500 ml-1">*</span>
+              </label>
+              <input
+                type="date"
+                ref={dateRef}
+                value={date}
+                disabled={isLookupMode || (!!editLoanId && hasLedgerActivity)}
+                onChange={(e) => { setDate(e.target.value); setErrors(p => ({...p, date: false})) }}
+                className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-caption-12 ${errors.date ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="peek-label uppercase block mb-1 text-[11px] font-bold text-slate-700">
+                LEDGER TYPE <span className="text-red-500 ml-1">*</span>
+              </label>
+              <select
+                value={loanCategory}
+                disabled={isLookupMode || !!editLoanId}
+                onChange={(e) => setLoanCategory(e.target.value as any)}
+                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12 font-bold"
+                style={{ fontFamily: 'Times New Roman', fontSize: '15px' }}
+                required
+              >
+                <option value="CD">CD LEDGER</option>
+                <option value="STBD">STBD LEDGER</option>
+                <option value="HP">HP LEDGER</option>
+                <option value="TBD">TBD LEDGER</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="peek-label uppercase block mb-1 text-[11px] font-bold text-slate-700">
+                LOAN NUMBER <span className="text-red-500 ml-1">*</span>
+              </label>
+              <input
+                type="text"
+                ref={loanIdRef}
+                value={loanId}
+                disabled={isLookupMode || !!editLoanId}
+                onChange={(e) => { setLoanId(e.target.value); setErrors(p => ({...p, loanId: false})) }}
+                placeholder="e.g. CD001"
+                className={`w-full bg-slate-50 border rounded-lg p-2 text-slate-700 focus:outline-none font-mono peek-caption-12 ${errors.loanId ? 'border-red-500 bg-red-50' : 'border-slate-200'}`}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="peek-label uppercase block mb-1 text-[11px] font-bold text-slate-700">
+                SEARCH LOAN AC/NO
+              </label>
+              <div ref={cdSearchDropdownRef} className="relative flex gap-2">
+                <div className="relative flex-grow">
+                  <input
+                    type="text"
+                    value={existingCdSearch}
+                    disabled={!!editLoanId}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onFocus={() => {
+                      if (existingCdSearch.trim()) {
+                        setShowCdSuggestions(true);
+                      }
+                    }}
+                    placeholder="E.G. CD001"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none font-mono peek-caption-12 uppercase disabled:bg-slate-50"
+                  />
+                  {showCdSuggestions && cdSuggestions.length > 0 && (
+                    <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {cdSuggestions.map((suggestion) => (
+                        <div
+                          key={suggestion}
+                          onClick={() => handleSelectCdSuggestion(suggestion)}
+                          className="px-3 py-2 hover:bg-slate-50 cursor-pointer text-slate-800 font-mono text-xs border-b border-slate-50 last:border-0 uppercase"
+                        >
+                          {suggestion}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  disabled={!!editLoanId}
+                  onClick={() => handleExistingCdLookup(existingCdSearch)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-bold text-xs uppercase shadow-sm flex-shrink-0 disabled:opacity-50"
                 >
-                  <option value="CD">CD LEDGER</option>
-                  <option value="STBD">STBD LEDGER</option>
-                  <option value="HP">HP LEDGER</option>
-                  <option value="TBD">TBD LEDGER</option>
-                </select>
-                <span className="text-[9px] text-slate-400 mt-1.5 block peek-button uppercase">
-                  CD, HP, STBD, TBD
-                </span>
-              </div>
-
-              <div>
-                <label className="peek-label uppercase">
-                  LOAN NUMBER <span className="text-red-500 ml-1">*</span>
-                </label>
-                <input
-                  type="text"
-                  ref={loanIdRef}
-                  value={loanId}
-                  disabled={isLookupMode}
-                  onChange={(e) => { setLoanId(e.target.value); setErrors(p => ({...p, loanId: false})) }}
-                  placeholder="e.g. CD001"
-                  className={`w-full bg-slate-50 border rounded-lg p-2 text-slate-700 focus:outline-none font-mono peek-caption-12 ${errors.loanId ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200'}`}
-                  required
-                />
-                <span className="text-[9px] text-slate-400 mt-1.5 block peek-button uppercase">
-                  AUTO-GENERATED
-                </span>
-              </div>
-
-              <div>
-                <label className="peek-label uppercase">
                   SEARCH
-                </label>
-                <div ref={cdSearchDropdownRef} className="relative flex gap-2">
-                  <div className="relative flex-grow">
-                    <input
-                      type="text"
-                      value={existingCdSearch}
-                      onChange={(e) => handleSearchChange(e.target.value)}
-                      onFocus={() => {
-                        if (existingCdSearch.trim()) {
-                          setShowCdSuggestions(true);
-                        }
-                      }}
-                      placeholder="E.G. CD001"
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none font-mono peek-caption-12 uppercase"
-                    />
-                    {showCdSuggestions && cdSuggestions.length > 0 && (
-                      <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                        {cdSuggestions.map((suggestion) => (
-                          <div
-                            key={suggestion}
-                            onClick={() => handleSelectCdSuggestion(suggestion)}
-                            className="px-3 py-2 hover:bg-slate-50 cursor-pointer text-slate-800 font-mono text-xs border-b border-slate-50 last:border-0 uppercase"
-                          >
-                            {suggestion}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleExistingCdLookup(existingCdSearch)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-bold text-xs uppercase shadow-sm flex-shrink-0"
-                  >
-                    SEARCH
-                  </button>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <fieldset disabled={isLookupMode} className="space-y-2">
+
+        {/* NPA Warning Banner */}
+        {npaWarning && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800 uppercase">
+                  NPA Record Found
+                </h3>
+                <div className="mt-2 text-sm text-red-700 space-y-1">
+                  <p>
+                    This customer had a previous Non-Performing Asset (NPA) closed on <strong>{new Date(npaWarning.closed_at).toLocaleDateString('en-IN')}</strong>. 
+                    Reason: {npaWarning.reason || 'N/A'}.
+                  </p>
+                  <p className="font-bold flex flex-wrap gap-x-6 gap-y-1 mt-1">
+                    <span>TOTAL LIABILITY: ₹{
+                      (
+                        npaWarning.total_liability !== undefined && npaWarning.total_liability !== null && Number(npaWarning.total_liability) > 0
+                          ? Number(npaWarning.total_liability) 
+                          : (Number(npaWarning.balance_amount || 0) + Number(npaWarning.interest_due || 0) + Number(npaWarning.penalty_due || 0))
+                      ).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                    }</span>
+                    <span>SETTLEMENT AMOUNT: ₹{(npaWarning.settlement_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <span>WAIVED AMOUNT: ₹{
+                      (
+                        npaWarning.waived_amount !== undefined && npaWarning.waived_amount !== null && Number(npaWarning.waived_amount) > 0
+                          ? Number(npaWarning.waived_amount)
+                          : Math.max(0, 
+                              (
+                                npaWarning.total_liability !== undefined && npaWarning.total_liability !== null && Number(npaWarning.total_liability) > 0
+                                  ? Number(npaWarning.total_liability) 
+                                  : (Number(npaWarning.balance_amount || 0) + Number(npaWarning.interest_due || 0) + Number(npaWarning.penalty_due || 0))
+                              ) - Number(npaWarning.settlement_amount || 0)
+                            )
+                      ).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                    }</span>
+                  </p>
                 </div>
               </div>
             </div>
           </div>
+        )}
 
-          <fieldset disabled={isLookupMode} className="space-y-6">
+        {/* Card 2: CUSTOMER */}
+        <div className="bg-white border border-slate-200 rounded p-3 space-y-3">
+          <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+            <h3 className="text-slate-900 uppercase font-bold text-[15px]">
+              CUSTOMER DETAILS
+            </h3>
+            {selectedCustomerId && !editLoanId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCustomerId('');
+                  setCustName('');
+                  setCustFatherName('');
+                  setCustPhone('');
+                  setCustPhone2('');
+                  setCustAadhaar('');
+                  setCustPhoto(null);
+                  setCustSignature(null);
+                  setCustFingerprintUrl(null);
+                  setCustFingerprintTemplate(null);
+                  setCustFingerprintAdded(false);
+                  setCustAadhaarAddress('');
+                  setCustPresentAddress('');
+                  setCustHouseNo('');
+                  setCustMandal('');
+                  setCustDistrict('');
+                  setNpaWarning(null);
+                }}
+                className="text-red-655 hover:underline peek-small-10 uppercase font-bold text-xs"
+              >
+                CLEAR SELECTION
+              </button>
+            )}
+          </div>
 
-          {/* NPA Warning Banner */}
-          {npaWarning && (
-            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <AlertCircle className="h-5 w-5 text-red-500" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800 uppercase">
-                    NPA Record Found
-                  </h3>
-                  <div className="mt-2 text-sm text-red-700 space-y-1">
-                    <p>
-                      This customer had a previous Non-Performing Asset (NPA) closed on <strong>{new Date(npaWarning.closed_at).toLocaleDateString('en-IN')}</strong>. 
-                      Reason: {npaWarning.reason || 'N/A'}.
-                    </p>
-                    <p className="font-bold flex flex-wrap gap-x-6 gap-y-1 mt-1">
-                      <span>TOTAL LIABILITY: ₹{
-                        (
-                          npaWarning.total_liability !== undefined && npaWarning.total_liability !== null && Number(npaWarning.total_liability) > 0
-                            ? Number(npaWarning.total_liability) 
-                            : (Number(npaWarning.balance_amount || 0) + Number(npaWarning.interest_due || 0) + Number(npaWarning.penalty_due || 0))
-                        ).toLocaleString('en-IN', { minimumFractionDigits: 2 })
-                      }</span>
-                      <span>SETTLEMENT AMOUNT: ₹{(npaWarning.settlement_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                      <span>WAIVED AMOUNT: ₹{
-                        (
-                          npaWarning.waived_amount !== undefined && npaWarning.waived_amount !== null && Number(npaWarning.waived_amount) > 0
-                            ? Number(npaWarning.waived_amount)
-                            : Math.max(0, 
-                                (
-                                  npaWarning.total_liability !== undefined && npaWarning.total_liability !== null && Number(npaWarning.total_liability) > 0
-                                    ? Number(npaWarning.total_liability) 
-                                    : (Number(npaWarning.balance_amount || 0) + Number(npaWarning.interest_due || 0) + Number(npaWarning.penalty_due || 0))
-                                ) - Number(npaWarning.settlement_amount || 0)
-                              )
-                        ).toLocaleString('en-IN', { minimumFractionDigits: 2 })
-                      }</span>
-                    </p>
+          <div className="space-y-4">
+            {!editLoanId && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded border border-slate-100 print:hidden">
+                <div ref={dropdownRef} className="space-y-1">
+                  <label className="peek-label uppercase block text-[11px] font-bold text-slate-700">
+                    SEARCH CUSTOMER
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search className="h-4 w-4 text-slate-400" />
+                    </div>
+                    <input
+                      type="text"
+                      value={custSearch}
+                      onChange={(e) => {
+                        setCustSearch(e.target.value);
+                        setCustDropdownOpen(true);
+                      }}
+                      onFocus={() => setCustDropdownOpen(true)}
+                      placeholder="Search by customer name, ID, phone, or Aadhaar..."
+                      className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
+                    />
+                    
+                    {isSearchingCust && (
+                      <div className="absolute inset-y-0 right-10 pr-3 flex items-center pointer-events-none">
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-slate-400"></div>
+                      </div>
+                    )}
+                    {custDropdownOpen && (
+                      <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {customerSearchResults.length === 0 && !isSearchingCust ? (
+                          <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase text-xs">
+                            No matching customers found
+                          </div>
+                        ) : (
+                          customerSearchResults.map((c) => (
+                              <div
+                                key={c.id}
+                                onClick={() => {
+                                  if (c.id) setSelectedCustomerId(c.id);
+                                  setCustDropdownOpen(false);
+                                  setCustSearch('');
+                                }}
+                                className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
+                              >
+                                <div>
+                                  <div className="text-slate-900 peek-caption-12 font-bold">{c.name}</div>
+                                  <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">
+                                    ID: #{c.customer_id || 'N/A'} | Aadhaar: {c.aadhaar || 'N/A'} | Village: {c.village || 'N/A'}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {(c.phone_1 || c.phone) ? (
+                                    <div className="text-slate-500 font-mono peek-small-10 font-bold">
+                                      {c.phone_1 || c.phone}
+                                    </div>
+                                  ) : null}
+                                  {c.customer_photo_url && (
+                                    <div className="w-8 h-8 rounded-full border overflow-hidden shrink-0">
+                                      <img src={c.customer_photo_url} alt="Profile" className="w-full h-full object-cover" />
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                <div className="space-y-1">
+                  <label className="peek-label uppercase block text-[11px] font-bold text-slate-700">
+                    SELECT PARTNER
+                  </label>
+                  <select
+                    value={selectedPartnerId}
+                    onChange={(e) => setSelectedPartnerId(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12 font-bold h-[38px]"
+                    style={{ fontFamily: 'Times New Roman', fontSize: '15px' }}
+                  >
+                    <option value="">-- SELECT PARTNER --</option>
+                    {partners.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Customer Inputs Panel */}
+            <div className="bg-slate-50 p-3 rounded border border-slate-150 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 font-bold text-xs uppercase">
+                <Input label="Customer Name" value={custName} onChange={editLoanId ? setCustName : undefined} readOnly={!editLoanId} placeholder="Name" />
+                {(() => {
+                  const rel = getRelationshipDisplay(custFatherName);
+                  return (
+                    <Input 
+                      label={`${rel.label} Name`} 
+                      value={rel.name} 
+                      onChange={editLoanId ? setCustFatherName : undefined} 
+                      readOnly={!editLoanId} 
+                      placeholder="Father/Husband/Wife's Name" 
+                    />
+                  );
+                })()}
+                <Input label="Aadhaar UID" value={custAadhaar} onChange={editLoanId ? setCustAadhaar : undefined} readOnly={!editLoanId} placeholder="Aadhaar" />
+                <Input label="Phone 1" value={custPhone} onChange={editLoanId ? setCustPhone : undefined} readOnly={!editLoanId} placeholder="Phone 1" />
+                <Input label="Phone 2" value={custPhone2} onChange={editLoanId ? setCustPhone2 : undefined} readOnly={!editLoanId} placeholder="Phone 2" />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t border-slate-100 pt-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Aadhaar Address
+                  </label>
+                  <textarea
+                    value={custAadhaarAddress}
+                    onChange={editLoanId ? (e) => setCustAadhaarAddress(e.target.value) : undefined}
+                    readOnly={!editLoanId}
+                    placeholder="Address printed on Aadhaar"
+                    rows={4}
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none resize-none peek-caption-12 disabled:bg-slate-50"
+                  />
+                </div>
+                <div className="space-y-3">
+                  <span className="block text-[11px] font-bold text-slate-700 uppercase">Present Address Details</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={custHouseNo}
+                      onChange={editLoanId ? (e) => setCustHouseNo(e.target.value) : undefined}
+                      readOnly={!editLoanId}
+                      placeholder="House / Door No"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[38px] disabled:bg-slate-50"
+                    />
+                    <input
+                      type="text"
+                      value={custMandal}
+                      onChange={editLoanId ? (e) => setCustMandal(e.target.value) : undefined}
+                      readOnly={!editLoanId}
+                      placeholder="Mandal"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[38px] disabled:bg-slate-50"
+                    />
+                  </div>
+                  <textarea
+                    value={custPresentAddress}
+                    onChange={editLoanId ? (e) => setCustPresentAddress(e.target.value) : undefined}
+                    readOnly={!editLoanId}
+                    placeholder="Street / Village / Area"
+                    rows={2}
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none resize-none peek-caption-12 disabled:bg-slate-50"
+                  />
+                  <input
+                    type="text"
+                    value={custDistrict}
+                    onChange={editLoanId ? (e) => setCustDistrict(e.target.value) : undefined}
+                    readOnly={!editLoanId}
+                    placeholder="District"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[38px] disabled:bg-slate-50"
+                  />
+                </div>
+              </div>
+
+              {/* Photo, Signature & Biometrics */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-4 border-t border-slate-150">
+                <div className="bg-white border border-slate-200 rounded p-3 flex flex-col items-center justify-center space-y-2">
+                  <span className="peek-label uppercase text-slate-500 font-bold mb-1 text-[11px]">Customer Photo</span>
+                  <div className="w-28 h-28 bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden relative">
+                    {custPhoto ? (
+                      <img src={custPhoto} alt="Customer" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="flex flex-col items-center text-slate-400 gap-1">
+                        <User className="w-8 h-8 stroke-1" />
+                        <span className="text-[9px] peek-button uppercase">NO PHOTO</span>
+                      </div>
+                    )}
+                  </div>
+                  {selectedCustomerId && (
+                    <button
+                      type="button"
+                      onClick={handleRefreshCustPhoto}
+                      className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 shadow-sm font-bold uppercase transition-colors"
+                    >
+                      REFRESH PHOTO
+                    </button>
+                  )}
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded p-3 flex flex-col items-center justify-center space-y-2">
+                  <span className="peek-label uppercase text-slate-500 font-bold mb-1 text-[11px]">Customer Signature</span>
+                  <div className="w-28 h-28 bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden relative">
+                    {custSignature ? (
+                      <img src={custSignature} alt="Signature" className="max-h-full max-w-full object-contain" />
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">No Signature</span>
+                    )}
+                  </div>
+                </div>
+
+                <BiometricScanner
+                  label="Customer Fingerprint Capture"
+                  existingTemplate={custFingerprintTemplate}
+                  existingImageUrl={custFingerprintUrl}
+                  disabled={true}
+                  onFingerprintSaved={(url, template, added) => {
+                    setCustFingerprintUrl(url);
+                    setCustFingerprintTemplate(template);
+                    setCustFingerprintAdded(added);
+                  }}
+                />
               </div>
             </div>
-          )}
+          </div>
+        </div>
 
-          {/* Card 2: CUSTOMER */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-slate-900 peek-h3 uppercase">
-                CUSTOMER DETAILS
-              </h3>
-              {selectedCustomerId && (
+        {/* Card 3: GUARANTORS */}
+        <div className="bg-white border border-slate-200 rounded p-3 space-y-3">
+          <h3 className="text-slate-900 border-b border-slate-100 pb-2 uppercase font-bold text-[15px]">
+            GUARANTORS
+          </h3>
+          
+          {/* Guarantor 1 */}
+          <div className="space-y-3 pb-4 border-b border-slate-100">
+            <div className="flex justify-between items-center">
+              <h4 className="text-slate-900 font-bold text-xs uppercase tracking-wide">
+                GUARANTOR 1
+              </h4>
+              {g1SelectedId && (
                 <button
                   type="button"
                   onClick={() => {
-                    setSelectedCustomerId('');
-                    setCustName('');
-                    setCustFatherName('');
-                    setCustPhone('');
-                    setCustPhone2('');
-                    setCustAadhaar('');
-                    setCustPhoto(null);
-                    setCustFingerprintUrl(null);
-                    setCustFingerprintTemplate(null);
-                    setCustFingerprintAdded(false);
-                    setCustVillage('');
-                    setCustMandal('');
-                    setCustDistrict('');
-                    setCustAadhaarAddress('');
-                    setCustPresentAddress('');
-                    setNpaWarning(null);
+                    setG1SelectedId('');
+                    setG1Name('');
+                    setG1Phone('');
+                    setG1Phone2('');
+                    setG1Aadhaar('');
+                    setG1AadhaarAddress('');
+                    setG1PresentAddress('');
+                    setG1Photo(null);
+                    setG1Signature(null);
                   }}
-                  className="text-red-650 hover:underline peek-small-10 uppercase"
+                  className="text-[10px] text-red-655 hover:underline peek-button uppercase font-bold"
                 >
                   CLEAR SELECTION
                 </button>
               )}
             </div>
 
-            <div className="space-y-4">
-              {/* Search input for existing customer */}
-              <div ref={dropdownRef} className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 print:hidden">
-                <label className="peek-label uppercase">
-                  SELECT EXISTING CUSTOMER (OR TYPE DETAILS DIRECTLY BELOW)
+            {/* Search select existing guarantor 1 */}
+            <div ref={g1DropdownRef} className="relative print:hidden">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-slate-400" />
+              </div>
+              <input
+                type="text"
+                value={g1Search}
+                onChange={(e) => {
+                  setG1Search(e.target.value);
+                  setG1DropdownOpen(true);
+                }}
+                onFocus={() => setG1DropdownOpen(true)}
+                placeholder="Type to search guarantor 1..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
+              />
+              
+              {isSearchingG1 && (
+                <div className="absolute inset-y-0 right-10 pr-3 flex items-center pointer-events-none">
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-slate-400"></div>
+                </div>
+              )}
+              {g1DropdownOpen && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                  {g1SearchResults.length === 0 && !isSearchingG1 ? (
+                    <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase text-xs">
+                      No matching guarantors
+                    </div>
+                  ) : (
+                    g1SearchResults.map((g) => (
+                      <div
+                        key={g.id}
+                        onClick={() => {
+                          if (g.id) setG1SelectedId(g.id);
+                          setG1DropdownOpen(false);
+                          setG1Search('');
+                        }}
+                        className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
+                      >
+                        <div>
+                          <div className="text-slate-900 peek-caption-12 font-bold">{g.name}</div>
+                          <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">
+                            ID: #{g.customer_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
+                          </div>
+                        </div>
+                        {(g.phone || g.phone_1) && (
+                          <div className="text-[9px] text-slate-500 font-mono peek-button font-bold">
+                            {g.phone || g.phone_1}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Guarantor 1 details */}
+            <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 pt-2">
+              <Input label="Name" value={g1Name} readOnly placeholder="Name" />
+              <Input label="Aadhaar" value={g1Aadhaar} readOnly placeholder="Aadhaar" />
+              <Input label="Phone 1" value={g1Phone} readOnly placeholder="Phone 1" />
+              <Input label="Phone 2" value={g1Phone2} readOnly placeholder="Phone 2" />
+              <div className="flex flex-col items-center justify-center">
+                <span className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Photo</span>
+                <div className="w-14 h-14 bg-slate-50 border rounded overflow-hidden">
+                  {g1Photo ? (
+                    <img src={g1Photo} alt="G1" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-350"><User className="w-5 h-5" /></div>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col items-center justify-center">
+                <span className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Signature</span>
+                <div className="w-14 h-14 bg-slate-50 border rounded overflow-hidden flex items-center justify-center">
+                  {g1Signature ? (
+                    <img src={g1Signature} alt="G1 Sig" className="max-h-full max-w-full object-contain" />
+                  ) : (
+                    <span className="text-[8px] text-slate-400 uppercase">None</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Aadhaar Address
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search className="h-4 w-4 text-slate-400" />
-                  </div>
-                  <input
-                    type="text"
-                    value={custSearch}
-                    onChange={(e) => {
-                      setCustSearch(e.target.value);
-                      setCustDropdownOpen(true);
-                    }}
-                    onFocus={() => setCustDropdownOpen(true)}
-                    placeholder="Search by customer name, ID, phone, or Aadhaar..."
-                    className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
-                  />
-                  
-                  {isSearchingCust && (
-                    <div className="absolute inset-y-0 right-10 pr-3 flex items-center pointer-events-none">
-                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-slate-400"></div>
-                    </div>
-                  )}
-                  {custDropdownOpen && (
-                    <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      {customerSearchResults.length === 0 && !isSearchingCust ? (
-                        <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase">
-                          No matching customers found
-                        </div>
-                      ) : (
-                        customerSearchResults.map((c) => (
-                          <div
-                            key={c.id}
-                            onClick={() => {
-                              if (c.id) setSelectedCustomerId(c.id);
-                              setCustDropdownOpen(false);
-                              setCustSearch('');
-                            }}
-                            className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
-                          >
-                            <div>
-                              <div className="text-slate-900 peek-caption-12">{c.name}</div>
-                              <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">
-                                ID: #{c.customer_id || 'N/A'} | Aadhaar: {c.aadhaar || 'N/A'}
-                              </div>
-                            </div>
-                            {(c.phone_1 || c.phone) ? (
-                              <div className="text-slate-500 font-mono peek-small-10">
-                                {c.phone_1 || c.phone}
-                              </div>
-                            ) : null}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Customer Inputs Panel */}
-              <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-150 space-y-4">
-                <div className="flex justify-between items-center pb-2">
-                  <span className="bg-[#0b1329] text-white text-[9px] px-2 py-1 rounded peek-button uppercase">
-                    {selectedCustomerId ? `ID: SELECTED` : 'NEW ENTRY'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Input 
-                    label="Customer Name" 
-                    ref={custNameRef} error={errors.custName} value={custName} onChange={(val) => { setCustName(val); setErrors(p => ({...p, custName: false})) }} 
-                    placeholder="Full Name" 
-                    readOnly={!!selectedCustomerId} 
-                    required 
-                  />
-                  <Input 
-                    label="Father Name" 
-                    value={custFatherName} 
-                    onChange={setCustFatherName} 
-                    placeholder="Father Name" 
-                    readOnly={!!selectedCustomerId} 
-                    required
-                  />
-                  <Input 
-                    label="Aadhaar UID" 
-                    value={custAadhaar} 
-                    onChange={setCustAadhaar} 
-                    placeholder="12-digit Aadhaar UID" 
-                    readOnly={!!selectedCustomerId} 
-                    required
-                  />
-                  <Input 
-                    label="Phone 1" 
-                    ref={custPhoneRef} error={errors.custPhone} value={custPhone} onChange={(val) => { setCustPhone(val); setErrors(p => ({...p, custPhone: false})) }} 
-                    placeholder="Primary contact" 
-                    readOnly={!!selectedCustomerId} 
-                    required
-                  />
-                  <Input 
-                    label="Phone 2" 
-                    value={custPhone2} 
-                    onChange={setCustPhone2} 
-                    placeholder="Secondary contact" 
-                    readOnly={!!selectedCustomerId} 
-                  />
-                  <Input 
-                    label="Village (Aadhaar Address)" 
-                    value={custVillage} 
-                    onChange={setCustVillage} 
-                    placeholder="Village" 
-                    readOnly={!!selectedCustomerId} 
-                  />
-                  <Input 
-                    label="Mandal (Aadhaar Address)" 
-                    value={custMandal} 
-                    onChange={setCustMandal} 
-                    placeholder="Mandal" 
-                    readOnly={!!selectedCustomerId} 
-                  />
-                  <Input 
-                    label="District (Aadhaar Address)" 
-                    value={custDistrict} 
-                    onChange={setCustDistrict} 
-                    placeholder="District" 
-                    readOnly={!!selectedCustomerId} 
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-3">
-                  <div>
-                    <label className="block text-[9px] text-slate-400 mb-1 peek-button uppercase">
-                      Aadhaar Address
-                    </label>
-                    <textarea
-                      value={custAadhaarAddress}
-                      onChange={(e) => setCustAadhaarAddress(e.target.value)}
-                      placeholder="Address printed on Aadhaar"
-                      rows={2}
-                      disabled={!!selectedCustomerId}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 disabled:bg-slate-50 focus:outline-none resize-none peek-caption-12"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] text-slate-400 mb-1 peek-button uppercase">
-                      Present Address
-                    </label>
-                    <textarea
-                      value={custPresentAddress}
-                      onChange={(e) => setCustPresentAddress(e.target.value)}
-                      placeholder="Current residential address"
-                      rows={2}
-                      disabled={!!selectedCustomerId}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 disabled:bg-slate-50 focus:outline-none resize-none peek-caption-12"
-                    />
-                  </div>
-                </div>
-
-                {/* Photo & Biometrics */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">
-                  <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center space-y-3 shadow-sm">
-                    <span className="peek-label uppercase text-slate-500 font-semibold mb-1">Customer Photo</span>
-                    <div className="w-24 h-24 bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden relative group">
-                      {custPhoto ? (
-                        <>
-                          <img src={custPhoto} alt="Customer" className="w-full h-full object-cover" />
-                          {!isLookupMode && (
-                            <button
-                              type="button"
-                              onClick={() => setCustPhoto(null)}
-                              className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <Trash2 className="w-5 h-5 mb-1" />
-                              <span className="peek-small-10 uppercase">REMOVE</span>
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <div className="flex flex-col items-center text-slate-400 gap-1">
-                          <User className="w-6 h-6 stroke-1" />
-                          <span className="text-[9px] peek-button uppercase">NO PHOTO</span>
-                        </div>
-                      )}
-                    </div>
-                    {!isLookupMode && (
-                      <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm peek-button uppercase inline-flex items-center gap-1.5 transition-colors">
-                        <Camera className="w-3.5 h-3.5" />
-                        {custPhoto ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setCustPhoto(reader.result as string);
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
-                  </div>
-
-                  <BiometricScanner
-                    label="Customer Fingerprint Capture"
-                    existingTemplate={custFingerprintTemplate}
-                    existingImageUrl={custFingerprintUrl}
-                    disabled={isLookupMode}
-                    onFingerprintSaved={(url, template, added) => {
-                      setCustFingerprintUrl(url);
-                      setCustFingerprintTemplate(template);
-                      setCustFingerprintAdded(added);
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 3: GUARANTORS */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
-              GUARANTORS
-            </h3>
-            
-            {/* Guarantor 1 */}
-            <div className="space-y-3 pb-4 border-b border-slate-100">
-              <div className="flex justify-between items-center">
-                <h4 className="text-slate-400 peek-small-10 uppercase">
-                  GUARANTOR 1
-                </h4>
-                {g1SelectedId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setG1SelectedId('');
-                      setG1Name('');
-                      setG1Phone('');
-                      setG1Aadhaar('');
-                      setG1AadhaarAddress('');
-                      setG1PresentAddress('');
-                      setG1Photo(null);
-                    }}
-                    className="text-[9px] text-red-650 hover:underline peek-button uppercase"
-                  >
-                    CLEAR SELECTION
-                  </button>
-                )}
-              </div>
-
-              {/* Search select existing guarantor 1 */}
-              <div ref={g1DropdownRef} className="relative print:hidden">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-slate-400" />
-                </div>
-                <input
-                  type="text"
-                  value={g1Search}
-                  onChange={(e) => {
-                    setG1Search(e.target.value);
-                    setG1DropdownOpen(true);
-                  }}
-                  onFocus={() => setG1DropdownOpen(true)}
-                  placeholder="Type to search guarantor 1..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
-                />
-                
-                {isSearchingG1 && (
-                  <div className="absolute inset-y-0 right-10 pr-3 flex items-center pointer-events-none">
-                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-slate-400"></div>
-                  </div>
-                )}
-                {g1DropdownOpen && (
-                  <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                    {g1SearchResults.length === 0 && !isSearchingG1 ? (
-                      <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase">
-                        No matching guarantors
-                      </div>
-                    ) : (
-                      g1SearchResults.map((g) => (
-                        <div
-                          key={g.id}
-                          onClick={() => {
-                            if (g.id) setG1SelectedId(g.id);
-                            setG1DropdownOpen(false);
-                            setG1Search('');
-                          }}
-                          className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
-                        >
-                          <div>
-                            <div className="text-slate-900 peek-caption-12">{g.name}</div>
-                            <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">
-                              ID: #{g.customer_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
-                            </div>
-                          </div>
-                          {(g.phone || g.phone_1) && (
-                            <div className="text-[9px] text-slate-500 font-mono peek-button">
-                              {g.phone || g.phone_1}
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Guarantor 1 details */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <Input label="Name" ref={g1NameRef} error={errors.g1Name} value={g1Name} onChange={(val) => { setG1Name(val); setErrors(p => ({...p, g1Name: false})) }} placeholder="Full Name" readOnly={!!g1SelectedId} />
-                <Input label="Aadhaar" value={g1Aadhaar} onChange={setG1Aadhaar} placeholder="Aadhaar UID" readOnly={!!g1SelectedId} required={!!g1Name} />
-                <Input label="Phone" ref={g1PhoneRef} error={errors.g1Phone} value={g1Phone} onChange={(val) => { setG1Phone(val); setErrors(p => ({...p, g1Phone: false})) }} placeholder="Phone No" readOnly={!!g1SelectedId} required={!!g1Name} />
-
-                <div className="sm:col-span-2 space-y-4 pt-2 border-t border-slate-100">
-                  <div>
-                    <h5 className="text-[10px] text-slate-500 font-semibold uppercase mb-2">Permanent Address</h5>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Input label="Permanent Address *" value={g1PermanentAddress} onChange={setG1PermanentAddress} placeholder="Permanent Address" readOnly={!!g1SelectedId} required={!!g1Name} />
-                      <Input label="Permanent Village" value={g1Village} onChange={setG1Village} placeholder="Village" readOnly={!!g1SelectedId} />
-                      <Input label="Permanent Mandal" value={g1Mandal} onChange={setG1Mandal} placeholder="Mandal" readOnly={!!g1SelectedId} />
-                      <Input label="Permanent District" value={g1District} onChange={setG1District} placeholder="District" readOnly={!!g1SelectedId} />
-                    </div>
-                  </div>
-                  <div>
-                    <h5 className="text-[10px] text-slate-500 font-semibold uppercase mb-2">Current Address</h5>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Input label="Current Address *" value={g1CurrentAddress} onChange={setG1CurrentAddress} placeholder="Current Address" readOnly={!!g1SelectedId} required={!!g1Name} />
-                      <Input label="Current Village" value={g1CurrentVillage} onChange={setG1CurrentVillage} placeholder="Village" readOnly={!!g1SelectedId} />
-                      <Input label="Current Mandal" value={g1CurrentMandal} onChange={setG1CurrentMandal} placeholder="Mandal" readOnly={!!g1SelectedId} />
-                      <Input label="Current District" value={g1CurrentDistrict} onChange={setG1CurrentDistrict} placeholder="District" readOnly={!!g1SelectedId} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Guarantor 1 Photo & Biometrics */}
-                <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center space-y-3">
-                    <span className="peek-label uppercase text-slate-500 font-semibold mb-1">Guarantor 1 Photo</span>
-                    <div className="w-24 h-24 bg-white rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden relative group">
-                      {g1Photo ? (
-                        <>
-                          <img src={g1Photo} alt="Guarantor 1" className="w-full h-full object-cover" />
-                          {!isLookupMode && (
-                            <button
-                              type="button"
-                              onClick={() => setG1Photo(null)}
-                              className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <Trash2 className="w-5 h-5 mb-1" />
-                              <span className="peek-small-10 uppercase">REMOVE</span>
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <div className="flex flex-col items-center text-slate-400 gap-1">
-                          <User className="w-6 h-6 stroke-1" />
-                          <span className="text-[9px] peek-button uppercase">NO PHOTO</span>
-                        </div>
-                      )}
-                    </div>
-                    {!isLookupMode && (
-                      <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm peek-button uppercase inline-flex items-center gap-1.5 transition-colors">
-                        <Camera className="w-3.5 h-3.5" />
-                        {g1Photo ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setG1Photo(reader.result as string);
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
-                  </div>
-
-                  <BiometricScanner
-                    label="Guarantor 1 Fingerprint Capture"
-                    existingTemplate={g1FingerprintTemplate}
-                    existingImageUrl={g1FingerprintUrl}
-                    disabled={isLookupMode}
-                    onFingerprintSaved={(url, template, added) => {
-                      setG1FingerprintUrl(url);
-                      setG1FingerprintTemplate(template);
-                      setG1FingerprintAdded(added);
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Guarantor 2 */}
-            <div className="space-y-3 pt-2">
-              <div className="flex justify-between items-center">
-                <h4 className="text-slate-400 peek-small-10 uppercase">
-                  GUARANTOR 2
-                </h4>
-                {g2SelectedId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setG2SelectedId('');
-                      setG2Name('');
-                      setG2Phone('');
-                      setG2Aadhaar('');
-                      setG2AadhaarAddress('');
-                      setG2PresentAddress('');
-                      setG2Photo(null);
-                    }}
-                    className="text-[9px] text-red-650 hover:underline peek-button uppercase"
-                  >
-                    CLEAR SELECTION
-                  </button>
-                )}
-              </div>
-
-              {/* Search select existing guarantor 2 */}
-              <div ref={g2DropdownRef} className="relative print:hidden">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-slate-400" />
-                </div>
-                <input
-                  type="text"
-                  value={g2Search}
-                  onChange={(e) => {
-                    setG2Search(e.target.value);
-                    setG2DropdownOpen(true);
-                  }}
-                  onFocus={() => setG2DropdownOpen(true)}
-                  placeholder="Type to search guarantor 2..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
-                />
-                
-                {isSearchingG2 && (
-                  <div className="absolute inset-y-0 right-10 pr-3 flex items-center pointer-events-none">
-                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-slate-400"></div>
-                  </div>
-                )}
-                {g2DropdownOpen && (
-                  <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                    {g2SearchResults.length === 0 && !isSearchingG2 ? (
-                      <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase">
-                        No matching guarantors
-                      </div>
-                    ) : (
-                      g2SearchResults.map((g) => (
-                        <div
-                          key={g.id}
-                          onClick={() => {
-                            if (g.id) setG2SelectedId(g.id);
-                            setG2DropdownOpen(false);
-                            setG2Search('');
-                          }}
-                          className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
-                        >
-                          <div>
-                            <div className="text-slate-900 peek-caption-12">{g.name}</div>
-                            <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">
-                              ID: #{g.customer_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
-                            </div>
-                          </div>
-                          {(g.phone || g.phone_1) && (
-                            <div className="text-[9px] text-slate-500 font-mono peek-button">
-                              {g.phone || g.phone_1}
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Guarantor 2 details */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <Input label="Name" value={g2Name} onChange={setG2Name} placeholder="Full Name" readOnly={!!g2SelectedId} />
-                <Input label="Aadhaar" value={g2Aadhaar} onChange={setG2Aadhaar} placeholder="Aadhaar UID" readOnly={!!g2SelectedId} required={!!g2Name} />
-                <Input label="Phone" value={g2Phone} onChange={setG2Phone} placeholder="Phone No" readOnly={!!g2SelectedId} />
-
-                <div className="sm:col-span-2 space-y-4 pt-2 border-t border-slate-100">
-                  <div>
-                    <h5 className="text-[10px] text-slate-500 font-semibold uppercase mb-2">Permanent Address</h5>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Input label="Permanent Address *" value={g2PermanentAddress} onChange={setG2PermanentAddress} placeholder="Permanent Address" readOnly={!!g2SelectedId} required={!!g2Name} />
-                      <Input label="Permanent Village" value={g2Village} onChange={setG2Village} placeholder="Village" readOnly={!!g2SelectedId} />
-                      <Input label="Permanent Mandal" value={g2Mandal} onChange={setG2Mandal} placeholder="Mandal" readOnly={!!g2SelectedId} />
-                      <Input label="Permanent District" value={g2District} onChange={setG2District} placeholder="District" readOnly={!!g2SelectedId} />
-                    </div>
-                  </div>
-                  <div>
-                    <h5 className="text-[10px] text-slate-500 font-semibold uppercase mb-2">Current Address</h5>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Input label="Current Address *" value={g2CurrentAddress} onChange={setG2CurrentAddress} placeholder="Current Address" readOnly={!!g2SelectedId} required={!!g2Name} />
-                      <Input label="Current Village" value={g2CurrentVillage} onChange={setG2CurrentVillage} placeholder="Village" readOnly={!!g2SelectedId} />
-                      <Input label="Current Mandal" value={g2CurrentMandal} onChange={setG2CurrentMandal} placeholder="Mandal" readOnly={!!g2SelectedId} />
-                      <Input label="Current District" value={g2CurrentDistrict} onChange={setG2CurrentDistrict} placeholder="District" readOnly={!!g2SelectedId} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Guarantor 2 Photo & Biometrics */}
-                <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-150">
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center space-y-3">
-                    <span className="peek-label uppercase text-slate-500 font-semibold mb-1">Guarantor 2 Photo</span>
-                    <div className="w-24 h-24 bg-white rounded-lg border border-slate-200 flex items-center justify-center overflow-hidden relative group">
-                      {g2Photo ? (
-                        <>
-                          <img src={g2Photo} alt="Guarantor 2" className="w-full h-full object-cover" />
-                          {!isLookupMode && (
-                            <button
-                              type="button"
-                              onClick={() => setG2Photo(null)}
-                              className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <Trash2 className="w-5 h-5 mb-1" />
-                              <span className="peek-small-10 uppercase">REMOVE</span>
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <div className="flex flex-col items-center text-slate-400 gap-1">
-                          <User className="w-6 h-6 stroke-1" />
-                          <span className="text-[9px] peek-button uppercase">NO PHOTO</span>
-                        </div>
-                      )}
-                    </div>
-                    {!isLookupMode && (
-                      <label className="text-[10px] bg-white text-slate-700 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 cursor-pointer shadow-sm peek-button uppercase inline-flex items-center gap-1.5 transition-colors">
-                        <Camera className="w-3.5 h-3.5" />
-                        {g2Photo ? 'REPLACE PHOTO' : 'CAPTURE / UPLOAD'}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setG2Photo(reader.result as string);
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
-                  </div>
-
-                  <BiometricScanner
-                    label="Guarantor 2 Fingerprint Capture"
-                    existingTemplate={g2FingerprintTemplate}
-                    existingImageUrl={g2FingerprintUrl}
-                    disabled={isLookupMode}
-                    onFingerprintSaved={(url, template, added) => {
-                      setG2FingerprintUrl(url);
-                      setG2FingerprintTemplate(template);
-                      setG2FingerprintAdded(added);
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 4: LOAN TERMS */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-5">
-            <div className="border-b border-slate-100 pb-3">
-              <h3 className="text-slate-800 font-bold text-base tracking-wide uppercase">
-                LOAN TERMS
-              </h3>
-              <p className="text-slate-800 text-xs uppercase font-extrabold mt-1 tracking-wider">
-                CASH DEPOSIT (CD) — DEFAULT RATE 3% / MONTH
-              </p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
-              {/* Row 1 */}
-              <div>
-                <label className="text-xs font-extrabold text-slate-800 tracking-wider uppercase mb-2 block">LOAN AMOUNT (₹) <span className="text-red-500 ml-0.5">*</span></label>
-                <input
-                  type="number"
-                  ref={amountRef}
-                  value={amount}
-                  onChange={(e) => { setAmount(e.target.value); setErrors(p => ({...p, amount: false})) }}
-                  className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[42px] ${errors.amount ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                  required
-                />
-              </div>
-              <div>
-                <label className="text-xs font-extrabold text-slate-800 tracking-wider uppercase mb-2 block">RATE OF INTEREST (% / MONTH)</label>
-                <input
-                  type="number"
-                  ref={interestRateRef}
-                  value={interestRate}
-                  onChange={(e) => { setInterestRate(e.target.value); setErrors(p => ({...p, interestRate: false})) }}
-                  className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[42px] ${errors.interestRate ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                />
-                <span className="text-[10px] font-extrabold tracking-wider text-slate-800 mt-2 block uppercase">DEFAULT: 3%</span>
-              </div>
-
-              {/* Row 2 */}
-              <div>
-                <label className="text-xs font-extrabold text-slate-800 tracking-wider uppercase mb-2 block">PERIOD (DAYS)</label>
-                <input
-                  type="number"
-                  ref={durationMonthsRef}
-                  value={durationMonths}
-                  onChange={(e) => { setDurationMonths(e.target.value); setErrors(p => ({...p, durationMonths: false})) }}
-                  className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[42px] ${errors.durationMonths ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                />
-                <span className="text-[10px] font-extrabold tracking-wider text-slate-800 mt-2 block uppercase leading-relaxed">DAYS FOR CD/OD</span>
-              </div>
-              <div>
-                <label className="text-xs font-extrabold text-slate-800 tracking-wider uppercase mb-2 block">DOCUMENT CHARGES (₹)</label>
-                <input
-                  type="number"
-                  value={docCharges}
-                  onChange={(e) => setDocCharges(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[42px]"
-                />
-              </div>
-
-              {/* Row 3 */}
-              <div>
-                <label className="text-xs font-extrabold text-slate-800 tracking-wider uppercase mb-2 block">PENALTY PERCENT (0.75% DEFAULT)</label>
-                <input
-                  type="number"
-                  value={penaltyPercent}
-                  onChange={(e) => setPenaltyPercent(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[42px]"
-                />
-              </div>
-              <div className="hidden sm:block"></div>
-
-              {/* Row 4 */}
-              <div className="sm:col-span-2">
-                <label className="text-xs font-extrabold text-slate-800 tracking-wider uppercase mb-2 block">PARTICULARS</label>
                 <textarea
-                  ref={particularsRef}
-                  value={particulars}
-                  onChange={(e) => { setParticulars(e.target.value); setErrors(p => ({...p, particulars: false})) }}
-                  rows={3}
-                  className={`w-full bg-white border rounded-lg p-3 text-sm text-slate-800 focus:outline-none resize-none ${errors.particulars ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
+                  value={g1AadhaarAddress}
+                  readOnly
+                  placeholder="Guarantor 1 Aadhaar Address"
+                  rows={1}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none resize-none peek-caption-12"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Present Address
+                </label>
+                <textarea
+                  value={g1PresentAddress}
+                  readOnly
+                  placeholder="Guarantor 1 Present Address"
+                  rows={1}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none resize-none peek-caption-12"
                 />
               </div>
             </div>
           </div>
 
-          {/* Card 5: PARTNER */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
-              PARTNER
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="peek-label uppercase">
-                  SELECT PARTNER
-                </label>
-                <select
-                  value={selectedPartnerId}
-                  onChange={(e) => setSelectedPartnerId(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
-                  style={{ fontFamily: 'Times New Roman', fontSize: '15px', fontWeight: 'bold' }}
+          {/* Guarantor 2 */}
+          <div className="space-y-3 pt-2">
+            <div className="flex justify-between items-center">
+              <h4 className="text-slate-900 font-bold text-xs uppercase tracking-wide">
+                GUARANTOR 2
+              </h4>
+              {g2SelectedId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setG2SelectedId('');
+                    setG2Name('');
+                    setG2Phone('');
+                    setG2Phone2('');
+                    setG2Aadhaar('');
+                    setG2AadhaarAddress('');
+                    setG2PresentAddress('');
+                    setG2Photo(null);
+                    setG2Signature(null);
+                  }}
+                  className="text-[10px] text-red-655 hover:underline peek-button uppercase font-bold"
                 >
-                  <option value="">-- SELECT PARTNER --</option>
-                  {partners.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
+                  CLEAR SELECTION
+                </button>
+              )}
+            </div>
+
+            {/* Search select existing guarantor 2 */}
+            <div ref={g2DropdownRef} className="relative print:hidden">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-slate-400" />
               </div>
-              <Input
-                label="PARTNER NAME (READONLY)"
-                value={partnerName}
-                placeholder="Partner Name"
+              <input
+                type="text"
+                value={g2Search}
+                onChange={(e) => {
+                  setG2Search(e.target.value);
+                  setG2DropdownOpen(true);
+                }}
+                onFocus={() => setG2DropdownOpen(true)}
+                placeholder="Type to search guarantor 2..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
+              />
+              
+              {isSearchingG2 && (
+                <div className="absolute inset-y-0 right-10 pr-3 flex items-center pointer-events-none">
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-slate-400"></div>
+                </div>
+              )}
+              {g2DropdownOpen && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                  {g2SearchResults.length === 0 && !isSearchingG2 ? (
+                    <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase text-xs">
+                      No matching guarantors
+                    </div>
+                  ) : (
+                    g2SearchResults.map((g) => (
+                      <div
+                        key={g.id}
+                        onClick={() => {
+                          if (g.id) setG2SelectedId(g.id);
+                          setG2DropdownOpen(false);
+                          setG2Search('');
+                        }}
+                        className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
+                      >
+                        <div>
+                          <div className="text-slate-900 peek-caption-12 font-bold">{g.name}</div>
+                          <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">
+                            ID: #{g.customer_id || 'N/A'} | Aadhaar: {g.aadhaar || 'N/A'}
+                          </div>
+                        </div>
+                        {(g.phone || g.phone_1) && (
+                          <div className="text-[9px] text-slate-500 font-mono peek-button font-bold">
+                            {g.phone || g.phone_1}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Guarantor 2 details */}
+            <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 pt-2">
+              <Input label="Name" value={g2Name} readOnly placeholder="Name" />
+              <Input label="Aadhaar" value={g2Aadhaar} readOnly placeholder="Aadhaar" />
+              <Input label="Phone 1" value={g2Phone} readOnly placeholder="Phone 1" />
+              <Input label="Phone 2" value={g2Phone2} readOnly placeholder="Phone 2" />
+              <div className="flex flex-col items-center justify-center">
+                <span className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Photo</span>
+                <div className="w-14 h-14 bg-slate-50 border rounded overflow-hidden">
+                  {g2Photo ? (
+                    <img src={g2Photo} alt="G2" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-355"><User className="w-5 h-5" /></div>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col items-center justify-center">
+                <span className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Signature</span>
+                <div className="w-14 h-14 bg-slate-50 border rounded overflow-hidden flex items-center justify-center">
+                  {g2Signature ? (
+                    <img src={g2Signature} alt="G2 Sig" className="max-h-full max-w-full object-contain" />
+                  ) : (
+                    <span className="text-[8px] text-slate-400 uppercase">None</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Aadhaar Address
+                </label>
+                <textarea
+                  value={g2AadhaarAddress}
+                  readOnly
+                  placeholder="Guarantor 2 Aadhaar Address"
+                  rows={1}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none resize-none peek-caption-12"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Present Address
+                </label>
+                <textarea
+                  value={g2PresentAddress}
+                  readOnly
+                  placeholder="Guarantor 2 Present Address"
+                  rows={1}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none resize-none peek-caption-12"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: LOAN TERMS */}
+        <div className="bg-white border border-slate-200 rounded p-3 space-y-3">
+          <div className="border-b border-slate-100 pb-3">
+            <h3 className="text-slate-800 font-bold text-[15px] uppercase">
+              LOAN TERMS
+            </h3>
+            <p className="text-slate-500 text-xs uppercase mt-0.5">
+              Principal and rates of interest, penalty, document charges and net disbursement preview
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-6 gap-4 items-end">
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">LOAN AMOUNT (₹) <span className="text-red-500">*</span></label>
+              <input
+                type="number"
+                ref={amountRef}
+                value={amount}
+                disabled={!!editLoanId && hasLedgerActivity}
+                onChange={(e) => { setAmount(e.target.value); setErrors(p => ({...p, amount: false})) }}
+                className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[38px] ${errors.amount ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
+                required
               />
             </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">INTEREST (% pm) <span className="text-red-500">*</span></label>
+              <input
+                type="number"
+                ref={interestRateRef}
+                value={interestRate}
+                disabled={(!user?.is_admin) || (!!editLoanId && hasLedgerActivity)}
+                onChange={(e) => { setInterestRate(e.target.value); setErrors(p => ({...p, interestRate: false})) }}
+                className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[38px] ${errors.interestRate ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
+                required
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">PENALTY (% pm) <span className="text-red-500">*</span></label>
+              <input
+                type="number"
+                value={penaltyPercent}
+                disabled={(!user?.is_admin) || (!!editLoanId && hasLedgerActivity)}
+                onChange={(e) => setPenaltyPercent(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[38px] disabled:bg-slate-50"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">PERIOD (DAYS) <span className="text-red-500">*</span></label>
+              <input
+                type="number"
+                ref={durationMonthsRef}
+                value={durationMonths}
+                disabled={!!editLoanId && hasLedgerActivity}
+                onChange={(e) => { setDurationMonths(e.target.value); setErrors(p => ({...p, durationMonths: false})) }}
+                className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[38px] ${errors.durationMonths ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
+                required
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">DOC CHARGES (₹)</label>
+              <input
+                type="number"
+                value={docCharges}
+                onChange={(e) => setDocCharges(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[38px]"
+              />
+            </div>
+            
+            {/* Realtime Disbursement Preview */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 flex flex-col justify-center items-center h-[38px] font-bold shadow-inner">
+              <span className="text-[8px] text-slate-400 uppercase block tracking-wider">Net Amount To Borrower</span>
+              <span className="text-[14px] text-emerald-800 font-black">
+                ₹{liveCalculations ? formatRupee(liveCalculations.netDisbursed) : '0.00'}
+              </span>
+            </div>
           </div>
 
-          {/* Card 6: DOCUMENTS SUBMITTED */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <div>
-                <h3 className="text-slate-800 font-bold text-sm uppercase">
-                  DOCUMENTS SUBMITTED
-                </h3>
-                <p className="text-slate-500 text-xs uppercase mt-0.5">
-                  RECORD WHAT THE CUSTOMER HAS PHYSICALLY HANDED OVER
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <span className="text-xs text-blue-500 bg-white border border-blue-200 px-3 py-1 rounded-full font-bold">
-                  FIN - {documents.filter(d => d.category === 'Financial' && (d.checked || d.fileUrl)).length}
-                </span>
-                <span className="text-xs text-blue-500 bg-white border border-blue-200 px-3 py-1 rounded-full font-bold">
-                  ORIG - {documents.filter(d => d.category === 'Original' && (d.checked || d.fileUrl)).length}
-                </span>
-                <span className="text-xs text-blue-500 bg-white border border-blue-200 px-3 py-1 rounded-full font-bold">
-                  REG - {documents.filter(d => d.category === 'Registration' && (d.checked || d.fileUrl)).length}
-                </span>
-              </div>
-            </div>
+          <div className="w-full">
+            <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">PARTICULARS</label>
+            <textarea
+              ref={particularsRef}
+              value={particulars}
+              onChange={(e) => { setParticulars(e.target.value); setErrors(p => ({...p, particulars: false})) }}
+              rows={1}
+              className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none resize-none h-[38px] ${errors.particulars ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
+            />
+          </div>
+        </div>
 
-            {/* Checklist Category Groups */}
-            {(['Financial', 'Original', 'Registration'] as const).map((cat, catIdx) => {
-              let subtitle = '';
-              if (cat === 'Financial') subtitle = 'BANK STATEMENTS, INCOME PROOF, IT RETURNS, GST FILINGS';
-              if (cat === 'Original') subtitle = 'PATTAS, DEEDS, VEHICLE PAPERS, JEWELLERY RECEIPTS';
-              if (cat === 'Registration') subtitle = 'JOINT REGISTRATION ON THE FINANCE COMPANY, STAMP PAPERS, BONDS';
-              
-              let headerTitle = `${catIdx + 1}. ${cat.toUpperCase()} DOCUMENTS`;
-              if (cat === 'Original') headerTitle += ' (LAND, ASSETS, ETC.)';
-              if (cat === 'Registration') headerTitle += ' (JOINT REGISTRATION, ETC.)';
+        {/* Card 6: DOCUMENTS SUBMITTED */}
+        <div className="bg-white border border-slate-200 rounded p-3 space-y-3">
+          <div className="border-b border-slate-100 pb-2">
+            <h3 className="text-slate-850 font-bold text-[15px] uppercase">
+              DOCUMENTS SUBMITTED
+            </h3>
+            <p className="text-slate-500 text-xs uppercase mt-0.5">
+              Select the documents physically submitted and enter any additional remarks
+            </p>
+          </div>
 
-              return (
-                <div key={catIdx} className="space-y-4 pt-4 first:pt-2">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="text-slate-800 text-sm font-bold uppercase">
-                        {headerTitle}
-                      </h4>
-                      <p className="text-slate-500 text-[11px] uppercase mt-0.5">
-                        {subtitle}
-                      </p>
-                    </div>
-                    {!isLookupMode && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newDoc: DocumentItem = {
-                            key: `custom_${Date.now()}_${Math.random()}`,
-                            label: '',
-                            category: cat,
-                            checked: true,
-                            refNo: '',
-                            fileUrl: null,
-                            uploading: false,
-                            isCustom: true
-                          };
-                          setDocuments(prev => [...prev, newDoc]);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 rounded-md transition-colors text-xs font-bold uppercase"
-                      >
-                        + ADD
-                      </button>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    {documents.filter(doc => doc.category === cat).map((doc) => (
-                      <div key={doc.key} className="flex items-center gap-4">
+          <div className="space-y-4 pt-2">
+            <div className="border border-slate-200 rounded overflow-hidden">
+              <table className="min-w-full divide-y divide-slate-150 text-xs">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left font-bold text-slate-700 uppercase">Document Name</th>
+                    <th className="px-4 py-2.5 text-center font-bold text-slate-700 uppercase w-36">File Attachment</th>
+                    <th className="px-4 py-2.5 text-center font-bold text-slate-700 uppercase w-24">View</th>
+                    <th className="px-4 py-2.5 text-right font-bold text-slate-700 uppercase w-24">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {loanDocs.map((doc, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-2">
                         <input
-                          type="checkbox"
-                          checked={doc.checked}
-                          disabled={isLookupMode}
-                          onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, checked: e.target.checked } : d))}
-                          className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-600 shrink-0 ml-4 disabled:opacity-50"
+                          type="text"
+                          value={doc.name}
+                          onChange={(e) => {
+                            const next = [...loanDocs];
+                            next[idx].name = e.target.value;
+                            setLoanDocs(next);
+                          }}
+                          placeholder="Document Name (e.g. Gold Invoice)"
+                          className="w-full bg-white border border-slate-200 rounded p-1.5 font-bold text-slate-800 focus:outline-none"
                         />
-                        <div className="w-[240px] shrink-0">
-                          {doc.isCustom ? (
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        {doc.fileUrl ? (
+                          <div className="text-emerald-700 font-bold flex items-center justify-center gap-1">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Uploaded
+                          </div>
+                        ) : (
+                          <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border rounded cursor-pointer hover:bg-slate-50 text-[10px] font-bold uppercase shadow-sm">
+                            Upload File
                             <input
-                              type="text"
-                              value={doc.label}
-                              disabled={isLookupMode}
-                              onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, label: e.target.value } : d))}
-                              placeholder="DOCUMENT NAME"
-                              className="w-full bg-white border border-slate-200 rounded-md px-4 py-2 text-sm text-slate-800 font-bold focus:outline-none focus:border-slate-300 uppercase h-[42px] disabled:bg-slate-50"
-                            />
-                          ) : (
-                            <div className="w-full bg-white border border-slate-200 rounded-md px-4 py-2 text-sm text-slate-800 font-bold uppercase truncate select-none flex items-center h-[42px]">
-                              {doc.label}
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="flex-1 shrink-0 min-w-0">
-                          <input
-                            type="text"
-                            value={doc.refNo}
-                            disabled={isLookupMode}
-                            onChange={(e) => setDocuments(prev => prev.map(d => d.key === doc.key ? { ...d, refNo: e.target.value } : d))}
-                            placeholder="REF NO., AUTHORITY, REMARKS..."
-                            className="w-full bg-white border border-slate-200 rounded-md px-4 py-2 text-sm text-slate-600 uppercase focus:outline-none focus:border-slate-300 placeholder:text-slate-300 h-[42px] disabled:bg-slate-50"
-                          />
-                        </div>
-                        
-                        <div className="flex items-center gap-2 shrink-0">
-                          {doc.fileUrl ? (
-                            <a
-                              href={doc.fileUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="px-4 py-2 text-xs font-bold bg-white text-blue-600 border border-blue-200 rounded-md hover:bg-blue-50 transition-colors uppercase h-[42px] flex items-center justify-center min-w-[100px]"
-                            >
-                              VIEW
-                            </a>
-                          ) : !isLookupMode ? (
-                            <label className="px-4 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 cursor-pointer rounded-md transition-colors select-none flex items-center justify-center gap-2 uppercase h-[42px] min-w-[100px]">
-                              <Upload className="w-3.5 h-3.5 text-slate-500" />
-                              {doc.uploading ? 'UPLOADING...' : 'UPLOAD'}
-                              <input
-                                type="file"
-                                accept="image/*,.pdf"
-                                onChange={(e) => handleChecklistUpload(doc.key, e)}
-                                className="hidden"
-                                disabled={doc.uploading}
-                              />
-                            </label>
-                          ) : null}
-
-                          {!isLookupMode && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (doc.isCustom) {
-                                  // For custom rows, remove the row completely
-                                  setDocuments(prev => prev.filter(d => d.key !== doc.key));
-                                } else {
-                                  // For default rows, reset them
-                                  if (doc.fileUrl) {
-                                    removeChecklistUpload(doc.key);
+                              type="file"
+                              accept="image/*,application/pdf"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  try {
+                                    const fileExt = file.name.split('.').pop();
+                                    const fileName = `doc-${Date.now()}.${fileExt}`;
+                                    const filePath = `documents/${fileName}`;
+                                    const { error } = await supabase.storage
+                                      .from('finance-photos')
+                                      .upload(filePath, file);
+                                    if (error) throw error;
+                                    const { data } = supabase.storage
+                                      .from('finance-photos')
+                                      .getPublicUrl(filePath);
+                                    
+                                    const next = [...loanDocs];
+                                    next[idx].fileUrl = data.publicUrl;
+                                    next[idx].fileName = file.name;
+                                    setLoanDocs(next);
+                                    toast.success('Document uploaded!');
+                                  } catch (err) {
+                                    console.error(err);
+                                    toast.error('Upload failed');
                                   }
-                                  setDocuments(prev => prev.map(d => 
-                                    d.key === doc.key ? { ...d, checked: false, refNo: '', fileUrl: null } : d
-                                  ));
                                 }
                               }}
-                              className="w-[42px] h-[42px] text-red-400 hover:text-red-500 hover:bg-red-50 border border-red-100 rounded-md transition-colors shrink-0 flex items-center justify-center"
-                              title="Remove or Reset Document"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Card 7: ASSET / COLLATERAL LOCATION */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-slate-900 peek-h3 uppercase">
-                ASSET / COLLATERAL LOCATION
-              </h3>
-              <button
-                type="button"
-                onClick={handleDetectGPS}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-white text-slate-800 border border-slate-200 hover:bg-slate-50 rounded transition-colors shadow-sm peek-small-10"
-              >
-                <Navigation className="w-3.5 h-3.5 text-slate-600 animate-pulse" />
-                DETECT GPS
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <Input
-                label="ADDRESS"
-                ref={locAddressRef} error={errors.locAddress} value={locAddress} onChange={(val) => { setLocAddress(val); setErrors(p => ({...p, locAddress: false})) }}
-                placeholder="DOOR NO, STREET, VILLAGE / TOWN"
-              />
-              
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <Input label="VILLAGE/TOWN" value={locVillage} onChange={setLocVillage} placeholder="Village/Town" />
-                <Input label="MANDAL" value={locMandal} onChange={setLocMandal} placeholder="Mandal" />
-                <Input label="DISTRICT" value={locDistrict} onChange={setLocDistrict} placeholder="District" />
-                <Input label="STATE" value={locState} onChange={setLocState} placeholder="State" />
-                <Input label="PINCODE" value={locPincode} onChange={setLocPincode} placeholder="Pincode" />
-                <Input label="LANDMARK" value={locLandmark} onChange={setLocLandmark} placeholder="e.g. Near Ramalayam temple" />
-                <Input label="LATITUDE" value={locLatitude} onChange={setLocLatitude} placeholder="GPS Latitude" readOnly />
-                <Input label="LONGITUDE" value={locLongitude} onChange={setLocLongitude} placeholder="GPS Longitude" readOnly />
-              </div>
-
-              <Input
-                label="GOOGLE MAPS GPS LINK"
-                value={locMapsLink}
-                onChange={setLocMapsLink}
-                placeholder="PASTE THE GOOGLE MAPS LINK"
-              />
-              
-              <div className="pt-2 border-t border-slate-100">
-                <label className="peek-label uppercase block mb-2">
-                  COLLATERAL PHOTO (OPTIONAL)
-                </label>
-                <div className="flex items-center gap-4">
-                  {collateralImage ? (
-                    <div className="relative w-32 h-32 rounded-xl border-2 border-slate-200 overflow-hidden group">
-                      <img
-                        src={collateralImage}
-                        alt="Collateral"
-                        className="w-full h-full object-cover"
-                      />
-                      {!isLookupMode && (
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        {doc.fileUrl ? (
+                          <a
+                            href={doc.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline uppercase font-bold text-[10px]"
+                          >
+                            View File
+                          </a>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right">
                         <button
                           type="button"
-                          onClick={removeCollateralImage}
+                          onClick={() => {
+                            const next = loanDocs.filter((_, i) => i !== idx);
+                            setLoanDocs(next);
+                          }}
+                          className="text-red-600 hover:underline uppercase font-bold text-[10px]"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setLoanDocs(prev => [...prev, { name: '', fileUrl: null }])}
+              className="py-1.5 px-4 bg-white border border-dashed border-slate-300 hover:border-slate-400 rounded text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors uppercase shadow-sm"
+            >
+              + Add Document
+            </button>
+          </div>
+        </div>
+
+        {/* Card 7: ASSET / COLLATERAL LOCATION */}
+        <div className="bg-white border border-slate-200 rounded p-3 space-y-3">
+          <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+            <h3 className="text-slate-900 uppercase font-bold text-[15px]">
+              ASSET / COLLATERAL INFORMATION
+            </h3>
+          </div>
+
+          <div className="space-y-4">
+            {locations.map((loc, idx) => (
+              <div key={idx} className="border border-slate-200 rounded p-3 bg-slate-50/30 space-y-2">
+                <div className="flex justify-between items-center border-b pb-1">
+                  <span className="text-xs font-bold text-slate-700 uppercase">Location #{idx + 1}</span>
+                  {locations.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeLocation(idx)}
+                      className="text-xs text-red-600 hover:underline uppercase font-bold"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <Input
+                  label="Location Description"
+                  value={loc.address}
+                  onChange={(val) => updateLocation(idx, 'address', val)}
+                  placeholder="Door No, Street, Landmark, Village..."
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Latitude"
+                    value={loc.latitude}
+                    onChange={(val) => updateLocation(idx, 'latitude', val)}
+                    placeholder="GPS Latitude"
+                  />
+                  <Input
+                    label="Longitude"
+                    value={loc.longitude}
+                    onChange={(val) => updateLocation(idx, 'longitude', val)}
+                    placeholder="GPS Longitude"
+                  />
+                </div>
+                <Input
+                  label="Google Maps Location Link"
+                  value={loc.mapsLink}
+                  onChange={(val) => updateLocation(idx, 'mapsLink', val)}
+                  placeholder="Paste Google Maps link here..."
+                />
+                     <Input
+                  label="Remarks / Specific bounds"
+                  value={loc.remarks || ''}
+                  onChange={(val) => updateLocation(idx, 'remarks', val)}
+                  placeholder="e.g. Bound east by road, west by plot 10"
+                />
+
+                {/* Location Image */}
+                <div className="pt-2 space-y-2">
+                  <label className="peek-label uppercase block mb-1 text-[11px] font-bold text-slate-700">Location Photos (Multiple)</label>
+                  <div className="flex flex-wrap gap-4">
+                    {(loc.images || []).map((imgUrl, imgIdx) => (
+                      <div key={imgIdx} className="relative w-28 h-28 rounded-lg border overflow-hidden group">
+                        <img src={imgUrl} alt={`Location ${imgIdx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextImages = (loc.images || []).filter((_, i) => i !== imgIdx);
+                            updateLocation(idx, 'images', nextImages);
+                          }}
                           className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                         >
-                          <Trash2 className="w-5 h-5 mb-1" />
-                          <span className="peek-small-10 uppercase">REMOVE</span>
+                          <Trash2 className="w-4 h-4 mb-0.5" />
+                          <span className="text-[8px] uppercase">REMOVE</span>
                         </button>
-                      )}
-                    </div>
-                  ) : !isLookupMode ? (
-                    <label className="w-32 h-32 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-xl hover:border-slate-400 hover:bg-slate-50 transition-colors cursor-pointer bg-slate-50/50">
-                      <Camera className="w-6 h-6 text-slate-400 mb-2" />
-                      <span className="peek-small-10 uppercase text-slate-500 text-center px-2">
-                        UPLOAD PHOTO
-                      </span>
+                      </div>
+                    ))}
+                    {loc.image && (!loc.images || !loc.images.includes(loc.image)) && (
+                      <div className="relative w-28 h-28 rounded-lg border overflow-hidden group">
+                        <img src={loc.image} alt="Location Original" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => updateLocation(idx, 'image', null)}
+                          className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Trash2 className="w-4 h-4 mb-0.5" />
+                          <span className="text-[8px] uppercase">REMOVE</span>
+                        </button>
+                      </div>
+                    )}
+                    <label className="w-28 h-28 flex flex-col items-center justify-center border border-dashed rounded-lg cursor-pointer hover:bg-slate-50/50">
+                      <Camera className="w-5 h-5 text-slate-400 mb-1" />
+                      <span className="text-[9px] text-slate-500 uppercase">Add Photo</span>
                       <input
                         type="file"
                         accept="image/*"
-                        onChange={handleCollateralImageUpload}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const fileExt = file.name.split('.').pop();
+                              const fileName = `loc-${Date.now()}.${fileExt}`;
+                              const filePath = `collateral/${fileName}`;
+                              const { error } = await supabase.storage
+                                .from('finance-photos')
+                                .upload(filePath, file);
+                              if (error) throw error;
+                              const { data } = supabase.storage
+                                .from('finance-photos')
+                                .getPublicUrl(filePath);
+                              const currentImages = loc.images || [];
+                              updateLocation(idx, 'images', [...currentImages, data.publicUrl]);
+                              toast.success('Location image uploaded!');
+                            } catch (err) {
+                              console.error(err);
+                              toast.error('Upload failed');
+                            }
+                          }
+                        }}
                         className="hidden"
                       />
                     </label>
-                  ) : (
-                    <div className="w-32 h-32 flex flex-col items-center justify-center border border-dashed border-slate-200 rounded-xl bg-slate-50/20 text-slate-400 peek-small-10 uppercase">
-                      NO PHOTO
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 8: DESCRIPTION & EXTRA FEATURES */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
-              DESCRIPTION & EXTRA FEATURES
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="peek-label uppercase">
-                  REMARKS
-                </label>
-                <textarea
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="REASON FOR BORROWING, REPAYMENT ARRANGEMENT..."
-                  rows={3}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
-                />
-              </div>
-
-              <div>
-                <label className="peek-label uppercase">
-                  EXTRA DETAILS
-                </label>
-                <textarea
-                  value={extraDetails}
-                  onChange={(e) => setExtraDetails(e.target.value)}
-                  placeholder="SPECIAL CONDITIONS, ETC."
-                  rows={2}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
-                />
-              </div>
-            </div>
-          </div>
-          </fieldset>
-
-        </div>
-
-        {/* Right Column: Live Calculation and Recent Loans */}
-        <div className="space-y-6">
-          
-          {/* Card 9: LIVE CALCULATION */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4 h-fit">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-slate-900 peek-h3 uppercase">
-                LIVE CALCULATION
-              </h3>
-              <span className="text-[9px] text-slate-500 bg-slate-50 border border-slate-150 px-2 py-0.5 rounded peek-button uppercase">
-                {dueType}
-              </span>
-            </div>
-
-            {!liveCalculations ? (
-              <div className="py-8 text-center text-slate-800 font-extrabold peek-h3 uppercase" style={{ fontFamily: 'Times New Roman' }}>
-                FILL IN THE LOAN AMOUNT TO SEE THE CALCULATION PREVIEW.
-              </div>
-            ) : loanCategory === 'CD' ? (
-              <div className="space-y-4 text-slate-700 finance-caption">
-                <div className="grid grid-cols-2 gap-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Loan Amount (Principal):</span>
-                  <span className="text-right text-slate-950 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.principal)}</span>
-
-                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Document Charges:</span>
-                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.docFees)}</span>
-
-                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Interest:</span>
-                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.interestAmount)}</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-y-2 border-t pt-2.5 items-center">
-                  <span className="text-slate-900 text-[14px] uppercase font-black tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Payable Amount:</span>
-                  <span className="text-right text-emerald-800 text-[22px] font-black" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.payableAmount)}</span>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4 text-slate-700 finance-caption">
-                <div className="grid grid-cols-2 gap-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Loan Amount (Principal):</span>
-                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.principal)}</span>
-
-                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Document Charges:</span>
-                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.docFees)}</span>
-
-                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Net Disbursement:</span>
-                  <span className="text-right text-blue-700 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.netDisbursed)}</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-y-2 border-t pt-2.5 items-center">
-                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Interest Component:</span>
-                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.interestAmount)}</span>
-
-                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Total Repayment:</span>
-                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.totalRepayment)}</span>
-
-                  <span className="text-slate-800 text-[13px] uppercase font-extrabold tracking-wider" style={{ fontFamily: 'Times New Roman' }}>Instalment Count:</span>
-                  <span className="text-right text-slate-955 text-[17px] font-bold" style={{ fontFamily: 'Times New Roman' }}>{liveCalculations.duesCount} {dueType} Dues</span>
-
-                  <span className="text-slate-900 text-[14px] uppercase font-black tracking-wider mt-1" style={{ fontFamily: 'Times New Roman' }}>Instalment Amount:</span>
-                  <span className="text-right text-emerald-800 text-[22px] font-black" style={{ fontFamily: 'Times New Roman' }}>₹{formatRupee(liveCalculations.dueAmount)}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Card 10: RECENT LOANS */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 peek-h3 uppercase">
-              RECENT LOANS
-            </h3>
-            
-            {activeLoans.length === 0 ? (
-              <div className="py-8 text-center text-slate-400 peek-h3 uppercase">
-                NO LOANS YET
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-                {activeLoans.slice(0, 5).map(loan => (
-                  <div key={loan.id} className="p-3 border border-slate-100 rounded-lg hover:bg-slate-50 transition-all flex justify-between items-center bg-slate-50/20">
-                    <div>
-                      <div className="text-slate-900 peek-caption-12">{loan.customer?.name}</div>
-                      <div className="text-[9px] text-slate-400 mt-0.5 peek-button uppercase">{loan.due_type} Mode</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-mono text-slate-700 peek-caption-12">{loan.loan_id}</div>
-                      <div className="text-slate-900 mt-0.5 peek-caption-12">₹{Number(loan.amount).toLocaleString('en-IN')}</div>
-                    </div>
                   </div>
-                ))}
+                </div>
               </div>
-            )}
+            ))}
+            <button
+              type="button"
+              onClick={addLocation}
+              className="w-full py-2 bg-white border border-dashed border-slate-300 hover:border-slate-400 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm uppercase"
+            >
+              + Add More Locations
+            </button>
           </div>
-
         </div>
 
+        {/* Card 8: DESCRIPTION & EXTRA FEATURES */}
+        <div className="bg-white border border-slate-200 rounded p-3 space-y-3">
+          <h3 className="text-slate-900 border-b border-slate-100 pb-2 uppercase font-bold text-[15px]">
+            DESCRIPTION & EXTRA FEATURES
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <label className="peek-label uppercase block mb-1 text-[11px] font-bold text-slate-700">
+                REMARKS
+              </label>
+              <textarea
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="REASON FOR BORROWING, REPAYMENT ARRANGEMENT..."
+                rows={3}
+                className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
+              />
+            </div>
+
+            <div>
+              <label className="peek-label uppercase block mb-1 text-[11px] font-bold text-slate-700">
+                EXTRA DETAILS
+              </label>
+              <textarea
+                value={extraDetails}
+                onChange={(e) => setExtraDetails(e.target.value)}
+                placeholder="SPECIAL CONDITIONS, ETC."
+                rows={2}
+                className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-gray-800 placeholder-gray-400 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
+              />
+            </div>
+          </div>
+        </div>
+        </fieldset>
       </div>
 
       {/* Print Preview Modal */}
@@ -2622,58 +2251,63 @@ const LoanEntry: React.FC = () => {
         title="Loan Entry - Preview"
         documentTitle="LOAN ENTRY FORM"
       >
-        <div className="space-y-6">
+        <div className="space-y-2">
           {/* Top Header */}
           <div className="text-center border-b pb-4">
-            <h1 className="peek-h1">THIRUMALA GROUP - LOAN ENTRY</h1>
+            <h1 className="peek-h1 text-xl font-bold">THIRUMALA GROUP - LOAN ENTRY</h1>
             <p className="text-slate-500 mt-1 finance-sidebar-link">Date: {date} | Loan Type: {loanCategory}</p>
           </div>
           
           {/* Customer Info */}
           <div>
-            <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Customer Details</h3>
+            <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase font-bold text-sm">Customer Details</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="text-gray-500 peek-caption-12">NAME:</span> {custName}</div>
-               <div><span className="text-gray-500 peek-caption-12">F/W/H:</span> {custFatherName}</div>
-               <div><span className="text-gray-500 peek-caption-12">PHONE:</span> {custPhone}</div>
-               <div><span className="text-gray-500 peek-caption-12">AADHAAR:</span> {custAadhaar}</div>
-               <div className="col-span-2"><span className="text-gray-500 peek-caption-12">ADDRESS:</span> {custPresentAddress}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">NAME:</span> {custName}</div>
+               {(() => {
+                 const rel = getRelationshipDisplay(custFatherName);
+                 return (
+                   <div><span className="text-gray-500 peek-caption-12 font-bold">{rel.label.toUpperCase()}:</span> {rel.name}</div>
+                 );
+               })()}
+               <div><span className="text-gray-500 peek-caption-12 font-bold">PHONE:</span> {custPhone}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">AADHAAR:</span> {custAadhaar}</div>
+               <div className="col-span-2"><span className="text-gray-500 peek-caption-12 font-bold">ADDRESS:</span> {custPresentAddress}</div>
             </div>
           </div>
 
           {/* Guarantors */}
           <div>
-            <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Guarantor Details</h3>
+            <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase font-bold text-sm">Guarantor Details</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="text-gray-500 peek-caption-12">G1 NAME:</span> {g1Name}</div>
-               <div><span className="text-gray-500 peek-caption-12">G1 PHONE:</span> {g1Phone}</div>
-               {g2Name && <div><span className="text-gray-500 peek-caption-12">G2 NAME:</span> {g2Name}</div>}
-               {g2Phone && <div><span className="text-gray-500 peek-caption-12">G2 PHONE:</span> {g2Phone}</div>}
+               <div><span className="text-gray-500 peek-caption-12 font-bold">G1 NAME:</span> {g1Name}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">G1 PHONE:</span> {g1Phone}</div>
+               {g2Name && <div><span className="text-gray-500 peek-caption-12 font-bold">G2 NAME:</span> {g2Name}</div>}
+               {g2Phone && <div><span className="text-gray-500 peek-caption-12 font-bold">G2 PHONE:</span> {g2Phone}</div>}
             </div>
           </div>
 
           {/* Loan Terms */}
           <div>
-            <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Loan Terms</h3>
+            <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase font-bold text-sm">Loan Terms</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="text-gray-500 peek-caption-12">PRINCIPAL:</span> ₹{formatRupee(Number(amount) || 0)}</div>
-               <div><span className="text-gray-500 peek-caption-12">INTEREST RATE:</span> {interestRate}% / MONTH</div>
-               <div><span className="text-gray-500 peek-caption-12">DURATION:</span> {durationMonths} MONTHS</div>
-               <div><span className="text-gray-500 peek-caption-12">DUE TYPE:</span> {dueType}</div>
-               <div><span className="text-gray-500 peek-caption-12">DOC CHARGES:</span> ₹{formatRupee(Number(docCharges) || 0)}</div>
-               <div className="col-span-2"><span className="text-gray-500 peek-caption-12">PARTICULARS:</span> {particulars}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">PRINCIPAL:</span> ₹{formatRupee(Number(amount) || 0)}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">INTEREST RATE:</span> {interestRate}% / MONTH</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">DURATION:</span> {durationMonths} MONTHS</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">DUE TYPE:</span> {dueType}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">DOC CHARGES:</span> ₹{formatRupee(Number(docCharges) || 0)}</div>
+               <div className="col-span-2"><span className="text-gray-500 peek-caption-12 font-bold">PARTICULARS:</span> {particulars}</div>
             </div>
           </div>
 
           {/* Live Calculation */}
           {liveCalculations && (
           <div>
-            <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase">Calculations</h3>
+            <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase font-bold text-sm">Calculations</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="text-gray-500 peek-caption-12">NET DISBURSED:</span> ₹{formatRupee(liveCalculations.netDisbursed)}</div>
-               <div><span className="text-gray-500 peek-caption-12">TOTAL REPAYMENT:</span> ₹{formatRupee(liveCalculations.totalRepayment)}</div>
-               <div><span className="text-gray-500 peek-caption-12">INSTALMENT COUNT:</span> {liveCalculations.duesCount}</div>
-               <div><span className="text-gray-500 peek-caption-12">INSTALMENT AMOUNT:</span> ₹{formatRupee(liveCalculations.dueAmount)}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">NET DISBURSED:</span> ₹{formatRupee(liveCalculations.netDisbursed)}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">TOTAL REPAYMENT:</span> ₹{formatRupee(liveCalculations.totalRepayment)}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">INSTALMENT COUNT:</span> {liveCalculations.duesCount}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">INSTALMENT AMOUNT:</span> ₹{formatRupee(liveCalculations.dueAmount)}</div>
             </div>
           </div>
           )}
@@ -2681,10 +2315,10 @@ const LoanEntry: React.FC = () => {
           {/* Signatures */}
           <div className="pt-24 grid grid-cols-2 gap-10 text-center text-slate-500 finance-sidebar-link">
             <div>
-              <div className="border-t border-slate-300 pt-2 w-48 mx-auto">Customer Signature</div>
+              <div className="border-t border-slate-300 pt-2 w-48 mx-auto font-bold">Customer Signature</div>
             </div>
             <div>
-              <div className="border-t border-slate-300 pt-2 w-48 mx-auto">Authorized Signatory</div>
+              <div className="border-t border-slate-300 pt-2 w-48 mx-auto font-bold">Authorized Signatory</div>
             </div>
           </div>
         </div>

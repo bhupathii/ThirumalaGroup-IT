@@ -4,15 +4,13 @@ import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { 
   ArrowLeft, 
-  RotateCcw, 
   Save, 
   Camera, 
-  FileImage, 
-  X, 
-  RefreshCw 
+  Trash2 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { BiometricScanner } from '../../components/finance/BiometricScanner';
+import { SignaturePad } from '../../components/finance/SignaturePad';
 import { validateFinanceForm, ValidationField } from '../../utils/financeValidation';
 import { compressToWebP } from '../../utils/imageCompressor';
 
@@ -31,18 +29,17 @@ const NewCustomer: React.FC = () => {
   // Form State
   const [aadhaar, setAadhaar] = useState('');
   const [name, setName] = useState('');
-  const [fatherName, setFatherName] = useState('');
-  const [aadhaarVillage, setAadhaarVillage] = useState('');
-  const [aadhaarMandal, setAadhaarMandal] = useState('');
-  const [aadhaarDistrict, setAadhaarDistrict] = useState('');
-  const [presentVillage, setPresentVillage] = useState('');
-  const [presentMandal, setPresentMandal] = useState('');
-  const [presentDistrict, setPresentDistrict] = useState('');
+  const [relationshipType, setRelationshipType] = useState<'Father' | 'Husband' | 'Wife'>('Father');
+  const [relationshipName, setRelationshipName] = useState('');
   const [aadhaarAddress, setAadhaarAddress] = useState('');
   const [presentAddress, setPresentAddress] = useState('');
+  const [houseNo, setHouseNo] = useState('');
+  const [mandal, setMandal] = useState('');
+  const [district, setDistrict] = useState('');
   const [phone1, setPhone1] = useState('');
   const [phone2, setPhone2] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
 
   // Fingerprint State
   const [fingerprintUrl, setFingerprintUrl] = useState<string | null>(null);
@@ -52,7 +49,6 @@ const NewCustomer: React.FC = () => {
   // Camera Capture State
   const [cameraActive, setCameraActive] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -84,19 +80,25 @@ const NewCustomer: React.FC = () => {
         setEstimatedId(data.customer_id || 1);
         setAadhaar(data.aadhaar || '');
         setName(data.name || '');
-        setFatherName(data.father_name || data.father_husband_name || '');
-        setAadhaarVillage(data.aadhaar_village || data.village || '');
-        setAadhaarMandal(data.aadhaar_mandal || data.mandal || '');
-        setAadhaarDistrict(data.aadhaar_district || data.district || '');
-        setPresentVillage(data.present_village || data.village || '');
-        setPresentMandal(data.present_mandal || data.mandal || '');
-        setPresentDistrict(data.present_district || data.district || '');
+        const rawRel = data.father_name || data.father_husband_name || '';
+        if (rawRel.includes(':')) {
+          const parts = rawRel.split(':');
+          setRelationshipType(parts[0] as any);
+          setRelationshipName(parts[1] || '');
+        } else {
+          setRelationshipType('Father');
+          setRelationshipName(rawRel);
+        }
         setAadhaarAddress(data.aadhaar_address || '');
-        setPresentAddress(data.present_address || data.address || '');
+        setPresentAddress(data.present_address || '');
+        setHouseNo(data.address || '');
+        setMandal(data.mandal || '');
+        setDistrict(data.district || '');
         setPhone1(data.phone_1 || data.phone || '');
         setPhone2(data.phone_2 || data.phone2 || '');
         setPhotoUrl(data.customer_photo_url || null);
         setCapturedImage(data.customer_photo_url || null);
+        setSignatureUrl(data.customer_fingerprint_image_url || null);
         setFingerprintUrl(data.fingerprint_url || null);
         setFingerprintTemplate(data.fingerprint_template || null);
         setFingerprintAdded(data.fingerprint_added || false);
@@ -114,24 +116,21 @@ const NewCustomer: React.FC = () => {
         .select('customer_id')
         .order('customer_id', { ascending: false })
         .limit(1);
-      if (!error && data && data.length > 0) {
+      
+      if (error) throw error;
+      if (data && data.length > 0) {
         setEstimatedId((data[0].customer_id || 0) + 1);
       } else {
         setEstimatedId(1);
       }
     } catch (err) {
-      console.error('Error fetching next customer ID:', err);
+      console.error('Error fetching next Customer ID:', err);
     }
   };
 
-  // Webcam Helpers
   const startCamera = async () => {
     try {
-      setCapturedImage(null);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: 640, height: 480 },
-        audio: false
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -139,8 +138,8 @@ const NewCustomer: React.FC = () => {
       }
       setCameraActive(true);
     } catch (err) {
-      console.error('Camera access error:', err);
-      toast.error('Could not access camera. Please check device permissions.');
+      console.error('Error accessing camera:', err);
+      toast.error('Could not open camera');
     }
   };
 
@@ -152,25 +151,87 @@ const NewCustomer: React.FC = () => {
     setCameraActive(false);
   };
 
-  const capturePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      const context = canvas.getContext('2d');
+  const capturePhoto = async () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
 
-      if (context) {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-        setCapturedImage(dataUrl);
-        stopCamera();
-        uploadPhoto(dataUrl);
-      }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg');
+    const rawFile = dataURLtoFile(dataUrl, 'temp.jpg');
+    
+    setSaving(true);
+    try {
+      const compressedBlob = await compressToWebP(rawFile, 1280, 0.7);
+      
+      const fileName = `cust_${Date.now()}_photo.webp`;
+      
+      const { error } = await supabase.storage
+        .from('finance_photos')
+        .upload(fileName, compressedBlob, { contentType: 'image/webp' });
+        
+      if (error) throw error;
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('finance_photos')
+        .getPublicUrl(fileName);
+        
+      setPhotoUrl(publicUrl);
+      setCapturedImage(publicUrl);
+      toast.success('Photo captured and uploaded');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to capture photo');
+    } finally {
+      setSaving(false);
+      stopCamera();
     }
   };
 
-  const dataURLtoFile = (dataurl: string, filename: string): File => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    const file = files[0];
+    setSaving(true);
+    try {
+      const compressedBlob = await compressToWebP(file, 1280, 0.7);
+      
+      const fileName = `cust_${Date.now()}_photo.webp`;
+      
+      const { error } = await supabase.storage
+        .from('finance_photos')
+        .upload(fileName, compressedBlob, { contentType: 'image/webp' });
+        
+      if (error) throw error;
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('finance_photos')
+        .getPublicUrl(fileName);
+        
+      setPhotoUrl(publicUrl);
+      setCapturedImage(publicUrl);
+      toast.success('Photo uploaded successfully');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to upload photo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClearPhoto = () => {
+    setPhotoUrl(null);
+    setCapturedImage(null);
+    stopCamera();
+  };
+
+  const dataURLtoFile = (dataurl: string, filename: string) => {
     const arr = dataurl.split(',');
-    const mime = arr[0].match(/:(.*?);/)![1];
+    const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/webp';
     const bstr = atob(arr[1]);
     let n = bstr.length;
     const u8arr = new Uint8Array(n);
@@ -180,163 +241,92 @@ const NewCustomer: React.FC = () => {
     return new File([u8arr], filename, { type: mime });
   };
 
-  const uploadPhoto = async (base64Data: string) => {
-    setUploading(true);
+  const uploadSignature = async (signatureDataUrl: string | null) => {
+    if (!signatureDataUrl) {
+      setSignatureUrl(null);
+      return;
+    }
+    setSaving(true);
     try {
-      const fileObj = dataURLtoFile(base64Data, `capture-${Date.now()}.jpg`);
-      const compressedBlob = await compressToWebP(fileObj, 1280, 0.78);
-      const filename = `capture-${Date.now()}.webp`;
-
-      const { data, error } = await supabase.storage
-        .from('finance-photos')
-        .upload(`photos/${filename}`, compressedBlob, {
-          contentType: 'image/webp',
-          cacheControl: '31536000',
-          upsert: true
-        });
-
+      const fileName = `cust_${Date.now()}_sig.png`;
+      const file = dataURLtoFile(signatureDataUrl, fileName);
+      
+      const { error } = await supabase.storage
+        .from('finance_photos')
+        .upload(fileName, file, { contentType: 'image/png' });
+        
       if (error) throw error;
-
-      const publicUrl = supabase.storage
-        .from('finance-photos')
-        .getPublicUrl(data.path).data.publicUrl;
-
-      setPhotoUrl(publicUrl);
-      toast.success('Photo uploaded successfully!');
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('finance_photos')
+        .getPublicUrl(fileName);
+        
+      setSignatureUrl(publicUrl);
+      toast.success('Signature uploaded successfully');
     } catch (err) {
-      console.error('Upload failed, falling back to direct base64:', err);
-      // Fallback to storing base64 directly
-      setPhotoUrl(base64Data);
-      toast('Photo saved in database fallback.', { icon: '⚠️' });
+      console.error(err);
+      toast.error('Failed to upload signature');
     } finally {
-      setUploading(false);
+      setSaving(false);
     }
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 15 * 1024 * 1024) {
-        toast.error('File is too large. Max allowed size is 15MB.');
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCapturedImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-
-      setUploading(true);
-      try {
-        const compressedBlob = await compressToWebP(file, 1280, 0.78);
-        const filename = `upload-${Date.now()}.webp`;
-
-        const { data, error } = await supabase.storage
-          .from('finance-photos')
-          .upload(`photos/${filename}`, compressedBlob, {
-            contentType: 'image/webp',
-            cacheControl: '31536000',
-            upsert: true
-          });
-
-        if (error) throw error;
-
-        const publicUrl = supabase.storage
-          .from('finance-photos')
-          .getPublicUrl(data.path).data.publicUrl;
-
-        setPhotoUrl(publicUrl);
-        toast.success('Image uploaded successfully!');
-      } catch (err) {
-        console.error('File upload failed, falling back to base64:', err);
-        const base64Reader = new FileReader();
-        base64Reader.onloadend = () => {
-          setPhotoUrl(base64Reader.result as string);
-        };
-        base64Reader.readAsDataURL(file);
-        toast('Using base64 image encoding fallback.', { icon: '⚠️' });
-      } finally {
-        setUploading(false);
-      }
-    }
-  };
-
-  const handleClearPhoto = () => {
-    stopCamera();
-    setCapturedImage(null);
-    setPhotoUrl(null);
   };
 
   const handleResetForm = () => {
-    if (!window.confirm('Are you sure you want to clear the form?')) return;
-    if (editId) {
-      loadCustomerDetails(editId);
-    } else {
-      setAadhaar('');
-      setName('');
-      setFatherName('');
-      setAadhaarVillage('');
-      setAadhaarMandal('');
-      setAadhaarDistrict('');
-      setPresentVillage('');
-      setPresentMandal('');
-      setPresentDistrict('');
-      setAadhaarAddress('');
-      setPresentAddress('');
-      setPhone1('');
-      setPhone2('');
-      handleClearPhoto();
-      setFingerprintUrl(null);
-      setFingerprintTemplate(null);
-      setFingerprintAdded(false);
-      fetchNextId();
-    }
-    toast.success('Form reset successfully');
+    setAadhaar('');
+    setName('');
+    setRelationshipType('Father');
+    setRelationshipName('');
+    setAadhaarAddress('');
+    setPresentAddress('');
+    setHouseNo('');
+    setMandal('');
+    setDistrict('');
+    setPhone1('');
+    setPhone2('');
+    handleClearPhoto();
+    setSignatureUrl(null);
+    setFingerprintUrl(null);
+    setFingerprintTemplate(null);
+    setFingerprintAdded(false);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanAadhaar = aadhaar.trim();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (saving) return;
 
+    // Validate
     const fields: ValidationField[] = [
       { name: 'name', label: 'Customer Name', value: name, required: true, ref: nameRef },
-      { name: 'aadhaarAddress', label: 'Aadhaar Address', value: aadhaarAddress, required: true, ref: aadhaarAddressRef },
-      { name: 'presentAddress', label: 'Present Address', value: presentAddress, required: true, ref: presentAddressRef },
       { name: 'phone1', label: 'Phone 1', value: phone1, required: true, ref: phone1Ref },
-      { 
-        name: 'aadhaar', 
-        label: 'Aadhaar', 
-        value: cleanAadhaar, 
-        required: false, 
-        ref: aadhaarRef,
-        customValidation: (val) => /^\d{12}$/.test(val) ? null : 'Aadhaar must be exactly 12 digits'
-      }
+      { name: 'aadhaarAddress', label: 'Aadhaar Address', value: aadhaarAddress, required: true, ref: aadhaarAddressRef },
+      { name: 'presentAddress', label: 'Present Address', value: presentAddress, required: true, ref: presentAddressRef }
     ];
 
-    const { isValid, errors: newErrors } = validateFinanceForm(fields);
-    setErrors(newErrors);
+    const cleanAadhaar = aadhaar.replace(/\s+/g, '');
+    if (cleanAadhaar && !/^\d{12}$/.test(cleanAadhaar)) {
+      toast.error('Aadhaar UID must be exactly 12 digits');
+      aadhaarRef.current?.focus();
+      return;
+    }
 
-    if (!isValid) return;
+    const { isValid, errors: valErrors } = validateFinanceForm(fields);
+    if (!isValid) {
+      setErrors(valErrors);
+      const firstErrorKey = Object.keys(valErrors)[0];
+      const match = fields.find(f => f.name === firstErrorKey);
+      if (match && match.ref && 'current' in match.ref && match.ref.current) {
+        match.ref.current.focus();
+      }
+      return;
+    }
 
     setSaving(true);
     try {
-      // 1. Check duplicate Aadhaar if entered
-      if (cleanAadhaar) {
-        let query = supabase
-          .from('finance_customers')
-          .select('name, customer_id')
-          .eq('aadhaar', cleanAadhaar);
-        
-        if (editId) {
-          query = query.neq('id', editId);
-        }
+      if (!editId && cleanAadhaar) {
+        const query = supabase.from('finance_customers').select('id, name, customer_id').eq('aadhaar', cleanAadhaar);
+        const { data: existingCustomers } = await query.limit(1);
 
-        const { data: existingCustomers, error: checkError } = await query.limit(1);
-
-        if (checkError) {
-          console.error('Error checking duplicate Aadhaar:', checkError);
-        } else if (existingCustomers && existingCustomers.length > 0) {
+        if (existingCustomers && existingCustomers.length > 0) {
           const dup = existingCustomers[0];
           toast.error(`Customer with this Aadhaar already exists (Name: ${dup.name}, ID: ${dup.customer_id || 'N/A'}).`);
           setSaving(false);
@@ -349,28 +339,20 @@ const NewCustomer: React.FC = () => {
         phone: phone1.trim() || null,
         phone2: phone2.trim() || null,
         partner_name: null,
-        address: presentAddress.trim() || null,
+        address: houseNo.trim() || null,
         aadhaar: cleanAadhaar || null,
         customer_photo_url: photoUrl || null,
-        father_husband_name: fatherName.trim() || null,
-        
-        // Redesign columns
-        father_name: fatherName.trim() || null,
-        village: presentVillage.trim() || null,
-        mandal: presentMandal.trim() || null,
-        district: presentDistrict.trim() || null,
+        father_husband_name: `${relationshipType}:${relationshipName.trim()}`,
+        father_name: `${relationshipType}:${relationshipName.trim()}`,
         aadhaar_address: aadhaarAddress.trim() || null,
-        aadhaar_village: aadhaarVillage.trim() || null,
-        aadhaar_mandal: aadhaarMandal.trim() || null,
-        aadhaar_district: aadhaarDistrict.trim() || null,
         present_address: presentAddress.trim() || null,
-        present_village: presentVillage.trim() || null,
-        present_mandal: presentMandal.trim() || null,
-        present_district: presentDistrict.trim() || null,
+        mandal: mandal.trim() || null,
+        district: district.trim() || null,
         phone_1: phone1.trim() || null,
         phone_2: phone2.trim() || null,
-
-        // Fingerprints (only send standard ones which exist in current schema)
+        customer_fingerprint_image_url: signatureUrl || null,
+        customer_fingerprint_template: null,
+        customer_fingerprint_added: false,
         fingerprint_url: fingerprintUrl || null,
         fingerprint_template: fingerprintTemplate || null,
         fingerprint_added: fingerprintAdded
@@ -378,456 +360,299 @@ const NewCustomer: React.FC = () => {
 
       let result;
       if (editId) {
-        // Edit mode
         const staffName = sessionStorage.getItem('thirumala_user') 
           ? JSON.parse(sessionStorage.getItem('thirumala_user')!).username 
           : 'Staff';
         result = await supabaseFinance.updateCustomer(editId, payload, staffName);
       } else {
-        // Create mode
         result = await supabaseFinance.createCustomer(payload);
       }
 
       if (result) {
         toast.success(editId ? 'Customer details updated successfully.' : 'Customer registered successfully.');
-        
         if (!editId) {
-          // Reset form state on success
-          setAadhaar('');
-          setName('');
-          setFatherName('');
-          setAadhaarVillage('');
-          setAadhaarMandal('');
-          setAadhaarDistrict('');
-          setPresentVillage('');
-          setPresentMandal('');
-          setPresentDistrict('');
-          setAadhaarAddress('');
-          setPresentAddress('');
-          setPhone1('');
-          setPhone2('');
-          handleClearPhoto();
-          setFingerprintUrl(null);
-          setFingerprintTemplate(null);
-          setFingerprintAdded(false);
+          handleResetForm();
           fetchNextId();
+        } else {
+          navigate('/finance/customers');
         }
-
-        // Redirect
-        navigate('/finance/customers');
       } else {
-        toast.error(editId ? 'Failed to update customer details.' : 'Failed to register customer. Check console.');
+        toast.error('Failed to save customer');
       }
     } catch (err: any) {
-      console.error('Customer save error details:', err);
-      const errorMsg = err.message || '';
-      if (err.code === '23505' || errorMsg.includes('duplicate') || errorMsg.includes('unique constraint')) {
-        toast.error('Customer with this Aadhaar already exists.');
-      } else {
-        toast.error(`Failed to save customer: ${errorMsg || 'Check database connection.'}`);
-      }
+      console.error(err);
+      toast.error(err.message || 'Error processing request');
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto select-none print:p-0">
+    <div className="space-y-3 w-full select-none font-outfit text-slate-800 p-2">
       
-      {/* Top Header Actions Bar */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5">
+      {/* Top Action Header */}
+      <div className="flex justify-between items-center bg-white border border-slate-200 p-3 rounded-lg shadow-sm">
         <div>
-          <div className="text-slate-400 finance-small-label uppercase">
-            DASHBOARD / CUSTOMERS / {editId ? 'EDIT' : 'NEW'}
-          </div>
-          <h1 className="mt-1 finance-h1">{editId ? 'EDIT CUSTOMER' : 'NEW CUSTOMER'}</h1>
-          <p className="mt-0.5 finance-small-label uppercase">
-            {editId ? 'MODIFY CUSTOMER MASTER LIST RECORD' : 'REGISTER A NEW CUSTOMER IN THE MASTER LIST'}
+          <h1 className="text-[24px] font-bold uppercase text-slate-900 tracking-tight leading-none">
+            {editId ? `EDIT CUSTOMER PRO#${estimatedId}` : `NEW CUSTOMER REGISTRATION`}
+          </h1>
+          <p className="text-[14px] text-slate-400 font-bold uppercase mt-1">
+            Demographic, photograph, signature and biometrics
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
+            onClick={() => navigate(editId ? '/finance/customers' : '/finance')}
+            className="inline-flex items-center justify-center gap-1 px-3 h-[48px] bg-white text-slate-700 border border-slate-250 rounded hover:bg-slate-50 font-bold text-[16px] uppercase"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            BACK
+            <ArrowLeft className="w-4 h-4" />
+            Back
           </button>
           <button
             type="button"
             onClick={handleResetForm}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
+            className="inline-flex items-center justify-center gap-1 px-3 h-[48px] bg-white text-red-700 border border-slate-250 rounded hover:bg-red-50 font-bold text-[16px] uppercase"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            RESET
+            Clear
           </button>
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={saving || uploading}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 finance-button uppercase"
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-1 px-4 h-[48px] bg-[#0b1329] text-white border border-slate-800 rounded hover:bg-slate-800 font-bold text-[16px] uppercase disabled:opacity-50"
           >
-            <Save className="w-3.5 h-3.5" />
-            {saving ? 'SAVING...' : 'SAVE'}
+            <Save className="w-4 h-4" />
+            {saving ? 'Saving...' : 'Save Profile'}
           </button>
         </div>
       </div>
 
-      {/* Two-Column Grid Layout */}
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left Column: Customer Details Form */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <h3 className="text-slate-900 border-b border-slate-100 pb-2 finance-header-time uppercase">
-              CUSTOMER DETAILS
-            </h3>
+      {/* Main Form Fields */}
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3">
+          
+          {/* Row 1 Grid */}
+          <div className="grid grid-cols-12 gap-3 items-end">
+            <div className="col-span-12 md:col-span-3">
+              <label className="uppercase block mb-1 text-[15px] font-bold text-slate-700">Customer Name *</label>
+              <input
+                type="text"
+                ref={nameRef}
+                value={name}
+                onChange={(e) => { setName(e.target.value); setErrors(p => ({...p, name: false})) }}
+                placeholder="Full Name"
+                className={`w-full bg-white border rounded px-3 text-[16px] text-slate-800 focus:outline-none h-[48px] font-bold ${errors.name ? 'border-red-500 bg-red-50' : 'border-slate-250 focus:ring-1 focus:ring-slate-900'}`}
+                required
+              />
+            </div>
             
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="finance-caption uppercase">
-                    CUSTOMER ID
-                  </label>
-                  <input
-                    type="text"
-                    value={estimatedId}
-                    readOnly
-                    disabled
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-500 focus:outline-none cursor-not-allowed finance-header-time"
-                  />
-                  <span className="text-[9px] text-slate-400 mt-1 block finance-input uppercase">
-                    AUTO-GENERATED
-                  </span>
-                </div>
+            <div className="col-span-4 md:col-span-2">
+              <label className="uppercase block mb-1 text-[15px] font-bold text-slate-700">Relationship</label>
+              <select
+                value={relationshipType}
+                onChange={(e) => setRelationshipType(e.target.value as any)}
+                className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[48px] font-bold"
+              >
+                <option value="Father">Father</option>
+                <option value="Husband">Husband</option>
+                <option value="Wife">Wife</option>
+              </select>
+            </div>
 
-                <div>
-                  <label className="finance-caption uppercase">
-                    AADHAAR
-                  </label>
-                  <input
-                    type="text"
-                    ref={aadhaarRef}
-                    value={aadhaar}
-                    onChange={(e) => { setAadhaar(e.target.value); setErrors(p => ({...p, aadhaar: false})) }}
-                    placeholder="12-digit Aadhaar UID"
-                    className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none finance-header-time ${errors.aadhaar ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                  />
-                </div>
-              </div>
+            <div className="col-span-8 md:col-span-4">
+              <label className="uppercase block mb-1 text-[15px] font-bold text-slate-700">Relationship Name</label>
+              <input
+                type="text"
+                value={relationshipName}
+                onChange={(e) => setRelationshipName(e.target.value)}
+                placeholder={`${relationshipType}'s Name`}
+                className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[48px] font-bold uppercase"
+              />
+            </div>
 
+            <div className="col-span-12 md:col-span-3">
+              <label className="uppercase block mb-1 text-[15px] font-bold text-slate-700 font-mono">Aadhaar (12-digit)</label>
+              <input
+                type="text"
+                ref={aadhaarRef}
+                value={aadhaar}
+                onChange={(e) => { setAadhaar(e.target.value); setErrors(p => ({...p, aadhaar: false})) }}
+                placeholder="12-digit Aadhaar UID"
+                className={`w-full bg-white border rounded px-3 text-[16px] text-slate-800 focus:outline-none h-[48px] font-bold ${errors.aadhaar ? 'border-red-500 bg-red-50' : 'border-slate-250 focus:ring-1 focus:ring-slate-900'}`}
+              />
+            </div>
+          </div>
+
+          {/* Row 2 Grid */}
+          <div className="grid grid-cols-12 gap-3">
+            <div className="col-span-12 md:col-span-6">
+              <label className="uppercase block mb-1 text-[15px] font-bold text-slate-700">Phone 1 *</label>
+              <input
+                type="text"
+                ref={phone1Ref}
+                value={phone1}
+                onChange={(e) => { setPhone1(e.target.value); setErrors(p => ({...p, phone1: false})) }}
+                placeholder="Primary Contact"
+                className={`w-full bg-white border rounded px-3 text-[16px] text-slate-800 focus:outline-none h-[48px] font-bold ${errors.phone1 ? 'border-red-500 bg-red-50' : 'border-slate-250 focus:ring-1 focus:ring-slate-900'}`}
+                required
+              />
+            </div>
+            <div className="col-span-12 md:col-span-6">
+              <label className="uppercase block mb-1 text-[15px] font-bold text-slate-700">Phone 2</label>
+              <input
+                type="text"
+                value={phone2}
+                onChange={(e) => setPhone2(e.target.value)}
+                placeholder="Secondary Contact"
+                className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] text-slate-850 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[48px] font-bold"
+              />
+            </div>
+          </div>
+
+          {/* Row 3 Grid */}
+          <div className="grid grid-cols-12 gap-3 border-t border-slate-100 pt-3">
+            <div className="col-span-12 md:col-span-4">
+              <label className="block text-[15px] font-bold text-slate-700 uppercase mb-1">Aadhaar Address *</label>
+              <textarea
+                ref={aadhaarAddressRef}
+                value={aadhaarAddress}
+                onChange={(e) => { setAadhaarAddress(e.target.value); setErrors(p => ({...p, aadhaarAddress: false})) }}
+                placeholder="Aadhaar Address (Door No, Street, Village, Mandal, District)"
+                rows={3}
+                className={`w-full bg-white border rounded p-2 text-[16px] text-slate-800 focus:outline-none resize-none font-bold ${errors.aadhaarAddress ? 'border-red-500 bg-red-50' : 'border-slate-250 focus:ring-1 focus:ring-slate-900'}`}
+                required
+              />
+            </div>
+            
+            <div className="col-span-12 md:col-span-4">
+              <label className="block text-[15px] font-bold text-slate-700 uppercase mb-1">Present Address *</label>
+              <textarea
+                ref={presentAddressRef}
+                value={presentAddress}
+                onChange={(e) => { setPresentAddress(e.target.value); setErrors(p => ({...p, presentAddress: false})) }}
+                placeholder="Street / Village / Area"
+                rows={3}
+                className={`w-full bg-white border rounded p-2 text-[16px] text-slate-850 focus:outline-none resize-none font-bold ${errors.presentAddress ? 'border-red-500 bg-red-50' : 'border-slate-250 focus:ring-1 focus:ring-slate-900'}`}
+                required
+              />
+            </div>
+
+            <div className="col-span-12 md:col-span-4 grid grid-cols-2 gap-2">
               <div>
-                <label className="finance-caption uppercase">
-                  NAME <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-[15px] font-bold text-slate-700 uppercase mb-1">House No</label>
                 <input
                   type="text"
-                  ref={nameRef}
-                  value={name}
-                  onChange={(e) => { setName(e.target.value); setErrors(p => ({...p, name: false})) }}
-                  placeholder="e.g. Ramesh Kumar"
+                  value={houseNo}
+                  onChange={(e) => setHouseNo(e.target.value)}
+                  placeholder="Door No"
+                  className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[48px] font-bold uppercase"
                   required
-                  className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none finance-header-time ${errors.name ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
                 />
               </div>
-
               <div>
-                <label className="finance-caption uppercase">
-                  FATHER
-                </label>
+                <label className="block text-[15px] font-bold text-slate-700 uppercase mb-1">Mandal</label>
                 <input
                   type="text"
-                  value={fatherName}
-                  onChange={(e) => setFatherName(e.target.value)}
-                  placeholder="Father's or Husband's name"
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
+                  value={mandal}
+                  onChange={(e) => setMandal(e.target.value)}
+                  placeholder="Mandal"
+                  className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[48px] font-bold uppercase"
+                  required
                 />
               </div>
-
-              {/* Permanent / Aadhaar Address Details */}
-              <div className="border-t border-slate-100 pt-4 space-y-4">
-                <h4 className="text-sm font-bold text-slate-950 uppercase tracking-wide">
-                  Permanent Address (Aadhaar)
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="finance-caption uppercase">
-                      AADHAAR ADDRESS <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      ref={aadhaarAddressRef}
-                      value={aadhaarAddress}
-                      onChange={(e) => { setAadhaarAddress(e.target.value); setErrors(p => ({...p, aadhaarAddress: false})) }}
-                      placeholder="Address details as printed on Aadhaar card"
-                      rows={2}
-                      required
-                      className={`w-full bg-white border rounded-lg p-2.5 text-slate-800 focus:outline-none resize-y finance-header-time ${errors.aadhaarAddress ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                    />
-                  </div>
-                  <div>
-                    <label className="finance-caption uppercase">
-                      AADHAAR VILLAGE
-                    </label>
-                    <input
-                      type="text"
-                      value={aadhaarVillage}
-                      onChange={(e) => setAadhaarVillage(e.target.value)}
-                      placeholder="Village"
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
-                    />
-                  </div>
-                  <div>
-                    <label className="finance-caption uppercase">
-                      AADHAAR MANDAL
-                    </label>
-                    <input
-                      type="text"
-                      value={aadhaarMandal}
-                      onChange={(e) => setAadhaarMandal(e.target.value)}
-                      placeholder="Mandal"
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="finance-caption uppercase">
-                      AADHAAR DISTRICT
-                    </label>
-                    <input
-                      type="text"
-                      value={aadhaarDistrict}
-                      onChange={(e) => setAadhaarDistrict(e.target.value)}
-                      placeholder="District"
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Present Address Details */}
-              <div className="border-t border-slate-100 pt-4 space-y-4">
-                <h4 className="text-sm font-bold text-slate-950 uppercase tracking-wide">
-                  Present Address
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="finance-caption uppercase">
-                      PRESENT ADDRESS <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      ref={presentAddressRef}
-                      value={presentAddress}
-                      onChange={(e) => { setPresentAddress(e.target.value); setErrors(p => ({...p, presentAddress: false})) }}
-                      placeholder="Current residential address details"
-                      rows={2}
-                      required
-                      className={`w-full bg-white border rounded-lg p-2.5 text-slate-800 focus:outline-none resize-y finance-header-time ${errors.presentAddress ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                    />
-                  </div>
-                  <div>
-                    <label className="finance-caption uppercase">
-                      PRESENT VILLAGE
-                    </label>
-                    <input
-                      type="text"
-                      value={presentVillage}
-                      onChange={(e) => setPresentVillage(e.target.value)}
-                      placeholder="Village"
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
-                    />
-                  </div>
-                  <div>
-                    <label className="finance-caption uppercase">
-                      PRESENT MANDAL
-                    </label>
-                    <input
-                      type="text"
-                      value={presentMandal}
-                      onChange={(e) => setPresentMandal(e.target.value)}
-                      placeholder="Mandal"
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="finance-caption uppercase">
-                      PRESENT DISTRICT
-                    </label>
-                    <input
-                      type="text"
-                      value={presentDistrict}
-                      onChange={(e) => setPresentDistrict(e.target.value)}
-                      placeholder="District"
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Phone Inputs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
-                <div>
-                  <label className="finance-caption uppercase">
-                    PHONE 1 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    ref={phone1Ref}
-                    value={phone1}
-                    onChange={(e) => { setPhone1(e.target.value); setErrors(p => ({...p, phone1: false})) }}
-                    placeholder="Primary 10-digit number"
-                    required
-                    className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none finance-header-time ${errors.phone1 ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
-                  />
-                </div>
-
-                <div>
-                  <label className="finance-caption uppercase">
-                    PHONE 2
-                  </label>
-                  <input
-                    type="text"
-                    value={phone2}
-                    onChange={(e) => setPhone2(e.target.value)}
-                    placeholder="Secondary contact number"
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none finance-header-time"
-                  />
-                </div>
+              <div className="col-span-2">
+                <label className="block text-[15px] font-bold text-slate-700 uppercase mb-1">District</label>
+                <input
+                  type="text"
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                  placeholder="District"
+                  className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[48px] font-bold uppercase"
+                  required
+                />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Customer Photo Card */}
-        <div className="space-y-6">
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <div>
-              <h3 className="text-slate-900 finance-header-time uppercase">
-                CUSTOMER PHOTO
-              </h3>
-              <p className="text-slate-400 mt-0.5 finance-small-label uppercase">
-                UPLOAD OR CAPTURE. SAVED WITH CUSTOMER RECORD.
-              </p>
+        {/* Compressed Row: Photograph, Signature, Fingerprint */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          
+          {/* Card 1: Photo Capture */}
+          <div className="bg-white border border-slate-200 rounded-lg p-3 flex flex-col items-center space-y-2 shadow-sm">
+            <span className="text-[15px] font-bold text-slate-700 uppercase">Customer Photograph</span>
+            <div className="w-full h-24 bg-slate-50 rounded border border-slate-200 flex items-center justify-center overflow-hidden relative">
+              {cameraActive ? (
+                <video ref={videoRef} className="w-full h-full object-cover" />
+              ) : capturedImage ? (
+                <img src={capturedImage} alt="Captured" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-[14px] text-slate-400 font-bold uppercase">No Capture</span>
+              )}
             </div>
 
-            {/* Photo Box Container */}
-            <div className="relative border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 p-6 flex flex-col items-center justify-center min-h-[240px] overflow-hidden shadow-inner">
+            <div className="flex gap-1.5 w-full">
+              {cameraActive ? (
+                <button
+                  type="button"
+                  onClick={capturePhoto}
+                  className="flex-grow h-[38px] bg-slate-950 text-white rounded text-[16px] font-bold uppercase"
+                >
+                  Capture
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="flex-grow h-[38px] bg-white text-slate-700 border border-slate-250 rounded text-[16px] font-bold uppercase inline-flex items-center justify-center gap-1 hover:bg-slate-50"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  Camera
+                </button>
+              )}
               
-              {/* Camera Active State */}
-              {cameraActive && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black">
-                  <video
-                    ref={videoRef}
-                    className="w-full h-full object-cover"
-                    playsInline
-                    muted
-                  />
-                  <div className="absolute bottom-4 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={capturePhoto}
-                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg shadow hover:bg-emerald-700 flex items-center gap-1 finance-header-time"
-                    >
-                      <Camera className="w-4 h-4" />
-                      CAPTURE
-                    </button>
-                    <button
-                      type="button"
-                      onClick={stopCamera}
-                      className="px-4 py-2 bg-slate-800 text-white rounded-lg shadow hover:bg-slate-700 finance-header-time"
-                    >
-                      CANCEL
-                    </button>
-                  </div>
-                </div>
-              )}
+              <label className="h-[38px] px-3 bg-white text-slate-700 border border-slate-250 rounded text-[16px] font-bold uppercase cursor-pointer hover:bg-slate-50 flex items-center justify-center">
+                Browse
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+              </label>
 
-              {/* Preview State */}
-              {capturedImage && !cameraActive && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white p-2">
-                  <img
-                    src={capturedImage}
-                    alt="Preview"
-                    className="w-full h-full object-contain rounded-lg"
-                  />
-                  {uploading && (
-                    <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-slate-900"></div>
-                    </div>
-                  )}
-                  <div className="absolute bottom-4 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={startCamera}
-                      className="px-3 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg shadow-sm hover:bg-orange-100 flex items-center gap-1 finance-small-label"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      RETAKE
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleClearPhoto}
-                      className="px-3 py-1.5 bg-red-50 text-red-650 border border-red-200 rounded-lg shadow-sm hover:bg-red-100 flex items-center gap-1 finance-small-label"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                      CLEAR
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Default Empty State */}
-              {!cameraActive && !capturedImage && (
-                <div className="text-center space-y-4 w-full flex flex-col items-center">
-                  <div 
-                    onClick={startCamera}
-                    className="cursor-pointer group flex flex-col items-center space-y-2 p-4"
-                  >
-                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 text-orange-500 group-hover:scale-105 transition-all">
-                      <Camera className="w-6 h-6 stroke-1.5" />
-                    </div>
-                    <span className="text-[11px] text-slate-800 block pt-1 finance-input uppercase">
-                      CUSTOMER PHOTO
-                    </span>
-                    <span className="text-[9px] text-slate-400 block finance-input uppercase">
-                      CLICK TO CAPTURE PHOTO
-                    </span>
-                  </div>
-
-                  <div className="w-full flex items-center justify-center gap-2 pt-2 border-t border-slate-100/60">
-                    <label className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-colors shadow-sm inline-flex items-center gap-1.5 finance-small-label uppercase">
-                      <FileImage className="w-3.5 h-3.5 text-slate-500" />
-                      OR SELECT FROM DEVICE
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileChange}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                </div>
+              {(capturedImage || photoUrl) && (
+                <button
+                  type="button"
+                  onClick={handleClearPhoto}
+                  className="px-2 h-[38px] bg-red-50 text-red-700 border border-red-250 rounded hover:bg-red-100 flex items-center justify-center"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               )}
             </div>
-
-            {/* Hidden elements */}
-            <canvas ref={canvasRef} width="640" height="480" className="hidden" />
+            <canvas ref={canvasRef} width={640} height={480} className="hidden" />
           </div>
 
-          {/* Fingerprint Capture Card */}
-          <div className="bg-white border border-slate-150 rounded-xl p-5 shadow-sm space-y-4">
-            <BiometricScanner
-              label="Customer Fingerprint Capture"
-              existingTemplate={fingerprintTemplate}
-              existingImageUrl={fingerprintUrl}
-              onFingerprintSaved={(url, template, added) => {
-                setFingerprintUrl(url);
-                setFingerprintTemplate(template);
-                setFingerprintAdded(added);
-              }}
-            />
-          </div>
+          {/* Card 2: Signature Pad */}
+          <SignaturePad
+            existingUrl={signatureUrl}
+            onSave={uploadSignature}
+          />
+
+          {/* Card 3: Fingerprint Biometric */}
+          <BiometricScanner
+            label="Fingerprint Biometric"
+            existingTemplate={fingerprintTemplate}
+            existingImageUrl={fingerprintUrl}
+            onFingerprintSaved={(url, template, added) => {
+              setFingerprintUrl(url);
+              setFingerprintTemplate(template);
+              setFingerprintAdded(added);
+            }}
+          />
         </div>
-
       </form>
     </div>
   );

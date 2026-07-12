@@ -76,6 +76,7 @@ import CashBook from './pages/finance/CashBook';
 import LedgerSettings from './pages/finance/LedgerSettings';
 import PaymentFollowUp from './pages/finance/PaymentFollowUp';
 import TransactionApproval from './pages/finance/TransactionApproval';
+import CallHistory from './pages/finance/CallHistory';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
@@ -299,6 +300,7 @@ const AppContent: React.FC = () => {
           <Route path='finance/tbd-ledger' element={<OfflineGuard><TBDLedger /></OfflineGuard>} />
           <Route path='finance/dues-ledger' element={<OfflineGuard><DuesLedger /></OfflineGuard>} />
           <Route path='finance/payment-followup' element={<OfflineGuard><PaymentFollowUp /></OfflineGuard>} />
+          <Route path='finance/call-history' element={<OfflineGuard><CallHistory /></OfflineGuard>} />
           <Route path='finance/pl' element={<OfflineGuard><ProfitAndLoss /></OfflineGuard>} />
           <Route path='finance/final-statement' element={<OfflineGuard><FinalStatement /></OfflineGuard>} />
           <Route path='finance/business-report' element={<OfflineGuard><BusinessReport /></OfflineGuard>} />
