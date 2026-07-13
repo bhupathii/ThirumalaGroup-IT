@@ -170,13 +170,13 @@ const NewCustomer: React.FC = () => {
       const fileName = `cust_${Date.now()}_photo.webp`;
       
       const { error } = await supabase.storage
-        .from('finance_photos')
+        .from('finance-photos')
         .upload(fileName, compressedBlob, { contentType: 'image/webp' });
         
       if (error) throw error;
       
       const { data: { publicUrl } } = supabase.storage
-        .from('finance_photos')
+        .from('finance-photos')
         .getPublicUrl(fileName);
         
       setPhotoUrl(publicUrl);
@@ -203,13 +203,13 @@ const NewCustomer: React.FC = () => {
       const fileName = `cust_${Date.now()}_photo.webp`;
       
       const { error } = await supabase.storage
-        .from('finance_photos')
+        .from('finance-photos')
         .upload(fileName, compressedBlob, { contentType: 'image/webp' });
         
       if (error) throw error;
       
       const { data: { publicUrl } } = supabase.storage
-        .from('finance_photos')
+        .from('finance-photos')
         .getPublicUrl(fileName);
         
       setPhotoUrl(publicUrl);
@@ -252,13 +252,13 @@ const NewCustomer: React.FC = () => {
       const file = dataURLtoFile(signatureDataUrl, fileName);
       
       const { error } = await supabase.storage
-        .from('finance_photos')
+        .from('finance-photos')
         .upload(fileName, file, { contentType: 'image/png' });
         
       if (error) throw error;
       
       const { data: { publicUrl } } = supabase.storage
-        .from('finance_photos')
+        .from('finance-photos')
         .getPublicUrl(fileName);
         
       setSignatureUrl(publicUrl);

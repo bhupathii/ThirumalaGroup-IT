@@ -42,6 +42,7 @@ interface NewEntryForm {
   date: string;
   companyName: string;
   accountName: string;
+  reportCategory?: string;
   subAccount: string;
   particulars: string;
   saleQ: string;
@@ -202,6 +203,7 @@ const NewEntry: React.FC = () => {
     date: format(new Date(), 'yyyy-MM-dd'),
     companyName: '',
     accountName: '',
+    reportCategory: '',
     subAccount: '',
     particulars: '',
     saleQ: '',
@@ -245,6 +247,7 @@ const NewEntry: React.FC = () => {
     date: format(new Date(), 'yyyy-MM-dd'),
     companyName: '',
     accountName: '',
+    reportCategory: '',
     subAccount: '',
     particulars: '',
     saleQ: '',
@@ -265,6 +268,8 @@ const NewEntry: React.FC = () => {
   // Load account options from cash_book distincts (same as Edit Entry)
   const [accountOptions, setAccountOptions] = useState<{ value: string; label: string }[]>([]);
   const [dualAccountOptions, setDualAccountOptions] = useState<{ value: string; label: string }[]>([]);
+  const [companyAccounts, setCompanyAccounts] = useState<any[]>([]);
+  const [dualCompanyAccounts, setDualCompanyAccounts] = useState<any[]>([]);
   const [subAccounts, setSubAccounts] = useState<
     { value: string; label: string }[]
   >([]);
@@ -291,6 +296,7 @@ const NewEntry: React.FC = () => {
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newCompanyAddress, setNewCompanyAddress] = useState('');
   const [newAccountName, setNewAccountName] = useState('');
+  const [newAccountReportCategory, setNewAccountReportCategory] = useState('BALANCE_SHEET');
   const [newSubAccountName, setNewSubAccountName] = useState('');
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
@@ -433,6 +439,7 @@ const NewEntry: React.FC = () => {
   const dateRef = useRef<HTMLInputElement>(null);
   const companyNameRef = useRef<HTMLInputElement>(null);
   const mainAccountRef = useRef<HTMLInputElement>(null);
+  const reportRef = useRef<HTMLInputElement>(null);
   const subAccountRef = useRef<HTMLInputElement>(null);
   const particularsRef = useRef<HTMLInputElement>(null);
   const staffRef = useRef<HTMLInputElement>(null);
@@ -447,6 +454,7 @@ const NewEntry: React.FC = () => {
   // Refs for dual entry form navigation
   const dualCompanyNameRef = useRef<HTMLInputElement>(null);
   const dualMainAccountRef = useRef<HTMLInputElement>(null);
+  const dualReportRef = useRef<HTMLInputElement>(null);
   const dualSubAccountRef = useRef<HTMLInputElement>(null);
   const dualParticularsRef = useRef<HTMLInputElement>(null);
   const dualCreditRef = useRef<HTMLInputElement>(null);
@@ -592,14 +600,19 @@ const NewEntry: React.FC = () => {
       try {
         if (entry.companyName) {
           console.log(`🔍 [NEW ENTRY] Loading accounts for company: "${entry.companyName}" (Mode: ${tableMode})`);
-          const names = await supabaseDB.getDistinctAccountNamesByCompany(entry.companyName);
+          const [names, fullAccs] = await Promise.all([
+            supabaseDB.getDistinctAccountNamesByCompany(entry.companyName),
+            supabaseDB.getAccountsByCompany(entry.companyName)
+          ]);
           console.log(`🔍 [NEW ENTRY] Found ${names.length} accounts for company "${entry.companyName}":`, names);
           setAccountOptions(names.map(name => ({ value: name, label: name })));
-          setEntry(prev => ({ ...prev, accountName: '', subAccount: '' }));
+          setCompanyAccounts(fullAccs);
+          setEntry(prev => ({ ...prev, accountName: '', reportCategory: '', subAccount: '' }));
           setSubAccounts([]);
         } else {
           console.log('🔍 [NEW ENTRY] No company selected, clearing account options');
           setAccountOptions([]);
+          setCompanyAccounts([]);
         }
       } catch (error) {
         console.error('Error loading account names by company:', error);
@@ -614,14 +627,19 @@ const NewEntry: React.FC = () => {
       try {
         if (dualEntry.companyName) {
           console.log(`🔍 [DUAL ENTRY] Loading accounts for company: "${dualEntry.companyName}" (Mode: ${tableMode})`);
-          const names = await supabaseDB.getDistinctAccountNamesByCompany(dualEntry.companyName);
+          const [names, fullAccs] = await Promise.all([
+            supabaseDB.getDistinctAccountNamesByCompany(dualEntry.companyName),
+            supabaseDB.getAccountsByCompany(dualEntry.companyName)
+          ]);
           console.log(`🔍 [DUAL ENTRY] Found ${names.length} accounts for company "${dualEntry.companyName}":`, names);
           setDualAccountOptions(names.map(name => ({ value: name, label: name })));
-          setDualEntry(prev => ({ ...prev, accountName: '', subAccount: '' }));
+          setDualCompanyAccounts(fullAccs);
+          setDualEntry(prev => ({ ...prev, accountName: '', reportCategory: '', subAccount: '' }));
           setDualSubAccounts([]);
         } else {
           console.log('🔍 [DUAL ENTRY] No company selected, clearing account options');
           setDualAccountOptions([]);
+          setDualCompanyAccounts([]);
         }
       } catch (error) {
         console.error('Error loading dual account names by company:', error);
@@ -854,6 +872,10 @@ const NewEntry: React.FC = () => {
         company: entry.companyName,
         account: entry.accountName
       });
+
+      const matchedAcc = companyAccounts.find(acc => acc.acc_name === entry.accountName);
+      const headOfAccountId = matchedAcc ? matchedAcc.id : null;
+      const reportCategory = entry.reportCategory || (matchedAcc ? matchedAcc.report_category : null);
       
       const mainEntryData = {
         acc_name: entry.accountName,
@@ -876,12 +898,17 @@ const NewEntry: React.FC = () => {
           ? parseFloat(entry.purchaseQ) || 0
           : 0,
         cb: 'CB',
+        report_category: reportCategory,
+        head_of_account_id: headOfAccountId,
       };
 
       // If dual entry, prepare both entries for bulk operation
       if (dualEntryEnabled) {
         const dualCreditNum = parseFloat(dualEntry.credit) || 0;
         const dualDebitNum = parseFloat(dualEntry.debit) || 0;
+        const dualMatchedAcc = dualCompanyAccounts.find(acc => acc.acc_name === dualEntry.accountName);
+        const dualHeadOfAccountId = dualMatchedAcc ? dualMatchedAcc.id : null;
+        const dualReportCategory = dualEntry.reportCategory || (dualMatchedAcc ? dualMatchedAcc.report_category : null);
         
         // Payment mode removed from dual entry per user request
         const dualEntryData = {
@@ -907,6 +934,8 @@ const NewEntry: React.FC = () => {
             ? parseFloat(dualEntry.purchaseQ) || 0
             : 0,
           cb: 'CB',
+          report_category: dualReportCategory,
+          head_of_account_id: dualHeadOfAccountId,
         };
 
         // Use bulk operations for dual entries
@@ -1090,19 +1119,29 @@ const NewEntry: React.FC = () => {
     try {
       const account = await supabaseDB.addAccount(
         entry.companyName,
-        newAccountName.trim()
+        newAccountName.trim(),
+        newAccountReportCategory
       );
       
       // Refresh account options for the current company
-      const names = await supabaseDB.getDistinctAccountNamesByCompany(entry.companyName);
+      const [names, fullAccs] = await Promise.all([
+        supabaseDB.getDistinctAccountNamesByCompany(entry.companyName),
+        supabaseDB.getAccountsByCompany(entry.companyName)
+      ]);
       setAccountOptions(names.map(name => ({ value: name, label: name })));
+      setCompanyAccounts(fullAccs);
       
       // Invalidate companies query to refresh the dropdown (in case account creation affects company data)
       queryClient.invalidateQueries({ queryKey: queryKeys.dropdowns.companies() });
       
       // Set the newly created account as selected
-      setEntry(prev => ({ ...prev, accountName: account.acc_name }));
+      setEntry(prev => ({ 
+        ...prev, 
+        accountName: account.acc_name,
+        reportCategory: account.report_category
+      }));
       setNewAccountName('');
+      setNewAccountReportCategory('BALANCE_SHEET');
       setShowNewAccount(false);
       toast.success('Account created successfully!');
     } catch (error) {
@@ -1988,11 +2027,11 @@ const NewEntry: React.FC = () => {
         </div>
       )}
 
-      {/* Main Content - Side-by-Side: 40% Form, 60% Recent Entries */}
+      {/* Main Content - Stacked: Recent Transactions on Top, Form on Bottom */}
       <div className='flex-1 p-2 w-full'>
-        <div className='w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-3 items-start'>
+        <div className='w-full max-w-7xl mx-auto space-y-3'>
           {/* Recent Transactions Section */}
-          <div className='lg:col-span-7 lg:order-2 w-full space-y-2'>
+          <div className='w-full space-y-2'>
             {/* Totals Ribbon */}
             <div className='flex gap-3 p-3 bg-white border border-gray-250 rounded shadow-sm text-sm font-bold uppercase items-center justify-between'>
               <div className='flex items-center gap-1'>Total Cr: <span className='text-green-750 font-mono'>₹{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
@@ -2132,8 +2171,8 @@ const NewEntry: React.FC = () => {
             </Card>
           </div>
 
-          {/* Entry Form - 40% Panel */}
-          <div className='lg:col-span-5 lg:order-1 w-full'>
+          {/* Entry Form */}
+          <div className='w-full'>
             <Card
               className='p-3 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg'
             >
@@ -2250,54 +2289,86 @@ const NewEntry: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className='space-y-0.5'>
-                    <SearchableSelect
-                      ref={mainAccountRef}
-                      label='Main Account'
-                      value={entry.accountName}
-                      onChange={value =>
-                        handleInputChange('accountName', value)
-                      }
-                      onSelect={() => {
-                        // Auto-navigate to next field when account is selected
-                        setTimeout(() => {
-                          if (subAccountRef.current) {
-                            subAccountRef.current.focus();
+                  <div className='flex gap-1 items-end w-full' style={{ minWidth: 0 }}>
+                    <div className='w-[65%]' style={{ minWidth: 0 }}>
+                      <SearchableSelect
+                        ref={mainAccountRef}
+                        label='Main Account'
+                        value={entry.accountName}
+                        onChange={value =>
+                          handleInputChange('accountName', value)
+                        }
+                        onSelect={value => {
+                          const matchedAcc = companyAccounts.find(acc => acc.acc_name === value);
+                          if (matchedAcc && matchedAcc.report_category) {
+                            handleInputChange('reportCategory', matchedAcc.report_category);
                           }
-                        }, 100);
-                      }}
-                      options={accountOptions}
-                      placeholder='Select account...'
-                      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, subAccountRef)}
-                      required
-                      disabled={!entry.companyName}
-                      size='sm'
-                    />
-                    <div className='flex gap-1'>
-                      <Button
-                        type='button'
+                          setTimeout(() => {
+                            if (reportRef.current) {
+                              reportRef.current.focus();
+                            }
+                          }, 100);
+                        }}
+                        options={accountOptions}
+                        placeholder='Select account...'
+                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, reportRef)}
+                        required
+                        disabled={!entry.companyName}
                         size='sm'
-                        variant='secondary'
-                        onClick={() => setShowNewAccount(true)}
-                        className='text-xs px-1 py-1'
-                        icon={FileText}
-                        tabIndex={-1}
-                      >
-                        Add
-                      </Button>
-                      {entry.accountName && (
+                      />
+                      <div className='flex gap-1 mt-1'>
                         <Button
                           type='button'
                           size='sm'
-                          variant='danger'
-                          onClick={() => handleDelete('account')}
+                          variant='secondary'
+                          onClick={() => setShowNewAccount(true)}
                           className='text-xs px-1 py-1'
-                          icon={AlertCircle}
+                          icon={FileText}
                           tabIndex={-1}
                         >
-                          Del
+                          Add
                         </Button>
-                      )}
+                        {entry.accountName && (
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='danger'
+                            onClick={() => handleDelete('account')}
+                            className='text-xs px-1 py-1'
+                            icon={AlertCircle}
+                            tabIndex={-1}
+                          >
+                            Del
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div className='w-[35%]' style={{ minWidth: 0 }}>
+                      <SearchableSelect
+                        ref={reportRef}
+                        label='Report'
+                        value={entry.reportCategory || ''}
+                        onChange={value =>
+                          handleInputChange('reportCategory', value)
+                        }
+                        onSelect={() => {
+                          setTimeout(() => {
+                            if (staffRef.current) {
+                              staffRef.current.focus();
+                            }
+                          }, 100);
+                        }}
+                        options={[
+                          { value: 'BALANCE_SHEET', label: 'Balance Sheet' },
+                          { value: 'PROFIT_LOSS', label: 'Profit & Loss' }
+                        ]}
+                        placeholder='Category...'
+                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, staffRef)}
+                        required
+                        disabled={!entry.accountName}
+                        size='sm'
+                      />
+                      <div className='h-[26px] mt-1' />
                     </div>
                   </div>
                 </div>
@@ -2376,12 +2447,19 @@ const NewEntry: React.FC = () => {
                         setEntry(prev => ({ ...prev, staff: value }));
                         setSessionStaff(value);
                       }}
+                      onSelect={() => {
+                        setTimeout(() => {
+                          if (subAccountRef.current) {
+                            subAccountRef.current.focus();
+                          }
+                        }, 100);
+                      }}
                       options={users}
                       placeholder='Select staff...'
+                      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, subAccountRef)}
                       required
                       size='sm'
                       className='staff-field'
-                      tabIndex={-1}
                     />
                     <div className='flex gap-1'>
                       <Button
@@ -2610,31 +2688,67 @@ const NewEntry: React.FC = () => {
                         required
                         size='sm'
                       />
-                      <SearchableSelect
-                        ref={dualMainAccountRef}
-                        label='Main Account'
-                        value={dualEntry.accountName}
-                        onChange={value =>
-                          setDualEntry(prev => ({
-                            ...prev,
-                            accountName: value,
-                          }))
-                        }
-                        onSelect={() => {
-                          // Auto-navigate to next field when account is selected
-                          setTimeout(() => {
-                            if (dualSubAccountRef.current) {
-                              dualSubAccountRef.current.focus();
+                      <div className='flex gap-1 items-end w-full' style={{ minWidth: 0 }}>
+                        <div className='w-[65%]' style={{ minWidth: 0 }}>
+                          <SearchableSelect
+                            ref={dualMainAccountRef}
+                            label='Main Account'
+                            value={dualEntry.accountName}
+                            onChange={value =>
+                              setDualEntry(prev => ({
+                                ...prev,
+                                accountName: value,
+                              }))
                             }
-                          }, 100);
-                        }}
-                        options={dualAccountOptions}
-                        placeholder='Select account...'
-                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, dualSubAccountRef)}
-                        required
-                        disabled={!dualEntry.companyName}
-                        size='sm'
-                      />
+                            onSelect={value => {
+                              const matchedAcc = dualCompanyAccounts.find(acc => acc.acc_name === value);
+                              if (matchedAcc && matchedAcc.report_category) {
+                                setDualEntry(prev => ({ ...prev, reportCategory: matchedAcc.report_category }));
+                              }
+                              setTimeout(() => {
+                                if (dualReportRef.current) {
+                                  dualReportRef.current.focus();
+                                }
+                              }, 100);
+                            }}
+                            options={dualAccountOptions}
+                            placeholder='Select account...'
+                            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, dualReportRef)}
+                            required
+                            disabled={!dualEntry.companyName}
+                            size='sm'
+                          />
+                        </div>
+                        <div className='w-[35%]' style={{ minWidth: 0 }}>
+                          <SearchableSelect
+                            ref={dualReportRef}
+                            label='Report'
+                            value={dualEntry.reportCategory || ''}
+                            onChange={value =>
+                              setDualEntry(prev => ({
+                                ...prev,
+                                reportCategory: value,
+                              }))
+                            }
+                            onSelect={() => {
+                              setTimeout(() => {
+                                if (dualSubAccountRef.current) {
+                                  dualSubAccountRef.current.focus();
+                                }
+                              }, 100);
+                            }}
+                            options={[
+                              { value: 'BALANCE_SHEET', label: 'Balance Sheet' },
+                              { value: 'PROFIT_LOSS', label: 'Profit & Loss' }
+                            ]}
+                            placeholder='Category...'
+                            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => handleKeyDown(e, dualSubAccountRef)}
+                            required
+                            disabled={!dualEntry.accountName}
+                            size='sm'
+                          />
+                        </div>
+                      </div>
                     </div>
                     {/* Line 2: Sub Account, Particulars */}
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-1 mt-1'>
@@ -2952,6 +3066,18 @@ const NewEntry: React.FC = () => {
                 required
                 uppercase={true}
               />
+              <div className='space-y-1 text-xs'>
+                <label className='block font-semibold text-gray-700'>Report Category *</label>
+                <select
+                  value={newAccountReportCategory}
+                  onChange={e => setNewAccountReportCategory(e.target.value)}
+                  className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold bg-white text-gray-900'
+                  required
+                >
+                  <option value="BALANCE_SHEET">Balance Sheet</option>
+                  <option value="PROFIT_LOSS">Profit & Loss</option>
+                </select>
+              </div>
               <div className='flex gap-2'>
                 <Button onClick={handleCreateAccount} className='flex-1'>
                   Create

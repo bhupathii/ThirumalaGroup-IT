@@ -17,6 +17,7 @@ export interface Account {
   id: string;
   company_name: string;
   acc_name: string;
+  report_category?: string;
   created_at: string;
 }
 
@@ -54,6 +55,8 @@ export interface CashBookEntry {
   credit_mode?: string;
   debit_mode?: string;
   payment_mode?: string;
+  report_category?: string;
+  head_of_account_id?: string | null;
 }
 
 export interface User {
@@ -1101,12 +1104,13 @@ class SupabaseDatabase {
     return data || [];
   }
 
-  async addAccount(companyName: string, accountName: string): Promise<Account> {
+  async addAccount(companyName: string, accountName: string, reportCategory: string): Promise<Account> {
     const { data, error } = await supabase
       .from(getTableName('company_main_accounts'))
       .insert({
         company_name: companyName,
         acc_name: accountName,
+        report_category: reportCategory,
       })
       .select()
       .single();

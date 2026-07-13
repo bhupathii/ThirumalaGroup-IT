@@ -11,8 +11,8 @@ import { toast } from 'react-hot-toast';
 const Header: React.FC = () => {
   const today = new Date();
   const { user } = useAuth();
-  const { isFinanceMode, isITRMode } = useTableMode();
-  const { currentBook, books, selectBook, createBook } = useBook();
+  const { mode, setMode, isFinanceMode, isITRMode } = useTableMode();
+  const { currentBook, books, selectBook, createBook, reportFilter, setReportFilter } = useBook();
   const { connectionStatus, isSyncing, pendingCount, lastSyncAt, offlineSince } = useOffline();
   
   const [isOpen, setIsOpen] = useState(false);
@@ -97,95 +97,96 @@ const Header: React.FC = () => {
           </div>
 
           <div className='flex items-center gap-4'>
-            {/* Global Book Selector */}
+            {/* Global Book & Report Selector */}
             {user && (
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  onClick={() => setIsOpen(!isOpen)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all shadow-sm ${
-                    currentBook?.is_locked 
-                      ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                      : isFinanceMode
-                        ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                        : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
-                  }`}
-                >
-                  <span className="font-semibold">{modeText}</span>
-                  <span className="text-gray-400">|</span>
-                  <span className="flex items-center gap-1.5">
-                    Book: <span className="font-bold">{currentBook?.book_code || 'None'}</span>
-                    {currentBook?.is_locked && <Lock className="w-3.5 h-3.5" />}
-                  </span>
-                  <ChevronDown className="w-4 h-4 ml-1 opacity-70" />
-                </button>
+              <div className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all shadow-sm ${
+                currentBook?.is_locked 
+                  ? 'bg-red-50 text-red-700 border-red-200'
+                  : isFinanceMode
+                    ? 'bg-green-50 text-green-700 border-green-200'
+                    : 'bg-blue-50 text-blue-700 border-blue-200'
+              }`}>
+                {/* Mode Select */}
+                <div className="flex items-center gap-1">
+                  <select
+                    value={mode || 'regular'}
+                    onChange={async (e) => {
+                      await setMode(e.target.value as any);
+                    }}
+                    className={`bg-transparent font-semibold focus:outline-none cursor-pointer pr-1 ${
+                      currentBook?.is_locked 
+                        ? 'text-red-700'
+                        : isFinanceMode
+                          ? 'text-green-700'
+                          : 'text-blue-700'
+                    }`}
+                  >
+                    <option value="regular">Regular Mode</option>
+                    <option value="itr">ITR Mode</option>
+                    <option value="finance">Finance Mode</option>
+                  </select>
+                </div>
 
-                {isOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-30 py-1 divide-y divide-gray-100">
-                    <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      Available Books ({books.length})
-                    </div>
-                    
-                    <div className="max-h-60 overflow-y-auto py-1">
-                      {books.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-gray-500 italic">
-                          No books found.
-                        </div>
-                      ) : (
-                        books.map((book) => (
-                          <button
-                            key={book.id}
-                            onClick={() => {
-                              selectBook(book.id);
-                              setIsOpen(false);
-                            }}
-                            className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-sm transition-colors hover:bg-gray-50 ${
-                              currentBook?.id === book.id 
-                                ? 'bg-gray-50 text-gray-900 font-semibold' 
-                                : 'text-gray-700'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span 
-                                className="w-2.5 h-2.5 rounded-full" 
-                                style={{ backgroundColor: book.color || '#9ca3af' }}
-                              />
-                              <div className="flex flex-col">
-                                <span>{book.name}</span>
-                                <span className="text-xs text-gray-400 font-mono">{book.book_code}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              {book.is_locked && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 uppercase flex items-center gap-0.5">
-                                  <Lock className="w-2.5 h-2.5" /> Lock
-                                </span>
-                              )}
-                              {book.is_default && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600 uppercase">
-                                  Default
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
+                <span className="text-gray-300">|</span>
 
-                    {user.is_admin && (
-                      <div className="p-1.5">
-                        <button
-                          onClick={() => {
-                            setShowModal(true);
-                            setIsOpen(false);
-                          }}
-                          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm"
-                        >
-                          <Plus className="w-4 h-4" /> Create New Book
-                        </button>
-                      </div>
+                {/* Book Select */}
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-500 font-semibold">Book:</span>
+                  <select
+                    value={currentBook?.id || ''}
+                    onChange={(e) => selectBook(e.target.value)}
+                    className={`bg-transparent font-bold focus:outline-none cursor-pointer pr-1 ${
+                      currentBook?.is_locked 
+                        ? 'text-red-700'
+                        : isFinanceMode
+                          ? 'text-green-700'
+                          : 'text-blue-700'
+                    }`}
+                  >
+                    {books.length === 0 ? (
+                      <option value="">None</option>
+                    ) : (
+                      books.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.book_code}
+                        </option>
+                      ))
                     )}
-                  </div>
-                )}
+                  </select>
+                  {user.is_admin && (
+                    <button
+                      onClick={() => setShowModal(true)}
+                      className={`p-0.5 rounded transition-colors ${
+                        isFinanceMode ? 'hover:bg-green-100' : 'hover:bg-blue-100'
+                      }`}
+                      title="Create New Book"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <span className="text-gray-300">|</span>
+
+                {/* Report Select */}
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-500 font-semibold">Report:</span>
+                  <select
+                    value={reportFilter}
+                    onChange={(e) => setReportFilter(e.target.value)}
+                    className={`bg-transparent font-bold focus:outline-none cursor-pointer pr-1 ${
+                      currentBook?.is_locked 
+                        ? 'text-red-700'
+                        : isFinanceMode
+                          ? 'text-green-700'
+                          : 'text-blue-700'
+                    }`}
+                  >
+                    <option value="ALL">All Reports</option>
+                    <option value="BALANCE_SHEET">Balance Sheet</option>
+                    <option value="PROFIT_LOSS">Profit & Loss</option>
+                  </select>
+                </div>
               </div>
             )}
 

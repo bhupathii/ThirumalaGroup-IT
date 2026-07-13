@@ -38,6 +38,8 @@ interface BookContextType {
   toggleArchive: (bookId: string, isArchived: boolean) => Promise<void>;
   deleteBook: (bookId: string) => Promise<{ success: boolean; error?: string }>;
   refreshBooks: () => Promise<void>;
+  reportFilter: string;
+  setReportFilter: (filter: string) => void;
 }
 
 const BookContext = createContext<BookContextType | undefined>(undefined);
@@ -57,6 +59,14 @@ export const BookProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [books, setBooks] = useState<Book[]>([]);
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reportFilter, setReportFilter] = useState<string>(() => {
+    return localStorage.getItem('globalReportFilter') || 'ALL';
+  });
+
+  const handleSetReportFilter = (filter: string) => {
+    setReportFilter(filter);
+    localStorage.setItem('globalReportFilter', filter);
+  };
 
   // Map active book mode (only regular and itr modes support books)
   const activeBookMode = (tableMode === 'itr' ? 'itr' : 'regular') as 'regular' | 'itr';
@@ -384,7 +394,9 @@ export const BookProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toggleLock,
         toggleArchive,
         deleteBook,
-        refreshBooks
+        refreshBooks,
+        reportFilter,
+        setReportFilter: handleSetReportFilter
       }}
     >
       {children}
