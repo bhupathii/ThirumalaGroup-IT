@@ -9,15 +9,12 @@ import {
   Search, 
   Eye, 
   Edit2, 
-  Trash2, 
   X, 
   Info 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useAuth } from '../../contexts/AuthContext';
 
 const Partners: React.FC = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
   
   // State
@@ -51,24 +48,6 @@ const Partners: React.FC = () => {
       toast.error('Failed to load partners data');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this partner? All capital entries for this partner will be deleted!')) return;
-    const deleteToastId = toast.loading('Deleting partner profile...');
-    try {
-      const staffName = user?.username || 'Staff';
-      const success = await supabaseFinance.deletePartner(id, staffName);
-      if (success) {
-        toast.success('Partner deleted successfully', { id: deleteToastId });
-        fetchData();
-      } else {
-        toast.error('Failed to delete partner', { id: deleteToastId });
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Delete failed', { id: deleteToastId });
     }
   };
 
