@@ -2134,43 +2134,58 @@ class SupabaseFinance {
 
       if (!oldData) throw new Error('Loan not found');
 
-      // 1. Detect CD ledger activity
-      const [{ count: cdLedgerCount }, { count: txCount }] = await Promise.all([
+      // ── CORRECT SERVER-SIDE LOCK DETECTION ───────────────────────────────
+      // Lock protected fields ONLY when genuine customer repayment activity
+      // exists. System-generated opening entries (original_loan,
+      // opening_commission, document_charge) must NOT trigger the lock.
+      //
+      // Customer payment entry_types for CD ledger:
+      const CUSTOMER_PAYMENT_ENTRY_TYPES = [
+        'amount_paid',
+        'penalty_payment',
+        'interest_payment',
+        'principal_payment',
+        'Legacy Payment',
+      ];
+
+      // 1. Detect genuine customer repayment activity
+      const [{ count: cdPaymentCount }, { count: txCollectionCount }] = await Promise.all([
         supabase
           .from('finance_cd_ledger_entries')
           .select('*', { count: 'exact', head: true })
           .eq('loan_id', id)
-          .neq('entry_type', 'original_loan'),
+          .in('entry_type', CUSTOMER_PAYMENT_ENTRY_TYPES),
         supabase
           .from('finance_transactions')
           .select('*', { count: 'exact', head: true })
           .eq('loan_id', id)
-          .neq('type', 'Disbursement')
+          .eq('type', 'Collection')
       ]);
 
-      const hasLedgerActivity = (cdLedgerCount || 0) > 0 || (txCount || 0) > 0;
+      const hasCustomerRepaymentActivity =
+        (cdPaymentCount || 0) > 0 || (txCollectionCount || 0) > 0;
 
-      if (hasLedgerActivity) {
-        // Compare protected fields
+      if (hasCustomerRepaymentActivity) {
+        // Compare protected fields — throw only if the caller is trying to change them
         if (loan.date !== undefined && loan.date !== oldData.date) {
-          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Cannot modify loan_date for ${oldData.loan_id} because ledger activity exists.`);
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
         }
         if (loan.amount !== undefined && Number(loan.amount) !== Number(oldData.amount)) {
-          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Cannot modify amount for ${oldData.loan_id} because ledger activity exists.`);
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
         }
         if (loan.interest_rate !== undefined && Number(loan.interest_rate) !== Number(oldData.interest_rate)) {
-          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Cannot modify interest_rate for ${oldData.loan_id} because ledger activity exists.`);
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
         }
         const oldPenaltyPercent = oldData.penalty_percent !== null && oldData.penalty_percent !== undefined ? oldData.penalty_percent : 0.75;
         const newPenaltyPercent = loan.penalty_percent !== undefined ? loan.penalty_percent : (loan as any).penalty_rate;
         if (newPenaltyPercent !== undefined && Number(newPenaltyPercent) !== Number(oldPenaltyPercent)) {
-          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Cannot modify penalty_rate for ${oldData.loan_id} because ledger activity exists.`);
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
         }
         if (loan.period_days !== undefined && loan.period_days !== oldData.period_days) {
-          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Cannot modify period_days for ${oldData.loan_id} because ledger activity exists.`);
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
         }
         if (loan.loan_category !== undefined && loan.loan_category !== oldData.loan_category) {
-          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Cannot modify loan_type for ${oldData.loan_id} because ledger activity exists.`);
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
         }
       }
 

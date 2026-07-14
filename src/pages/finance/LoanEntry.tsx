@@ -33,6 +33,10 @@ export const getRelationshipDisplay = (rawRel: string | null | undefined): { lab
   return { label: 'Father/Husband', name: rawRel };
 };
 
+// Module-level variable used to defer partner-name matching after partners list
+// loads. Set by loadLoanForEdit, consumed by the partners useEffect.
+let _deferredEditPartnerName: string | null = null;
+
 interface LoanEntryProps {
   editLoanId?: string;
   onCancelEdit?: () => void;
@@ -280,14 +284,42 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
         return;
       }
 
-      // Check transactions activity
-      const { data: txs } = await supabase
-        .from('finance_loan_transactions')
-        .select('id')
-        .eq('loan_id', id)
-        .eq('transaction_type', 'Payment')
-        .limit(1);
-      setHasLedgerActivity(!!(txs && txs.length > 0));
+      // ── CORRECT LOCK DETECTION ────────────────────────────────────────────
+      // Lock core fields ONLY when genuine customer repayment activity exists.
+      // System-generated opening entries (original_loan, opening_commission,
+      // document_charge) must NOT trigger the lock.
+      //
+      // For CD loans  → check finance_cd_ledger_entries for payment entry_types
+      // For all loans → check finance_transactions for Collection type entries
+      //                 (these are only created by actual customer payments)
+      const CUSTOMER_PAYMENT_ENTRY_TYPES = [
+        'amount_paid',
+        'penalty_payment',
+        'interest_payment',
+        'principal_payment',
+        'Legacy Payment',
+      ];
+
+      const [cdPaymentsRes, txCollectionsRes] = await Promise.all([
+        supabase
+          .from('finance_cd_ledger_entries')
+          .select('id')
+          .eq('loan_id', id)
+          .in('entry_type', CUSTOMER_PAYMENT_ENTRY_TYPES)
+          .limit(1),
+        supabase
+          .from('finance_transactions')
+          .select('id')
+          .eq('loan_id', id)
+          .eq('type', 'Collection')
+          .limit(1),
+      ]);
+
+      const hasCustomerRepaymentActivity =
+        !!(cdPaymentsRes.data && cdPaymentsRes.data.length > 0) ||
+        !!(txCollectionsRes.data && txCollectionsRes.data.length > 0);
+
+      setHasLedgerActivity(hasCustomerRepaymentActivity);
 
       // Customer
       const cust = fullLoan.customer;
@@ -309,6 +341,13 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
 
       setLoanId(fullLoan.loan_id);
       setLoanCategory(fullLoan.loan_category as any || 'CD');
+      // ── BUG 1 FIX: Always load the stored loan date, never default to today ──
+      // fullLoan.date is a yyyy-mm-dd ISO string stored in the database.
+      // The input[type=date] value format must be yyyy-mm-dd.
+      if (fullLoan.date) {
+        // Ensure we use only the date part (strip time if present)
+        setDate(fullLoan.date.substring(0, 10));
+      }
       setAmount(String(fullLoan.amount));
       setInterestRate(String(fullLoan.interest_rate));
       setDurationMonths(String(fullLoan.duration_months));
@@ -319,6 +358,23 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
       // Guarantors
       if (fullLoan.guarantor_1_id) setG1SelectedId(fullLoan.guarantor_1_id);
       if (fullLoan.guarantor_2_id) setG2SelectedId(fullLoan.guarantor_2_id);
+
+      // ── Partner: restore from stored customer.partner_name ────────────────
+      // partners state may not be populated yet at this point; we store the
+      // name so the useEffect below can match it once partners load.
+      const customerPartnerName = (fullLoan as any).customer?.partner_name || null;
+      if (customerPartnerName) {
+        // If partners are already loaded, match immediately
+        setPartners(prev => {
+          const match = prev.find(p => p.name === customerPartnerName);
+          if (match && match.id) setSelectedPartnerId(match.id as string);
+          return prev;
+        });
+        // Store the name for deferred matching (see partners useEffect below)
+        _deferredEditPartnerName = customerPartnerName;
+      } else {
+        _deferredEditPartnerName = null;
+      }
 
       const { data: colLogs } = await supabase
         .from('finance_edited_logs')
@@ -694,10 +750,16 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
     fetchG2();
   }, [g2SelectedId]);
 
-  // Autofill partner name
+  // Autofill partner name — also handles deferred matching from loadLoanForEdit
   useEffect(() => {
-    // Partner selected state hook
-  }, [selectedPartnerId, partners]);
+    if (_deferredEditPartnerName && partners.length > 0 && !selectedPartnerId) {
+      const match = partners.find(p => p.name === _deferredEditPartnerName);
+      if (match && match.id) {
+        setSelectedPartnerId(match.id as string);
+        _deferredEditPartnerName = null;
+      }
+    }
+  }, [partners]);
 
   // Helper to format currency properly as Indian Rupees
   const formatRupee = (value: number) => {
@@ -1168,7 +1230,7 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
           <div>
             <span className="text-amber-800 font-bold text-[13px] uppercase">Financial Field Protection Active — </span>
-            <span className="text-amber-700 text-[12px] uppercase">Core financial fields are locked. Non-financial fields remain editable.</span>
+            <span className="text-amber-700 text-[12px] uppercase">Core loan fields cannot be edited because customer repayment activity already exists for this loan. Documents, address, guarantor details and collateral remain editable.</span>
           </div>
         </div>
       )}
