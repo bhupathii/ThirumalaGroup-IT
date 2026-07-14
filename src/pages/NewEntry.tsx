@@ -5,7 +5,7 @@ import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import SearchableSelect from '../components/UI/SearchableSelect';
-import { supabaseDB } from '../lib/supabaseDatabase';
+import { supabaseDB, Account } from '../lib/supabaseDatabase';
 import { supabase } from '../lib/supabase';
 import { getTableName } from '../lib/tableNames';
 import { useAuth } from '../contexts/AuthContext';
@@ -36,6 +36,9 @@ import {
   Download,
   ChevronDown,
   ChevronUp,
+  Settings,
+  Edit,
+  Trash2,
 } from 'lucide-react';
 
 interface NewEntryForm {
@@ -285,6 +288,10 @@ const NewEntry: React.FC = () => {
   // Modal states for creating new items
   const [showNewCompany, setShowNewCompany] = useState(false);
   const [showNewAccount, setShowNewAccount] = useState(false);
+  const [showManageAccounts, setShowManageAccounts] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [editingAccountName, setEditingAccountName] = useState('');
+  const [editingAccountCategory, setEditingAccountCategory] = useState<'BALANCE_SHEET' | 'PROFIT_LOSS'>('BALANCE_SHEET');
   const [showNewSubAccount, setShowNewSubAccount] = useState(false);
   const [showNewStaff, setShowNewStaff] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -1050,7 +1057,9 @@ const NewEntry: React.FC = () => {
           dateRef.current.focus();
           try {
             dateRef.current.select();
-          } catch (err) {}
+          } catch (err) {
+            // Safe fallback
+          }
         }
       }, 150);
       
@@ -1146,6 +1155,59 @@ const NewEntry: React.FC = () => {
       toast.success('Account created successfully!');
     } catch (error) {
       toast.error('Failed to create account');
+    }
+  };
+
+  const handleUpdateAccountSubmit = async (acc: Account) => {
+    if (!editingAccountName.trim()) {
+      toast.error('Account name cannot be empty');
+      return;
+    }
+    try {
+      const res = await supabaseDB.updateAccount(
+        entry.companyName,
+        acc.acc_name,
+        editingAccountName.trim().toUpperCase(),
+        editingAccountCategory
+      );
+      if (res.success) {
+        toast.success('Account updated successfully');
+        setEditingAccountId(null);
+        // Refresh accounts list
+        const [names, fullAccs] = await Promise.all([
+          supabaseDB.getDistinctAccountNamesByCompany(entry.companyName),
+          supabaseDB.getAccountsByCompany(entry.companyName)
+        ]);
+        setAccountOptions(names.map(name => ({ value: name, label: name })));
+        setCompanyAccounts(fullAccs);
+      } else {
+        toast.error(res.error || 'Failed to update account');
+      }
+    } catch (e) {
+      toast.error('Error updating account');
+    }
+  };
+
+  const handleDeleteAccountSubmit = async (acc: Account) => {
+    if (!window.confirm(`Are you sure you want to delete account "${acc.acc_name}"?`)) {
+      return;
+    }
+    try {
+      const res = await supabaseDB.deleteAccount(entry.companyName, acc.acc_name);
+      if (res.success) {
+        toast.success('Account deleted successfully');
+        // Refresh accounts list
+        const [names, fullAccs] = await Promise.all([
+          supabaseDB.getDistinctAccountNamesByCompany(entry.companyName),
+          supabaseDB.getAccountsByCompany(entry.companyName)
+        ]);
+        setAccountOptions(names.map(name => ({ value: name, label: name })));
+        setCompanyAccounts(fullAccs);
+      } else {
+        toast.error(res.error || 'Failed to delete account');
+      }
+    } catch (e) {
+      toast.error('Error deleting account');
     }
   };
 
@@ -1245,7 +1307,7 @@ const NewEntry: React.FC = () => {
           break;
         case 'account':
           if (entry.companyName && entry.accountName) {
-            const result = await supabaseDB.deleteAccount(entry.accountName);
+            const result = await supabaseDB.deleteAccount(entry.companyName, entry.accountName);
             success = result.success;
             if (success) {
               // Invalidate and refetch accounts query
@@ -2328,6 +2390,23 @@ const NewEntry: React.FC = () => {
                         >
                           Add
                         </Button>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='secondary'
+                          onClick={() => {
+                            if (!entry.companyName) {
+                              toast.error('Please select a company first');
+                              return;
+                            }
+                            setShowManageAccounts(true);
+                          }}
+                          className='text-xs px-1 py-1'
+                          icon={Settings}
+                          tabIndex={-1}
+                        >
+                          Manage
+                        </Button>
                         {entry.accountName && (
                           <Button
                             type='button'
@@ -2998,7 +3077,9 @@ const NewEntry: React.FC = () => {
                           dateRef.current.focus();
                           try {
                             dateRef.current.select();
-                          } catch (err) {}
+                          } catch (err) {
+                            // Safe fallback
+                          }
                         }
                       }, 150);
                     }}
@@ -3090,6 +3171,122 @@ const NewEntry: React.FC = () => {
                   Cancel
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Accounts Modal */}
+      {showManageAccounts && (
+        <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50'>
+          <div className='bg-white rounded-lg max-w-2xl w-full p-6 max-h-[85vh] flex flex-col'>
+            <div className='flex justify-between items-center mb-4'>
+              <h3 className='text-lg font-semibold text-gray-900'>Manage Main Accounts ({entry.companyName})</h3>
+              <button 
+                onClick={() => { setShowManageAccounts(false); setEditingAccountId(null); }}
+                className='text-gray-400 hover:text-gray-650 text-xl font-bold'
+              >
+                &times;
+              </button>
+            </div>
+            
+            <div className='overflow-y-auto flex-1 pr-1'>
+              <table className='min-w-full divide-y divide-gray-200 text-sm'>
+                <thead className='bg-gray-50'>
+                  <tr>
+                    <th className='px-4 py-2 text-left font-semibold text-gray-600'>Account Name</th>
+                    <th className='px-4 py-2 text-left font-semibold text-gray-600'>Report Category</th>
+                    <th className='px-4 py-2 text-right font-semibold text-gray-600'>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className='divide-y divide-gray-200'>
+                  {companyAccounts.map(acc => {
+                    const isEditing = editingAccountId === acc.id;
+                    return (
+                      <tr key={acc.id} className='hover:bg-gray-50'>
+                        <td className='px-4 py-2'>
+                          {isEditing ? (
+                            <input
+                              type='text'
+                              value={editingAccountName}
+                              onChange={e => setEditingAccountName(e.target.value)}
+                              className='border border-gray-300 rounded px-2 py-1 w-full font-bold uppercase text-gray-900'
+                            />
+                          ) : (
+                            <span className='font-bold text-gray-900'>{acc.acc_name}</span>
+                          )}
+                        </td>
+                        <td className='px-4 py-2'>
+                          {isEditing ? (
+                            <select
+                              value={editingAccountCategory}
+                              onChange={e => setEditingAccountCategory(e.target.value as any)}
+                              className='border border-gray-300 rounded px-2 py-1 font-bold text-gray-900'
+                            >
+                              <option value="BALANCE_SHEET">Balance Sheet</option>
+                              <option value="PROFIT_LOSS">Profit & Loss</option>
+                            </select>
+                          ) : (
+                            <span className='text-xs font-semibold px-2.5 py-0.5 rounded bg-blue-100 text-blue-800 uppercase'>
+                              {acc.report_category === 'PROFIT_LOSS' ? 'Profit & Loss' : 'Balance Sheet'}
+                            </span>
+                          )}
+                        </td>
+                        <td className='px-4 py-2 text-right whitespace-nowrap'>
+                          {isEditing ? (
+                            <div className='flex justify-end gap-2'>
+                              <button
+                                onClick={() => handleUpdateAccountSubmit(acc)}
+                                className='text-emerald-600 hover:text-emerald-800 font-semibold text-xs'
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingAccountId(null)}
+                                className='text-gray-500 hover:text-gray-700 font-semibold text-xs'
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className='flex justify-end gap-3'>
+                              <button
+                                onClick={() => {
+                                  setEditingAccountId(acc.id);
+                                  setEditingAccountName(acc.acc_name);
+                                  setEditingAccountCategory(acc.report_category as any || 'BALANCE_SHEET');
+                                }}
+                                className='text-blue-600 hover:text-blue-800 inline-flex items-center gap-1 text-xs'
+                              >
+                                <Edit className='w-3 h-3' /> Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteAccountSubmit(acc)}
+                                className='text-red-600 hover:text-red-800 inline-flex items-center gap-1 text-xs'
+                              >
+                                <Trash2 className='w-3 h-3' /> Delete
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {companyAccounts.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className='text-center py-4 text-gray-500'>
+                        No accounts created for this company yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            
+            <div className='mt-4 pt-3 border-t border-gray-200 flex justify-end'>
+              <Button onClick={() => { setShowManageAccounts(false); setEditingAccountId(null); }}>
+                Close
+              </Button>
             </div>
           </div>
         </div>

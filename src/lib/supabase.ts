@@ -14,7 +14,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Create raw Supabase client
-const rawSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const rawSupabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
@@ -42,6 +42,7 @@ const SHARED_TABLES = [
   'features',
   'audit_logs',
   'notification_settings',
+  'ledger_settings',
 ];
 
 // Helper to get table mode from storage

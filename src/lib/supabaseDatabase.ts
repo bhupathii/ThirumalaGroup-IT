@@ -159,7 +159,6 @@ export interface Reminder {
 
 const isScopedTable = (table: string): boolean => {
   const scopedTables = [
-    'books',
     'companies',
     'company_main_accounts',
     'company_main_sub_acc',
@@ -218,7 +217,7 @@ const createBuilderProxy = (builder: any, table: string): any => {
       return function (...args: any[]) {
         const methodName = String(prop);
 
-        const activeBookId = supabaseDB.currentBookId || (getTableMode() === 'finance' ? 'd499da98-71a8-40d6-a167-ca67d8cdacab' : '');
+        const activeBookId = getTableMode() === 'finance' ? '' : (supabaseDB.currentBookId || '');
 
         if (isScopedTable(table) && activeBookId && !supabaseDB.isScopeBypassed()) {
           if (methodName === 'select') {
@@ -1143,11 +1142,16 @@ class SupabaseDatabase {
     }
   }
 
-  async deleteAccount(accountName: string): Promise<{ success: boolean; error?: string }> {
-    // First check if account has any entries in cash_book
-    const hasEntries = await this.hasAccountEntries(accountName);
-    
-    if (hasEntries) {
+  async deleteAccount(companyName: string, accountName: string): Promise<{ success: boolean; error?: string }> {
+    // Check if account has any entries in cash_book for this company
+    const { data: entries } = await supabase
+      .from(getTableName('cash_book'))
+      .select('id')
+      .eq('company_name', companyName)
+      .eq('acc_name', accountName)
+      .limit(1);
+
+    if (entries && entries.length > 0) {
       return {
         success: false,
         error: 'Cannot delete account: It has entries in cash book. Please delete all entries first.'
@@ -1158,6 +1162,7 @@ class SupabaseDatabase {
     const { error: subDelErr } = await supabase
       .from(getTableName('company_main_sub_acc'))
       .delete()
+      .eq('company_name', companyName)
       .eq('acc_name', accountName);
     if (subDelErr) {
       console.error('Error deleting sub accounts for account:', subDelErr);
@@ -1167,21 +1172,59 @@ class SupabaseDatabase {
     const { error } = await supabase
       .from(getTableName('company_main_accounts'))
       .delete()
+      .eq('company_name', companyName)
       .eq('acc_name', accountName);
 
     if (error) {
       console.error('Error deleting account:', error);
-      // Handle 409 conflict error
-      if (error.code === '409' || error.message.includes('409')) {
-        return {
-          success: false,
-          error: 'Cannot delete account: It is being used by sub accounts or has entries. Please delete sub accounts and entries first.'
-        };
-      }
       return {
         success: false,
         error: `Failed to delete account: ${error.message}`
       };
+    }
+
+    return { success: true };
+  }
+
+  async updateAccount(companyName: string, oldAccName: string, newAccName: string, reportCategory: string): Promise<{ success: boolean; error?: string }> {
+    // 1. If name changed, check duplicates
+    if (oldAccName.toUpperCase() !== newAccName.toUpperCase()) {
+      const { data: duplicate } = await supabase
+        .from(getTableName('company_main_accounts'))
+        .select('id')
+        .eq('company_name', companyName)
+        .eq('acc_name', newAccName)
+        .maybeSingle();
+      if (duplicate) {
+        return { success: false, error: 'An account with this name already exists for this company.' };
+      }
+    }
+
+    // 2. Update the account row
+    const { error: accError } = await supabase
+      .from(getTableName('company_main_accounts'))
+      .update({
+        acc_name: newAccName,
+        report_category: reportCategory
+      })
+      .eq('company_name', companyName)
+      .eq('acc_name', oldAccName);
+
+    if (accError) {
+      return { success: false, error: accError.message };
+    }
+
+    // 3. Update transactions in cash_book tables to the new name and category
+    const tables = ['cash_book', 'original_cash_book', 'edit_cash_book', 'deleted_cash_book'];
+    for (const t of tables) {
+      await supabase
+        .from(getTableName(t))
+        .update({
+          acc_name: newAccName,
+          report_category: reportCategory
+        })
+        .eq('company_name', companyName)
+        .eq('acc_name', oldAccName);
     }
 
     return { success: true };

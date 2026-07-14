@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import { supabaseFinance, FinanceCashbookAccount, FinanceCashbookEntry } from '../../lib/supabaseFinance';
-import { supabase } from '../../lib/supabase';
 import { 
   ArrowLeft, 
   RotateCcw, 
@@ -331,7 +330,7 @@ const CashBook: React.FC = () => {
       };
 
       const result = await supabaseFinance.updateCashbookAccount(editingAccId, payload);
-      if (result) {
+      if (result.success) {
         toast.success(`Account "${editAccountName.trim()}" updated`);
         setEditingAccId(null);
         setEditAccountName('');
@@ -339,7 +338,7 @@ const CashBook: React.FC = () => {
         const fetchedAccounts = await supabaseFinance.getCashbookAccounts();
         setAccounts(fetchedAccounts);
       } else {
-        toast.error('Failed to update account details');
+        toast.error(result.error || 'Failed to update account details');
       }
     } catch (err) {
       console.error(err);
@@ -355,23 +354,9 @@ const CashBook: React.FC = () => {
     }
 
     try {
-      // 1. Dependency check from real database cashbook_entries
-      const { count, error: countError } = await supabase
-        .schema('finance')
-        .from('cashbook_entries')
-        .select('*', { count: 'exact', head: true })
-        .eq('head_of_account', account.account_name);
-
-      if (countError) throw countError;
-
-      if (count && count > 0) {
-        toast.error(`Cannot delete this Head of Account because it has existing transactions.\n(${count} existing transactions)`);
-        return;
-      }
-
-      // 2. Perform delete
-      const deleted = await supabaseFinance.deleteCashbookAccount(account.id);
-      if (deleted) {
+      // Perform delete
+      const result = await supabaseFinance.deleteCashbookAccount(account.id);
+      if (result.success) {
         toast.success(`Head of Account "${account.account_name}" deleted successfully.`);
         // Refresh accounts
         const fetchedAccounts = await supabaseFinance.getCashbookAccounts();
@@ -381,7 +366,7 @@ const CashBook: React.FC = () => {
           setAccountNumber('');
         }
       } else {
-        toast.error('Failed to delete Head of Account');
+        toast.error(result.error || 'Failed to delete account');
       }
     } catch (err) {
       console.error(err);
@@ -907,12 +892,12 @@ const CashBook: React.FC = () => {
                       required
                       uppercase
                     />
-                    <div className="hidden">
+                    <div>
                       <label className="finance-caption uppercase block mb-1">REPORT CLASSIFICATION *</label>
                       <select
                         value={editAccountClassification}
                         onChange={(e) => setEditAccountClassification(e.target.value as any)}
-                        className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
+                        className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time font-bold"
                         required
                       >
                         <option value="PROFIT_AND_LOSS">PROFIT AND LOSS</option>
@@ -945,6 +930,7 @@ const CashBook: React.FC = () => {
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
                       <th className="px-4 py-2.5">Account Name</th>
+                      <th className="px-4 py-2.5">Report Category</th>
                       <th className="px-4 py-2.5 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -954,6 +940,11 @@ const CashBook: React.FC = () => {
                       .map(acc => (
                         <tr key={acc.id} className="hover:bg-slate-50/50">
                           <td className="px-4 py-2.5 font-bold uppercase">{acc.account_name}</td>
+                          <td className="px-4 py-2.5">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                              {acc.report_classification === 'BALANCE_SHEET' ? 'BALANCE SHEET' : 'PROFIT & LOSS'}
+                            </span>
+                          </td>
                           <td className="px-4 py-2.5 text-right flex gap-3 justify-end items-center">
                             <button
                               onClick={() => {

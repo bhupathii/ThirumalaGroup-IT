@@ -460,7 +460,7 @@ class SupabaseFinance {
       return data;
     } catch (error) {
       console.error('Error creating finance partner:', error);
-      return null;
+      throw error;
     }
   }
 
@@ -487,7 +487,7 @@ class SupabaseFinance {
       return data;
     } catch (error) {
       console.error('Error updating finance partner:', error);
-      return null;
+      throw error;
     }
   }
 
@@ -3089,33 +3089,91 @@ class SupabaseFinance {
     }
   }
 
-  async updateCashbookAccount(id: string, account: Partial<Omit<FinanceCashbookAccount, 'id' | 'created_at'>>): Promise<FinanceCashbookAccount | null> {
+  async updateCashbookAccount(id: string, account: { account_name: string; report_classification: 'BALANCE_SHEET' | 'PROFIT_AND_LOSS' }): Promise<{ success: boolean; error?: string }> {
     try {
-      const { data, error } = await supabase
+      // 1. Get old name
+      const { data: oldAcc } = await supabase
         .from('finance_cashbook_accounts')
-        .update(account)
+        .select('account_name')
         .eq('id', id)
-        .select()
         .single();
-      if (error) throw error;
-      return data;
-    } catch (error) {
+
+      if (!oldAcc) {
+        return { success: false, error: 'Account not found' };
+      }
+
+      // 2. Check duplicates if name changed
+      if (oldAcc.account_name.toUpperCase() !== account.account_name.toUpperCase()) {
+        const { data: duplicate } = await supabase
+          .from('finance_cashbook_accounts')
+          .select('id')
+          .eq('account_name', account.account_name)
+          .maybeSingle();
+
+        if (duplicate) {
+          return { success: false, error: 'An account with this name already exists.' };
+        }
+      }
+
+      // 3. Update account
+      const { error: updateErr } = await supabase
+        .from('finance_cashbook_accounts')
+        .update({
+          account_name: account.account_name,
+          report_classification: account.report_classification
+        })
+        .eq('id', id);
+
+      if (updateErr) throw updateErr;
+
+      // 4. Propagate name changes to existing cashbook entries
+      await supabase
+        .from('finance_cashbook_entries')
+        .update({
+          head_of_account: account.account_name
+        })
+        .eq('head_of_account', oldAcc.account_name);
+
+      return { success: true };
+    } catch (error: any) {
       console.error('Error updating cashbook account:', error);
-      return null;
+      return { success: false, error: error.message || 'Unknown error occurred' };
     }
   }
 
-  async deleteCashbookAccount(id: string): Promise<boolean> {
+  async deleteCashbookAccount(id: string): Promise<{ success: boolean; error?: string }> {
     try {
+      // 1. Get the account name first
+      const { data: acc } = await supabase
+        .from('finance_cashbook_accounts')
+        .select('account_name')
+        .eq('id', id)
+        .single();
+      
+      if (!acc) {
+        return { success: false, error: 'Account not found' };
+      }
+
+      // 2. Check if there are any cashbook entries using this account name
+      const { data: entries } = await supabase
+        .from('finance_cashbook_entries')
+        .select('id')
+        .eq('head_of_account', acc.account_name)
+        .limit(1);
+
+      if (entries && entries.length > 0) {
+        return { success: false, error: 'Cannot delete account: It has entries in cash book. Please delete all entries first.' };
+      }
+
       const { error } = await supabase
         .from('finance_cashbook_accounts')
         .delete()
         .eq('id', id);
       if (error) throw error;
-      return true;
-    } catch (error) {
+      return { success: true };
+    } catch (error: any) {
       console.error('Error deleting cashbook account:', error);
-      return false;
+      return { success: false, error: error.message || 'Unknown error occurred' };
     }
   }
 

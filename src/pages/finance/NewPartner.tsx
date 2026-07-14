@@ -22,7 +22,6 @@ const NewPartner: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [homePhone, setHomePhone] = useState('');
   const [village, setVillage] = useState('');
-  const [mdName, setMdName] = useState('');
   const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -41,18 +40,44 @@ const NewPartner: React.FC = () => {
 
   const fetchNextPartnerId = async () => {
     try {
+      const financeMode = (sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode')) === 'itr' ? 'ITR' : 'REGULAR';
+      const bookId = await supabaseFinance.getLegacyBookId(financeMode);
+      if (!bookId) {
+        throw new Error('Book configuration is missing.');
+      }
+
       const { data, error } = await supabase
         .from('finance_partners')
         .select('partner_id')
+        .eq('book_id', bookId)
         .order('partner_id', { ascending: false })
         .limit(1);
 
       if (error) throw error;
 
+      // Load serial settings starting number
+      const { data: settingsData } = await supabase
+        .from('ledger_settings')
+        .select('*')
+        .eq('code', 'SERIAL_SETTINGS')
+        .maybeSingle();
+
+      let startNo = 1;
+      if (settingsData && settingsData.method) {
+        try {
+          const parsed = JSON.parse(settingsData.method);
+          if (parsed.partner) {
+            startNo = parseInt(parsed.partner, 10) || 1;
+          }
+        } catch (e) {
+          console.warn('Error parsing serial settings', e);
+        }
+      }
+
       if (data && data.length > 0) {
-        setPartnerId((data[0].partner_id || 0) + 1);
+        setPartnerId(Math.max(startNo, (data[0].partner_id || 0) + 1));
       } else {
-        setPartnerId(1);
+        setPartnerId(startNo);
       }
     } catch (err) {
       console.error('Error fetching next partner ID:', err);
@@ -77,7 +102,6 @@ const NewPartner: React.FC = () => {
         setPhone(data.phone || '');
         setHomePhone(data.home_phone || '');
         setVillage(data.village || '');
-        setMdName(data.md_name || '');
         setAddress(data.address || '');
       }
     } catch (err) {
@@ -93,7 +117,6 @@ const NewPartner: React.FC = () => {
       setPhone('');
       setHomePhone('');
       setVillage('');
-      setMdName('');
       setAddress('');
       if (editId) {
         loadPartnerDetails(editId);
@@ -134,14 +157,20 @@ const NewPartner: React.FC = () => {
     const savingToastId = toast.loading(editId ? 'Updating partner details...' : 'Registering partner...');
     try {
       const staffName = user?.username || 'Staff';
+      const financeMode = (sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode')) === 'itr' ? 'ITR' : 'REGULAR';
+      const bookId = await supabaseFinance.getLegacyBookId(financeMode);
+      if (!bookId) {
+        throw new Error('Book configuration is missing.');
+      }
+
       const payload = {
         name: name.trim(),
         is_md: role === 'MANAGING PARTNER',
         phone: phone.trim() || null,
         home_phone: homePhone.trim() || null,
         village: village.trim() || null,
-        md_name: mdName.trim() || null,
-        address: address.trim() || null
+        address: address.trim() || null,
+        book_id: bookId
       };
 
       let result;
@@ -274,21 +303,13 @@ const NewPartner: React.FC = () => {
                 />
               </div>
 
-              {/* Village & MD Name (Grid of 2) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input
-                  label="VILLAGE"
-                  value={village}
-                  onChange={setVillage}
-                  placeholder="Village / Location"
-                />
-                <Input
-                  label="MD NAME"
-                  value={mdName}
-                  onChange={setMdName}
-                  placeholder="Managing Director Name"
-                />
-              </div>
+              {/* Village */}
+              <Input
+                label="VILLAGE"
+                value={village}
+                onChange={setVillage}
+                placeholder="Village / Location"
+              />
 
               {/* Address (Textarea) */}
               <div>

@@ -70,7 +70,6 @@ const Partners: React.FC = () => {
         const phoneStr = (p.phone || '').toLowerCase();
         const homePhoneStr = (p.home_phone || '').toLowerCase();
         const villageStr = (p.village || '').toLowerCase();
-        const mdNameStr = (p.md_name || '').toLowerCase();
         const addressStr = (p.address || '').toLowerCase();
 
         return (
@@ -79,7 +78,6 @@ const Partners: React.FC = () => {
           phoneStr.includes(query) ||
           homePhoneStr.includes(query) ||
           villageStr.includes(query) ||
-          mdNameStr.includes(query) ||
           addressStr.includes(query)
         );
       });
@@ -264,7 +262,6 @@ const Partners: React.FC = () => {
                   <th className="finance-small-label uppercase">Phone</th>
                   <th className="finance-small-label uppercase">Home Phone</th>
                   <th className="finance-small-label uppercase">Village</th>
-                  <th className="finance-small-label uppercase">MD Name</th>
                   <th className="finance-small-label uppercase">Created Date</th>
                   <th className="text-right finance-small-label uppercase">Actions</th>
                 </tr>
@@ -294,9 +291,6 @@ const Partners: React.FC = () => {
                     </td>
                     <td className="px-3 py-3 text-slate-600 finance-input">
                       {partner.village || '—'}
-                    </td>
-                    <td className="px-3 py-3 text-slate-600 finance-input">
-                      {partner.md_name || '—'}
                     </td>
                     <td className="px-3 py-3 text-slate-500 finance-input">
                       {new Date(partner.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
@@ -381,10 +375,6 @@ const Partners: React.FC = () => {
                     <div>
                       <div className="text-slate-400 finance-small-label uppercase">Village</div>
                       <div className="text-slate-900">{selectedPartner.village || '—'}</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-400 finance-small-label uppercase">MD Name</div>
-                      <div className="text-slate-900">{selectedPartner.md_name || '—'}</div>
                     </div>
                   </div>
                   <div className="mt-4 pt-3 border-t border-slate-200">
