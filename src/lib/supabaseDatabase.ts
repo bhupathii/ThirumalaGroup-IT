@@ -217,12 +217,13 @@ const createBuilderProxy = (builder: any, table: string): any => {
       return function (...args: any[]) {
         const methodName = String(prop);
 
-        const activeBookId = getTableMode() === 'finance' ? '' : (supabaseDB.currentBookId || '');
+        const activeBookId = supabaseDB.currentBookId || (getTableMode() === 'finance' ? 'd499da98-71a8-40d6-a167-ca67d8cdacab' : '');
+        const isFinanceMode = getTableMode() === 'finance';
 
-        if (isScopedTable(table) && activeBookId && !supabaseDB.isScopeBypassed()) {
+        if (isScopedTable(table) && (activeBookId || isFinanceMode) && !supabaseDB.isScopeBypassed()) {
           if (methodName === 'select') {
             const nextBuilder = origMethod.apply(target, args);
-            const proxied = createBuilderProxy(nextBuilder.eq('book_id', activeBookId), table);
+            const proxied = createBuilderProxy(isFinanceMode ? nextBuilder : nextBuilder.eq('book_id', activeBookId), table);
             if (target._offlineInfo) {
               proxied._offlineInfo = { ...target._offlineInfo };
             }
@@ -235,9 +236,9 @@ const createBuilderProxy = (builder: any, table: string): any => {
             }
             const records = args[0];
             if (Array.isArray(records)) {
-              args[0] = records.map(r => ({ ...r, book_id: activeBookId }));
+              args[0] = records.map(r => ({ ...r, book_id: r.book_id || activeBookId }));
             } else if (records && typeof records === 'object') {
-              args[0] = { ...records, book_id: activeBookId };
+              args[0] = { ...records, book_id: records.book_id || activeBookId };
             }
             const nextBuilder = origMethod.apply(target, args);
             const proxied = createBuilderProxy(nextBuilder, table);
@@ -255,7 +256,7 @@ const createBuilderProxy = (builder: any, table: string): any => {
               throw new Error('This Book is Locked (Read Only). Editing is blocked.');
             }
             const nextBuilder = origMethod.apply(target, args);
-            const proxied = createBuilderProxy(nextBuilder.eq('book_id', activeBookId), table);
+            const proxied = createBuilderProxy(isFinanceMode ? nextBuilder : nextBuilder.eq('book_id', activeBookId), table);
             proxied._offlineInfo = {
               table,
               operation_type: 'UPDATE',
@@ -270,7 +271,7 @@ const createBuilderProxy = (builder: any, table: string): any => {
               throw new Error('This Book is Locked (Read Only). Deletion is blocked.');
             }
             const nextBuilder = origMethod.apply(target, args);
-            const proxied = createBuilderProxy(nextBuilder.eq('book_id', activeBookId), table);
+            const proxied = createBuilderProxy(isFinanceMode ? nextBuilder : nextBuilder.eq('book_id', activeBookId), table);
             proxied._offlineInfo = {
               table,
               operation_type: 'DELETE',
@@ -286,9 +287,9 @@ const createBuilderProxy = (builder: any, table: string): any => {
             }
             const records = args[0];
             if (Array.isArray(records)) {
-              args[0] = records.map(r => ({ ...r, book_id: activeBookId }));
+              args[0] = records.map(r => ({ ...r, book_id: r.book_id || activeBookId }));
             } else if (records && typeof records === 'object') {
-              args[0] = { ...records, book_id: activeBookId };
+              args[0] = { ...records, book_id: records.book_id || activeBookId };
             }
             const nextBuilder = origMethod.apply(target, args);
             const proxied = createBuilderProxy(nextBuilder, table);

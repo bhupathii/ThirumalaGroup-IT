@@ -358,10 +358,28 @@ const CDLedger: React.FC = () => {
     }
   };
 
-  const handleRefresh = () => {
-    fetchLedgerData();
+  const refreshLoanData = async () => {
+    if (!selectedLoan?.id) return;
+    const loanId = selectedLoan.id;
+    try {
+      await fetchLedgerData();
+      await loadLedgerDetails(loanId);
+      await Promise.all([
+        loadTabDetails('statement', loanId),
+        loadTabDetails('interest', loanId),
+        loadTabDetails('payment', loanId),
+        loadTabDetails('editHistory', loanId)
+      ]);
+    } catch (err) {
+      console.error('Failed to refresh loan data:', err);
+    }
+  };
+
+  const handleRefresh = async () => {
     if (selectedLoan) {
-      loadLedgerDetails(selectedLoan.id);
+      await refreshLoanData();
+    } else {
+      await fetchLedgerData();
     }
   };
 
@@ -476,7 +494,7 @@ const CDLedger: React.FC = () => {
       setEditingTx(null);
       
       // Refresh details
-      await loadLedgerDetails(selectedLoan.id);
+      await refreshLoanData();
     } catch (err: any) {
       console.error('Error saving transaction edit:', err);
       toast.error(err.message || 'Failed to edit transaction');
@@ -558,7 +576,7 @@ const CDLedger: React.FC = () => {
       toast.success('Transaction deleted and loan rebuilt successfully');
       
       // Refresh details
-      await loadLedgerDetails(selectedLoan.id);
+      await refreshLoanData();
     } catch (err: any) {
       console.error('Error deleting transaction:', err);
       toast.error(err.message || 'Failed to delete transaction');
@@ -596,7 +614,7 @@ const CDLedger: React.FC = () => {
 
       if (docResult) {
         toast.success('Document uploaded successfully!');
-        loadLedgerDetails(selectedLoan.id);
+        refreshLoanData();
       } else {
         toast.error('Failed to link document in database.');
       }
@@ -614,7 +632,7 @@ const CDLedger: React.FC = () => {
       const success = await supabaseFinance.deleteDocument(id);
       if (success) {
         toast.success('Document deleted');
-        if (selectedLoan) loadLedgerDetails(selectedLoan.id);
+        if (selectedLoan) refreshLoanData();
       } else {
         toast.error('Failed to delete document');
       }
@@ -1562,8 +1580,7 @@ const CDLedger: React.FC = () => {
       }
 
       setTotalAmountPaying('');
-      await fetchLedgerData();
-      await loadLedgerDetails(selectedLoan.id);
+      await refreshLoanData();
 
       if (actionType === 'Close' || paymentAmount >= totalForClose) {
         toast.success('Account closed successfully');
@@ -1647,8 +1664,7 @@ const CDLedger: React.FC = () => {
         entry_type: 'NPA_CLOSE'
       });
 
-      await fetchLedgerData();
-      await loadLedgerDetails(selectedLoan.id);
+      await refreshLoanData();
       toast.success('NPA Account closed and settlement recorded.');
       setShowNpaModal(false);
     } catch (e) {
@@ -1699,7 +1715,7 @@ const CDLedger: React.FC = () => {
         entry_type: 'Settlement'
       });
 
-      await loadLedgerDetails(selectedLoan.id);
+      await refreshLoanData();
       toast.success('Documents returned successfully.');
       setShowReturnDocModal(false);
     } catch (e) {
