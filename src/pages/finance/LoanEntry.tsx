@@ -806,7 +806,7 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
     const D = Number(durationMonths);
     const docFees = Number(docCharges) || 0;
 
-    if (isNaN(P) || P <= 0 || isNaN(R) || R < 0 || isNaN(D) || D <= 0) {
+    if (isNaN(P) || P <= 0 || isNaN(R) || R < 0 || isNaN(D) || D < 0) {
       return null;
     }
 
@@ -1010,7 +1010,7 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
         guarantor_2_id: g2SelectedId || null,
         penalty_percent: Number(penaltyPercent) || 0.75,
         document_charges: Number(docCharges) || 0,
-        period_days: loanCategory === 'CD' ? (Number(durationMonths) || 30) : null
+        period_days: loanCategory === 'CD' ? ((durationMonths === '' || durationMonths === null || durationMonths === undefined) ? 30 : Number(durationMonths)) : null
       };
 
       const linkedDocs: any[] = [];
