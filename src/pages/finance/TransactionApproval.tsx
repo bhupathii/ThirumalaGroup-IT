@@ -302,12 +302,11 @@ const TransactionApproval: React.FC = () => {
   };
 
   const formatCurrency = (val: number | undefined) => {
-    if (val === undefined) return '₹0.00';
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
+    if (val === undefined) return '0.00';
+    return val.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }).format(val);
+    });
   };
 
   return (
@@ -735,8 +734,8 @@ const TransactionApproval: React.FC = () => {
                                         <th className="px-4 py-2.5 text-left">Date</th>
                                         <th className="px-4 py-2.5 text-left">Account Name</th>
                                         <th className="px-4 py-2.5 text-left">Particulars</th>
-                                        <th className="px-4 py-2.5 text-right">Debit</th>
                                         <th className="px-4 py-2.5 text-right">Credit</th>
+                                        <th className="px-4 py-2.5 text-right">Debit</th>
                                         <th className="px-4 py-2.5 text-left">Entered By</th>
                                         <th className="px-4 py-2.5 text-center">Status</th>
                                       </tr>
@@ -747,8 +746,8 @@ const TransactionApproval: React.FC = () => {
                                           <td className="px-4 py-2 font-sans">{format(new Date(detail.date), 'dd/MM/yyyy')}</td>
                                           <td className="px-4 py-2 font-sans font-black text-indigo-900">{detail.account_name}</td>
                                           <td className="px-4 py-2 font-sans text-slate-500 font-bold">{detail.particulars}</td>
-                                          <td className="px-4 py-2 text-right font-bold text-slate-900">{detail.debit > 0 ? formatCurrency(detail.debit) : '-'}</td>
                                           <td className="px-4 py-2 text-right font-bold text-slate-900">{detail.credit > 0 ? formatCurrency(detail.credit) : '-'}</td>
+                                          <td className="px-4 py-2 text-right font-bold text-slate-900">{detail.debit > 0 ? formatCurrency(detail.debit) : '-'}</td>
                                           <td className="px-4 py-2 font-sans font-semibold uppercase text-[10px] text-slate-650">{detail.entered_by}</td>
                                           <td className="px-4 py-2 text-center font-sans">
                                             <span className={`inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${

@@ -2,18 +2,14 @@ import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo } from 'react';
 import Card from '../../components/UI/Card';
 import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../../services/dailyFinancialTransactionService';
-import { Printer, ArrowLeft, Search } from 'lucide-react';
+import { Printer, ArrowLeft, Search, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useNavigate } from 'react-router-dom';
 
 const DetailedLedgerFinance: React.FC = () => {
   const navigate = useNavigate();
-  const [fromDate, setFromDate] = useState(() => {
-    const d = new Date();
-    d.setDate(1); // Default to start of month
-    return d.toISOString().split('T')[0];
-  });
+  const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState(() => getLocalBusinessDateISO());
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'CD' | 'CAPITAL' | 'BANK' | 'SALARY' | 'EXPENSE' | 'OTHER'>('ALL');
   const [selectedHead, setSelectedHead] = useState<string>('ALL');
@@ -28,7 +24,17 @@ const DetailedLedgerFinance: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchData();
+    const initDates = async () => {
+      const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
+      setFromDate(oldest);
+    };
+    initDates();
+  }, []);
+
+  useEffect(() => {
+    if (fromDate && toDate) {
+      fetchData();
+    }
   }, [fromDate, toDate]);
 
   const fetchData = async () => {
@@ -131,6 +137,36 @@ const DetailedLedgerFinance: React.FC = () => {
       balance: totalCredit - totalDebit
     };
   }, [filteredEntries]);
+  const handleExportCSV = () => {
+    if (filteredEntries.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+    const headers = ['Sl No', 'Date', 'Account/Loan No', 'Head of Account', 'Borrower/Partner', 'Credit (Cr)', 'Debit (Dr)', 'Running Balance', 'Particulars', 'User'];
+    const rows = filteredEntries.map((entry, idx) => [
+      idx + 1,
+      entry.transactionDate.split('-').reverse().join('/'),
+      entry.accountOrLoanNo || '',
+      entry.headOfAccount,
+      entry.customerName || entry.accountOrLoanNo || '',
+      entry.credit,
+      entry.debit,
+      entry.runningBalance,
+      entry.particulars || '',
+      entry.userName || 'Staff'
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Detailed_Ledger_${fromDate}_to_${toDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Report exported to Excel CSV!');
+  };
 
   const categories = [
     { value: 'ALL', label: 'All Categories' },
@@ -160,6 +196,13 @@ const DetailedLedgerFinance: React.FC = () => {
           >
             <ArrowLeft className="w-4 h-4" />
             BACK
+          </button>
+          <button
+            onClick={handleExportCSV}
+            className="inline-flex items-center justify-center gap-1.5 px-4 h-[48px] bg-emerald-600 text-white border border-emerald-700 rounded hover:bg-emerald-750 font-bold text-[16px] uppercase"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            EXCEL
           </button>
           <button
             onClick={() => setShowPrintPreview(true)}
@@ -244,27 +287,18 @@ const DetailedLedgerFinance: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {/* Compact Totals Strip */}
-              <div className="flex flex-wrap gap-4 p-3 bg-slate-50 border border-slate-200 rounded shadow-sm text-sm font-bold uppercase items-center justify-between">
-                <div>Total Dr: <span className="text-red-700 font-mono">₹{totals.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
-                <div className="hidden md:block w-px h-4 bg-slate-300"></div>
-                <div>Total Cr: <span className="text-emerald-700 font-mono">₹{totals.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
-                <div className="hidden md:block w-px h-4 bg-slate-300"></div>
-                <div>Net Balance: <span className={`${totals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'} font-mono`}>₹{totals.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
-              </div>
-
               {/* Transactions Table */}
               <div className="overflow-x-auto border border-slate-200 rounded" style={{ maxHeight: '500px', overflowY: 'auto' }}>
                 <table className="min-w-full text-[13px] divide-y divide-slate-200">
                   <thead className="bg-slate-100 sticky top-0 z-10 text-slate-700">
-                  <tr className="divide-x divide-slate-200">
+                    <tr className="divide-x divide-slate-200">
                       <th className="w-10 px-2 py-2 text-center font-bold text-[12px] uppercase whitespace-nowrap">Sl</th>
                       <th className="w-24 px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">Date</th>
-                      <th className="w-32 px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">Account/Loan No</th>
+                      <th className="w-20 px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">ACC NO</th>
                       <th className="w-36 px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">Head of Account</th>
                       <th className="w-40 px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">Borrower/Partner</th>
-                      <th className="w-28 px-2 py-2 text-right font-bold text-[12px] uppercase whitespace-nowrap">Debit (Dr)</th>
                       <th className="w-28 px-2 py-2 text-right font-bold text-[12px] uppercase whitespace-nowrap">Credit (Cr)</th>
+                      <th className="w-28 px-2 py-2 text-right font-bold text-[12px] uppercase whitespace-nowrap">Debit (Dr)</th>
                       <th className="w-32 px-2 py-2 text-right font-bold text-[12px] uppercase whitespace-nowrap">Running Bal</th>
                       <th className="min-w-[140px] px-2 py-2 text-left font-bold text-[12px] uppercase">Particulars</th>
                       <th className="w-20 px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">User</th>
@@ -287,14 +321,14 @@ const DetailedLedgerFinance: React.FC = () => {
                           <td className="px-2 py-1 font-mono text-slate-900 font-bold truncate text-[12px] max-w-[128px]">{entry.accountOrLoanNo || '—'}</td>
                           <td className="px-2 py-1 text-slate-800 uppercase truncate text-[12px] max-w-[144px]">{entry.headOfAccount}</td>
                           <td className="px-2 py-1 text-slate-700 uppercase text-[12px] break-words">{entry.customerName || entry.accountOrLoanNo || '—'}</td>
-                          <td className="px-2 py-1 text-right text-red-700 font-bold whitespace-nowrap font-mono text-[12px]">
-                            {entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                          </td>
                           <td className="px-2 py-1 text-right text-emerald-700 font-bold whitespace-nowrap font-mono text-[12px]">
-                            {entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                            {entry.credit > 0 ? `${entry.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                          </td>
+                          <td className="px-2 py-1 text-right text-red-700 font-bold whitespace-nowrap font-mono text-[12px]">
+                            {entry.debit > 0 ? `${entry.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
                           <td className={`px-2 py-1 text-right font-bold whitespace-nowrap font-mono text-[12px] ${entry.runningBalance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                            ₹{Math.abs(entry.runningBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {entry.runningBalance >= 0 ? 'Cr' : 'Dr'}
+                            {Math.abs(entry.runningBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {entry.runningBalance >= 0 ? 'Cr' : 'Dr'}
                           </td>
                           <td className="px-2 py-1 text-slate-600 truncate uppercase text-[12px]" title={entry.particulars}>{entry.particulars}</td>
                           <td className="px-2 py-1 text-slate-500 uppercase truncate text-[12px]">{entry.userName || 'Staff'}</td>
@@ -304,16 +338,25 @@ const DetailedLedgerFinance: React.FC = () => {
                     {/* Grand Total */}
                     <tr className="bg-slate-50 font-bold divide-x divide-slate-100 border-t border-slate-200">
                       <td colSpan={5} className="px-3 py-2 text-right text-slate-800 uppercase">Grand Total:</td>
-                      <td className="px-3 py-2 text-right text-red-700 font-black whitespace-nowrap font-mono">
-                        ₹{totals.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
                       <td className="px-3 py-2 text-right text-emerald-700 font-black whitespace-nowrap font-mono">
-                        ₹{totals.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        {totals.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-3 py-2 text-right text-red-700 font-black whitespace-nowrap font-mono">
+                        {totals.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                       <td colSpan={3}></td>
                     </tr>
                   </tbody>
                 </table>
+              </div>
+
+              {/* Compact Totals Strip */}
+              <div className="flex flex-wrap gap-4 p-3 bg-slate-50 border border-slate-200 rounded shadow-sm text-sm font-bold uppercase items-center justify-between mt-3">
+                <div>Total Cr: <span className="text-emerald-700 font-mono">{totals.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                <div className="hidden md:block w-px h-4 bg-slate-300"></div>
+                <div>Total Dr: <span className="text-red-700 font-mono">{totals.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                <div className="hidden md:block w-px h-4 bg-slate-300"></div>
+                <div>Net Balance: <span className={`${totals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'} font-mono`}>{totals.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
               </div>
             </div>
           )}
@@ -325,7 +368,7 @@ const DetailedLedgerFinance: React.FC = () => {
         isOpen={showPrintPreview}
         onClose={() => setShowPrintPreview(false)}
         title="Detailed Ledger Report"
-        documentTitle={`DETAILED LEDGER: ${new Date(fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })} to ${new Date(toDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}`}
+        documentTitle={`DETAILED LEDGER: ${fromDate ? new Date(fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''} to ${new Date(toDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}`}
       >
         {!loading && (
           <div className="space-y-6">
@@ -333,26 +376,8 @@ const DetailedLedgerFinance: React.FC = () => {
               <h2 className="finance-brand">TIRUMALA FINANCE</h2>
               <p className="mt-1 finance-header-time uppercase">DETAILED LEDGER TRANSACTION STATEMENT</p>
               <p className="text-slate-500 text-[10px] mt-0.5 uppercase">
-                PERIOD: {new Date(fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })} to {new Date(toDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                PERIOD: {fromDate ? new Date(fromDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''} to {new Date(toDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
               </p>
-            </div>
-
-            {/* Summaries strip */}
-            <div className="grid grid-cols-3 gap-4 py-4 border-b border-slate-350 finance-caption">
-              <div>
-                <span className="text-slate-500 text-[9px] uppercase font-bold block">TOTAL DEBITS (Dr)</span>
-                <span className="text-red-700 text-lg font-black font-mono">₹{totals.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 text-[9px] uppercase font-bold block">TOTAL CREDITS (Cr)</span>
-                <span className="text-emerald-700 text-lg font-black font-mono">₹{totals.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 text-[9px] uppercase font-bold block">NET LEDGER BALANCE</span>
-                <span className="text-slate-900 text-lg font-black font-mono">
-                  {totals.balance >= 0 ? '+' : ''}₹{totals.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
             </div>
 
             <table className="min-w-full divide-y divide-slate-300 finance-caption">
@@ -360,12 +385,13 @@ const DetailedLedgerFinance: React.FC = () => {
                 <tr className="bg-slate-50">
                   <th className="py-2 px-1 text-center font-bold text-slate-700 uppercase">Sl</th>
                   <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase">Date</th>
-                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase">Account/Loan</th>
+                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase">ACC NO</th>
                   <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase">Head of Account</th>
-                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase">Particulars</th>
-                  <th className="py-2 px-2 text-right font-bold text-slate-700 uppercase">Dr</th>
                   <th className="py-2 px-2 text-right font-bold text-slate-700 uppercase">Cr</th>
+                  <th className="py-2 px-2 text-right font-bold text-slate-700 uppercase">Dr</th>
                   <th className="py-2 px-2 text-right font-bold text-slate-700 uppercase">Bal</th>
+                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase">Particulars</th>
+                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase">User</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -375,14 +401,33 @@ const DetailedLedgerFinance: React.FC = () => {
                     <td className="py-1 px-2 font-mono">{entry.transactionDate.split('-').reverse().join('/')}</td>
                     <td className="py-1 px-2 font-mono font-bold uppercase">{entry.accountOrLoanNo || '—'}</td>
                     <td className="py-1 px-2 uppercase font-medium">{entry.headOfAccount}</td>
+                    <td className="py-1 px-2 text-right font-mono text-emerald-600">{entry.credit > 0 ? `${entry.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
+                    <td className="py-1 px-2 text-right font-mono text-red-600">{entry.debit > 0 ? `${entry.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
+                    <td className="py-1 px-2 text-right font-mono font-bold">{Math.abs(entry.runningBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {entry.runningBalance >= 0 ? 'Cr' : 'Dr'}</td>
                     <td className="py-1 px-2 uppercase truncate max-w-xs">{entry.particulars || '—'}</td>
-                    <td className="py-1 px-2 text-right font-mono text-red-600">{entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
-                    <td className="py-1 px-2 text-right font-mono text-emerald-600">{entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
-                    <td className="py-1 px-2 text-right font-mono font-bold">₹{Math.abs(entry.runningBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {entry.runningBalance >= 0 ? 'Cr' : 'Dr'}</td>
+                    <td className="py-1 px-2 uppercase text-slate-500">{entry.userName || 'Staff'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
+            {/* Summaries strip */}
+            <div className="grid grid-cols-3 gap-4 py-4 border-t border-slate-350 finance-caption mt-4">
+              <div>
+                <span className="text-slate-500 text-[9px] uppercase font-bold block">TOTAL CREDITS (Cr)</span>
+                <span className="text-emerald-700 text-lg font-black font-mono">{totals.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 text-[9px] uppercase font-bold block">TOTAL DEBITS (Dr)</span>
+                <span className="text-red-700 text-lg font-black font-mono">{totals.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 text-[9px] uppercase font-bold block">NET LEDGER BALANCE</span>
+                <span className="text-slate-900 text-lg font-black font-mono">
+                  {totals.balance >= 0 ? '+' : ''}{totals.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
           </div>
         )}
       </FinancePrintPreview>

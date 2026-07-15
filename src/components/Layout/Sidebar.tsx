@@ -191,7 +191,7 @@ const Sidebar: React.FC = () => {
     { icon: Book, label: 'TBD Ledger', path: '/finance/tbd-ledger', key: 'tbd_ledger' },
     { icon: Book, label: 'Dues Ledger', path: '/finance/dues-ledger', key: 'dues_ledger' },
     { icon: Phone, label: 'Payment Follow-up', path: '/finance/payment-followup', key: 'payment_followup' },
-    { icon: FileText, label: 'Profit & Loss', path: '/finance/pl', key: 'pl' },
+    { icon: FileText, label: 'P&L / Balance Sheet', path: '/finance/pl', key: 'pl' },
     { icon: FileText, label: 'Final Statement', path: '/finance/final-statement', key: 'final_statement' },
     { icon: FileText, label: 'Business Report', path: '/finance/business-report', key: 'business_report' },
     { icon: FileText, label: 'Partner Performance', path: '/finance/partner-performance', key: 'partner_performance' },

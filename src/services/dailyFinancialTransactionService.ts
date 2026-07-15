@@ -36,7 +36,7 @@ export interface DailyFinancialTransaction {
   reportClassification: 'BALANCE_SHEET' | 'PROFIT_AND_LOSS' | 'UNCLASSIFIED';
   customerName?: string | null;
   partnerId?: string | null;
-  category?: 'CD' | 'CAPITAL' | 'HP' | 'STBD' | 'TBD' | 'BANK' | 'SALARY' | 'EXPENSE' | 'OTHER' | null;
+  category?: string | null;
 }
 
 export const dailyFinancialTransactionService = {
@@ -181,10 +181,15 @@ export const dailyFinancialTransactionService = {
         const head = cb.head_of_account;
         const normHead = normalizeHeadOfAccount(head);
         
-        let cat: 'BANK' | 'SALARY' | 'EXPENSE' | 'OTHER' = 'OTHER';
-        if (normHead.toUpperCase().includes('BANK')) cat = 'BANK';
-        else if (normHead.toUpperCase().includes('SALARY')) cat = 'SALARY';
-        else if (getClassification(normHead) === 'PROFIT_AND_LOSS' && Number(cb.debit) > 0) cat = 'EXPENSE';
+        let cat: string = 'OTHER';
+        const acc = accountsMap.get(normHead.toUpperCase()) || accountsMap.get(head.toUpperCase());
+        if (acc?.category) {
+          cat = acc.category;
+        } else {
+          if (normHead.toUpperCase().includes('BANK')) cat = 'BANK';
+          else if (normHead.toUpperCase().includes('SALARY')) cat = 'SALARY';
+          else if (getClassification(normHead) === 'PROFIT_AND_LOSS' && Number(cb.debit) > 0) cat = 'EXPENSE';
+        }
 
         normalizedList.push({
           id: `DAY_BOOK_ENTRY:${cb.id}`,
@@ -287,6 +292,139 @@ export const dailyFinancialTransactionService = {
     } catch (error) {
       console.error('Error fetching daily report activity dates:', error);
       return [];
+    }
+  },
+
+  async getNearestTransactionDate(params: {
+    currentDate: string;
+    direction: 'prev' | 'next';
+    financeMode: 'REGULAR' | 'ITR';
+  }): Promise<string | null> {
+    const { currentDate, direction, financeMode } = params;
+    const isPrev = direction === 'prev';
+    const compOp = isPrev ? 'lt' : 'gt';
+    const orderOptions = { ascending: !isPrev };
+
+    try {
+      // 1. Fetch nearest from CD ledger entries
+      let cdQuery = supabase
+        .from('finance_cd_ledger_entries')
+        .select('entry_date')
+        .neq('account_name', 'CD Amount Paid');
+      if (isPrev) {
+        cdQuery = cdQuery.lt('entry_date', currentDate);
+      } else {
+        cdQuery = cdQuery.gt('entry_date', currentDate);
+      }
+      const { data: cdData } = await cdQuery
+        .order('entry_date', orderOptions)
+        .limit(1);
+
+      // 2. Fetch nearest from Capital entries
+      let capQuery = supabase
+        .from('finance_capital_entries')
+        .select('entry_date');
+      if (isPrev) {
+        capQuery = capQuery.lt('entry_date', currentDate);
+      } else {
+        capQuery = capQuery.gt('entry_date', currentDate);
+      }
+      const { data: capData } = await capQuery
+        .order('entry_date', orderOptions)
+        .limit(1);
+
+      // 3. Fetch nearest from Cashbook entries
+      const { data: bookData } = await supabase
+        .from('finance_books')
+        .select('id')
+        .eq('book_code', financeMode === 'ITR' ? 'ITR-LEGACY' : 'REG-LEGACY')
+        .maybeSingle();
+
+      let cbData: any[] = [];
+      if (bookData?.id) {
+        let cbQuery = supabase
+          .from('finance_cashbook_entries')
+          .select('entry_date')
+          .eq('book_id', bookData.id);
+        if (isPrev) {
+          cbQuery = cbQuery.lt('entry_date', currentDate);
+        } else {
+          cbQuery = cbQuery.gt('entry_date', currentDate);
+        }
+        const { data: fetchedCb } = await cbQuery
+          .order('entry_date', orderOptions)
+          .limit(1);
+        cbData = fetchedCb || [];
+      }
+
+      const dates: string[] = [];
+      const extractDate = (val: any) => {
+        if (typeof val === 'string') {
+          const match = val.match(/^(\d{4}-\d{2}-\d{2})/);
+          if (match) dates.push(match[1]);
+        }
+      };
+
+      if (cdData?.[0]) extractDate(cdData[0].entry_date);
+      if (capData?.[0]) extractDate(capData[0].entry_date);
+      if (cbData?.[0]) extractDate(cbData[0].entry_date);
+
+      if (dates.length === 0) return null;
+
+      // Sort dates
+      dates.sort();
+      if (isPrev) {
+        // Nearest previous date is the largest of dates < currentDate
+        return dates[dates.length - 1];
+      } else {
+        // Nearest future date is the smallest of dates > currentDate
+        return dates[0];
+      }
+    } catch (err) {
+      console.error('Error fetching nearest transaction date:', err);
+      return null;
+    }
+  },
+
+  async getOldestTransactionDate(): Promise<string> {
+    try {
+      const { data: cdData } = await supabase
+        .from('finance_cd_ledger_entries')
+        .select('entry_date')
+        .neq('account_name', 'CD Amount Paid')
+        .order('entry_date', { ascending: true })
+        .limit(1);
+
+      const { data: capData } = await supabase
+        .from('finance_capital_entries')
+        .select('entry_date')
+        .order('entry_date', { ascending: true })
+        .limit(1);
+
+      const { data: cbData } = await supabase
+        .from('finance_cashbook_entries')
+        .select('entry_date')
+        .order('entry_date', { ascending: true })
+        .limit(1);
+
+      const dates: string[] = [];
+      const extractDate = (val: any) => {
+        if (typeof val === 'string') {
+          const match = val.match(/^(\d{4}-\d{2}-\d{2})/);
+          if (match) dates.push(match[1]);
+        }
+      };
+
+      if (cdData?.[0]) extractDate(cdData[0].entry_date);
+      if (capData?.[0]) extractDate(capData[0].entry_date);
+      if (cbData?.[0]) extractDate(cbData[0].entry_date);
+
+      if (dates.length === 0) return '2020-01-01'; // safety fallback
+      dates.sort();
+      return dates[0];
+    } catch (e) {
+      console.error('Error getting oldest transaction date:', e);
+      return '2020-01-01';
     }
   }
 };

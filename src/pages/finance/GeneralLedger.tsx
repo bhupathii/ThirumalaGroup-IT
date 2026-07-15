@@ -10,11 +10,7 @@ import { useNavigate } from 'react-router-dom';
 
 const GeneralLedger: React.FC = () => {
   const navigate = useNavigate();
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(1); // Default to start of month
-    return d.toISOString().split('T')[0];
-  });
+  const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState(() => getLocalBusinessDateISO());
   const [loading, setLoading] = useState(true);
   const [allEntries, setAllEntries] = useState<DailyFinancialTransaction[]>([]);
@@ -28,7 +24,30 @@ const GeneralLedger: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchLedgerData();
+    const loadDefaultStartDate = async () => {
+      try {
+        const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
+        if (oldest) {
+          setStartDate(oldest);
+        } else {
+          const d = new Date();
+          d.setDate(1);
+          setStartDate(d.toISOString().split('T')[0]);
+        }
+      } catch (err) {
+        console.error(err);
+        const d = new Date();
+        d.setDate(1);
+        setStartDate(d.toISOString().split('T')[0]);
+      }
+    };
+    loadDefaultStartDate();
+  }, []);
+
+  useEffect(() => {
+    if (startDate) {
+      fetchLedgerData();
+    }
   }, [startDate, endDate]);
 
   const fetchLedgerData = async () => {
@@ -190,8 +209,8 @@ const GeneralLedger: React.FC = () => {
                   <thead className="bg-slate-100 sticky top-0 z-10 text-slate-700">
                     <tr className="divide-x divide-slate-200">
                       <th className="px-3 py-2 text-left font-bold text-[15px] uppercase">Head of Account</th>
-                      <th className="w-48 px-3 py-2 text-right font-bold text-[15px] uppercase">Debit (Dr)</th>
                       <th className="w-48 px-3 py-2 text-right font-bold text-[15px] uppercase">Credit (Cr)</th>
+                      <th className="w-48 px-3 py-2 text-right font-bold text-[15px] uppercase">Debit (Dr)</th>
                       <th className="w-48 px-3 py-2 text-right font-bold text-[15px] uppercase">Balance</th>
                       <th className="w-20 px-2 py-2 text-center font-bold text-[15px] uppercase">Drill</th>
                     </tr>
@@ -205,14 +224,14 @@ const GeneralLedger: React.FC = () => {
                         style={{ height: '38px' }}
                       >
                         <td className="px-3 py-1.5 text-slate-900 font-bold uppercase truncate">{s.head}</td>
-                        <td className="px-3 py-1.5 text-right text-red-700 font-bold font-mono whitespace-nowrap">
-                          {s.debit > 0 ? `₹${s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                        </td>
                         <td className="px-3 py-1.5 text-right text-emerald-700 font-bold font-mono whitespace-nowrap">
-                          {s.credit > 0 ? `₹${s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                          {s.credit > 0 ? `${s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="px-3 py-1.5 text-right text-red-700 font-bold font-mono whitespace-nowrap">
+                          {s.debit > 0 ? `${s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                         </td>
                         <td className={`px-3 py-1.5 text-right font-black font-mono whitespace-nowrap ${s.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                          ₹{Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}
+                          {Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}
                         </td>
                         <td className="px-2 py-1.5 text-center text-slate-400">
                           <ChevronRight className="w-4 h-4 mx-auto" />
@@ -222,14 +241,14 @@ const GeneralLedger: React.FC = () => {
                     {/* Overall totals */}
                     <tr className="bg-slate-50 font-black divide-x divide-slate-150 border-t-2 border-slate-200" style={{ height: '42px' }}>
                       <td className="px-3 py-2 text-slate-800 uppercase text-[15px]">Grand Total:</td>
-                      <td className="px-3 py-2 text-right text-red-755 font-black font-mono whitespace-nowrap">
-                        ₹{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
                       <td className="px-3 py-2 text-right text-emerald-755 font-black font-mono whitespace-nowrap">
-                        ₹{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        {overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-3 py-2 text-right text-red-755 font-black font-mono whitespace-nowrap">
+                        {overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                       <td className={`px-3 py-2 text-right font-black font-mono whitespace-nowrap ${overallTotals.balance >= 0 ? 'text-emerald-900' : 'text-rose-905'}`}>
-                        ₹{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}
+                        {Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}
                       </td>
                       <td></td>
                     </tr>
@@ -282,16 +301,15 @@ const GeneralLedger: React.FC = () => {
                 </button>
               )}
             </div>
-
             {/* Modal Body & Table */}
             <div className="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-3">
               {/* Compact Ribbon for Drilldown */}
               <div className="flex gap-4 p-2 bg-slate-100 border border-slate-200 rounded text-xs font-bold uppercase items-center justify-between">
-                <div>Drill Dr: <span className="text-red-700 font-mono">₹{drillTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                <div>Drill Cr: <span className="text-emerald-700 font-mono">{drillTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
                 <div className="w-px h-4 bg-slate-300"></div>
-                <div>Drill Cr: <span className="text-emerald-700 font-mono">₹{drillTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                <div>Drill Dr: <span className="text-red-700 font-mono">{drillTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
                 <div className="w-px h-4 bg-slate-300"></div>
-                <div>Net Balance: <span className={`${drillTotals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'} font-mono`}>₹{drillTotals.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                <div>Net Balance: <span className={`${drillTotals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'} font-mono`}>{drillTotals.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
               </div>
 
               <div className="border border-slate-200 rounded overflow-hidden">
@@ -302,8 +320,8 @@ const GeneralLedger: React.FC = () => {
                       <th className="px-3 py-2 text-left font-bold text-slate-600 uppercase">Account/Loan</th>
                       <th className="px-3 py-2 text-left font-bold text-slate-600 uppercase">Customer</th>
                       <th className="px-3 py-2 text-left font-bold text-slate-600 uppercase">Particulars</th>
-                      <th className="px-3 py-2 text-right font-bold text-slate-600 uppercase">Debit (Dr)</th>
                       <th className="px-3 py-2 text-right font-bold text-slate-600 uppercase">Credit (Cr)</th>
+                      <th className="px-3 py-2 text-right font-bold text-slate-600 uppercase">Debit (Dr)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
@@ -328,11 +346,11 @@ const GeneralLedger: React.FC = () => {
                           <td className="px-3 py-1.5 text-slate-600 uppercase text-[13px]">
                             {e.particulars || '—'}
                           </td>
-                          <td className="px-3 py-1.5 text-right font-mono text-red-600 text-[13px] font-bold">
-                            {e.debit > 0 ? `₹${e.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                          </td>
                           <td className="px-3 py-1.5 text-right font-mono text-emerald-600 text-[13px] font-bold">
-                            {e.credit > 0 ? `₹${e.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                            {e.credit > 0 ? `${e.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono text-red-600 text-[13px] font-bold">
+                            {e.debit > 0 ? `${e.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
                         </tr>
                       ))
@@ -373,17 +391,17 @@ const GeneralLedger: React.FC = () => {
         {/* Overall summary numbers */}
         <div className="grid grid-cols-3 gap-4 py-6 border-b border-slate-350 finance-caption">
           <div>
-            <span className="text-slate-500 text-[9px] uppercase font-bold block">GRAND TOTAL DEBITS (Dr)</span>
-            <span className="text-red-700 text-lg font-black font-mono">₹{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            <span className="text-slate-500 text-[9px] uppercase font-bold block">GRAND TOTAL CREDITS (Cr)</span>
+            <span className="text-emerald-700 text-lg font-black font-mono">{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
           </div>
           <div>
-            <span className="text-slate-500 text-[9px] uppercase font-bold block">GRAND TOTAL CREDITS (Cr)</span>
-            <span className="text-emerald-700 text-lg font-black font-mono">₹{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            <span className="text-slate-500 text-[9px] uppercase font-bold block">GRAND TOTAL DEBITS (Dr)</span>
+            <span className="text-red-700 text-lg font-black font-mono">{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
           </div>
           <div>
             <span className="text-slate-500 text-[9px] uppercase font-bold block">NET LEDGER VALUE</span>
             <span className="text-slate-900 text-lg font-black font-mono">
-              {overallTotals.balance >= 0 ? 'Cr ' : 'Dr '}₹{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              {overallTotals.balance >= 0 ? 'Cr ' : 'Dr '}{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </span>
           </div>
         </div>
@@ -394,8 +412,8 @@ const GeneralLedger: React.FC = () => {
             <thead>
               <tr className="bg-slate-50">
                 <th className="py-2 px-3 text-left font-bold text-slate-700 uppercase">Head of Account</th>
-                <th className="py-2 px-3 text-right font-bold text-slate-700 uppercase">Dr</th>
                 <th className="py-2 px-3 text-right font-bold text-slate-700 uppercase">Cr</th>
+                <th className="py-2 px-3 text-right font-bold text-slate-700 uppercase">Dr</th>
                 <th className="py-2 px-3 text-right font-bold text-slate-700 uppercase">Net Balance</th>
               </tr>
             </thead>
@@ -403,16 +421,16 @@ const GeneralLedger: React.FC = () => {
               {summaryData.map(s => (
                 <tr key={s.head}>
                   <td className="py-2 px-3 text-slate-800 font-bold uppercase">{s.head}</td>
-                  <td className="py-2 px-3 text-right font-mono text-red-600">{s.debit > 0 ? `₹${s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
-                  <td className="py-2 px-3 text-right font-mono text-emerald-600">{s.credit > 0 ? `₹${s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
-                  <td className="py-2 px-3 text-right font-mono font-bold">₹{Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}</td>
+                  <td className="py-2 px-3 text-right font-mono text-emerald-600">{s.credit > 0 ? `${s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
+                  <td className="py-2 px-3 text-right font-mono text-red-600">{s.debit > 0 ? `${s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
+                  <td className="py-2 px-3 text-right font-mono font-bold">{Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}</td>
                 </tr>
               ))}
               <tr className="bg-slate-100 font-black border-t border-slate-350">
                 <td className="py-2.5 px-3 text-slate-900 uppercase">Grand Total:</td>
-                <td className="py-2.5 px-3 text-right font-mono">₹{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td className="py-2.5 px-3 text-right font-mono">₹{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td className="py-2.5 px-3 text-right font-mono">₹{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}</td>
+                <td className="py-2.5 px-3 text-right font-mono">{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-2.5 px-3 text-right font-mono">{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-2.5 px-3 text-right font-mono">{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}</td>
               </tr>
             </tbody>
           </table>

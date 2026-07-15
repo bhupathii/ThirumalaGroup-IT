@@ -266,6 +266,8 @@ export interface FinanceCashbookAccount {
   account_name: string;
   account_number: string | null;
   report_classification?: 'BALANCE_SHEET' | 'PROFIT_AND_LOSS' | null;
+  report_section?: 'BALANCE_SHEET' | 'PROFIT_AND_LOSS' | null;
+  category?: string | null;
   created_at: string;
 }
 
@@ -3104,7 +3106,15 @@ class SupabaseFinance {
     }
   }
 
-  async updateCashbookAccount(id: string, account: { account_name: string; report_classification: 'BALANCE_SHEET' | 'PROFIT_AND_LOSS' }): Promise<{ success: boolean; error?: string }> {
+  async updateCashbookAccount(
+    id: string, 
+    account: { 
+      account_name: string; 
+      report_classification: 'BALANCE_SHEET' | 'PROFIT_AND_LOSS';
+      report_section: 'BALANCE_SHEET' | 'PROFIT_AND_LOSS';
+      category: string;
+    }
+  ): Promise<{ success: boolean; error?: string }> {
     try {
       // 1. Get old name
       const { data: oldAcc } = await supabase
@@ -3135,7 +3145,9 @@ class SupabaseFinance {
         .from('finance_cashbook_accounts')
         .update({
           account_name: account.account_name,
-          report_classification: account.report_classification
+          report_classification: account.report_classification,
+          report_section: account.report_section,
+          category: account.category
         })
         .eq('id', id);
 

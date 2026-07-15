@@ -19,11 +19,7 @@ interface BSAccountBalanceItem {
 const FinalStatement: React.FC = () => {
   const navigate = useNavigate();
   
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 1);
-    return d.toISOString().split('T')[0];
-  });
+  const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState(() => getLocalBusinessDateISO());
   
   const [loading, setLoading] = useState(false);
@@ -42,7 +38,30 @@ const FinalStatement: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchStatementData();
+    const loadDefaultStartDate = async () => {
+      try {
+        const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
+        if (oldest) {
+          setStartDate(oldest);
+        } else {
+          const d = new Date();
+          d.setMonth(d.getMonth() - 1);
+          setStartDate(d.toISOString().split('T')[0]);
+        }
+      } catch (err) {
+        console.error(err);
+        const d = new Date();
+        d.setMonth(d.getMonth() - 1);
+        setStartDate(d.toISOString().split('T')[0]);
+      }
+    };
+    loadDefaultStartDate();
+  }, []);
+
+  useEffect(() => {
+    if (startDate) {
+      fetchStatementData();
+    }
   }, [startDate, endDate]);
 
   const fetchStatementData = async () => {
@@ -189,7 +208,7 @@ const FinalStatement: React.FC = () => {
         <div className="w-full md:w-64 px-6 py-4 flex flex-col justify-center bg-[#0b1329]">
           <span className="text-blue-300 mb-1 block finance-small-label uppercase">Share Value</span>
           <span className={`${shareValue >= 0 ? 'text-emerald-400' : 'text-red-400'} finance-money`}>
-            ₹{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            {shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </span>
         </div>
       </div>
@@ -199,25 +218,25 @@ const FinalStatement: React.FC = () => {
         {/* Credit Total */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
           <span className="text-slate-400 block finance-small-label uppercase">Credit Total</span>
-          <span className="text-emerald-600 mt-1 finance-money">₹{creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          <span className="text-emerald-600 mt-1 finance-money">{creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
         
         {/* Debit Total */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
           <span className="text-slate-400 block finance-small-label uppercase">Debit Total</span>
-          <span className="text-red-600 mt-1 finance-money">₹{debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          <span className="text-red-600 mt-1 finance-money">{debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
 
         {/* Opening Cash */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
           <span className="text-slate-400 block finance-small-label uppercase">Opening Cash</span>
-          <span className="text-slate-900 mt-1 finance-money">₹{openingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          <span className="text-slate-900 mt-1 finance-money">{openingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
 
         {/* Closing Cash */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
           <span className="text-slate-400 block finance-small-label uppercase">Closing Cash</span>
-          <span className="text-slate-900 mt-1 finance-money">₹{closingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          <span className="text-slate-900 mt-1 finance-money">{closingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         </div>
       </div>
 
@@ -261,16 +280,16 @@ const FinalStatement: React.FC = () => {
                     <td className="px-6 py-4 text-slate-500 finance-sidebar-link">{idx + 1}</td>
                     <td className="px-6 py-4 text-slate-900 font-bold uppercase finance-sidebar-link">{acc.accountName}</td>
                     <td className={`px-6 py-4 text-right font-medium ${acc.opening >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      ₹{Math.abs(acc.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {acc.opening >= 0 ? 'Cr' : 'Dr'}
+                      {Math.abs(acc.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {acc.opening >= 0 ? 'Cr' : 'Dr'}
                     </td>
                     <td className="px-6 py-4 text-emerald-600 text-right font-medium">
-                      {acc.credit > 0 ? `₹${acc.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                      {acc.credit > 0 ? `${acc.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
                     <td className="px-6 py-4 text-rose-600 text-right font-medium">
-                      {acc.debit > 0 ? `₹${acc.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                      {acc.debit > 0 ? `${acc.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
                     <td className={`px-6 py-4 text-right font-black ${acc.closing >= 0 ? 'text-emerald-850' : 'text-rose-850'}`}>
-                      ₹{Math.abs(acc.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {acc.closing >= 0 ? 'Cr' : 'Dr'}
+                      {Math.abs(acc.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {acc.closing >= 0 ? 'Cr' : 'Dr'}
                     </td>
                   </tr>
                 ))}
@@ -292,19 +311,19 @@ const FinalStatement: React.FC = () => {
           <div className="grid grid-cols-4 gap-4 border-b border-t border-slate-900 py-4 mb-6 text-center text-[11px]">
             <div>
               <p className="text-slate-500 finance-small-label uppercase">Opening Cash</p>
-              <p className="text-slate-900 finance-sidebar-link font-bold">₹{openingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+              <p className="text-slate-900 finance-sidebar-link font-bold">{openingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
             </div>
             <div>
-              <p className="text-slate-500 finance-small-label uppercase">Closing Cash</p>
-              <p className="text-slate-900 finance-sidebar-link font-bold">₹{closingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+              <p className="text-slate-550 text-[10px] mt-0.5 uppercase">Closing Cash</p>
+              <p className="text-slate-900 finance-sidebar-link font-bold">{closingCash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
             </div>
             <div>
               <p className="text-slate-500 finance-small-label uppercase">Grand Total</p>
-              <p className="text-slate-900 finance-sidebar-link font-bold">₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+              <p className="text-slate-900 finance-sidebar-link font-bold">{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
             </div>
             <div>
-              <p className="text-slate-500 finance-small-label uppercase">Share Value ({partnerCount})</p>
-              <p className="text-[#0b1329] finance-sidebar-link font-bold">₹{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+              <p className="text-slate-550 text-[10px] mt-0.5 uppercase">Share Value ({partnerCount})</p>
+              <p className="text-[#0b1329] finance-sidebar-link font-bold">{shareValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
             </div>
           </div>
 
@@ -328,17 +347,17 @@ const FinalStatement: React.FC = () => {
               <tbody className="font-mono">
                 {accountBalances.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-slate-500 font-sans finance-input uppercase">No records found</td>
+                    <td colSpan={6} className="text-center py-8 text-slate-550 font-sans finance-input uppercase">No records found</td>
                   </tr>
                 ) : (
                   accountBalances.map((acc, idx) => (
                     <tr key={idx} className="border-b border-slate-200 last:border-0">
                       <td className="p-1 border-r border-slate-200 text-center">{idx + 1}</td>
                       <td className="p-1 text-slate-900 border-r border-slate-200 uppercase font-bold">{acc.accountName}</td>
-                      <td className="p-1 text-right border-r border-slate-200">₹{acc.opening.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="p-1 text-right border-r border-slate-200">{acc.opening.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                       <td className="p-1 text-right border-r border-slate-200">{acc.credit > 0 ? acc.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}</td>
                       <td className="p-1 text-right border-r border-slate-200">{acc.debit > 0 ? acc.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}</td>
-                      <td className="p-1 text-right font-black">₹{acc.closing.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="p-1 text-right font-black">{acc.closing.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     </tr>
                   ))
                 )}

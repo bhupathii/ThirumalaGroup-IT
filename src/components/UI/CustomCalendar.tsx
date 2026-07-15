@@ -168,22 +168,48 @@ const CustomCalendar = ({
       ? 'bg-red-800'
       : 'bg-red-500';
 
+  const yearsList = useMemo(() => {
+    const list = [];
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear - 15; y <= currentYear + 10; y++) {
+      list.push(y);
+    }
+    return list;
+  }, []);
+
   return (
     <div className="CustomCalendar absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 p-4 min-w-[280px]">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-1">
         <button
           onClick={() => navigateMonth('prev')}
-          className="p-1 hover:bg-gray-100 rounded"
+          className="p-1 hover:bg-gray-100 rounded shrink-0"
           type="button"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <h3 className="font-semibold text-sm">
-          {monthNames[month]} {year}
-        </h3>
+        <div className="flex items-center gap-1">
+          <select
+            value={month}
+            onChange={(e) => setCurrentMonth(new Date(year, parseInt(e.target.value), 1))}
+            className="text-xs font-semibold bg-gray-50 border border-gray-200 rounded p-1 focus:outline-none"
+          >
+            {monthNames.map((name, idx) => (
+              <option key={idx} value={idx}>{name}</option>
+            ))}
+          </select>
+          <select
+            value={year}
+            onChange={(e) => setCurrentMonth(new Date(parseInt(e.target.value), month, 1))}
+            className="text-xs font-semibold bg-gray-50 border border-gray-200 rounded p-1 focus:outline-none"
+          >
+            {yearsList.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
         <button
           onClick={() => navigateMonth('next')}
-          className="p-1 hover:bg-gray-100 rounded"
+          className="p-1 hover:bg-gray-100 rounded shrink-0"
           type="button"
         >
           <ChevronRight className="w-4 h-4" />

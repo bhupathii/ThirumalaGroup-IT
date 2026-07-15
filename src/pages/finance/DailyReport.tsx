@@ -1,11 +1,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import Button from '../../components/UI/Button';
 import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../../services/dailyFinancialTransactionService';
 import { 
   Printer, 
   ChevronLeft, 
   ChevronRight, 
-  ArrowLeft, 
   Search, 
   Calendar,
   RefreshCw,
@@ -47,6 +45,53 @@ const DailyReportFinance: React.FC = () => {
   // Modal / Drawer for clicked transaction (Requirement 1 & 3)
   const [selectedTx, setSelectedTx] = useState<DailyFinancialTransaction | null>(null);
 
+  // Manual Date Entry Input State
+  const [dateInputText, setDateInputText] = useState(() => {
+    const todayStr = getLocalBusinessDateISO();
+    const parts = todayStr.split('-');
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  });
+
+  useEffect(() => {
+    if (selectedDate) {
+      const parts = selectedDate.split('-');
+      if (parts.length === 3) {
+        setDateInputText(`${parts[2]}/${parts[1]}/${parts[0]}`);
+      }
+    }
+  }, [selectedDate]);
+
+  const parseAndValidateDate = (val: string): string | null => {
+    const cleanVal = val.trim();
+    const match = cleanVal.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!match) return null;
+    const d = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    const y = parseInt(match[3], 10);
+    if (y < 1000 || y > 9999) return null;
+    if (m < 1 || m > 12) return null;
+
+    const daysInMonth = new Date(y, m, 0).getDate();
+    if (d < 1 || d > daysInMonth) return null;
+
+    const mm = String(m).padStart(2, '0');
+    const dd = String(d).padStart(2, '0');
+    return `${y}-${mm}-${dd}`;
+  };
+
+  const handleDateTextBlurOrSubmit = () => {
+    const validated = parseAndValidateDate(dateInputText);
+    if (validated) {
+      setSelectedDate(validated);
+    } else {
+      toast.error('Invalid date format/value. Use DD/MM/YYYY (e.g. 15/07/2026).');
+      const parts = selectedDate.split('-');
+      if (parts.length === 3) {
+        setDateInputText(`${parts[2]}/${parts[1]}/${parts[0]}`);
+      }
+    }
+  };
+
   // Auto-refresh interval (Requirement 6)
   useEffect(() => {
     fetchDailyData();
@@ -62,16 +107,30 @@ const DailyReportFinance: React.FC = () => {
     fetchActivityDates(d.getMonth() + 1, d.getFullYear());
   }, [selectedDate]);
 
-  const handlePrevDay = () => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() - 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+  const handlePrevDay = async () => {
+    const prevDate = await dailyFinancialTransactionService.getNearestTransactionDate({
+      currentDate: selectedDate,
+      direction: 'prev',
+      financeMode
+    });
+    if (prevDate) {
+      setSelectedDate(prevDate);
+    } else {
+      toast.error('No previous transaction dates found');
+    }
   };
 
-  const handleNextDay = () => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+  const handleNextDay = async () => {
+    const nextDate = await dailyFinancialTransactionService.getNearestTransactionDate({
+      currentDate: selectedDate,
+      direction: 'next',
+      financeMode
+    });
+    if (nextDate) {
+      setSelectedDate(nextDate);
+    } else {
+      toast.error('No future transaction dates found');
+    }
   };
 
   const handleGoToToday = () => {
@@ -99,8 +158,11 @@ const DailyReportFinance: React.FC = () => {
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
 
+      // Dynamically derive the oldest transaction date as From Date (Requirement 12)
+      const oldestDate = await dailyFinancialTransactionService.getOldestTransactionDate();
+
       const priorTx = await dailyFinancialTransactionService.getDailyFinancialTransactions({
-        fromDate: '2000-01-01',
+        fromDate: oldestDate,
         toDate: yesterdayStr,
         financeMode
       });
@@ -141,14 +203,15 @@ const DailyReportFinance: React.FC = () => {
   // Ordered NEWEST FIRST (Requirement 1)
   const filteredTransactions = useMemo(() => {
     const list = transactions.filter(tx => {
-      // Quick Search (Receipt, Loan, Customer, Account, Phone)
+      // Quick Search (Receipt, Loan, Customer, Account, Phone, User)
       const q = searchQuery.toLowerCase().trim();
       if (q) {
         const matchesReceipt = tx.receiptOrVoucherNo?.toLowerCase().includes(q);
         const matchesLoan = tx.accountOrLoanNo?.toLowerCase().includes(q);
         const matchesCust = tx.customerName?.toLowerCase().includes(q) || tx.particulars?.toLowerCase().includes(q);
         const matchesAcc = tx.headOfAccount?.toLowerCase().includes(q);
-        if (!matchesReceipt && !matchesLoan && !matchesCust && !matchesAcc) {
+        const matchesUser = tx.userName?.toLowerCase().includes(q);
+        if (!matchesReceipt && !matchesLoan && !matchesCust && !matchesAcc && !matchesUser) {
           return false;
         }
       }
@@ -281,6 +344,15 @@ const DailyReportFinance: React.FC = () => {
 
   const displayDate = new Date(selectedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
 
+  const formatTransDate = (dateStr: string) => {
+    if (!dateStr) return '—';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dateStr;
+  };
+
   const printContent = useMemo(() => {
     return (
       <div className="space-y-6 pb-12 font-sans text-xs uppercase font-bold">
@@ -294,19 +366,19 @@ const DailyReportFinance: React.FC = () => {
         <div className="grid grid-cols-4 gap-4 border-b border-t border-slate-900 py-3 text-center text-[10px]">
           <div>
             <p className="text-slate-500">Opening Balance</p>
-            <p className="text-slate-900 mt-1">₹{dailyTotals.opening.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+            <p className="text-slate-900 mt-1">{dailyTotals.opening.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
           </div>
           <div>
             <p className="text-slate-500">Credit Total</p>
-            <p className="text-emerald-700 mt-1">₹{dailyTotals.credits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+            <p className="text-emerald-700 mt-1">{dailyTotals.credits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
           </div>
           <div>
             <p className="text-slate-500">Debit Total</p>
-            <p className="text-red-700 mt-1">₹{dailyTotals.debits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+            <p className="text-red-700 mt-1">{dailyTotals.debits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
           </div>
           <div>
             <p className="text-slate-500">Closing Balance</p>
-            <p className="text-slate-900 mt-1">₹{dailyTotals.closing.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+            <p className="text-slate-900 mt-1">{dailyTotals.closing.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
           </div>
         </div>
 
@@ -317,7 +389,7 @@ const DailyReportFinance: React.FC = () => {
             {accountSummaries.map((acc, idx) => (
               <div key={idx} className="flex justify-between border-b pb-0.5 border-slate-100">
                 <span>{acc.account}</span>
-                <span className="font-mono">CR: ₹{acc.credit.toLocaleString('en-IN')} | DR: ₹{acc.debit.toLocaleString('en-IN')}</span>
+                <span className="font-mono">CR: {acc.credit.toLocaleString('en-IN')} | DR: {acc.debit.toLocaleString('en-IN')}</span>
               </div>
             ))}
           </div>
@@ -339,7 +411,7 @@ const DailyReportFinance: React.FC = () => {
             <tbody className="font-mono font-medium">
               {filteredTransactions.map((tx) => (
                 <tr key={tx.id} className="border-b border-slate-200">
-                  <td className="p-2 border-r">{tx.transactionDate}</td>
+                  <td className="p-2 border-r">{formatTransDate(tx.transactionDate)}</td>
                   <td className="p-2 border-r">{tx.headOfAccount}</td>
                   <td className="p-2 border-r">{tx.particulars}</td>
                   <td className="p-2 border-r">{tx.receiptOrVoucherNo || '—'}</td>
@@ -375,11 +447,25 @@ const DailyReportFinance: React.FC = () => {
 
       {/* Compact Totals Strip */}
       <div className="grid grid-cols-5 gap-2">
-        <div className="bg-white border border-slate-200 rounded px-3 py-2 relative cursor-pointer hover:bg-slate-50" onClick={() => setShowCalendar(!showCalendar)}>
+        <div className="bg-white border border-slate-200 rounded px-3 py-2 relative">
           <div className="text-[11px] font-bold uppercase text-slate-400">Select Date</div>
           <div className="flex items-center justify-between mt-0.5">
-            <span className="text-[15px] font-black text-slate-900 font-mono">{new Date(selectedDate).toLocaleDateString('en-GB')}</span>
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <input
+              type="text"
+              value={dateInputText}
+              onChange={(e) => setDateInputText(e.target.value)}
+              onBlur={handleDateTextBlurOrSubmit}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleDateTextBlurOrSubmit(); }}
+              placeholder="DD/MM/YYYY"
+              className="text-[15px] font-black text-slate-900 font-mono focus:outline-none w-28 bg-transparent"
+            />
+            <button
+              type="button"
+              onClick={() => setShowCalendar(!showCalendar)}
+              className="p-1 hover:bg-slate-50 rounded shrink-0"
+            >
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            </button>
           </div>
           {showCalendar && (
             <CustomCalendar
@@ -393,19 +479,19 @@ const DailyReportFinance: React.FC = () => {
         </div>
         <div className="bg-white border border-slate-200 rounded px-3 py-2">
           <div className="text-[11px] font-bold uppercase text-slate-400">Opening Balance</div>
-          <div className="text-[15px] font-black text-slate-900 font-mono mt-0.5">₹{dailyTotals.opening.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          <div className="text-[15px] font-black text-slate-900 font-mono mt-0.5">{dailyTotals.opening.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded px-3 py-2">
           <div className="text-[11px] font-bold uppercase text-slate-400">Total Inflow (Cr)</div>
-          <div className="text-[15px] font-black text-emerald-600 font-mono mt-0.5">₹{dailyTotals.credits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          <div className="text-[15px] font-black text-emerald-600 font-mono mt-0.5">{dailyTotals.credits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded px-3 py-2">
           <div className="text-[11px] font-bold uppercase text-slate-400">Total Outflow (Dr)</div>
-          <div className="text-[15px] font-black text-red-600 font-mono mt-0.5">₹{dailyTotals.debits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          <div className="text-[15px] font-black text-red-600 font-mono mt-0.5">{dailyTotals.debits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
         </div>
         <div className="bg-[#0b1329] border border-slate-800 rounded px-3 py-2">
           <div className="text-[11px] font-bold uppercase text-slate-400">Closing Balance</div>
-          <div className="text-[15px] font-black text-white font-mono mt-0.5">₹{dailyTotals.closing.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          <div className="text-[15px] font-black text-white font-mono mt-0.5">{dailyTotals.closing.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
         </div>
       </div>
 
@@ -446,11 +532,11 @@ const DailyReportFinance: React.FC = () => {
           className="h-[32px] px-2 bg-white text-slate-400 border border-slate-200 rounded text-[12px] font-bold uppercase hover:text-slate-700">Clear</button>
       </div>
 
-      {/* Main Grid: Table + Right Panels */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-2">
+      {/* Main Layout Stack */}
+      <div className="space-y-2">
 
-        {/* Left: Transaction Table */}
-        <div className="xl:col-span-2">
+        {/* Transaction Table - occupy almost full width */}
+        <div className="w-full">
           <div className="bg-white border border-slate-200 rounded overflow-hidden">
             <div className="bg-slate-50 px-3 py-2 border-b flex justify-between items-center">
               <h3 className="text-[13px] font-bold text-slate-800 uppercase">Main Transaction Ledger</h3>
@@ -483,7 +569,7 @@ const DailyReportFinance: React.FC = () => {
                         onClick={() => handleRowClick(tx)}
                         className="hover:bg-slate-50/50 cursor-pointer transition-colors"
                       >
-                        <td className="px-4 py-3 font-mono text-slate-500">{tx.transactionDate}</td>
+                        <td className="px-4 py-3 font-mono text-slate-500">{formatTransDate(tx.transactionDate)}</td>
                         <td className="px-4 py-3 uppercase text-slate-900">{tx.headOfAccount}</td>
                         <td className="px-4 py-3">
                           <div className="text-slate-800">{tx.particulars}</div>
@@ -497,10 +583,10 @@ const DailyReportFinance: React.FC = () => {
                           {tx.receiptOrVoucherNo || '—'}
                         </td>
                         <td className="px-4 py-3 text-right text-emerald-600 font-mono">
-                          {tx.credit > 0 ? `₹${tx.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                          {tx.credit > 0 ? `${tx.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                         </td>
                         <td className="px-4 py-3 text-right text-red-600 font-mono">
-                          {tx.debit > 0 ? `₹${tx.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                          {tx.debit > 0 ? `${tx.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                         </td>
                         <td className="px-4 py-3 uppercase text-slate-500">{tx.userName || 'Staff'}</td>
                         <td className="px-4 py-3 font-mono text-slate-400 text-[10px]">
@@ -515,8 +601,8 @@ const DailyReportFinance: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Summaries */}
-        <div className="space-y-2">
+        {/* Summaries Panel moved below */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
 
           {/* Account Summary Panel */}
           <div className="bg-white border border-slate-200 rounded overflow-hidden">
@@ -531,11 +617,11 @@ const DailyReportFinance: React.FC = () => {
                   <div key={idx} className="px-3 py-2 flex justify-between items-center text-[12px] hover:bg-slate-50">
                     <div>
                       <span className="font-bold text-slate-900 uppercase block text-[13px]">{acc.account}</span>
-                      <span className="text-[11px] text-slate-400 font-bold uppercase">NET: ₹{acc.net.toLocaleString('en-IN')}</span>
+                      <span className="text-[11px] text-slate-400 font-bold uppercase">NET: {acc.net.toLocaleString('en-IN')}</span>
                     </div>
                     <div className="text-right font-mono text-[12px]">
-                      <div className="text-emerald-700 font-bold">CR: ₹{acc.credit.toLocaleString('en-IN')}</div>
-                      <div className="text-red-700 font-bold">DR: ₹{acc.debit.toLocaleString('en-IN')}</div>
+                      <div className="text-emerald-700 font-bold">CR: {acc.credit.toLocaleString('en-IN')}</div>
+                      <div className="text-red-700 font-bold">DR: {acc.debit.toLocaleString('en-IN')}</div>
                     </div>
                   </div>
                 ))}
@@ -560,7 +646,7 @@ const DailyReportFinance: React.FC = () => {
                       <span className="text-[11px] text-slate-500 uppercase font-semibold">{rc.borrower} ({rc.loanNo})</span>
                     </div>
                     <div className="text-right">
-                      <span className="font-mono text-emerald-600 font-bold text-[13px]">₹{rc.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      <span className="font-mono text-emerald-600 font-bold text-[13px]">{rc.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                       <button onClick={() => handleLoanClick(rc.loanNo)} className="text-[11px] text-slate-400 hover:underline block mt-0.5 uppercase">Ledger</button>
                     </div>
                   </div>
@@ -589,8 +675,8 @@ const DailyReportFinance: React.FC = () => {
                 <div><span className="text-slate-400 block text-[10px]">Account No</span><span className="text-slate-950 font-mono">{selectedTx.accountOrLoanNo || '—'}</span></div>
               </div>
               <div className="grid grid-cols-2 gap-3 border-t pt-2">
-                <div><span className="text-slate-400 block text-[10px]">Credit</span><span className="text-emerald-700 font-mono font-black">₹{selectedTx.credit.toLocaleString('en-IN')}</span></div>
-                <div><span className="text-slate-400 block text-[10px]">Debit</span><span className="text-red-700 font-mono font-black">₹{selectedTx.debit.toLocaleString('en-IN')}</span></div>
+                <div><span className="text-slate-400 block text-[10px]">Credit</span><span className="text-emerald-700 font-mono font-black">{selectedTx.credit.toLocaleString('en-IN')}</span></div>
+                <div><span className="text-slate-400 block text-[10px]">Debit</span><span className="text-red-700 font-mono font-black">{selectedTx.debit.toLocaleString('en-IN')}</span></div>
               </div>
               <div className="grid grid-cols-2 gap-3 border-t pt-2 text-[10px] text-slate-450">
                 <div><span>Entered By: {selectedTx.userName || 'Staff'}</span></div>

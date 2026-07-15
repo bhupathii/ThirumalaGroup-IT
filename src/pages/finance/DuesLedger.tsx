@@ -112,7 +112,6 @@ const DuesLedger: React.FC = () => {
       // 1. Report Type Filter
       if (activeReport === 'OUTSTANDING') {
         if (due.loanType === 'CD') {
-          // Keep showing if dueDays > 0 even if presentDue <= 0 (e.g. penalty only or exact 0 due)
           if (due.presentDue <= 0 && due.dueDays <= 0) return false;
         } else {
           if (due.presentDue <= 0 && due.dueDays <= 0) return false;
@@ -258,8 +257,8 @@ const DuesLedger: React.FC = () => {
           <div className="flex items-stretch gap-2 ml-auto flex-wrap">
             <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-1.5 flex flex-col justify-center min-w-[140px]">
               <span className="text-[10px] font-black text-red-500 uppercase tracking-wider leading-none">Total Present Dues</span>
-              <span className="text-red-650 text-[17px] font-black font-mono tracking-tight leading-tight mt-0.5 whitespace-nowrap">
-                ₹{totals.presentDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              <span className="text-red-655 text-[17px] font-black font-mono tracking-tight leading-tight mt-0.5 whitespace-nowrap">
+                {totals.presentDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
             </div>
             <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex flex-col justify-center min-w-[100px]">
@@ -273,88 +272,66 @@ const DuesLedger: React.FC = () => {
         </div>
       </div>
 
-      {/* CD DATA INTEGRITY ISSUES WARNING CARD */}
-      {integrityErrors.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm space-y-2">
-          <div className="flex items-center gap-2 text-red-700 font-extrabold text-[13px] uppercase">
-            <AlertTriangle className="w-4 h-4 text-red-600" />
-            <span>CD Data Issues ({integrityErrors.length})</span>
-          </div>
-          <p className="text-slate-600 text-xs font-semibold leading-relaxed">
-            The following active CD accounts failed validation constraints (e.g. loan date falls after earliest transaction date). They are excluded from financial totals but listed here for inspection.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-            {integrityErrors.map((err, index) => (
-              <div key={index} className="bg-white border border-red-100 rounded-lg p-3 flex flex-col justify-between hover:border-red-300 transition-colors shadow-sm">
-                <div>
-                  <div className="flex justify-between items-center">
-                    <span className="font-mono font-black text-red-700 text-[14px]">{err.loanNumber}</span>
-                    <span className="text-slate-400 font-mono text-[11px]">ID: {err.loanId.slice(0, 8)}...</span>
-                  </div>
-                  <div className="font-extrabold text-slate-800 text-[13px] mt-1">{err.borrowerName}</div>
-                  <div className="text-[11px] font-semibold text-slate-500 mt-1">
-                    Master Date: <span className="font-mono text-slate-700">{err.loanDate}</span> | Earliest Pay: <span className="font-mono text-slate-700">{err.earliestTransactionDate || 'None'}</span>
-                  </div>
-                  <div className="text-[11px] text-red-650 bg-red-50/50 p-1.5 rounded border border-red-100/55 font-semibold mt-2 break-words">
-                    {err.message}
-                  </div>
+      {/* ── ROW 3: Tabs Selection ────────────────────────────────────────────── */}
+      <div className="flex border-b border-slate-200 mt-1 flex-wrap">
+        {options.map(opt => (
+          <button
+            key={opt}
+            onClick={() => setActiveReport(opt)}
+            className={`px-4 py-2 border-b-2 text-xs font-black uppercase tracking-wider transition-colors ${
+              activeReport === opt 
+                ? 'border-slate-900 text-slate-900 bg-slate-50/50' 
+                : 'border-transparent text-slate-450 hover:text-slate-700 hover:border-slate-300'
+            }`}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+
+      {/* ── ROW 4: Integrity Warnings Box ────────────────────────────────────── */}
+      {!loading && integrityErrors.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2.5 text-xs text-amber-900 font-medium">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <span className="font-extrabold uppercase text-[11px] text-amber-850 block">Database Consistency Warnings ({integrityErrors.length})</span>
+            <p className="text-[11px] leading-relaxed">
+              Below entries failed check audits (duplicate profiles, missing principal rows). Report displayed totals might be skewed.
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] pt-1">
+              {integrityErrors.slice(0, 10).map((err, i) => (
+                <div key={i} className="bg-white/60 px-1.5 py-0.5 rounded border border-amber-100">
+                  <span className="font-bold text-amber-950 uppercase">{err.loanId || 'Unknown'}</span>: {err.error_type}
                 </div>
-                <button
-                  onClick={() => navigate(`/finance/cd-ledger?search=${err.loanNumber}`)}
-                  className="mt-3 text-center w-full py-1 bg-red-100 hover:bg-red-200 text-red-700 font-bold uppercase rounded text-[11px] transition-colors"
-                >
-                  Inspect Loan Profile
-                </button>
-              </div>
-            ))}
+              ))}
+              {integrityErrors.length > 10 && (
+                <div className="font-bold text-amber-700">+ {integrityErrors.length - 10} more warnings</div>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── ROW 3: Report Type Tabs ──────────────────────────────────────────── */}
-      <div className="bg-slate-100 px-1.5 py-1 rounded-xl border border-slate-200">
-        <div className="flex flex-wrap gap-1.5">
-          {options.map((opt) => (
-            <button
-              key={opt}
-              onClick={() => setActiveReport(opt)}
-              className={`flex-1 min-w-[130px] text-center px-3 py-2 rounded-lg text-[12px] font-extrabold tracking-wide uppercase transition-all duration-150 ${
-                activeReport === opt
-                  ? 'bg-[#0b1329] text-white shadow-md'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-              }`}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── ROW 4: Dues Table ────────────────────────────────────────────────── */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        {/* Compact section header */}
-        <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-          <span className="text-[12px] font-black uppercase text-slate-700 tracking-wide">{activeReport} — {loanTypeFilter}</span>
-          <span className="text-[11px] text-slate-400 font-semibold uppercase">{filteredDues.length} records</span>
-        </div>
-
+      {/* ── ROW 5: Main Ledger Table grid ────────────────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden min-h-[300px]">
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-7 w-7 border-t-2 border-slate-900"></div>
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400 font-bold uppercase text-[12px]">
+            <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-slate-900 mb-2.5"></div>
+            Loading database dues entries...
           </div>
         ) : filteredDues.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-slate-400 font-bold uppercase text-[13px]">No Due Accounts Found</p>
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400 font-bold uppercase text-[12px]">
+            No matching overdue profiles found.
           </div>
         ) : (
-          <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 260px)' }}>
-            <table className="min-w-full divide-y divide-slate-150 finance-caption">
-              <thead className="sticky top-0 z-10 bg-slate-50 shadow-[inset_0_-2px_0_rgba(0,0,0,0.1)]">
-                <tr className="bg-slate-50">
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 text-center w-10 bg-slate-50 finance-small-label">Sl</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 text-left w-20 bg-slate-50 finance-small-label">Loan No</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 text-left bg-slate-50 finance-small-label">Party Name</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-32 bg-slate-50 finance-small-label">Principal</th>
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left border-collapse border-spacing-0">
+              <thead>
+                <tr className="border-b border-slate-200 text-[11px] font-black uppercase text-slate-500 select-none">
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-10 bg-slate-50 finance-small-label">SL</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-28 bg-slate-50 finance-small-label">Loan No</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-52 bg-slate-50 finance-small-label">Party Name</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Principal Balance</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Paid Interest</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Pending Interest</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Paid Penalty</th>
@@ -366,55 +343,56 @@ const DuesLedger: React.FC = () => {
                   <th className="px-2 py-1.5 text-slate-800 text-left bg-slate-50 finance-small-label">Contact / G1 / G2</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-slate-100 font-mono text-[13px]">
+              <tbody className="bg-white divide-y divide-slate-100 font-mono text-[14px]">
                 {filteredDues.map((due, idx) => (
                   <tr key={due.id} className={`hover:bg-slate-50/40 transition-colors ${due.isNPA ? 'bg-red-50/20' : ''}`}>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-500 font-sans text-center text-[13px] font-semibold">{idx + 1}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 font-bold text-blue-650 text-[13px] whitespace-nowrap">{due.loanId}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-905 font-sans font-bold text-[13px]">{due.customerName}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-700 text-[13px] font-semibold whitespace-nowrap">
-                      {due.currentPrincipal < 0 ? `-₹${Math.abs(Math.round(due.currentPrincipal)).toLocaleString('en-IN')}` : `₹${Math.round(due.currentPrincipal).toLocaleString('en-IN')}`}
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-500 font-sans text-center text-[14px] font-bold">{idx + 1}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 font-black text-blue-650 text-[14px] whitespace-nowrap">{due.loanId}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-905 font-sans font-bold text-[14px]">{due.customerName}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-700 text-[14px] font-bold whitespace-nowrap">
+                      {due.currentPrincipal < 0 ? `-${Math.abs(Math.round(due.currentPrincipal)).toLocaleString('en-IN')}` : `${Math.round(due.currentPrincipal).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-emerald-700 text-[13px] font-semibold whitespace-nowrap">
-                      {due.interestPaid < 0 ? `-₹${Math.abs(Math.round(due.interestPaid)).toLocaleString('en-IN')}` : `₹${Math.round(due.interestPaid).toLocaleString('en-IN')}`}
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-emerald-700 text-[14px] font-bold whitespace-nowrap">
+                      {due.interestPaid < 0 ? `-${Math.abs(Math.round(due.interestPaid)).toLocaleString('en-IN')}` : `${Math.round(due.interestPaid).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-orange-600 text-[13px] font-semibold whitespace-nowrap">
-                      {due.pendingInterest < 0 ? `-₹${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : `₹${Math.round(due.pendingInterest).toLocaleString('en-IN')}`}
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-orange-605 text-[14px] font-bold whitespace-nowrap">
+                      {due.pendingInterest < 0 ? `-${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : `${Math.round(due.pendingInterest).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-emerald-700 text-[13px] font-semibold whitespace-nowrap">
-                      {due.penaltyPaid < 0 ? `-₹${Math.abs(Math.round(due.penaltyPaid)).toLocaleString('en-IN')}` : `₹${Math.round(due.penaltyPaid).toLocaleString('en-IN')}`}
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-emerald-700 text-[14px] font-bold whitespace-nowrap">
+                      {due.penaltyPaid < 0 ? `-${Math.abs(Math.round(due.penaltyPaid)).toLocaleString('en-IN')}` : `${Math.round(due.penaltyPaid).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-red-650 text-[13px] font-semibold whitespace-nowrap">
-                      {due.penalty < 0 ? `-₹${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : `₹${Math.round(due.penalty).toLocaleString('en-IN')}`}
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-red-650 text-[14px] font-bold whitespace-nowrap">
+                      {due.penalty < 0 ? `-${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : `${Math.round(due.penalty).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-[13px] font-bold whitespace-nowrap">
-                      {due.presentDue < 0 ? `-₹${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : `₹${Math.round(due.presentDue).toLocaleString('en-IN')}`}
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-[14px] font-black whitespace-nowrap">
+                      {due.presentDue < 0 ? `-${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : `${Math.round(due.presentDue).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-blue-900 font-sans text-[13px] font-bold whitespace-nowrap">
-                      {due.currentPrincipal + due.pendingInterest + due.penalty < 0 ? `-₹${Math.abs(Math.round(due.currentPrincipal + due.pendingInterest + due.penalty)).toLocaleString('en-IN')}` : `₹${Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}`}
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-blue-900 font-sans text-[14px] font-black whitespace-nowrap">
+                      {due.currentPrincipal + due.pendingInterest + due.penalty < 0 ? `-${Math.abs(Math.round(due.currentPrincipal + due.pendingInterest + due.penalty)).toLocaleString('en-IN')}` : `${Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-[13px] font-semibold">{due.currentDueDate.split('-').reverse().join('/')}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-center text-red-650 text-[13px] font-bold whitespace-nowrap">{due.dueDays}</td>
-                    <td className="px-2 py-1.5 font-sans text-[13px] text-slate-600 space-y-0.5">
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-[14px] font-bold">{due.currentDueDate.split('-').reverse().join('/')}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-center text-red-650 text-[14px] font-black whitespace-nowrap">{due.dueDays}</td>
+                    <td className="px-2 py-1.5 font-sans text-[14px] text-slate-600 space-y-0.5">
                       <div><span className="font-semibold text-slate-900">B:</span> {due.phone || '—'}</div>
                       {due.g1Name && (
-                        <div><span className="font-semibold text-slate-900">G1:</span> {due.g1Name} ({due.g1Phone || '—'})</div>
+                        <div><span className="font-semibold text-slate-900">G1:</span> {due.g1Name} {due.g1Phone ? `(${due.g1Phone})` : ''}</div>
                       )}
                       {due.g2Name && (
-                        <div><span className="font-semibold text-slate-900">G2:</span> {due.g2Name} ({due.g2Phone || '—'})</div>
+                        <div><span className="font-semibold text-slate-900">G2:</span> {due.g2Name} {due.g2Phone ? `(${due.g2Phone})` : ''}</div>
                       )}
                     </td>
                   </tr>
                 ))}
+                
                 {/* Grand Total Row */}
-                <tr className="bg-slate-50 font-sans font-extrabold border-t-2 border-slate-200 text-[13px]">
+                <tr className="bg-slate-50 font-sans font-black border-t-2 border-slate-200 text-[14px]">
                   <td colSpan={4} className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 uppercase">Grand Total:</td>
-                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 font-bold text-[13px] whitespace-nowrap">₹{Math.round(totals.principal).toLocaleString('en-IN')}</td>
-                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-emerald-700 font-bold text-[13px] whitespace-nowrap">₹{Math.round(totals.interestPaid).toLocaleString('en-IN')}</td>
-                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-orange-750 font-bold text-[13px] whitespace-nowrap">₹{Math.round(totals.interest).toLocaleString('en-IN')}</td>
-                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-red-650 font-bold text-[13px] whitespace-nowrap">₹{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
-                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-950 font-black text-[13px] whitespace-nowrap">₹{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
-                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-blue-950 font-black text-[13px] whitespace-nowrap">₹{Math.round(totals.amountToClose).toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.principal).toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-emerald-700 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.interestPaid).toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-orange-750 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.interest).toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-red-655 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-950 font-black text-[14px] whitespace-nowrap">{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-blue-955 font-black text-[14px] whitespace-nowrap">{Math.round(totals.amountToClose).toLocaleString('en-IN')}</td>
                   <td colSpan={3}></td>
                 </tr>
               </tbody>
@@ -482,30 +460,30 @@ const DuesLedger: React.FC = () => {
                 {filteredDues.map((due, idx) => (
                   <tr key={due.id} className="border-b" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                     <td className="p-1 border text-center print-nowrap" style={{ whiteSpace: 'nowrap' }}>{idx + 1}</td>
-                    <td className="p-1 border font-bold text-blue-800 print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.loanId}</td>
+                    <td className="p-1 border font-black text-blue-800 print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.loanId}</td>
                     <td className="p-1 border font-bold print-wrap" style={{ wordBreak: 'normal', overflowWrap: 'normal', whiteSpace: 'normal', minWidth: '90px' }}>
                       {due.customerName}
                     </td>
                     <td className="p-1 border text-right print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.currentPrincipal < 0 ? `-₹${Math.abs(Math.round(due.currentPrincipal)).toLocaleString('en-IN')}` : `₹${Math.round(due.currentPrincipal).toLocaleString('en-IN')}`}
+                      {due.currentPrincipal < 0 ? `-${Math.abs(Math.round(due.currentPrincipal)).toLocaleString('en-IN')}` : `${Math.round(due.currentPrincipal).toLocaleString('en-IN')}`}
                     </td>
                     <td className="p-1 border text-right text-green-700 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.interestPaid < 0 ? `-₹${Math.abs(Math.round(due.interestPaid)).toLocaleString('en-IN')}` : `₹${Math.round(due.interestPaid).toLocaleString('en-IN')}`}
+                      {due.interestPaid < 0 ? `-${Math.abs(Math.round(due.interestPaid)).toLocaleString('en-IN')}` : `${Math.round(due.interestPaid).toLocaleString('en-IN')}`}
                     </td>
                     <td className="p-1 border text-right text-orange-700 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.pendingInterest < 0 ? `-₹${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : `₹${Math.round(due.pendingInterest).toLocaleString('en-IN')}`}
+                      {due.pendingInterest < 0 ? `-${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : `${Math.round(due.pendingInterest).toLocaleString('en-IN')}`}
                     </td>
                     <td className="p-1 border text-right text-green-700 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.penaltyPaid < 0 ? `-₹${Math.abs(Math.round(due.penaltyPaid)).toLocaleString('en-IN')}` : `₹${Math.round(due.penaltyPaid).toLocaleString('en-IN')}`}
+                      {due.penaltyPaid < 0 ? `-${Math.abs(Math.round(due.penaltyPaid)).toLocaleString('en-IN')}` : `${Math.round(due.penaltyPaid).toLocaleString('en-IN')}`}
                     </td>
                     <td className="p-1 border text-right text-red-600 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.penalty < 0 ? `-₹${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : `₹${Math.round(due.penalty).toLocaleString('en-IN')}`}
+                      {due.penalty < 0 ? `-${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : `${Math.round(due.penalty).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="p-1 border text-right font-bold text-red-750 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.presentDue < 0 ? `-₹${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : `₹${Math.round(due.presentDue).toLocaleString('en-IN')}`}
+                    <td className="p-1 border text-right font-black text-red-755 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {due.presentDue < 0 ? `-${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : `${Math.round(due.presentDue).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="p-1 border text-right font-bold text-blue-900 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.currentPrincipal + due.pendingInterest + due.penalty < 0 ? `-₹${Math.abs(Math.round(due.currentPrincipal + due.pendingInterest + due.penalty)).toLocaleString('en-IN')}` : `₹${Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}`}
+                    <td className="p-1 border text-right font-black text-blue-900 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {due.currentPrincipal + due.pendingInterest + due.penalty < 0 ? `-${Math.abs(Math.round(due.currentPrincipal + due.pendingInterest + due.penalty)).toLocaleString('en-IN')}` : `${Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}`}
                     </td>
                     <td className="p-1 border print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.currentDueDate.split('-').reverse().join('/')}</td>
                     <td className="p-1 border text-center text-red-600 font-bold print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.dueDays}</td>
@@ -532,37 +510,37 @@ const DuesLedger: React.FC = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between border-b border-slate-300 pb-1">
                     <span className="font-semibold text-slate-700 uppercase">Outstanding Principal:</span>
-                    <span className="font-bold" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.principal).toLocaleString('en-IN')}</span>
+                    <span className="font-bold" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.principal).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-300 pb-1">
                     <span className="font-semibold text-slate-700 uppercase">Interest Paid:</span>
-                    <span className="font-bold text-green-700" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.interestPaid).toLocaleString('en-IN')}</span>
+                    <span className="font-bold text-green-700" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.interestPaid).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-300 pb-1">
                     <span className="font-semibold text-slate-700 uppercase">Pending Interest:</span>
-                    <span className="font-bold text-orange-700" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.interest).toLocaleString('en-IN')}</span>
+                    <span className="font-bold text-orange-700" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.interest).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-300 pb-1">
                     <span className="font-semibold text-slate-700 uppercase">Paid Penalty:</span>
-                    <span className="font-bold text-green-700" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.penaltyPaid).toLocaleString('en-IN')}</span>
+                    <span className="font-bold text-green-700" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.penaltyPaid).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-300 pb-1">
                     <span className="font-semibold text-slate-700 uppercase">Pending Penalty:</span>
-                    <span className="font-bold text-red-600" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.penalty).toLocaleString('en-IN')}</span>
+                    <span className="font-bold text-red-600" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.penalty).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-300 pb-1">
                     <span className="font-semibold text-slate-700 uppercase">Present Due:</span>
-                    <span className="font-bold text-red-700" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.presentDue).toLocaleString('en-IN')}</span>
+                    <span className="font-bold text-red-700" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.presentDue).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between pt-2 border-t-2 border-slate-900 mt-2 bg-slate-900 text-white p-2 rounded" style={{ fontSize: '13px' }}>
                     <span className="font-black uppercase tracking-wide">Total Amount to Close:</span>
-                    <span className="font-black" style={{ whiteSpace: 'nowrap' }}>₹{Math.round(totals.amountToClose).toLocaleString('en-IN')}</span>
-                  </div>
+                    <span className="font-black" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.amountToClose).toLocaleString('en-IN')}</span>
                 </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
       </FinancePrintPreview>
     </div>
   );

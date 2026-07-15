@@ -102,7 +102,7 @@ const FinanceSidebar: React.FC = () => {
         { icon: AlertCircle, label: 'Dues List', path: '/finance/dues-ledger', key: 'dues_ledger' },
         { icon: Phone, label: 'Payment Follow-up', path: '/finance/payment-followup', key: 'payment_followup' },
         { icon: PhoneCall, label: 'Call History', path: '/finance/call-history', key: 'payment_followup' },
-        { icon: TrendingUp, label: 'Profit & Loss', path: '/finance/pl', key: 'pl' },
+        { icon: TrendingUp, label: 'P&L / Balance Sheet', path: '/finance/pl', key: 'pl' },
         { icon: FileCheck, label: 'Final Statement', path: '/finance/final-statement', key: 'final_statement' },
         { icon: Briefcase, label: 'Business Details', path: '/finance/business-report', key: 'business_report' },
         { icon: BarChart3, label: 'Partner Performance', path: '/finance/partner-performance', key: 'partner_performance' },

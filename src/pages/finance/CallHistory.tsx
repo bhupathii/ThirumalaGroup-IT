@@ -8,7 +8,8 @@ import {
   Printer, 
   Clock, 
   ChevronRight,
-  X
+  X,
+  Phone
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
@@ -34,9 +35,17 @@ const CallHistory: React.FC = () => {
   const [staffFilter, setStaffFilter] = useState<string>('ALL');
   const [dateFilter, setDateFilter] = useState<string>('');
   
-  // Drawer state
+  // Modal state
   const [selectedGroup, setSelectedGroup] = useState<GroupedFollowUp | null>(null);
-  const [showDrawer, setShowDrawer] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+
+  // Detailed metrics state
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [loanMetrics, setLoanMetrics] = useState<any>(null);
+  const [borrowerDetails, setBorrowerDetails] = useState<any>(null);
+  const [g1Details, setG1Details] = useState<any>(null);
+  const [g2Details, setG2Details] = useState<any>(null);
+  const [financials, setFinancials] = useState<any>(null);
 
   // Print state
   const [isPrinting, setIsPrinting] = useState(false);
@@ -48,7 +57,6 @@ const CallHistory: React.FC = () => {
   const fetchHistory = async () => {
     setLoading(true);
     try {
-      // Fetch all follow-ups with loan details using getFollowUps or raw query to ensure we get everything
       const { data, error } = await supabase
         .from('finance_loan_payment_followups')
         .select(`
@@ -73,6 +81,95 @@ const CallHistory: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadAllDetailsForGroup = async (group: GroupedFollowUp) => {
+    setLoadingDetails(true);
+    setLoanMetrics(null);
+    setBorrowerDetails(null);
+    setG1Details(null);
+    setG2Details(null);
+    setFinancials(null);
+    try {
+      // 1. Fetch the loan details including current principal, present due, etc.
+      const { data: loanData, error: loanErr } = await supabase
+        .from('finance_loans')
+        .select('*, customer:finance_customers!customer_id(*), g1:finance_customers!guarantor1_id(*), g2:finance_customers!guarantor2_id(*)')
+        .eq('id', group.db_loan_id)
+        .maybeSingle();
+
+      if (!loanErr && loanData) {
+        setLoanMetrics(loanData);
+        setBorrowerDetails(loanData.customer);
+        setG1Details(loanData.g1);
+        setG2Details(loanData.g2);
+      }
+
+      // 2. Fetch loan transactions and CD entries
+      const { data: txs } = await supabase
+        .from('finance_transactions')
+        .select('*')
+        .eq('loan_id', group.db_loan_id)
+        .order('date', { ascending: true });
+
+      let cdEntries: any[] = [];
+      if (group.loan_number.toUpperCase().startsWith('CD')) {
+        const { data } = await supabase
+          .from('finance_cd_ledger_entries')
+          .select('*')
+          .eq('loan_id', group.db_loan_id)
+          .order('entry_date', { ascending: true });
+        cdEntries = data || [];
+      }
+
+      const collections = (txs || []).filter(t => t.type === 'Collection');
+      const totalPaid = collections.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+      const lastColl = collections[collections.length - 1];
+      const lastPaymentDate = lastColl ? lastColl.date.split('-').reverse().join('/') : '—';
+      const lastReceipt = lastColl ? lastColl.receipt_no || '—' : '—';
+      const operator = lastColl ? lastColl.collected_by || '—' : (txs?.[0]?.collected_by || '—');
+
+      let interestPaid = 0;
+      let penaltyPaid = 0;
+      let renewalPaid = 0;
+
+      cdEntries.forEach(e => {
+        const name = (e.account_name || '').toUpperCase();
+        if (name.includes('INTEREST') || name.includes('COMMISSION')) {
+          interestPaid += Number(e.credit || 0);
+        } else if (name.includes('PENALTY')) {
+          penaltyPaid += Number(e.credit || 0);
+        } else if (name.includes('RENEWAL')) {
+          renewalPaid += Number(e.credit || 0);
+        }
+      });
+
+      setFinancials({
+        interestPaid,
+        penaltyPaid,
+        renewalPaid,
+        totalPaid,
+        lastPaymentDate,
+        lastReceipt,
+        operator
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  const handleOpenModal = (group: GroupedFollowUp) => {
+    setSelectedGroup(group);
+    loadAllDetailsForGroup(group);
+    setShowModal(true);
+  };
+
+  const formatAddress = (details: any) => {
+    if (!details) return '';
+    const parts = [details.address, details.village, details.district].filter(Boolean);
+    return parts.join(', ');
   };
 
   // Group by loan_id (using the string identifier)
@@ -119,7 +216,6 @@ const CallHistory: React.FC = () => {
   // Filtered list
   const filteredGroups = useMemo(() => {
     return groupedData.filter(g => {
-      // 1. Search Query
       const q = searchQuery.toLowerCase().trim();
       if (q) {
         const matchLoan = g.loan_number.toLowerCase().includes(q);
@@ -131,22 +227,18 @@ const CallHistory: React.FC = () => {
         }
       }
 
-      // 2. Loan Type Filter
       if (loanTypeFilter !== 'ALL' && g.loan_category !== loanTypeFilter) {
         return false;
       }
 
-      // 3. Result Filter (Checks latest result or any in history)
       if (resultFilter !== 'ALL' && g.latest_follow_up.result !== resultFilter) {
         return false;
       }
 
-      // 4. Staff Filter
       if (staffFilter !== 'ALL' && g.latest_follow_up.followed_up_by !== staffFilter) {
         return false;
       }
 
-      // 5. Date Filter
       if (dateFilter && g.latest_follow_up.follow_up_date !== dateFilter) {
         return false;
       }
@@ -343,7 +435,7 @@ const CallHistory: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-150 text-xs">
+            <table className="min-w-full divide-y divide-slate-155 text-xs">
               <thead className="bg-slate-50 uppercase font-bold text-[11px] text-slate-700">
                 <tr>
                   <th className="px-4 py-3 text-left">Loan ID</th>
@@ -361,10 +453,7 @@ const CallHistory: React.FC = () => {
                 {filteredGroups.map((g) => (
                   <tr 
                     key={g.loan_id} 
-                    onDoubleClick={() => {
-                      setSelectedGroup(g);
-                      setShowDrawer(true);
-                    }}
+                    onDoubleClick={() => handleOpenModal(g)}
                     className="hover:bg-slate-50/50 cursor-pointer transition-colors"
                   >
                     <td className="px-4 py-2.5 font-mono font-bold text-slate-900">{g.loan_number}</td>
@@ -397,10 +486,7 @@ const CallHistory: React.FC = () => {
                     </td>
                     <td className="px-4 py-2.5 text-right">
                       <button
-                        onClick={() => {
-                          setSelectedGroup(g);
-                          setShowDrawer(true);
-                        }}
+                        onClick={() => handleOpenModal(g)}
                         className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-900 font-bold uppercase"
                       >
                         Timeline
@@ -415,47 +501,187 @@ const CallHistory: React.FC = () => {
         )}
       </div>
 
-      {/* Side Timeline Drawer */}
-      {showDrawer && selectedGroup && (
-        <div className="fixed inset-0 z-50 overflow-hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 overflow-hidden">
-            {/* Backdrop */}
-            <div className="absolute inset-0 bg-slate-900/40 transition-opacity" onClick={() => setShowDrawer(false)}></div>
+      {/* Centered Large Details Modal (Requirement 6 - Replacing the Drawer) */}
+      {showModal && selectedGroup && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-gray-150 max-w-[85vw] w-11/12 md:w-[80vw] lg:w-[75vw] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="bg-[#0b1329] text-white p-4 flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider">Loan Call Logs &amp; Metrics Timeline</h3>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
+                  Account: {selectedGroup.loan_number} — Borrower: {selectedGroup.customer_name}
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowModal(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10">
-              <div className="pointer-events-auto w-screen max-w-md">
-                <div className="flex h-full flex-col overflow-y-scroll bg-white shadow-2xl border-l border-slate-150">
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 scrollbar-thin">
+              {loadingDetails ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-500 font-sans text-xs">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-slate-900 mb-2"></div>
+                  Loading Loan details &amp; metrics...
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                   
-                  {/* Drawer Header */}
-                  <div className="bg-slate-50 px-4 py-6 sm:px-6 border-b border-slate-150">
-                    <div className="flex items-start justify-between">
-                      <h2 className="text-base font-bold text-slate-900 uppercase flex items-center gap-2">
-                        <History className="w-5 h-5 text-indigo-600" />
-                        Call Log Details
-                      </h2>
-                      <div className="ml-3 flex h-7 items-center">
-                        <button
-                          type="button"
-                          className="rounded-md text-slate-400 hover:text-slate-500 focus:outline-none"
-                          onClick={() => setShowDrawer(false)}
-                        >
-                          <X className="h-5 w-5" />
-                        </button>
+                  {/* Left Column: Loan Summary & Financial Summary */}
+                  <div className="lg:col-span-7 space-y-4">
+                    {/* Borrower Identity Header */}
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-start gap-4">
+                      {borrowerDetails?.customer_photo_url ? (
+                        <img 
+                          src={borrowerDetails.customer_photo_url} 
+                          alt="Customer" 
+                          className="w-20 h-20 rounded-lg object-cover border border-slate-200" 
+                        />
+                      ) : (
+                        <div className="w-20 h-20 bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-[10px] font-bold uppercase text-center p-1">
+                          No Photo
+                        </div>
+                      )}
+                      <div className="space-y-1.5 flex-1">
+                        <div>
+                          <span className="text-[9px] text-slate-450 uppercase font-black tracking-wider">Account Number</span>
+                          <div className="text-base font-black text-slate-900">{selectedGroup.loan_number}</div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <span className="text-[9px] text-slate-455 uppercase font-black tracking-wider">Borrower Name</span>
+                            <div className="text-sm font-bold text-slate-900">{selectedGroup.customer_name}</div>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-slate-450 uppercase font-black tracking-wider">Borrower Phone</span>
+                            <div className="text-xs font-bold text-[#0b1329] font-mono tracking-wide">{borrowerDetails?.phone || selectedGroup.customer_phone || '—'}</div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    
-                    <div className="mt-3 bg-white p-3 border rounded-lg text-xs space-y-1 font-bold">
-                      <div><span className="text-slate-400 uppercase">LOAN NUMBER:</span> {selectedGroup.loan_number}</div>
-                      <div><span className="text-slate-400 uppercase">BORROWER:</span> {selectedGroup.customer_name}</div>
-                      <div><span className="text-slate-400 uppercase">PHONE:</span> {selectedGroup.customer_phone}</div>
-                      <div><span className="text-slate-400 uppercase">PARTNER:</span> {selectedGroup.partner_name}</div>
-                    </div>
+
+                    {/* Financial Summary Quick Grid */}
+                    {loanMetrics && (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs font-bold uppercase">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Status</span>
+                          <span className="text-sm font-black text-slate-900">{loanMetrics.status || 'Active'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Loan Date</span>
+                          <span className="text-sm font-black text-slate-900 font-mono">{loanMetrics.loan_date ? loanMetrics.loan_date.split('-').reverse().join('/') : '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Due Date</span>
+                          <span className="text-sm font-black text-slate-900 font-mono">{loanMetrics.current_due_date ? loanMetrics.current_due_date.split('-').reverse().join('/') : '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Principal</span>
+                          <span className="text-sm font-black text-slate-900 font-mono">{Math.round(loanMetrics.amount || 0).toLocaleString('en-IN')}</span>
+                        </div>
+                        
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Present Due</span>
+                          <span className="text-sm font-black text-red-600 font-mono">{Math.round(loanMetrics.present_due || 0).toLocaleString('en-IN')}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Outstanding</span>
+                          <span className="text-sm font-black text-slate-900 font-mono">{Math.round(loanMetrics.principal_balance || loanMetrics.amount || 0).toLocaleString('en-IN')}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Current Interest</span>
+                          <span className="text-sm font-black text-slate-900 font-mono">{Math.round(loanMetrics.pending_interest || 0).toLocaleString('en-IN')}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Current Penalty</span>
+                          <span className="text-sm font-black text-slate-900 font-mono">{Math.round(loanMetrics.penalty || 0).toLocaleString('en-IN')}</span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Interest Paid</span>
+                          <span className="text-sm font-black text-emerald-600 font-mono">{financials ? Math.round(financials.interestPaid).toLocaleString('en-IN') : '...'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Penalty Paid</span>
+                          <span className="text-sm font-black text-emerald-600 font-mono">{financials ? Math.round(financials.penaltyPaid).toLocaleString('en-IN') : '...'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Renewal Paid</span>
+                          <span className="text-sm font-black text-emerald-600 font-mono">{financials ? Math.round(financials.renewalPaid).toLocaleString('en-IN') : '...'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Total Paid</span>
+                          <span className="text-sm font-black text-emerald-600 font-mono">{financials ? Math.round(financials.totalPaid).toLocaleString('en-IN') : '...'}</span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Days Due</span>
+                          <span className="text-sm font-black text-red-600 font-mono">{loanMetrics.due_days || 0} Days</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Last Receipt</span>
+                          <span className="text-sm font-black text-slate-900 font-mono">{financials ? financials.lastReceipt : '...'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Last Payment</span>
+                          <span className="text-sm font-black text-slate-900 font-mono">{financials ? financials.lastPaymentDate : '...'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Operator</span>
+                          <span className="text-sm font-black text-slate-900">{financials ? financials.operator : '...'}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Guarantors */}
+                    {(g1Details || g2Details) && (
+                      <div className="grid grid-cols-2 gap-3.5">
+                        {g1Details && (
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1 text-xs font-bold">
+                            <span className="text-[9px] text-[#0b1329] uppercase font-black tracking-wider border-b pb-0.5 block">Guarantor 1</span>
+                            <div>
+                              <span className="text-[8px] text-slate-400 uppercase">Name:</span> {g1Details.name}
+                            </div>
+                            <div>
+                              <span className="text-[8px] text-slate-400 uppercase">Phone:</span> <span className="font-mono">{g1Details.phone || '—'}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 leading-tight">
+                              <span className="text-[8px] text-slate-400 uppercase block">Address</span>
+                              {formatAddress(g1Details)}
+                            </div>
+                          </div>
+                        )}
+                        {g2Details && (
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1 text-xs font-bold">
+                            <span className="text-[9px] text-[#0b1329] uppercase font-black tracking-wider border-b pb-0.5 block">Guarantor 2</span>
+                            <div>
+                              <span className="text-[8px] text-slate-400 uppercase">Name:</span> {g2Details.name}
+                            </div>
+                            <div>
+                              <span className="text-[8px] text-slate-400 uppercase">Phone:</span> <span className="font-mono">{g2Details.phone || '—'}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 leading-tight">
+                              <span className="text-[8px] text-slate-400 uppercase block">Address</span>
+                              {formatAddress(g2Details)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Drawer Timeline Body */}
-                  <div className="relative flex-1 px-4 py-6 sm:px-6">
-                    <div className="flow-root">
-                      <ul role="list" className="-mb-8">
+                  {/* Right Column: Callback History Timeline */}
+                  <div className="lg:col-span-5 bg-slate-50/50 p-4 rounded-xl border border-slate-150 flex flex-col h-[550px] overflow-hidden">
+                    <h4 className="text-xs font-black uppercase text-indigo-900 border-b pb-2 mb-4 tracking-wider flex items-center gap-1.5 shrink-0">
+                      <Clock className="w-4 h-4" />
+                      Action Timeline ({selectedGroup.all_follow_ups.length} Records)
+                    </h4>
+                    <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin">
+                      <ul role="list" className="-mb-8 pl-1">
                         {selectedGroup.all_follow_ups.map((log, idx) => (
                           <li key={log.id}>
                             <div className="relative pb-8">
@@ -470,29 +696,25 @@ const CallHistory: React.FC = () => {
                                     log.result === 'CALL BACK' ? 'bg-amber-500 text-white' :
                                     'bg-rose-500 text-white'
                                   }`}>
-                                    <Clock className="w-4 h-4" />
+                                    <Phone className="w-3.5 h-3.5" />
                                   </span>
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="text-xs text-slate-800 font-bold uppercase flex justify-between">
-                                    <span>
-                                      {log.result}
-                                    </span>
-                                    <span className="text-slate-400 font-mono">
-                                      {log.follow_up_date}
-                                    </span>
+                                    <span>{log.result}</span>
+                                    <span className="text-slate-400 font-mono">{log.follow_up_date}</span>
                                   </div>
-                                  <div className="mt-1 text-[11px] text-slate-400 uppercase font-black flex items-center gap-2">
+                                  <div className="mt-1 text-[10px] text-slate-400 uppercase font-black flex items-center gap-2">
                                     <span>BY: {log.followed_up_by}</span>
                                     <span>•</span>
                                     <span>TO: {log.contacted_person}</span>
                                   </div>
                                   {log.promised_amount ? (
-                                    <div className="mt-1.5 text-xs text-green-700 font-bold bg-green-50/50 p-1.5 rounded border border-green-200 inline-block">
-                                      PROMISED AMOUNT: ₹{log.promised_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                    <div className="mt-1.5 text-xs text-green-700 font-bold bg-green-50/50 p-1.5 rounded border border-green-200 inline-block font-mono">
+                                      PROMISED AMOUNT: {log.promised_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                     </div>
                                   ) : null}
-                                  <p className="mt-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-150 font-medium leading-relaxed">
+                                  <p className="mt-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-150 font-semibold leading-normal">
                                     {log.narration || 'No remarks recorded.'}
                                   </p>
                                 </div>
@@ -505,8 +727,19 @@ const CallHistory: React.FC = () => {
                   </div>
 
                 </div>
-              </div>
+              )}
             </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 px-4 py-3 sm:px-6 border-t border-slate-150 flex justify-end gap-2 shrink-0">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold uppercase transition-colors"
+              >
+                Close
+              </button>
+            </div>
+
           </div>
         </div>
       )}

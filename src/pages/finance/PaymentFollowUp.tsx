@@ -1,16 +1,15 @@
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
+import { financeCalculationService } from '../../services/financeCalculationService';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabaseFinance, FinanceLoanPaymentFollowup } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { 
   ArrowLeft, 
-  Calendar, 
   User, 
   Printer, 
   Search,
-  MessageSquare,
-  History
+  MessageSquare
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
@@ -89,10 +88,15 @@ const PaymentFollowUp: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const [borrowerDetails, setBorrowerDetails] = useState<any>(null);
   const [g1Details, setG1Details] = useState<any>(null);
   const [g2Details, setG2Details] = useState<any>(null);
   const [loadingContactDetails, setLoadingContactDetails] = useState(false);
+
+  // Modal Dashboard State variables for fresh fetches
+  const [cdLedgerEntries, setCdLedgerEntries] = useState<any[]>([]);
+  const [cdInterestDetails, setCdInterestDetails] = useState<any[]>([]);
+  const [loanDetails, setLoanDetails] = useState<any>(null);
+  const [modalFollowUpHistory, setModalFollowUpHistory] = useState<any[]>([]);
 
   // Form Fields
   const [contactedPerson, setContactedPerson] = useState<'CUSTOMER' | 'GUARANTOR_1' | 'GUARANTOR_2' | 'OTHER'>('CUSTOMER');
@@ -388,26 +392,44 @@ const PaymentFollowUp: React.FC = () => {
     setPromisedAmount('');
     setShowModal(true);
 
-    setBorrowerDetails(null);
     setG1Details(null);
     setG2Details(null);
+    setCdLedgerEntries([]);
+    setCdInterestDetails([]);
+    setLoanDetails(null);
+    setModalFollowUpHistory([]);
     setLoadingContactDetails(true);
 
     try {
       const ids = [loan.customerId, loan.guarantor1Id, loan.guarantor2Id].filter(Boolean) as string[];
-      if (ids.length > 0) {
-        const { data, error } = await supabase
-          .from('finance_customers')
-          .select('*')
-          .in('id', ids);
-        if (!error && data) {
-          const b = data.find(c => c.id === loan.customerId);
-          const g1 = data.find(c => c.id === loan.guarantor1Id);
-          const g2 = data.find(c => c.id === loan.guarantor2Id);
-          setBorrowerDetails(b || null);
-          setG1Details(g1 || null);
-          setG2Details(g2 || null);
-        }
+      
+      const [customersRes, ledgerRes, interestRes, loanRes, followupsRes] = await Promise.all([
+        ids.length > 0 ? supabase.from('finance_customers').select('*').in('id', ids) : Promise.resolve({ data: [], error: null }),
+        supabase.from('finance_cd_ledger_entries').select('*').eq('loan_id', loan.id).order('created_at', { ascending: true }),
+        supabase.from('finance_cd_interest_details').select('*').eq('loan_id', loan.id),
+        supabase.from('finance_loans').select('*').eq('id', loan.id).single(),
+        supabase.from('finance_loan_payment_followups').select('*').eq('loan_id', loan.id).order('followed_up_at', { ascending: false })
+      ]);
+
+      if (customersRes.data) {
+        const data = customersRes.data;
+        const g1 = data.find(c => c.id === loan.guarantor1Id);
+        const g2 = data.find(c => c.id === loan.guarantor2Id);
+        setG1Details(g1 || null);
+        setG2Details(g2 || null);
+      }
+
+      if (ledgerRes.data) {
+        setCdLedgerEntries(ledgerRes.data);
+      }
+      if (interestRes.data) {
+        setCdInterestDetails(interestRes.data);
+      }
+      if (loanRes.data) {
+        setLoanDetails(loanRes.data);
+      }
+      if (followupsRes.data) {
+        setModalFollowUpHistory(followupsRes.data);
       }
     } catch (err) {
       console.error("Error fetching contact details for modal:", err);
@@ -415,6 +437,23 @@ const PaymentFollowUp: React.FC = () => {
       setLoadingContactDetails(false);
     }
   };
+
+  const renewCalculations = useMemo(() => {
+    if (!selectedLoan || selectedLoan.loanType !== 'CD' || !loanDetails || cdLedgerEntries.length === 0) {
+      return null;
+    }
+    try {
+      return financeCalculationService.getCDAccountPosition(
+        loanDetails,
+        cdLedgerEntries,
+        cdInterestDetails,
+        todayDateStr
+      ) as any;
+    } catch (err) {
+      console.warn("CD position calculation failed inside follow-up dashboard modal:", err);
+      return null;
+    }
+  }, [selectedLoan, loanDetails, cdLedgerEntries, cdInterestDetails, todayDateStr]);
 
   // Quick next date calculator helpers
   const handleSetQuickDate = (days: number) => {
@@ -475,13 +514,7 @@ const PaymentFollowUp: React.FC = () => {
     }
   };
 
-  // Get selected loan specific history (sorted)
-  const selectedLoanHistory = useMemo(() => {
-    if (!selectedLoan) return [];
-    return followUps
-      .filter(f => f.loan_id === selectedLoan.id)
-      .sort((a, b) => new Date(b.followed_up_at).getTime() - new Date(a.followed_up_at).getTime());
-  }, [selectedLoan, followUps]);
+
 
   return (
     <div className="flex flex-col gap-2 w-full max-w-[100%] mx-auto px-4 pt-3 pb-4 print:p-0 select-none">
@@ -867,395 +900,414 @@ const PaymentFollowUp: React.FC = () => {
         </div>
       </div>
 
-      {/* RECORD FOLLOW-UP MODAL */}
+            {/* RECORD FOLLOW-UP MODAL */}
       {showModal && selectedLoan && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-gray-150 max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            
-            {/* Modal Header */}
-            <div className="bg-[#0b1329] text-white p-4 flex justify-between items-center">
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-wider">Log Call Action / Follow-up</h3>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
-                  Account: {selectedLoan.loanId} — Borrower: {selectedLoan.customerName}
-                </p>
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center backdrop-blur-sm">
+          <div
+            className="bg-[#f0f2f7] rounded-2xl border border-slate-300 shadow-2xl overflow-hidden flex flex-col"
+            style={{ width: '94vw', maxWidth: '1820px', height: '92vh' }}
+          >
+
+            {/* ══════════════════════════════════════════════════════
+                HEADER BAR  —  dark background, loan ID + close
+            ══════════════════════════════════════════════════════ */}
+            <div className="bg-[#0b1329] text-white px-5 py-2.5 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-4">
+                <span className="text-[13px] font-black uppercase tracking-widest text-slate-400">Follow-up Operator Dashboard</span>
+                <span className="text-white font-black text-[20px] font-mono">{selectedLoan.loanId}</span>
+                <span className={`px-3 py-0.5 rounded-full text-[13px] font-black uppercase ${
+                  (loanDetails?.status || selectedLoan.status) === 'Active'
+                    ? 'bg-green-500 text-white' : 'bg-slate-500 text-white'
+                }`}>{loanDetails?.status || selectedLoan.status}</span>
               </div>
-              <button 
-                onClick={() => setShowModal(false)}
-                className="text-slate-450 hover:text-white transition-colors"
-              >
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10">
                 <XIcon className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-5 flex-1 scrollbar-thin">
-              
+            {/* ══════════════════════════════════════════════════════
+                CONTENT AREA
+            ══════════════════════════════════════════════════════ */}
+            <div className="flex-1 overflow-hidden flex flex-col p-2.5 gap-2">
               {loadingContactDetails ? (
-                <div className="flex flex-col items-center justify-center py-6 text-slate-500 font-sans text-xs">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-900 mb-2"></div>
-                  Loading Contact Details...
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-500">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-slate-900 mb-3"></div>
+                  <span className="text-[15px] font-bold uppercase">Loading Account Details &amp; History...</span>
                 </div>
               ) : (
                 <>
-                  {/* Account + Borrower Details Card */}
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-                    <div className="flex justify-between items-start border-b border-slate-200 pb-2">
-                      <div>
-                        <span className="text-[9px] text-slate-450 uppercase font-black tracking-wider">Account Number</span>
-                        <div className="text-base font-black text-slate-900">{selectedLoan.loanId}</div>
+                  {/* ────────────────────────────────────────────────
+                      ROW 1  :  BORROWER IDENTITY STRIP
+                      Borrower | Loan details | Guarantors  — one row
+                  ──────────────────────────────────────────────── */}
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-2 flex items-center gap-0 shrink-0">
+
+                    {/* Avatar + Name block */}
+                    <div className="flex items-center gap-3 pr-4 shrink-0">
+                      <div className="w-11 h-11 rounded-full bg-[#0b1329] flex items-center justify-center shrink-0 shadow">
+                        <span className="text-white text-[20px] font-black">{selectedLoan.customerName.charAt(0)}</span>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[9px] text-slate-450 uppercase font-black tracking-wider">Borrower Name</span>
-                        <div className="text-base font-black text-slate-900">{selectedLoan.customerName}</div>
+                      <div>
+                        <div className="text-[11px] text-slate-400 font-black uppercase tracking-wider leading-none mb-0.5">Borrower</div>
+                        <div className="text-[26px] font-black text-slate-900 uppercase leading-none">{selectedLoan.customerName}</div>
                       </div>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 pt-1">
+
+                    <div className="w-px self-stretch bg-slate-200 mx-3 shrink-0" />
+
+                    {/* Loan facts — compact 2-col grid */}
+                    <div className="grid grid-rows-2 grid-flow-col gap-x-6 gap-y-0.5 shrink-0">
                       <div>
-                        <span className="text-[9px] text-slate-450 uppercase font-black tracking-wider">Borrower Phone</span>
-                        <div className="text-sm font-bold text-[#0b1329] font-mono tracking-wide">{borrowerDetails?.phone || selectedLoan.phone || '—'}</div>
+                        <div className="text-[11px] text-slate-400 font-black uppercase tracking-wider leading-none">Phone</div>
+                        <div className="text-[18px] font-black text-slate-800 font-mono leading-tight">{selectedLoan.phone || '—'}</div>
                       </div>
                       <div>
-                        <span className="text-[9px] text-slate-450 uppercase font-black tracking-wider">Borrower Address</span>
-                        <div className="text-[11px] font-semibold text-slate-700 leading-normal">{formatAddress(borrowerDetails) || '—'}</div>
+                        <div className="text-[11px] text-slate-400 font-black uppercase tracking-wider leading-none">Loan Date</div>
+                        <div className="text-[15px] font-bold text-slate-700 font-mono leading-tight">
+                          {selectedLoan.loanDate ? selectedLoan.loanDate.split('-').reverse().join('/') : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-slate-400 font-black uppercase tracking-wider leading-none">Due Date</div>
+                        <div className="text-[15px] font-bold text-red-700 font-mono leading-tight">
+                          {selectedLoan.currentDueDate ? selectedLoan.currentDueDate.split('-').reverse().join('/') : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-slate-400 font-black uppercase tracking-wider leading-none">Last Paid</div>
+                        <div className="text-[15px] font-bold text-slate-700 font-mono leading-tight">
+                          {cdLedgerEntries.filter((e: any) => e.entry_date && e.credit > 0).slice(-1)[0]?.entry_date?.split('T')[0].split('-').reverse().join('/') || '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-slate-400 font-black uppercase tracking-wider leading-none">Operator</div>
+                        <div className="text-[15px] font-bold text-slate-700 uppercase leading-tight">{loanDetails?.created_by || '—'}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-slate-400 font-black uppercase tracking-wider leading-none">Interest Rate</div>
+                        <div className="text-[15px] font-bold text-slate-700 leading-tight">{loanDetails?.interest_rate ? `${loanDetails.interest_rate}%` : '—'}</div>
+                      </div>
+                    </div>
+
+                    <div className="w-px self-stretch bg-slate-200 mx-3 shrink-0" />
+
+                    {/* Guarantors — same row */}
+                    <div className="flex items-start gap-5 shrink-0">
+                      {selectedLoan.g1Name ? (
+                        <div>
+                          <div className="text-[11px] text-[#0b1329] font-black uppercase tracking-wider mb-0.5">G1</div>
+                          <div className="text-[16px] font-black text-slate-900 uppercase leading-none">{selectedLoan.g1Name}</div>
+                          <div className="text-[15px] font-bold text-slate-600 font-mono">{selectedLoan.g1Phone || g1Details?.phone || '—'}</div>
+                        </div>
+                      ) : null}
+                      {selectedLoan.g2Name ? (
+                        <div>
+                          <div className="text-[11px] text-[#0b1329] font-black uppercase tracking-wider mb-0.5">G2</div>
+                          <div className="text-[16px] font-black text-slate-900 uppercase leading-none">{selectedLoan.g2Name}</div>
+                          <div className="text-[15px] font-bold text-slate-600 font-mono">{selectedLoan.g2Phone || g2Details?.phone || '—'}</div>
+                        </div>
+                      ) : null}
+                      {!selectedLoan.g1Name && !selectedLoan.g2Name && (
+                        <div className="text-slate-400 italic text-[14px]">No guarantors</div>
+                      )}
+                    </div>
+
+                    {/* Days Due badge — far right */}
+                    <div className="ml-auto shrink-0 bg-red-600 text-white rounded-xl px-5 py-2 text-center shadow">
+                      <div className="text-[32px] font-black font-mono leading-none">{renewCalculations?.daysPastDue ?? selectedLoan.dueDays}</div>
+                      <div className="text-[11px] font-black uppercase tracking-widest mt-0.5">Days Due</div>
+                    </div>
+                  </div>
+
+                  {/* ────────────────────────────────────────────────
+                      ROW 2  :  FINANCIAL CARDS — 6 wide cards (amounts)
+                  ──────────────────────────────────────────────── */}
+                  <div className="grid grid-cols-6 gap-2 shrink-0">
+                    {/* Principal */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
+                      <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Principal</div>
+                      <div className="text-[28px] font-black text-slate-900 font-mono leading-tight mt-0.5">
+                        ₹{Math.round(renewCalculations?.principalBalance ?? selectedLoan.currentPrincipal).toLocaleString('en-IN')}
+                      </div>
+                    </div>
+                    {/* Interest Due */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
+                      <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Interest Due</div>
+                      <div className="text-[28px] font-black text-red-600 font-mono leading-tight mt-0.5">
+                        ₹{Math.round(renewCalculations?.accruedInterest ?? selectedLoan.pendingInterest).toLocaleString('en-IN')}
+                      </div>
+                    </div>
+                    {/* Penalty Due */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
+                      <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Penalty Due</div>
+                      <div className="text-[28px] font-black text-orange-600 font-mono leading-tight mt-0.5">
+                        ₹{Math.round(renewCalculations?.accruedPenalty ?? selectedLoan.penalty).toLocaleString('en-IN')}
+                      </div>
+                    </div>
+                    {/* Today's Due */}
+                    <div className="bg-red-50 rounded-xl border border-red-200 shadow-sm px-3 py-2">
+                      <div className="text-[13px] font-bold text-red-600 uppercase tracking-wide leading-none">Today's Due</div>
+                      <div className="text-[28px] font-black text-red-700 font-mono leading-tight mt-0.5">
+                        ₹{Math.round(renewCalculations?.todayDue ?? selectedLoan.presentDue).toLocaleString('en-IN')}
+                      </div>
+                    </div>
+                    {/* Outstanding */}
+                    <div className="bg-[#0b1329] rounded-xl shadow-sm px-3 py-2">
+                      <div className="text-[13px] font-bold text-slate-400 uppercase tracking-wide leading-none">Outstanding</div>
+                      <div className="text-[28px] font-black text-white font-mono leading-tight mt-0.5">
+                        ₹{Math.round(
+                          (renewCalculations?.principalBalance ?? selectedLoan.currentPrincipal) +
+                          (renewCalculations?.accruedInterest ?? selectedLoan.pendingInterest) +
+                          (renewCalculations?.accruedPenalty ?? selectedLoan.penalty)
+                        ).toLocaleString('en-IN')}
+                      </div>
+                    </div>
+                    {/* Total Paid */}
+                    <div className="bg-emerald-50 rounded-xl border border-emerald-200 shadow-sm px-3 py-2">
+                      <div className="text-[13px] font-bold text-emerald-700 uppercase tracking-wide leading-none">Total Paid</div>
+                      <div className="text-[28px] font-black text-emerald-700 font-mono leading-tight mt-0.5">
+                        ₹{Math.round(renewCalculations?.totalCollected ?? (cdLedgerEntries.filter((e: any) => e.credit > 0).reduce((s: number, e: any) => s + Number(e.credit), 0))).toLocaleString('en-IN')}
                       </div>
                     </div>
                   </div>
 
-                  {/* Guarantor Details */}
-                  {(selectedLoan.g1Name || selectedLoan.g2Name) && (
-                    <div className="grid grid-cols-2 gap-3.5">
-                      {selectedLoan.g1Name && (
-                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
-                          <span className="text-[9px] text-[#0b1329] uppercase font-black tracking-wider border-b pb-0.5 block">Guarantor 1</span>
-                          <div>
-                            <span className="text-[8px] text-slate-400 uppercase font-bold">Name</span>
-                            <div className="text-xs font-bold text-slate-800">{selectedLoan.g1Name}</div>
-                          </div>
-                          <div>
-                            <span className="text-[8px] text-slate-400 uppercase font-bold">Phone</span>
-                            <div className="text-xs font-bold text-slate-800 font-mono">{selectedLoan.g1Phone || g1Details?.phone || '—'}</div>
-                          </div>
-                          <div>
-                            <span className="text-[8px] text-slate-400 uppercase font-bold">Address</span>
-                            <div className="text-[10px] text-slate-600 font-medium leading-tight">{formatAddress(g1Details) || '—'}</div>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {selectedLoan.g2Name && (
-                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
-                          <span className="text-[9px] text-[#0b1329] uppercase font-black tracking-wider border-b pb-0.5 block">Guarantor 2</span>
-                          <div>
-                            <span className="text-[8px] text-slate-400 uppercase font-bold">Name</span>
-                            <div className="text-xs font-bold text-slate-800">{selectedLoan.g2Name}</div>
-                          </div>
-                          <div>
-                            <span className="text-[8px] text-slate-400 uppercase font-bold">Phone</span>
-                            <div className="text-xs font-bold text-slate-800 font-mono">{selectedLoan.g2Phone || g2Details?.phone || '—'}</div>
-                          </div>
-                          <div>
-                            <span className="text-[8px] text-slate-400 uppercase font-bold">Address</span>
-                            <div className="text-[10px] text-slate-600 font-medium leading-tight">{formatAddress(g2Details) || '—'}</div>
-                          </div>
-                        </div>
-                      )}
+                  {/* ────────────────────────────────────────────────
+                      ROW 3  :  RECOVERY METRICS — 6 stat cards
+                  ──────────────────────────────────────────────── */}
+                  <div className="grid grid-cols-6 gap-2 shrink-0">
+                    {/* Interest Paid */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
+                      <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Interest Paid</div>
+                      <div className="text-[22px] font-black text-emerald-700 font-mono leading-tight mt-0.5">
+                        ₹{Math.round(renewCalculations?.interestPaid ?? 0).toLocaleString('en-IN')}
+                      </div>
                     </div>
-                  )}
-                </>
-              )}
+                    {/* Penalty Paid */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
+                      <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Penalty Paid</div>
+                      <div className="text-[22px] font-black text-emerald-700 font-mono leading-tight mt-0.5">
+                        ₹{Math.round(renewCalculations?.penaltyPaid ?? 0).toLocaleString('en-IN')}
+                      </div>
+                    </div>
+                    {/* Renewal Paid */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
+                      <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Renewal Paid</div>
+                      <div className="text-[22px] font-black text-emerald-700 font-mono leading-tight mt-0.5">
+                        ₹{Math.round(cdInterestDetails.reduce((s: number, d: any) => s + Number(d.interest_amount || 0), 0)).toLocaleString('en-IN')}
+                      </div>
+                    </div>
+                    {/* No. of Renewals */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
+                      <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Renewals</div>
+                      <div className="text-[28px] font-black text-slate-800 font-mono leading-tight mt-0.5">
+                        {cdInterestDetails.filter((d: any) => Number(d.renewed_days) > 0).length}
+                      </div>
+                    </div>
+                    {/* Days Due */}
+                    <div className="bg-rose-50 rounded-xl border border-rose-200 shadow-sm px-3 py-2">
+                      <div className="text-[13px] font-bold text-rose-600 uppercase tracking-wide leading-none">Days Due</div>
+                      <div className="text-[28px] font-black text-rose-700 font-mono leading-tight mt-0.5">
+                        {renewCalculations?.daysPastDue ?? selectedLoan.dueDays}
+                      </div>
+                    </div>
+                    {/* Cycle */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
+                      <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Cycle</div>
+                      <div className="text-[28px] font-black text-slate-800 font-mono leading-tight mt-0.5">
+                        #{cdInterestDetails.length + 1}
+                      </div>
+                    </div>
+                  </div>
 
-              {/* Account Quick Metrics Summary */}
-              <div className="grid grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                <div className="flex flex-col">
-                  <span className="text-[9px] text-slate-450 uppercase font-black">Present Dues</span>
-                  <span className="text-sm font-black text-red-655 mt-0.5 font-mono">₹{Math.round(selectedLoan.presentDue).toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] text-slate-450 uppercase font-black">Days Overdue</span>
-                  <span className="text-sm font-black text-red-655 mt-0.5 font-mono">{selectedLoan.dueDays} Days</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] text-slate-450 uppercase font-black">Principal Balance</span>
-                  <span className="text-sm font-black text-slate-900 mt-0.5 font-mono">₹{Math.round(selectedLoan.currentPrincipal).toLocaleString('en-IN')}</span>
-                </div>
-              </div>
+                  {/* ────────────────────────────────────────────────
+                      ROW 4  :  CALLBACK HISTORY (55%)  |  LOG FORM (45%)
+                  ──────────────────────────────────────────────── */}
+                  <div className="flex-1 flex gap-2 min-h-0">
 
-              {/* Call Details / History Tracker per Loan */}
-              <div className="space-y-2">
-                <span className="text-[10px] font-black uppercase text-slate-800 tracking-wider flex items-center gap-1.5 border-b pb-1 mb-2">
-                  <History className="w-3.5 h-3.5 text-indigo-600" />
-                  Callback History for {selectedLoan.loanId}
-                </span>
-                <div className="max-h-[140px] overflow-y-auto space-y-2 pr-1 scrollbar-thin">
-                  {selectedLoanHistory.length === 0 ? (
-                    <p className="text-slate-400 italic text-sm py-2">No previous callbacks logged for this loan.</p>
-                  ) : (
-                    selectedLoanHistory.map((h) => (
-                      <div key={h.id} className="p-2.5 bg-slate-50 rounded-lg border border-slate-155 leading-relaxed text-sm">
-                        <div className="flex justify-between items-center text-[10px] text-slate-500 font-bold mb-1 font-sans">
-                          <span className="flex items-center gap-1">
-                            <User className="w-3 h-3 text-slate-400" />
-                            {h.followed_up_by}
-                          </span>
-                          <span className="flex items-center gap-1 font-mono">
-                            <Calendar className="w-3 h-3 text-slate-400" />
-                            {h.follow_up_date.split('-').reverse().join('/')}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 mb-1.5">
-                          <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 text-[8px] font-black uppercase rounded border border-indigo-200">
-                            {h.contacted_person}
-                          </span>
-                          <span className="px-1.5 py-0.5 bg-green-50 text-green-700 text-[8px] font-black uppercase rounded border border-green-200">
-                            {h.result}
-                          </span>
-                          {h.result === 'CALL BACK' && h.next_follow_up_date && (
-                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[8px] font-black uppercase rounded border border-amber-200 font-mono">
-                              NEXT CALL: {h.next_follow_up_date.split('-').reverse().join('/')}
-                            </span>
-                          )}
-                          {h.result === 'PROMISED TO PAY' && h.next_follow_up_date && (
-                            <>
-                              <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[8px] font-black uppercase rounded border border-blue-200 font-mono">
-                                PROMISE DATE: {h.next_follow_up_date.split('-').reverse().join('/')}
-                              </span>
-                              {h.promised_amount !== null && (
-                                <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[8px] font-black uppercase rounded border border-emerald-200 font-mono">
-                                  PROMISED AMOUNT: ₹{Number(h.promised_amount).toLocaleString('en-IN')}
+                    {/* LEFT — Callback History Timeline  55% */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-2.5 flex flex-col min-h-0" style={{ flex: '55' }}>
+                      <div className="text-[15px] font-black uppercase text-slate-700 tracking-wide pb-1.5 border-b border-slate-100 shrink-0 flex items-baseline gap-2">
+                        Callback History
+                        <span className="text-[13px] text-slate-400 font-bold normal-case">({modalFollowUpHistory.length} records)</span>
+                      </div>
+                      <div className="flex-1 overflow-y-auto space-y-1.5 min-h-0 mt-1.5 pr-0.5">
+                        {modalFollowUpHistory.length === 0 ? (
+                          <div className="text-slate-400 italic text-center py-6 text-[15px]">No callback logs recorded for this account.</div>
+                        ) : (
+                          modalFollowUpHistory.map((h: any) => (
+                            <div key={h.id} className="px-3 py-2 bg-slate-50 rounded-lg border border-slate-150 flex gap-3 items-start">
+                              {/* Date column */}
+                              <div className="shrink-0 text-right">
+                                <div className="text-[14px] font-black font-mono text-slate-600">{h.follow_up_date.split('-').reverse().join('/')}</div>
+                                <div className="text-[13px] font-bold text-slate-400 uppercase">{h.followed_up_by}</div>
+                              </div>
+                              {/* Badges */}
+                              <div className="shrink-0 flex flex-col gap-1 pt-0.5">
+                                <span className={`px-2 py-0.5 rounded text-[12px] font-black uppercase whitespace-nowrap ${
+                                  h.result === 'PROMISED TO PAY' ? 'bg-blue-100 text-blue-700' :
+                                  h.result === 'ANSWERED' ? 'bg-green-100 text-green-700' :
+                                  h.result === 'CALL BACK' ? 'bg-amber-100 text-amber-700' :
+                                  h.result === 'NO ANSWER' ? 'bg-red-100 text-red-700' :
+                                  'bg-slate-100 text-slate-600'
+                                }`}>{h.result}</span>
+                                <span className="text-[12px] font-bold text-slate-400 uppercase">
+                                  {h.contacted_person === 'CUSTOMER' ? 'Borrower' : h.contacted_person === 'GUARANTOR_1' ? 'G1' : h.contacted_person === 'GUARANTOR_2' ? 'G2' : 'Other'}
                                 </span>
-                              )}
-                            </>
-                          )}
-                        </div>
-                        <p className="text-slate-700 font-sans">{h.narration}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Callback Form Form Entry */}
-              <form onSubmit={handleSaveFollowUp} className="space-y-4 pt-2">
-                <div className="grid grid-cols-2 gap-4">
-                  
-                  {/* Contacted Person */}
-                  <div>
-                    <span className="text-[10px] font-black uppercase text-slate-450 block mb-1">Contacted Person</span>
-                    <select
-                      value={contactedPerson}
-                      onChange={(e) => setContactedPerson(e.target.value as any)}
-                      className="w-full text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-xs uppercase"
-                    >
-                      <option value="CUSTOMER">Customer (Borrower) — {selectedLoan.customerName}</option>
-                      {selectedLoan.g1Name && (
-                        <option value="GUARANTOR_1">Guarantor 1 — {selectedLoan.g1Name}</option>
-                      )}
-                      {selectedLoan.g2Name && (
-                        <option value="GUARANTOR_2">Guarantor 2 — {selectedLoan.g2Name}</option>
-                      )}
-                      <option value="OTHER">Other</option>
-                    </select>
-                  </div>
-
-                  {/* Result */}
-                  <div>
-                    <span className="text-[10px] font-black uppercase text-slate-455 block mb-1">Call Result</span>
-                    <select
-                      value={result}
-                      onChange={(e) => setResult(e.target.value as any)}
-                      className="w-full text-slate-900 border border-slate-200 rounded-lg p-2 focus:ring-slate-900 bg-white font-bold text-sm uppercase"
-                    >
-                      <option value="ANSWERED">Answered</option>
-                      <option value="NO ANSWER">No Answer</option>
-                      <option value="BUSY">Busy</option>
-                      <option value="SWITCHED OFF">Switched Off</option>
-                      <option value="WRONG NUMBER">Wrong Number</option>
-                      <option value="CALL BACK">Call Back</option>
-                      <option value="PROMISED TO PAY">Promised to Pay</option>
-                    </select>
-                  </div>
-
-                </div>
-
-                {/* Narration */}
-                <div>
-                  <span className="text-[10px] font-black uppercase text-slate-450 block mb-1">Call Summary / Details</span>
-                  <textarea
-                    rows={3}
-                    placeholder="e.g. Customer promised to pay ₹12,000 on Saturday morning."
-                    value={narration}
-                    onChange={(e) => setNarration(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg p-2.5 text-sm text-slate-900 focus:outline-none focus:border-slate-800 leading-relaxed"
-                  />
-                </div>
-
-                {/* Reschedule Next Call section */}
-                {result === 'CALL BACK' && (
-                  <div className="space-y-3 p-3 bg-amber-50/50 border border-amber-200 rounded-lg">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[10px] font-black uppercase text-amber-800 block">Next Call Date</span>
-                          <span className="text-[9px] text-amber-650 font-extrabold uppercase">Required</span>
-                        </div>
-                        <input
-                          type="date"
-                          value={nextFollowUpDate}
-                          min={getLocalBusinessDateISO()}
-                          onChange={(e) => setNextFollowUpDate(e.target.value)}
-                          className="w-full text-slate-900 border border-amber-300 rounded-lg p-2 focus:ring-amber-600 bg-white font-bold text-sm uppercase h-10"
-                          required
-                        />
-                      </div>
-                      <div className="flex flex-col justify-end">
-                        <span className="text-[9px] text-slate-400 font-bold uppercase mb-1">Quick Reschedule</span>
-                        <div className="flex flex-wrap gap-1.5">
-                          <button 
-                            type="button"
-                            onClick={() => handleSetQuickDate(0)}
-                            className="h-10 px-2 bg-amber-100 hover:bg-amber-200 border border-amber-200 text-amber-800 font-black text-[9px] uppercase rounded transition-colors"
-                          >
-                            Today
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => handleSetQuickDate(1)}
-                            className="h-10 px-2 bg-amber-100 hover:bg-amber-200 border border-amber-200 text-amber-800 font-black text-[9px] uppercase rounded transition-colors"
-                          >
-                            Tomorrow
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => handleSetQuickDate(3)}
-                            className="h-10 px-2 bg-amber-100 hover:bg-amber-200 border border-amber-200 text-amber-800 font-black text-[9px] uppercase rounded transition-colors"
-                          >
-                            +3 Days
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => handleSetQuickDate(5)}
-                            className="h-10 px-2 bg-amber-100 hover:bg-amber-200 border border-amber-200 text-amber-800 font-black text-[9px] uppercase rounded transition-colors"
-                          >
-                            +5 Days
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => handleSetQuickDate(7)}
-                            className="h-10 px-2 bg-amber-100 hover:bg-amber-200 border border-amber-200 text-amber-800 font-black text-[9px] uppercase rounded transition-colors"
-                          >
-                            +7 Days
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Next Follow Up Date & Quick Helpers (Promised to pay only) */}
-                {result === 'PROMISED TO PAY' && (
-                  <div className="space-y-3 p-3 bg-blue-50/50 border border-blue-200 rounded-lg">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[10px] font-black uppercase text-blue-800 block">Promise Date</span>
-                          <span className="text-[9px] text-blue-650 font-extrabold uppercase">Required</span>
-                        </div>
-                        <input
-                          type="date"
-                          value={nextFollowUpDate}
-                          min={getLocalBusinessDateISO()}
-                          onChange={(e) => setNextFollowUpDate(e.target.value)}
-                          className="w-full text-slate-900 border border-blue-300 rounded-lg p-2 focus:ring-blue-600 bg-white font-bold text-sm uppercase h-10"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[10px] font-black uppercase text-blue-800 block">Promised Amount</span>
-                          <span className="text-[9px] text-slate-400 font-bold uppercase">Optional</span>
-                        </div>
-                        <input
-                          type="number"
-                          placeholder="e.g. 10000"
-                          value={promisedAmount}
-                          onChange={(e) => setPromisedAmount(e.target.value)}
-                          className="w-full text-slate-900 border border-blue-300 rounded-lg p-2 focus:ring-blue-600 bg-white font-bold text-sm h-10"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-wrap gap-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <button 
-                          type="button"
-                          onClick={() => handleSetQuickDate(1)}
-                          className="h-10 px-2.5 bg-blue-100 hover:bg-blue-200 border border-blue-200 text-blue-800 font-black text-[9px] uppercase rounded transition-colors"
-                        >
-                          Tomorrow
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => handleSetQuickDate(3)}
-                          className="h-10 px-2.5 bg-blue-100 hover:bg-blue-200 border border-blue-200 text-blue-800 font-black text-[9px] uppercase rounded transition-colors"
-                        >
-                          3 Days
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => handleSetQuickDate(5)}
-                          className="h-10 px-2.5 bg-blue-100 hover:bg-blue-200 border border-blue-200 text-blue-800 font-black text-[9px] uppercase rounded transition-colors"
-                        >
-                          5 Days
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => handleSetQuickDate(7)}
-                          className="h-10 px-2.5 bg-blue-100 hover:bg-blue-200 border border-blue-200 text-blue-800 font-black text-[9px] uppercase rounded transition-colors"
-                        >
-                          7 Days
-                        </button>
-                        {nextFollowUpDate && (
-                          <button 
-                            type="button"
-                            onClick={() => setNextFollowUpDate('')}
-                            className="h-10 px-2.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-black text-[9px] uppercase rounded transition-colors"
-                          >
-                            Clear
-                          </button>
+                                {h.next_follow_up_date && (
+                                  <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
+                                    → {h.next_follow_up_date.split('-').reverse().join('/')}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Narration */}
+                              <p className="text-[15px] text-slate-700 font-semibold leading-snug flex-1">{h.narration}</p>
+                            </div>
+                          ))
                         )}
                       </div>
                     </div>
-                  </div>
-                )}
 
-                {/* Submit Buttons */}
-                <div className="flex justify-end gap-2.5 pt-3 border-t">
-                  <button 
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="px-3 py-1.5 border border-slate-200 text-slate-700 hover:bg-slate-50 text-[12px] font-bold uppercase rounded-lg shadow-sm"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="submit"
-                    disabled={submitting}
-                    className="px-3 py-1.5 bg-[#0b1329] hover:bg-slate-800 text-white text-[12px] font-bold uppercase rounded-lg shadow-sm flex items-center gap-1.5"
-                  >
-                    {submitting ? 'Saving...' : 'Save Callback'}
-                  </button>
-                </div>
+                    {/* RIGHT — Log Callback Form  45% */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-2.5 flex flex-col min-h-0" style={{ flex: '45' }}>
+                      <div className="text-[15px] font-black uppercase text-slate-700 tracking-wide pb-1.5 border-b border-slate-100 shrink-0">Log Callback</div>
+                      <form onSubmit={handleSaveFollowUp} className="flex flex-col gap-2 flex-1 min-h-0 mt-1.5">
+                        {/* Contacted + Result */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[13px] font-black uppercase text-slate-500 block mb-1">Contacted</label>
+                            <select
+                              value={contactedPerson}
+                              onChange={(e) => setContactedPerson(e.target.value as any)}
+                              className="w-full text-slate-900 border border-slate-200 rounded-lg px-3 py-2 bg-white font-bold text-[15px] uppercase cursor-pointer focus:outline-none focus:border-slate-700"
+                            >
+                              <option value="CUSTOMER">C — Borrower</option>
+                              {selectedLoan.g1Name && <option value="GUARANTOR_1">G1 — Guarantor 1</option>}
+                              {selectedLoan.g2Name && <option value="GUARANTOR_2">G2 — Guarantor 2</option>}
+                              <option value="OTHER">Other</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[13px] font-black uppercase text-slate-500 block mb-1">Result</label>
+                            <select
+                              value={result}
+                              onChange={(e) => setResult(e.target.value as any)}
+                              className="w-full text-slate-900 border border-slate-200 rounded-lg px-3 py-2 bg-white font-bold text-[15px] uppercase cursor-pointer focus:outline-none focus:border-slate-700"
+                            >
+                              <option value="ANSWERED">Answered</option>
+                              <option value="NO ANSWER">No Answer</option>
+                              <option value="BUSY">Busy</option>
+                              <option value="SWITCHED OFF">Switched Off</option>
+                              <option value="WRONG NUMBER">Wrong Number</option>
+                              <option value="CALL BACK">Call Back</option>
+                              <option value="PROMISED TO PAY">Promised to Pay</option>
+                            </select>
+                          </div>
+                        </div>
 
-              </form>
+                        {/* Remarks — grows to fill available space */}
+                        <div className="flex-1 flex flex-col min-h-0">
+                          <label className="text-[13px] font-black uppercase text-slate-500 block mb-1">Remarks</label>
+                          <textarea
+                            placeholder="ENTER CALL REMARKS..."
+                            value={narration}
+                            onChange={(e) => setNarration(e.target.value)}
+                            className="flex-1 min-h-[60px] w-full border border-slate-200 rounded-lg px-3 py-2 text-[15px] text-slate-900 focus:outline-none focus:border-slate-700 leading-relaxed font-semibold uppercase placeholder-slate-400 resize-none"
+                            required
+                          />
+                        </div>
 
-            </div>
+                        {/* Call Back extra fields */}
+                        {result === 'CALL BACK' && (
+                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 shrink-0">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[12px] font-black uppercase text-amber-800 block mb-1">Next Call Date</label>
+                                <input
+                                  type="date"
+                                  value={nextFollowUpDate}
+                                  min={getLocalBusinessDateISO()}
+                                  onChange={(e) => setNextFollowUpDate(e.target.value)}
+                                  className="w-full border border-amber-300 rounded-lg px-2.5 py-1.5 text-[14px] font-bold bg-white text-slate-900"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[12px] font-black uppercase text-amber-800 block mb-1">Quick Schedule</label>
+                                <div className="flex gap-1.5">
+                                  <button type="button" onClick={() => handleSetQuickDate(1)} className="flex-1 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 font-black text-[12px] uppercase rounded border border-amber-300">Tmrw</button>
+                                  <button type="button" onClick={() => handleSetQuickDate(3)} className="flex-1 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 font-black text-[12px] uppercase rounded border border-amber-300">+3D</button>
+                                  <button type="button" onClick={() => handleSetQuickDate(7)} className="flex-1 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 font-black text-[12px] uppercase rounded border border-amber-300">+7D</button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Promised to Pay extra fields */}
+                        {result === 'PROMISED TO PAY' && (
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 shrink-0">
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-[12px] font-black uppercase text-blue-800 block mb-1">Promise Date</label>
+                                <input
+                                  type="date"
+                                  value={nextFollowUpDate}
+                                  min={getLocalBusinessDateISO()}
+                                  onChange={(e) => setNextFollowUpDate(e.target.value)}
+                                  className="w-full border border-blue-300 rounded-lg px-2.5 py-1.5 text-[14px] font-bold bg-white text-slate-900"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[12px] font-black uppercase text-blue-800 block mb-1">Amount (₹)</label>
+                                <input
+                                  type="number"
+                                  placeholder="e.g. 5000"
+                                  value={promisedAmount}
+                                  onChange={(e) => setPromisedAmount(e.target.value)}
+                                  className="w-full border border-blue-300 rounded-lg px-2.5 py-1.5 text-[14px] font-bold bg-white text-slate-900"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[12px] font-black uppercase text-blue-800 block mb-1">Quick Date</label>
+                                <div className="flex gap-1">
+                                  <button type="button" onClick={() => handleSetQuickDate(1)} className="flex-1 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-800 font-black text-[11px] uppercase rounded border border-blue-300">Tmrw</button>
+                                  <button type="button" onClick={() => handleSetQuickDate(3)} className="flex-1 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-800 font-black text-[11px] uppercase rounded border border-blue-300">+3D</button>
+                                  <button type="button" onClick={() => handleSetQuickDate(7)} className="flex-1 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-800 font-black text-[11px] uppercase rounded border border-blue-300">+7D</button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Action buttons — pinned at bottom */}
+                        <div className="flex gap-3 justify-end shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setShowModal(false)}
+                            className="px-5 py-2.5 border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-[15px] font-bold uppercase rounded-lg"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={submitting}
+                            className="px-8 py-2.5 bg-[#0b1329] hover:bg-slate-800 text-white text-[15px] font-black uppercase rounded-lg disabled:opacity-50 transition-colors"
+                          >
+                            {submitting ? 'Saving...' : 'Save Callback'}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+
+                  </div>{/* end row 4 */}
+                </>
+              )}
+            </div>{/* end content */}
 
           </div>
         </div>
-      )}
-
-      {/* PRINT PREVIEW LANDSCAPE */}
+      )}{/* PRINT PREVIEW LANDSCAPE */}
       <FinancePrintPreview
         isOpen={showPrintModal}
         onClose={() => setShowPrintModal(false)}

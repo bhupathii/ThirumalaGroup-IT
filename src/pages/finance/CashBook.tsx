@@ -22,6 +22,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 
+
 const CashBook: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -58,11 +59,11 @@ const CashBook: React.FC = () => {
   // Modal / Dialog Popups States
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [newAccountName, setNewAccountName] = useState('');
-  const [newAccountClassification, setNewAccountClassification] = useState<'BALANCE_SHEET' | 'PROFIT_AND_LOSS'>('PROFIT_AND_LOSS');
+  const [newAccountCategory, setNewAccountCategory] = useState<string>('');
   const [showDirectoryModal, setShowDirectoryModal] = useState(false);
   const [editingAccId, setEditingAccId] = useState<string | null>(null);
   const [editAccountName, setEditAccountName] = useState('');
-  const [editAccountClassification, setEditAccountClassification] = useState<'BALANCE_SHEET' | 'PROFIT_AND_LOSS'>('PROFIT_AND_LOSS');
+  const [editAccountCategory, setEditAccountCategory] = useState('');
   const [directorySearchQuery, setDirectorySearchQuery] = useState('');
   const [savingAccount, setSavingAccount] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -283,19 +284,26 @@ const CashBook: React.FC = () => {
       return;
     }
 
+    if (!newAccountCategory) {
+      toast.error('Please select a Category.');
+      return;
+    }
+
     setSavingAccount(true);
     try {
       const payload = {
         account_name: newAccountName.trim(),
-        account_number: null, // Removed account number input field
-        report_classification: newAccountClassification
+        account_number: null,
+        report_classification: newAccountCategory as 'BALANCE_SHEET' | 'PROFIT_AND_LOSS',
+        report_section: newAccountCategory as 'BALANCE_SHEET' | 'PROFIT_AND_LOSS',
+        category: newAccountCategory
       };
 
       const result = await supabaseFinance.createCashbookAccount(payload);
       if (result) {
         toast.success(`Account "${newAccountName.trim()}" created`);
         setNewAccountName('');
-        setNewAccountClassification('PROFIT_AND_LOSS');
+        setNewAccountCategory('');
         setShowAccountModal(false);
 
         // Fetch updated accounts list
@@ -321,12 +329,19 @@ const CashBook: React.FC = () => {
     e.preventDefault();
     if (!editingAccId) return;
 
+    if (!editAccountCategory) {
+      toast.error('Please select a Category.');
+      return;
+    }
+
     setSavingAccount(true);
     try {
       const payload = {
         account_name: editAccountName.trim(),
-        account_number: null, // Removed account number input field
-        report_classification: editAccountClassification
+        account_number: null,
+        report_classification: editAccountCategory as 'BALANCE_SHEET' | 'PROFIT_AND_LOSS',
+        report_section: editAccountCategory as 'BALANCE_SHEET' | 'PROFIT_AND_LOSS',
+        category: editAccountCategory
       };
 
       const result = await supabaseFinance.updateCashbookAccount(editingAccId, payload);
@@ -334,6 +349,7 @@ const CashBook: React.FC = () => {
         toast.success(`Account "${editAccountName.trim()}" updated`);
         setEditingAccId(null);
         setEditAccountName('');
+        setEditAccountCategory('');
         // Refresh accounts
         const fetchedAccounts = await supabaseFinance.getCashbookAccounts();
         setAccounts(fetchedAccounts);
@@ -441,7 +457,7 @@ const CashBook: React.FC = () => {
 
   return (
     <>
-    <div className={`space-y-6 p-6 max-w-7xl mx-auto select-none ${showPrintModal ? 'print:hidden' : ''}`}>
+    <div className={`space-y-6 p-6 w-full max-w-[100%] mx-auto select-none ${showPrintModal ? 'print:hidden' : ''}`}>
       
       {/* Top Header Actions Bar */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5">
@@ -451,7 +467,7 @@ const CashBook: React.FC = () => {
             <span>/</span>
             <span className="text-slate-600">DAY BOOK ENTRY</span>
           </div>
-          <h1 className="mt-1 finance-h1">DAY BOOK ENTRY</h1>
+          <h1 className="mt-1 text-[22px] font-black text-[#0b1329] tracking-tight uppercase">DAY BOOK ENTRY</h1>
           <p className="mt-1.5 finance-small-label uppercase">
             DAY-BOOK ENTRIES · CREDIT / DEBIT POSTED TO GENERAL LEDGER
           </p>
@@ -475,47 +491,45 @@ const CashBook: React.FC = () => {
       </div>
 
       {/* Main Grid: Form on Left (5 cols) & Content on Right (7 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
         
         {/* Left Column: Form */}
         <div className="lg:col-span-5 space-y-6">
           <Card
             title={
-              <span className="text-slate-900 finance-header-time uppercase">
+              <span className="text-slate-900 text-[18px] font-black uppercase">
                 {editId ? 'EDIT ENTRY' : 'NEW ENTRY'}
               </span>
             }
             subtitle={
-              <span className="text-slate-400 finance-small-label uppercase">
+              <span className="text-slate-400 text-[11px] font-bold uppercase">
                 Every field except account number is required
               </span>
             }
             className="shadow-sm border-slate-150 rounded-xl"
           >
-            <form onSubmit={handleSaveEntry} className="space-y-4">
-                        {/* Date Input */}
+            <form onSubmit={handleSaveEntry} className="space-y-5">
+              {/* Date Input */}
               <div className="w-full">
                 <Input
                   label="DATE"
                   type="date"
                   ref={entryDateRef} error={errors.entryDate} value={entryDate} onChange={(val) => { setEntryDate(val); setErrors(p => ({...p, entryDate: false})) }}
                   required
-                  
                 />
               </div>
 
               {/* Head of Account Select Dropdown */}
               <div>
-                <label className="finance-caption uppercase">
+                <label className="peek-label uppercase font-bold text-[15px] block mb-1.5">
                   HEAD OF A/C <span className="text-red-500 ml-0.5">*</span>
                 </label>
                 <select
                   value={headOfAccount}
                   onChange={(e) => { handleAccountChange(e.target.value); setErrors(p => ({...p, headOfAccount: false})) }}
                   ref={headOfAccountRef}
-                  className={`w-full bg-white border rounded-lg p-2 text-slate-855 focus:outline-none h-10 shadow-sm finance-header-time ${errors.headOfAccount ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-955'}`}
+                  className={`w-full bg-white border rounded-lg px-3 text-slate-850 focus:outline-none h-[44px] shadow-sm font-bold text-[16px] uppercase ${errors.headOfAccount ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-950'}`}
                   required
-
                 >
                   <option value="">SELECT...</option>
                   {accounts.map(acc => (
@@ -526,112 +540,108 @@ const CashBook: React.FC = () => {
                 </select>
                 
                 {/* Account Triggers */}
-                <div className="flex gap-4 mt-2">
+                <div className="grid grid-cols-2 gap-3 mt-3">
                   <button
                     type="button"
                     onClick={() => setShowAccountModal(true)}
-                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors finance-small-label uppercase"
+                    className="flex items-center justify-center gap-1.5 px-3 h-[40px] bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg border border-blue-200 text-xs font-bold uppercase transition-colors"
                   >
-                    <Plus className="w-3 h-3" />
+                    <Plus className="w-3.5 h-3.5" />
                     + New Account
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowDirectoryModal(true)}
-                    className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-800 transition-colors finance-small-label uppercase font-bold"
+                    className="flex items-center justify-center gap-1.5 px-3 h-[40px] bg-slate-50 text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold uppercase transition-colors"
                   >
-                    Manage Head of Accounts
+                    Manage Heads
                   </button>
                 </div>
               </div>
 
               {/* Particulars */}
               <div>
-                <label className="finance-caption uppercase">
+                <label className="peek-label uppercase font-bold text-[15px] block mb-1.5">
                   PARTICULARS <span className="text-red-500 ml-0.5">*</span>
                 </label>
                 <textarea
                   value={particulars}
                   onChange={(e) => { setParticulars(e.target.value); setErrors(p => ({...p, particulars: false})) }}
                   ref={particularsRef as any}
-                  className={`w-full bg-white border rounded-lg p-2 text-slate-855 focus:outline-none h-24 shadow-sm finance-header-time ${errors.particulars ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-950'}`}
-                  placeholder="Enter details of the transaction"
+                  className={`w-full bg-white border rounded-lg p-3 text-slate-850 focus:outline-none h-[88px] shadow-sm font-bold text-[16px] uppercase placeholder-slate-400 ${errors.particulars ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-950'}`}
+                  placeholder="ENTER TRANSACTION DETAILS..."
                   required
-
                 />
               </div>
 
               {/* Credit & Debit Mutual Exclusion */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <Input
-                  label="CREDIT (₹)"
+                  label="CREDIT"
                   type="number"
                   ref={creditRef} error={errors.credit} value={credit} onChange={(val) => { handleCreditChange(val); setErrors(p => ({...p, credit: false})) }}
                   placeholder="0"
                   disabled={debit !== ''}
-                  
                 />
                 <Input
-                  label="DEBIT (₹)"
+                  label="DEBIT"
                   type="number"
                   ref={debitRef} error={errors.debit} value={debit} onChange={(val) => { handleDebitChange(val); setErrors(p => ({...p, debit: false})) }}
                   placeholder="0"
                   disabled={credit !== ''}
-                  
                 />
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 finance-button uppercase"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  {saving ? 'SAVING...' : editId ? 'UPDATE ENTRY' : 'SAVE ENTRY'}
-                </button>
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => handleReset(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
+                  className="inline-flex items-center justify-center gap-1.5 px-4 h-11 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm font-bold text-xs uppercase"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   {editId ? 'CANCEL' : 'RESET'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center justify-center gap-1.5 px-5 h-11 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 font-bold text-xs uppercase"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {saving ? 'SAVING...' : editId ? 'UPDATE ENTRY' : 'SAVE ENTRY'}
                 </button>
               </div>
 
             </form>
           </Card>
         </div>
-
         {/* Right Column: Summaries + Recent Entries list */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="lg:col-span-7 space-y-6 flex flex-col">
           
           {/* Summaries Row */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             
             {/* Total Credits */}
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-emerald-150">
-              <span className="text-emerald-600 block finance-small-label uppercase">TOTAL CREDITS</span>
-              <span className="text-emerald-700 block mt-1 finance-h1">
-                ₹{summaries.totalCredits.toLocaleString('en-IN')}
+            <div className="bg-white rounded-xl py-2.5 px-4 shadow-sm border border-emerald-150 flex flex-col justify-center">
+              <span className="text-emerald-600 text-[10px] font-black uppercase tracking-wider">Total Credits</span>
+              <span className="text-emerald-700 text-[28px] font-black font-mono mt-0.5 tracking-tight leading-none">
+                {summaries.totalCredits.toLocaleString('en-IN')}
               </span>
             </div>
 
             {/* Total Debits */}
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-rose-150">
-              <span className="text-rose-600 block finance-small-label uppercase">TOTAL DEBITS</span>
-              <span className="text-rose-700 block mt-1 finance-h1">
-                ₹{summaries.totalDebits.toLocaleString('en-IN')}
+            <div className="bg-white rounded-xl py-2.5 px-4 shadow-sm border border-rose-150 flex flex-col justify-center">
+              <span className="text-rose-600 text-[10px] font-black uppercase tracking-wider">Total Debits</span>
+              <span className="text-rose-700 text-[28px] font-black font-mono mt-0.5 tracking-tight leading-none">
+                {summaries.totalDebits.toLocaleString('en-IN')}
               </span>
             </div>
 
             {/* Net Balance */}
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-250">
-              <span className="text-slate-500 block finance-small-label uppercase">NET</span>
-              <span className={`block mt-1 ${summaries.net >= 0 ? 'text-slate-900' : 'text-rose-700'} finance-h1`}>
-                ₹{summaries.net.toLocaleString('en-IN')}
+            <div className="bg-white rounded-xl py-2.5 px-4 shadow-sm border border-slate-250 flex flex-col justify-center">
+              <span className="text-slate-500 text-[10px] font-black uppercase tracking-wider">Net Balance</span>
+              <span className={`text-[28px] font-black font-mono mt-0.5 tracking-tight leading-none ${summaries.net >= 0 ? 'text-slate-900' : 'text-rose-700'}`}>
+                {summaries.net.toLocaleString('en-IN')}
               </span>
             </div>
 
@@ -640,47 +650,48 @@ const CashBook: React.FC = () => {
           {/* Recent Entries Card */}
           <Card
             title={
-              <div className="flex items-center justify-between w-full">
-                <span className="text-slate-900 finance-header-time uppercase">
-                  RECENT ENTRIES
-                </span>
+              <div className="flex flex-row items-center justify-between w-full flex-wrap gap-2">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-slate-900 text-sm font-black uppercase">
+                    RECENT ENTRIES
+                  </span>
+                  <span className="text-slate-400 text-[10px] font-bold uppercase whitespace-nowrap">
+                    ({filteredEntries.length} of {entries.length} records)
+                  </span>
+                </div>
                 
                 {/* Sort Toggle */}
                 <select
                   value={sortOrder}
                   onChange={(e) => setSortOrder(e.target.value as 'desc' | 'asc')}
-                  className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-700 focus:outline-none shadow-sm cursor-pointer finance-small-label uppercase"
+                  className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-700 focus:outline-none shadow-sm cursor-pointer font-bold text-[10px] uppercase"
                 >
                   <option value="desc">NEWEST FIRST</option>
                   <option value="asc">OLDEST FIRST</option>
                 </select>
               </div>
             }
-            subtitle={
-              <span className="text-slate-400 finance-small-label uppercase">
-                Showing {filteredEntries.length} of {entries.length} records
-              </span>
-            }
-            className="shadow-sm border-slate-150 rounded-xl"
+            subtitle={null}
+            className="shadow-sm border-slate-150 rounded-xl flex-1 flex flex-col"
           >
-            <div className="space-y-4">
+            <div className="space-y-4 flex flex-col min-h-[470px]">
               
               {/* Search & Status Filter Box */}
-              <div className="flex gap-4">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <div className="flex gap-3 w-full h-[44px] shrink-0">
+                <div className="relative w-[70%] h-full">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-[14px]" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Filter by head, particulars, date, account..."
-                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-slate-850 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-950 shadow-sm finance-header-time"
+                    placeholder="FILTER BY HEAD, PARTICULARS, DATE, ACCOUNT..."
+                    className="w-full h-full pl-9 pr-4 border border-slate-200 rounded-lg text-slate-855 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900 shadow-sm font-bold text-xs uppercase"
                   />
                 </div>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as any)}
-                  className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-950 shadow-sm finance-header-time"
+                  className="w-[30%] h-full bg-white border border-slate-200 rounded-lg px-3 text-slate-755 focus:outline-none focus:ring-1 focus:ring-slate-900 shadow-sm font-bold text-xs uppercase cursor-pointer"
                 >
                   <option value="ALL">ALL STATUSES</option>
                   <option value="PENDING">PENDING APPROVAL</option>
@@ -690,19 +701,19 @@ const CashBook: React.FC = () => {
 
               {/* Entries Table */}
               {loading ? (
-                <div className="flex flex-col items-center justify-center py-16 space-y-3">
+                <div className="flex-1 flex flex-col items-center justify-center py-16 space-y-3">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-slate-900"></div>
-                  <span className="text-slate-400 finance-header-time uppercase">Loading Day Book entries...</span>
+                  <span className="text-slate-400 font-bold text-xs uppercase">Loading Day Book entries...</span>
                 </div>
               ) : filteredEntries.length === 0 ? (
-                <div className="text-center py-16 border border-dashed border-slate-200 rounded-xl space-y-4 bg-slate-50/50">
-                  <div className="p-3 bg-white rounded-full border border-slate-100 max-w-fit mx-auto shadow-sm">
-                    <Info className="w-8 h-8 text-slate-300" />
+                <div className="flex-1 flex flex-col items-center justify-center py-20 border border-dashed border-slate-200 rounded-xl space-y-4 bg-slate-50/50">
+                  <div className="p-4 bg-white rounded-full border border-slate-100 max-w-fit shadow-md text-slate-400">
+                    <Info className="w-10 h-10" />
                   </div>
-                  <div>
-                    <h3 className="text-slate-700 finance-header-time uppercase">NO ENTRIES</h3>
-                    <p className="finance-small-label uppercase">
-                      Post an entry from the form on the left.
+                  <div className="text-center space-y-1">
+                    <h3 className="text-slate-900 text-sm font-black uppercase tracking-wider">No Transaction Entries</h3>
+                    <p className="text-slate-500 text-[11px] font-bold uppercase tracking-wide">
+                      Post a credit or debit entry from the form on the left to start.
                     </p>
                   </div>
                 </div>
@@ -738,10 +749,10 @@ const CashBook: React.FC = () => {
                             {e.particulars}
                           </td>
                           <td className="px-3 py-3 text-right text-emerald-600 whitespace-nowrap finance-input">
-                            {e.credit > 0 ? `₹${e.credit.toLocaleString('en-IN')}` : '—'}
+                            {e.credit > 0 ? `${e.credit.toLocaleString('en-IN')}` : '—'}
                           </td>
                           <td className="px-3 py-3 text-right text-rose-600 whitespace-nowrap finance-input">
-                            {e.debit > 0 ? `₹${e.debit.toLocaleString('en-IN')}` : '—'}
+                            {e.debit > 0 ? `${e.debit.toLocaleString('en-IN')}` : '—'}
                           </td>
                           <td className="px-3 py-3 text-slate-500 finance-input uppercase">
                             {e.created_by || 'Staff'}
@@ -818,16 +829,17 @@ const CashBook: React.FC = () => {
                 required
               />
 
-              <div className="hidden">
-                <label className="finance-caption uppercase block mb-1">REPORT CLASSIFICATION *</label>
+              <div>
+                <label className="finance-caption uppercase block mb-1">CATEGORY *</label>
                 <select
-                  value={newAccountClassification}
-                  onChange={(e) => setNewAccountClassification(e.target.value as any)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
+                  value={newAccountCategory}
+                  onChange={(e) => setNewAccountCategory(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-850 focus:outline-none h-10 shadow-sm finance-header-time font-bold"
                   required
                 >
-                  <option value="PROFIT_AND_LOSS">PROFIT AND LOSS</option>
+                  <option value="">SELECT CATEGORY</option>
                   <option value="BALANCE_SHEET">BALANCE SHEET</option>
+                  <option value="PROFIT_AND_LOSS">PROFIT &amp; LOSS</option>
                 </select>
               </div>
 
@@ -883,8 +895,8 @@ const CashBook: React.FC = () => {
               {/* Edit Form (renders if editingAccId is set) */}
               {editingAccId && (
                 <form onSubmit={handleEditAccountSubmit} className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-900 uppercase">Edit Account Classification Details</h4>
-                  <div className="grid grid-cols-1 gap-3">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase">Edit Account</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <Input
                       label="ACCOUNT NAME"
                       value={editAccountName}
@@ -893,15 +905,18 @@ const CashBook: React.FC = () => {
                       uppercase
                     />
                     <div>
-                      <label className="finance-caption uppercase block mb-1">REPORT CLASSIFICATION *</label>
+                      <label className="finance-caption uppercase block mb-1">CATEGORY *</label>
                       <select
-                        value={editAccountClassification}
-                        onChange={(e) => setEditAccountClassification(e.target.value as any)}
+                        value={editAccountCategory}
+                        onChange={(e) => {
+                          setEditAccountCategory(e.target.value);
+                        }}
                         className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time font-bold"
                         required
                       >
-                        <option value="PROFIT_AND_LOSS">PROFIT AND LOSS</option>
+                        <option value="">SELECT CATEGORY</option>
                         <option value="BALANCE_SHEET">BALANCE SHEET</option>
+                        <option value="PROFIT_AND_LOSS">PROFIT &amp; LOSS</option>
                       </select>
                     </div>
                   </div>
@@ -941,28 +956,35 @@ const CashBook: React.FC = () => {
                         <tr key={acc.id} className="hover:bg-slate-50/50">
                           <td className="px-4 py-2.5 font-bold uppercase">{acc.account_name}</td>
                           <td className="px-4 py-2.5">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                              {acc.report_classification === 'BALANCE_SHEET' ? 'BALANCE SHEET' : 'PROFIT & LOSS'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 text-right flex gap-3 justify-end items-center">
-                            <button
-                              onClick={() => {
-                                setEditingAccId(acc.id);
-                                setEditAccountName(acc.account_name);
-                                setEditAccountClassification(acc.report_classification || 'PROFIT_AND_LOSS');
-                              }}
-                              className="text-blue-600 hover:text-blue-800 font-bold uppercase"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteAccount(acc)}
-                              className="text-red-600 hover:text-red-800 font-bold uppercase"
-                            >
-                              Delete
-                            </button>
-                          </td>
+                             <div className="flex flex-col gap-1">
+                               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 w-fit">
+                                 {acc.report_classification === 'BALANCE_SHEET' ? 'BALANCE SHEET' : 'PROFIT & LOSS'}
+                               </span>
+                               {acc.category && (
+                                 <span className="text-[10px] font-semibold text-slate-500 italic">
+                                   Category: {acc.category}
+                                 </span>
+                               )}
+                             </div>
+                           </td>
+                           <td className="px-4 py-2.5 text-right flex gap-3 justify-end items-center">
+                             <button
+                               onClick={() => {
+                                 setEditingAccId(acc.id);
+                                 setEditAccountName(acc.account_name);
+                                 setEditAccountCategory(acc.report_classification || 'PROFIT_AND_LOSS');
+                               }}
+                               className="text-blue-600 hover:text-blue-800 font-bold uppercase"
+                             >
+                               Edit
+                             </button>
+                             <button
+                               onClick={() => handleDeleteAccount(acc)}
+                               className="text-red-600 hover:text-red-800 font-bold uppercase"
+                             >
+                               Delete
+                             </button>
+                           </td>
                         </tr>
                       ))}
                   </tbody>
@@ -1040,10 +1062,10 @@ const CashBook: React.FC = () => {
                       {e.particulars.toUpperCase()}
                     </td>
                     <td className="border border-slate-900 px-2 py-2 text-right finance-input">
-                      {e.credit > 0 ? `₹${e.credit.toLocaleString('en-IN')}` : '—'}
+                      {e.credit > 0 ? `${e.credit.toLocaleString('en-IN')}` : '—'}
                     </td>
                     <td className="border border-slate-900 px-2 py-2 text-right finance-input">
-                      {e.debit > 0 ? `₹${e.debit.toLocaleString('en-IN')}` : '—'}
+                      {e.debit > 0 ? `${e.debit.toLocaleString('en-IN')}` : '—'}
                     </td>
                   </tr>
                 ))
@@ -1051,13 +1073,13 @@ const CashBook: React.FC = () => {
               {/* Totals Summary Row */}
               <tr className="bg-slate-100 border-t-2 border-slate-900 finance-input">
                 <td colSpan={4} className="border border-slate-900 px-2 py-2 text-right">TOTAL CASH FLOW:</td>
-                <td className="border border-slate-900 px-2 py-2 text-right finance-input">₹{summaries.totalCredits.toLocaleString('en-IN')}</td>
-                <td className="border border-slate-900 px-2 py-2 text-right finance-input">₹{summaries.totalDebits.toLocaleString('en-IN')}</td>
+                <td className="border border-slate-900 px-2 py-2 text-right finance-input">{summaries.totalCredits.toLocaleString('en-IN')}</td>
+                <td className="border border-slate-900 px-2 py-2 text-right finance-input">{summaries.totalDebits.toLocaleString('en-IN')}</td>
               </tr>
               <tr className="bg-slate-200 finance-input">
                 <td colSpan={4} className="border border-slate-900 px-2 py-2 text-right">NET BALANCE:</td>
                 <td colSpan={2} className="border border-slate-900 px-2 py-2 text-center finance-sidebar-link">
-                  ₹{summaries.net.toLocaleString('en-IN')}
+                  {summaries.net.toLocaleString('en-IN')}
                 </td>
               </tr>
             </tbody>

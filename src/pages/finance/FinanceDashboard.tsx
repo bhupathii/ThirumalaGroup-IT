@@ -153,7 +153,7 @@ const FinanceDashboard: React.FC = () => {
     { label: 'Daily Report', path: '/finance/new-customers', icon: FileText },
     { label: 'General Ledger', path: '/finance/general-ledger', icon: BookOpen },
     { label: 'Dues List', path: '/finance/dues-ledger', icon: AlertCircle },
-    { label: 'Profit & Loss', path: '/finance/pl', icon: TrendingUp },
+    { label: 'P&L / Balance Sheet', path: '/finance/pl', icon: TrendingUp },
     { label: 'Final Statement', path: '/finance/final-statement', icon: FileText },
     { label: 'Business Details', path: '/finance/business-report', icon: FileText },
     { label: 'Partner Performance', path: '/finance/partner-performance', icon: Users },

@@ -2830,67 +2830,7 @@ const CDLedger: React.FC = () => {
               )}
             </Card>
             
-            {/* Submitted Files & Media */}
-            <Card
-              title={<span className="text-base font-extrabold text-slate-955 block">Submitted Files &amp; Media</span>}
-              className="shadow-sm border-gray-100 rounded-3xl print:hidden animate-none"
-            >
-              <div className="space-y-2.5">
-                <div className="flex gap-2 p-2 bg-gray-50 border border-gray-150 rounded-xl items-center">
-                  <select
-                    value={docType}
-                    onChange={(e) => setDocType(e.target.value)}
-                    disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
-                    className="flex-1 text-[13px] bg-white border border-gray-250 p-1.5 rounded-lg focus:outline-none font-sans font-bold text-slate-900"
-                  >
-                    <option value="Pledge Document">Pledge Document</option>
-                    <option value="Aadhaar Card Copy">Aadhaar Card Copy</option>
-                    <option value="PAN Card Copy">PAN Card Copy</option>
-                    <option value="Land Registry Copy">Land Registry Copy</option>
-                    <option value="Other Attachment">Other Attachment</option>
-                  </select>
-                  <label className={`bg-green-600 hover:bg-green-700 text-white px-2.5 py-1.5 rounded-lg text-[13px] font-bold cursor-pointer select-none ${(selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED') ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}>
-                    {uploadingDoc ? 'Uploading...' : 'Upload'}
-                    <input
-                      type="file"
-                      onChange={handleUploadDocument}
-                      disabled={uploadingDoc || selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {aggregatedDocs.map((doc) => (
-                    <div key={doc.id} className="flex justify-between items-center py-2.5 text-[13px] font-semibold text-slate-800">
-                      <div className="flex flex-col flex-1 min-w-0 pr-2">
-                        <span className="font-extrabold text-slate-900 truncate">{doc.name}</span>
-                        <span className="text-[12px] font-medium text-gray-500 truncate">{doc.remarks}</span>
-                      </div>
-                      <div className="flex items-center gap-3.5 font-sans">
-                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold ${doc.returnedStatus === 'Returned' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
-                          {doc.returnedStatus}
-                        </span>
-                        {doc.fileUrl ? (
-                          <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="text-green-700 hover:underline font-extrabold text-[13px]">View</a>
-                        ) : null}
-                        {doc.allowDelete ? (
-                          <button
-                            onClick={() => handleDeleteDocument(doc.id)}
-                            disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
-                            className="text-red-500 hover:text-red-700 font-bold ml-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
-                  {aggregatedDocs.length === 0 ? (
-                    <p className="text-center text-gray-400 italic py-4">No documents or files found</p>
-                  ) : null}
-                </div>
-              </div>
-            </Card>
+
 
             {/* Totals Summary Footer Card & Buttons */}
             <div className="bg-white px-5 py-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col gap-3">
