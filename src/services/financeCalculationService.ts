@@ -341,13 +341,17 @@ export const financeCalculationService = {
   ) {
     const dueDays = this.differenceInCalendarDays(paymentDate, this.addCalendarDays(originalLoanDateStr, periodDays - 1)) - totalRenewedDays;
     const rawDueDays = dueDays;
+    // For period_days=0 the daily rate formula uses 30 (standard month denominator).
+    // Dividing by 0 would yield Infinity; zero-period CDs have no renewal cycle but
+    // accrue interest daily from Day 1 at the same rate as any other CD.
+    const periodDivisor = periodDays > 0 ? periodDays : 30;
     let pendingInterest = 0;
     if (rawDueDays > 0) {
-      pendingInterest = Number(((principal * interestRate * rawDueDays) / periodDays / 100).toFixed(2));
+      pendingInterest = Number(((principal * interestRate * rawDueDays) / periodDivisor / 100).toFixed(2));
     }
     let penalty = 0;
     if (shouldApplyPenalty(rawDueDays)) {
-      penalty = Number(((principal * penaltyRate * rawDueDays) / periodDays / 100).toFixed(2));
+      penalty = Number(((principal * penaltyRate * rawDueDays) / periodDivisor / 100).toFixed(2));
     }
     const presentDue = Number((pendingInterest + penalty).toFixed(2));
     const closeAmount = Number((principal + presentDue).toFixed(2));
@@ -595,8 +599,11 @@ export const financeCalculationService = {
     const { baseDueDate, exactRenewedDays, contractualPositionDate, currentDueDate, fractionalCarry } = getCDContractualPosition(contract, ledgerEvents, interestEvents);
     const principalBalance = getCDPrincipalBalance(contract, ledgerEvents);
     
-    const dailyInterest = (contract.originalPrincipal * (contract.interestRate / 100)) / contract.periodDays;
-    const dailyPenalty  = (contract.originalPrincipal * (contract.penaltyRate / 100)) / contract.periodDays;
+    // For period_days=0 (zero-period CD) use 30 as the month denominator — no renewal
+    // cycle, but daily interest still accrues from Day 1 at the standard rate.
+    const periodDivisor = contract.periodDays > 0 ? contract.periodDays : 30;
+    const dailyInterest = (contract.originalPrincipal * (contract.interestRate / 100)) / periodDivisor;
+    const dailyPenalty  = (contract.originalPrincipal * (contract.penaltyRate / 100)) / periodDivisor;
     
     const paymentEntries = ledgerEvents
        .filter(e => e.entryType === 'amount_paid' && e.credit > 0)

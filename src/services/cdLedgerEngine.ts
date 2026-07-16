@@ -312,7 +312,12 @@ export function getCDContractualPosition(
   const baseDueDate = addCalendarDays(contract.originalLoanDate, contract.periodDays - 1);
   const baseOrdinal = dateOrdinal(baseDueDate);
 
-  const dailyInterest = (contract.originalPrincipal * (contract.interestRate / 100)) / contract.periodDays;
+  // For period_days=0 (zero-period CD) there is no renewal cycle.
+  // The daily interest rate still uses 30 as the standard month denominator —
+  // same as getCDAccountPosition. Dividing by 0 would yield Infinity and corrupt
+  // the legacy "derive renewedDays from interest paid" path.
+  const periodDivisor = contract.periodDays > 0 ? contract.periodDays : 30;
+  const dailyInterest = (contract.originalPrincipal * (contract.interestRate / 100)) / periodDivisor;
 
   const groups: { [key: string]: CDInterestDetailEvent[] } = {};
   const nullReceiptEvents: CDInterestDetailEvent[] = [];
