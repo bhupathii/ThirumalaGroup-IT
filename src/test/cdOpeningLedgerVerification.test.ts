@@ -51,7 +51,9 @@ function simulateCdSync(
   const nextEntries = [...existingEntries];
 
   const commRate = interestRate;
-  const pDays = periodDays || 30;
+  // NOTE: 0 is a valid business value for period_days (zero-day CD).
+  // Only substitute 30 when periodDays is null/undefined, not when it is explicitly 0.
+  const pDays = periodDays != null ? periodDays : 30;
   const commAmount = Number(((amount * (commRate / 100) * pDays) / 30).toFixed(2));
 
   // original_loan entry

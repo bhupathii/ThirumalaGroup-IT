@@ -131,7 +131,9 @@ export const cdLedgerRebuildService = {
         throw new Error('Could not determine original loan disbursement date');
       }
 
-      const periodDays = (loan.period_days && Number(loan.period_days) > 0) ? Number(loan.period_days) : 30;
+      // NOTE: 0 is a valid business value for period_days (zero-day CD).
+      // Only substitute 30 when period_days is absent (null / undefined / empty string).
+      const periodDays = (loan.period_days != null && loan.period_days !== '') ? Number(loan.period_days) : 30;
       
       // CD inclusive-cycle rule: the loan-given date IS Day 1 of the interest cycle.
       // Day 1 = LoanDate, Day 2 = LoanDate+1, …, Day N = LoanDate+(N-1)

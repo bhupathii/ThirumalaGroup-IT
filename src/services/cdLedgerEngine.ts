@@ -237,7 +237,9 @@ export function buildCDContract(loan: any): CDContract {
     originalPrincipal: Number(loan.amount) || 0,
     interestRate: Number(loan.interest_rate) || 3,
     penaltyRate: loan.penalty_percent !== undefined && loan.penalty_percent !== null ? Number(loan.penalty_percent) : 0.75,
-    periodDays: loan.period_days && Number(loan.period_days) > 0 ? Number(loan.period_days) : 30,
+    // NOTE: 0 is a valid business value for period_days (zero-day CD).
+    // Only substitute 30 when period_days is absent (null / undefined / empty string).
+    periodDays: (loan.period_days != null && loan.period_days !== '') ? Number(loan.period_days) : 30,
     graceDays: loan.grace_days !== undefined && loan.grace_days !== null ? Number(loan.grace_days) : 5,
     status: loan.status || 'Active',
   };
@@ -414,7 +416,11 @@ export function getCDAccountPosition(
   const accruedPenalty = (exactDueDays <= 0 || !penaltyEligible) ? 0 : roundCDMoney(dailyPenalty * exactDueDays);
 
   const todayDue = roundCDMoney(accruedInterest + accruedPenalty);
-  const renewalAmount = roundCDMoney(principalBalance * (contract.interestRate / 100) * (contract.periodDays / 30));
+  // Zero-day period means no renewal interest. Guard explicitly so 0/30 never silently
+  // resolves to a full month's charge when period_days is intentionally set to 0.
+  const renewalAmount = contract.periodDays === 0
+    ? 0
+    : roundCDMoney(principalBalance * (contract.interestRate / 100) * (contract.periodDays / 30));
   const totalToRegularize = exactDueDays <= 0 ? 0 : roundCDMoney(todayDue + renewalAmount);
   const totalForClose = roundCDMoney(principalBalance + todayDue);
 
