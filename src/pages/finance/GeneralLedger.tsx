@@ -21,7 +21,7 @@ const GeneralLedger: React.FC = () => {
   const [financeMode] = useState<'REGULAR' | 'ITR'>(() => {
     const mode = sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode');
     return mode === 'itr' ? 'ITR' : 'REGULAR';
-  });
+ });
 
   useEffect(() => {
     const loadDefaultStartDate = async () => {
@@ -29,26 +29,26 @@ const GeneralLedger: React.FC = () => {
         const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
         if (oldest) {
           setStartDate(oldest);
-        } else {
+       } else {
           const d = new Date();
           d.setDate(1);
           setStartDate(d.toISOString().split('T')[0]);
-        }
-      } catch (err) {
+       }
+     } catch (err) {
         console.error(err);
         const d = new Date();
         d.setDate(1);
         setStartDate(d.toISOString().split('T')[0]);
-      }
-    };
+     }
+   };
     loadDefaultStartDate();
-  }, []);
+ }, []);
 
   useEffect(() => {
     if (startDate) {
       fetchLedgerData();
-    }
-  }, [startDate, endDate]);
+   }
+ }, [startDate, endDate]);
 
   const fetchLedgerData = async () => {
     setLoading(true);
@@ -57,15 +57,15 @@ const GeneralLedger: React.FC = () => {
         fromDate: startDate,
         toDate: endDate,
         financeMode
-      });
+     });
       setAllEntries(data);
-    } catch (err) {
+   } catch (err) {
       console.error(err);
       toast.error('Failed to load general ledger data');
-    } finally {
+   } finally {
       setLoading(false);
-    }
-  };
+   }
+ };
 
   // Group and summarize by normalized Head of Account
   const summaryData = useMemo(() => {
@@ -75,11 +75,11 @@ const GeneralLedger: React.FC = () => {
       const head = entry.headOfAccount || 'UNCLASSIFIED';
       if (!map[head]) {
         map[head] = { debit: 0, credit: 0, count: 0, classification: entry.reportClassification };
-      }
+     }
       map[head].debit += entry.debit || 0;
       map[head].credit += entry.credit || 0;
       map[head].count += 1;
-    });
+   });
 
     return Object.entries(map).map(([head, data]) => {
       const balance = data.credit - data.debit;
@@ -90,9 +90,9 @@ const GeneralLedger: React.FC = () => {
         balance,
         count: data.count,
         classification: data.classification
-      };
-    }).sort((a, b) => a.head.localeCompare(b.head));
-  }, [allEntries]);
+     };
+   }).sort((a, b) => a.head.localeCompare(b.head));
+ }, [allEntries]);
 
   // Totals for the entire general ledger
   const overallTotals = useMemo(() => {
@@ -101,14 +101,15 @@ const GeneralLedger: React.FC = () => {
     summaryData.forEach(s => {
       debit += s.debit;
       credit += s.credit;
-    });
+   });
     return { debit, credit, balance: credit - debit };
-  }, [summaryData]);
+ }, [summaryData]);
 
   // Filter entries for drill-down view modal
   const drillDownEntries = useMemo(() => {
     if (!selectedHead) return [];
-    let list = allEntries.filter(e => e.headOfAccount === selectedHead);
+    // For drill-down, only show period entries
+    let list = allEntries.filter(e => e.headOfAccount === selectedHead && e.transactionDate >= startDate);
 
     if (drillSearchQuery.trim()) {
       const q = drillSearchQuery.toLowerCase().trim();
@@ -117,15 +118,15 @@ const GeneralLedger: React.FC = () => {
         (e.accountOrLoanNo && e.accountOrLoanNo.toLowerCase().includes(q)) ||
         (e.customerName && e.customerName.toLowerCase().includes(q))
       );
-    }
+   }
 
     return list.sort((a, b) => {
       if (a.transactionDate !== b.transactionDate) {
         return a.transactionDate.localeCompare(b.transactionDate);
-      }
+     }
       return (a.createdAt || '').localeCompare(b.createdAt || '');
-    });
-  }, [allEntries, selectedHead, drillSearchQuery]);
+   });
+ }, [allEntries, selectedHead, drillSearchQuery]);
 
   // Compute live drill-down summary
   const drillTotals = useMemo(() => {
@@ -134,9 +135,9 @@ const GeneralLedger: React.FC = () => {
     drillDownEntries.forEach(e => {
       debit += e.debit || 0;
       credit += e.credit || 0;
-    });
+   });
     return { debit, credit, balance: credit - debit };
-  }, [drillDownEntries]);
+ }, [drillDownEntries]);
 
   const displayDateRange = `${new Date(startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-')} TO ${new Date(endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-')}`;
 
@@ -144,7 +145,7 @@ const GeneralLedger: React.FC = () => {
     <div className="space-y-3 w-full select-none text-slate-800 p-2 font-outfit">
       
       {/* Header */}
-      <div className={`flex justify-between items-center bg-white border border-slate-200 p-3 rounded-lg shadow-sm ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <div className={`flex justify-between items-center bg-white border border-slate-200 p-3 rounded-lg shadow-sm`}>
         <div>
           <h1 className="text-[24px] font-bold uppercase tracking-tight text-slate-900 leading-none">General Ledger</h1>
           <p className="text-[14px] text-slate-400 font-bold uppercase mt-1">Summary of accounts with absolute drill-down capabilities</p>
@@ -163,7 +164,7 @@ const GeneralLedger: React.FC = () => {
       </div>
 
       {/* Date Filters in One Row */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-white border border-slate-200 rounded-lg shadow-sm ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-white border border-slate-200 rounded-lg shadow-sm`}>
         <div className="space-y-1">
           <label className="text-[15px] font-bold text-slate-500 uppercase block">FROM DATE</label>
           <input
@@ -194,7 +195,7 @@ const GeneralLedger: React.FC = () => {
                 {displayDateRange}
               </span>
             </div>
-          }
+         }
           subtitle="Click any row to drill down into transaction details"
           className="shadow-sm border-slate-200 rounded overflow-hidden"
         >
@@ -205,14 +206,14 @@ const GeneralLedger: React.FC = () => {
           ) : (
             <div className="space-y-3">
               <div className="overflow-x-auto border border-slate-200 rounded max-h-[550px] overflow-y-auto custom-scrollbar">
-                <table className="w-full text-[16px] divide-y divide-slate-200 table-fixed">
+                <table className="w-full text-[16px] divide-y divide-slate-200 table-auto">
                   <thead className="bg-slate-100 sticky top-0 z-10 text-slate-700">
                     <tr className="divide-x divide-slate-200">
                       <th className="px-3 py-2 text-left font-bold text-[15px] uppercase">Head of Account</th>
-                      <th className="w-48 px-3 py-2 text-right font-bold text-[15px] uppercase">Credit (Cr)</th>
-                      <th className="w-48 px-3 py-2 text-right font-bold text-[15px] uppercase">Debit (Dr)</th>
-                      <th className="w-48 px-3 py-2 text-right font-bold text-[15px] uppercase">Balance</th>
-                      <th className="w-20 px-2 py-2 text-center font-bold text-[15px] uppercase">Drill</th>
+                      <th className="w-40 px-3 py-2 text-right font-bold text-[15px] uppercase">Credit (Cr)</th>
+                      <th className="w-40 px-3 py-2 text-right font-bold text-[15px] uppercase">Debit (Dr)</th>
+                      <th className="w-48 px-3 py-2 text-right font-bold text-[15px] uppercase">Net Balance</th>
+                      <th className="w-16 px-2 py-2 text-center font-bold text-[15px] uppercase">Drill</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-100 divide-x divide-slate-55 font-semibold text-slate-800">
@@ -241,16 +242,16 @@ const GeneralLedger: React.FC = () => {
                     {/* Overall totals */}
                     <tr className="bg-slate-50 font-black divide-x divide-slate-150 border-t-2 border-slate-200" style={{ height: '42px' }}>
                       <td className="px-3 py-2 text-slate-800 uppercase text-[15px]">Grand Total:</td>
-                      <td className="px-3 py-2 text-right text-emerald-755 font-black font-mono whitespace-nowrap">
-                        {overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      <td className="px-3 py-2 text-right text-emerald-700 font-black font-mono whitespace-nowrap">
+                        {overallTotals.credit > 0 ? `${overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                       </td>
-                      <td className="px-3 py-2 text-right text-red-755 font-black font-mono whitespace-nowrap">
-                        {overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      <td className="px-3 py-2 text-right text-red-700 font-black font-mono whitespace-nowrap">
+                        {overallTotals.debit > 0 ? `${overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                       </td>
-                      <td className={`px-3 py-2 text-right font-black font-mono whitespace-nowrap ${overallTotals.balance >= 0 ? 'text-emerald-900' : 'text-rose-905'}`}>
+                      <td className={`px-3 py-2 text-right font-black font-mono whitespace-nowrap ${overallTotals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
                         {Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}
                       </td>
-                      <td></td>
+                      <td className="px-3 py-2 text-slate-400"></td>
                     </tr>
                   </tbody>
                 </table>
@@ -401,7 +402,7 @@ const GeneralLedger: React.FC = () => {
           <div>
             <span className="text-slate-500 text-[9px] uppercase font-bold block">NET LEDGER VALUE</span>
             <span className="text-slate-900 text-lg font-black font-mono">
-              {overallTotals.balance >= 0 ? 'Cr ' : 'Dr '}{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              {overallTotals.balance >= 0 ? 'Cr ' : 'Dr'}{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </span>
           </div>
         </div>

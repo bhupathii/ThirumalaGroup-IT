@@ -5,37 +5,47 @@ import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../
 import { Printer, ArrowLeft, Search, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { supabase } from '../../lib/supabaseDatabase';
 
 const DetailedLedgerFinance: React.FC = () => {
   const navigate = useNavigate();
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState(() => getLocalBusinessDateISO());
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const initialHead = searchParams.get('head') || 'ALL';
+  const initialFrom = searchParams.get('from') || '';
+  const initialTo = searchParams.get('to') || getLocalBusinessDateISO();
+
+  const [fromDate, setFromDate] = useState(initialFrom);
+  const [toDate, setToDate] = useState(initialTo);
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'CD' | 'CAPITAL' | 'BANK' | 'SALARY' | 'EXPENSE' | 'OTHER'>('ALL');
-  const [selectedHead, setSelectedHead] = useState<string>('ALL');
+  const [selectedHead, setSelectedHead] = useState<string>(initialHead);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [allRangeEntries, setAllRangeEntries] = useState<DailyFinancialTransaction[]>([]);
+  const [allHistoryEntries, setAllHistoryEntries] = useState<DailyFinancialTransaction[]>([]);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   const [financeMode] = useState<'REGULAR' | 'ITR'>(() => {
     const mode = sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode');
     return mode === 'itr' ? 'ITR' : 'REGULAR';
-  });
+ });
 
   useEffect(() => {
-    const initDates = async () => {
-      const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
-      setFromDate(oldest);
+    const initData = async () => {
+      if (!initialFrom) {
+        const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
+        setFromDate(oldest || getLocalBusinessDateISO());
+      }
     };
-    initDates();
-  }, []);
+    initData();
+ }, []);
 
   useEffect(() => {
     if (fromDate && toDate) {
       fetchData();
-    }
-  }, [fromDate, toDate]);
+   }
+ }, [fromDate, toDate]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -50,35 +60,36 @@ const DetailedLedgerFinance: React.FC = () => {
           fromDate: '1970-01-01',
           toDate: prevDateLimitStr,
           financeMode
-        });
-      }
+       });
+     }
 
       // 2. Fetch date range entries
       const rangeTxs = await dailyFinancialTransactionService.getDailyFinancialTransactions({
         fromDate,
         toDate,
         financeMode
-      });
+     });
 
       // We will store all and calculate opening balance dynamically based on filters
       setAllRangeEntries(rangeTxs);
 
-    } catch (err) {
+   } catch (err) {
       console.error(err);
       toast.error('Failed to load detailed ledger entries');
-    } finally {
+   } finally {
       setLoading(false);
-    }
-  };
+   }
+ };
 
   // Extract all unique head of accounts from the range entries
   const uniqueHeads = useMemo(() => {
     const heads = new Set<string>();
+    // Plus any heads from the actual entries in the current range
     allRangeEntries.forEach(t => {
       if (t.headOfAccount) heads.add(t.headOfAccount);
-    });
+   });
     return Array.from(heads).sort();
-  }, [allRangeEntries]);
+ }, [allRangeEntries]);
 
   // Dynamically recalculate opening balance and list based on selected head and category filter
   const filteredEntries = useMemo(() => {
@@ -87,10 +98,10 @@ const DetailedLedgerFinance: React.FC = () => {
 
     if (categoryFilter !== 'ALL') {
       rangeList = rangeList.filter(t => t.category === categoryFilter);
-    }
+   }
     if (selectedHead !== 'ALL') {
       rangeList = rangeList.filter(t => t.headOfAccount === selectedHead);
-    }
+   }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -100,15 +111,15 @@ const DetailedLedgerFinance: React.FC = () => {
         (t.accountOrLoanNo && t.accountOrLoanNo.toLowerCase().includes(q)) ||
         (t.customerName && t.customerName.toLowerCase().includes(q))
       );
-    }
+   }
 
     // Sort chronologically: Oldest first to build running balance
     const sorted = rangeList.sort((a, b) => {
       if (a.transactionDate !== b.transactionDate) {
         return a.transactionDate.localeCompare(b.transactionDate);
-      }
+     }
       return (a.createdAt || '').localeCompare(b.createdAt || '');
-    });
+   });
 
     // Compute running balance
     let currentBalance = 0; // Starts from 0
@@ -117,9 +128,9 @@ const DetailedLedgerFinance: React.FC = () => {
       return {
         ...t,
         runningBalance: currentBalance
-      };
-    }).reverse(); // Show newest first in table
-  }, [allRangeEntries, categoryFilter, selectedHead, searchQuery]);
+     };
+   }).reverse(); // Show newest first in table
+ }, [allRangeEntries, categoryFilter, selectedHead, searchQuery]);
 
   // Sum total credits & debits for matching filters
   const totals = useMemo(() => {
@@ -129,19 +140,19 @@ const DetailedLedgerFinance: React.FC = () => {
     filteredEntries.forEach(t => {
       totalCredit += t.credit || 0;
       totalDebit += t.debit || 0;
-    });
+   });
 
     return {
       totalCredit,
       totalDebit,
       balance: totalCredit - totalDebit
-    };
-  }, [filteredEntries]);
+   };
+ }, [filteredEntries]);
   const handleExportCSV = () => {
     if (filteredEntries.length === 0) {
       toast.error('No data to export');
       return;
-    }
+   }
     const headers = ['Sl No', 'Date', 'Account/Loan No', 'Head of Account', 'Borrower/Partner', 'Credit (Cr)', 'Debit (Dr)', 'Running Balance', 'Particulars', 'User'];
     const rows = filteredEntries.map((entry, idx) => [
       idx + 1,
@@ -166,7 +177,7 @@ const DetailedLedgerFinance: React.FC = () => {
     link.click();
     document.body.removeChild(link);
     toast.success('Report exported to Excel CSV!');
-  };
+ };
 
   const categories = [
     { value: 'ALL', label: 'All Categories' },
@@ -182,7 +193,7 @@ const DetailedLedgerFinance: React.FC = () => {
     <div className="space-y-3 w-full select-none text-slate-800 p-2 font-outfit">
       
       {/* Header */}
-      <div className={`flex justify-between items-center bg-white border border-slate-200 p-3 rounded-lg shadow-sm ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <div className={`flex justify-between items-center bg-white border border-slate-200 p-3 rounded-lg shadow-sm`}>
         <div>
           <h1 className="text-[24px] font-bold uppercase tracking-tight text-slate-900 leading-none">Detailed Ledger</h1>
           <p className="text-[14px] text-slate-400 font-bold uppercase mt-1">
@@ -215,7 +226,7 @@ const DetailedLedgerFinance: React.FC = () => {
       </div>
 
       {/* Date & Category Filters in One Row */}
-      <div className={`grid grid-cols-1 md:grid-cols-5 gap-3 p-3 bg-white border border-slate-200 rounded-lg shadow-sm items-end ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <div className={`grid grid-cols-1 md:grid-cols-5 gap-3 p-3 bg-white border border-slate-200 rounded-lg shadow-sm items-end`}>
         <div className="space-y-1">
           <label className="text-[15px] font-bold text-slate-500 uppercase block">FROM DATE</label>
           <input

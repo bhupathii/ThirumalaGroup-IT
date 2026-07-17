@@ -1,3 +1,4 @@
+import { sortNumerically } from '../../lib/financialCalculations';
 import React, { useEffect, useState, useMemo } from 'react';
 import { allocateCDPayment } from '../../services/cdLedgerEngine';
 
@@ -29,6 +30,7 @@ import {
 import toast from 'react-hot-toast';
 import { exportToExcel, exportToCSV } from '../../utils/excel';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
+import CompoundInterestModal from '../../components/finance/CompoundInterestModal';
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 
 
@@ -135,12 +137,10 @@ const CDLedger: React.FC = () => {
 
 
 
-  // Upload document fields
-  const [docType, setDocType] = useState('Pledge Document');
-  const [uploadingDoc, setUploadingDoc] = useState(false);
 
   // Print Preview Modal State
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [showCompoundModal, setShowCompoundModal] = useState(false);
 
   // Return Document Modal State
   const [returnDate, setReturnDate] = useState(() => getLocalBusinessDateISO());
@@ -189,8 +189,6 @@ const CDLedger: React.FC = () => {
   // Guarantor Full Objects for Display
   const [guarantor1, setGuarantor1] = useState<any | null>(null);
   const [guarantor2, setGuarantor2] = useState<any | null>(null);
-  const [loanDocuments, setLoanDocuments] = useState<any[]>([]);
-  const [collateralLog, setCollateralLog] = useState<any | null>(null);
   const [documentReturned, setDocumentReturned] = useState<any | null>(null);
   // Real-time ticking Clock State
   const [timeStr, setTimeStr] = useState('');
@@ -308,8 +306,8 @@ const CDLedger: React.FC = () => {
         const [
           g1Res,
           g2Res,
-          docsRes,
-          colLogsRes,
+          _docsRes,
+          _colLogsRes,
           retDocsRes,
           nextReceipt,
           cdEntries,
@@ -331,13 +329,6 @@ const CDLedger: React.FC = () => {
 
         setGuarantor1(g1Res.data || null);
         setGuarantor2(g2Res.data || null);
-        setLoanDocuments(docsRes.data || []);
-        
-        if (colLogsRes.data && colLogsRes.data.length > 0) {
-          setCollateralLog(colLogsRes.data[0].new_values);
-        } else {
-          setCollateralLog(null);
-        }
 
         setDocumentReturned(retDocsRes.data && retDocsRes.data.length > 0 ? retDocsRes.data[0] : null);
         setReceiptNo(nextReceipt);
@@ -585,63 +576,6 @@ const CDLedger: React.FC = () => {
 
 
 
-  const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!selectedLoan) return;
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadingDoc(true);
-    try {
-      const fileObj = new File([file], `doc-${selectedLoan.loan_id}-${Date.now()}-${file.name}`, { type: file.type });
-
-      const { data, error } = await supabase.storage
-        .from('finance-photos')
-        .upload(`documents/${fileObj.name}`, fileObj);
-
-      if (error) throw error;
-
-      const publicUrl = supabase.storage
-        .from('finance-photos')
-        .getPublicUrl(data.path).data.publicUrl;
-
-      const docResult = await supabaseFinance.addLoanDocument({
-        loan_id: selectedLoan.id,
-        category: docType === 'Pledge Document' ? 'Financial' : docType === 'Land Registry Copy' ? 'Original' : 'Registration',
-        document_name: docType,
-        file_url: publicUrl,
-        is_submitted: true
-      });
-
-      if (docResult) {
-        toast.success('Document uploaded successfully!');
-        refreshLoanData();
-      } else {
-        toast.error('Failed to link document in database.');
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to upload document file');
-    } finally {
-      setUploadingDoc(false);
-    }
-  };
-
-  const handleDeleteDocument = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this document?')) return;
-    try {
-      const success = await supabaseFinance.deleteDocument(id);
-      if (success) {
-        toast.success('Document deleted');
-        if (selectedLoan) refreshLoanData();
-      } else {
-        toast.error('Failed to delete document');
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Error deleting document');
-    }
-  };
-
   // Autocomplete Suggestions logic
   const nameSuggestions = useMemo(() => {
     const q = searchNameQuery.toLowerCase().trim();
@@ -871,6 +805,125 @@ const CDLedger: React.FC = () => {
       )
       .reduce((sum, e) => sum + Number(e.credit), 0);
   }, [displayedStatementEntries]);
+
+  // Compound Interest Calculation Engine (Integrated into Ledger Timeline)
+  const compoundInterestData = useMemo(() => {
+    if (!selectedLoan || !originalLoanDate) return { summary: null, reportRows: [] };
+
+    const rawEvents = displayedStatementEntries.map(e => ({
+      date: new Date(e.entry_date),
+      type: e.entry_type,
+      credit: Number(e.credit) || 0,
+      debit: Number(e.debit) || 0,
+      particulars: e.particulars || 'Transaction',
+      accountName: (e.account_name || '').toUpperCase()
+    }));
+
+    // Filter events to only keep original loan/disbursement and principal repayments
+    const events = rawEvents.filter(e => {
+      const typeLower = (e.type || '').toLowerCase();
+      const partLower = (e.particulars || '').toLowerCase();
+      const accLower = (e.accountName || '').toLowerCase();
+
+      // Original Loan/Disbursement
+      if (typeLower === 'original_loan' || typeLower === 'disbursement') {
+        return true;
+      }
+      
+      // Principal repayments
+      if (
+        typeLower === 'principal_payment' || 
+        typeLower === 'amount_paid' || 
+        accLower === 'cd amount paid' || 
+        partLower.includes('principal paid')
+      ) {
+        return e.credit > 0;
+      }
+
+      return false;
+    });
+
+    const targetDate = paymentDate ? new Date(paymentDate) : new Date();
+    const sortedEvents = [...events].sort((a, b) => a.date.getTime() - b.date.getTime());
+    
+    if (sortedEvents.length === 0 || sortedEvents[sortedEvents.length - 1].date.toDateString() !== targetDate.toDateString()) {
+      sortedEvents.push({
+        date: targetDate,
+        type: 'target_date',
+        credit: 0,
+        debit: 0,
+        particulars: 'Interest Accrued to Date',
+        accountName: ''
+      });
+    }
+
+    const interestRate = Number(selectedLoan.interest_rate) || 3;
+    let initialPrincipal = 0;
+    let remainingPrincipal = 0;
+    let compoundInterestEarned = 0;
+    let lastDate = new Date(originalLoanDate);
+    let principalPaid = 0;
+    
+    const reportRows = [];
+    
+    for (const ev of sortedEvents) {
+      if (ev.date < lastDate && ev.type !== 'original_loan' && ev.type !== 'Disbursement') continue;
+      
+      const diffTime = Math.max(0, ev.date.getTime() - lastDate.getTime());
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      const startingBalance = remainingPrincipal + compoundInterestEarned;
+      
+      // Generate compound interest for this period on the remaining principal
+      let interestAdded = 0;
+      if (diffDays > 0 && remainingPrincipal > 0) {
+        interestAdded = Number(((remainingPrincipal * (interestRate / 100) * diffDays) / 30).toFixed(2));
+        compoundInterestEarned += interestAdded;
+      }
+      
+      // Process event
+      if (ev.type === 'original_loan' || ev.type === 'Disbursement') {
+        initialPrincipal += ev.debit;
+        remainingPrincipal += ev.debit;
+      } else if (ev.credit > 0) {
+        principalPaid += ev.credit;
+        remainingPrincipal = Math.max(0, remainingPrincipal - ev.credit);
+      }
+      
+      const endingBalance = remainingPrincipal + compoundInterestEarned;
+
+      if (diffDays > 0 || ev.credit > 0 || ev.debit > 0 || ev.type === 'original_loan' || ev.type === 'Disbursement') {
+        reportRows.push({
+          date: ev.date.toISOString().split('T')[0],
+          particulars: ev.particulars,
+          days: diffDays,
+          startingBalance,
+          interestAdded,
+          paymentReceived: ev.credit,
+          adjustment: ev.debit,
+          endingBalance
+        });
+      }
+      lastDate = ev.date;
+    }
+    
+    const finalCompoundBalance = remainingPrincipal + compoundInterestEarned;
+    
+    return {
+      summary: {
+        initialPrincipal,
+        principalPaid,
+        interestAdded: compoundInterestEarned,
+        interestPaid: 0,
+        penaltyPaid: 0,
+        adjustments: 0,
+        finalCompoundBalance,
+        compoundInterestEarned,
+        calculatedUntil: targetDate.toISOString().split('T')[0]
+      },
+      reportRows
+    };
+  }, [selectedLoan, displayedStatementEntries, originalLoanDate, paymentDate]);
 
   // Grouped payment entries for receipt-centric statement reports (Change 6, 8, 9, 10, 11, 12, 13)
   const groupedPayments = useMemo(() => {
@@ -1258,133 +1311,6 @@ const CDLedger: React.FC = () => {
       partial: partialDetails
     };
   }, [totalAmountPaying, ledgerMetrics, renewCalculations, selectedLoan, paymentDate]);
-
-  // Aggregated Loan Documents & Fingerprint display metadata
-  const aggregatedDocs = useMemo(() => {
-    const list: any[] = [];
-
-    loanDocuments.forEach(doc => {
-      list.push({
-        id: doc.id,
-        source: 'loan_doc',
-        category: doc.category || 'Loan Doc',
-        name: doc.document_name || 'Document',
-        remarks: doc.remarks || 'N/A',
-        fileUrl: doc.file_url,
-        returnedStatus: documentReturned ? 'Returned' : 'Not Returned',
-        allowDelete: true
-      });
-    });
-
-    if (collateralLog) {
-      list.push({
-        id: 'collateral-metadata',
-        source: 'collateral',
-        category: 'Collateral',
-        name: 'Collateral Assets Details',
-        remarks: `Address: ${collateralLog.collateral_address || 'N/A'}, particulars: ${collateralLog.particulars || 'N/A'}`,
-        fileUrl: null,
-        returnedStatus: documentReturned ? 'Returned' : 'Not Returned',
-        allowDelete: false
-      });
-
-      if (collateralLog.collateral_image) {
-        list.push({
-          id: 'collateral-image',
-          source: 'collateral',
-          category: 'Collateral',
-          name: 'Collateral Asset Image',
-          remarks: `GPS: ${collateralLog.gps_latitude || 'N/A'}, ${collateralLog.gps_longitude || 'N/A'}`,
-          fileUrl: collateralLog.collateral_image,
-          returnedStatus: documentReturned ? 'Returned' : 'Not Returned',
-          allowDelete: false
-        });
-      }
-    }
-
-    if (selectedLoan?.customer) {
-      if (selectedLoan.customer.customer_photo_url) {
-        list.push({
-          id: 'customer-photo',
-          source: 'customer',
-          category: 'Registration',
-          name: 'Customer Photo',
-          remarks: `Aadhaar: ${selectedLoan.customer.aadhaar || 'N/A'}`,
-          fileUrl: selectedLoan.customer.customer_photo_url,
-          returnedStatus: 'Active',
-          allowDelete: false
-        });
-      }
-      if (selectedLoan.customer.customer_fingerprint_image_url || selectedLoan.customer.fingerprint_url) {
-        list.push({
-          id: 'customer-fingerprint',
-          source: 'customer',
-          category: 'Registration',
-          name: 'Customer Fingerprint',
-          remarks: selectedLoan.customer.fingerprint_template ? 'Template Captured' : 'Image Captured',
-          fileUrl: selectedLoan.customer.customer_fingerprint_image_url || selectedLoan.customer.fingerprint_url,
-          returnedStatus: 'Active',
-          allowDelete: false
-        });
-      }
-    }
-
-    if (guarantor1) {
-      if (guarantor1.customer_photo_url) {
-        list.push({
-          id: 'guarantor1-photo',
-          source: 'customer',
-          category: 'Registration',
-          name: 'Guarantor 1 Photo',
-          remarks: `Aadhaar: ${guarantor1.aadhaar || 'N/A'}`,
-          fileUrl: guarantor1.customer_photo_url,
-          returnedStatus: 'Active',
-          allowDelete: false
-        });
-      }
-      if (guarantor1.customer_fingerprint_image_url || guarantor1.fingerprint_url) {
-        list.push({
-          id: 'guarantor1-fingerprint',
-          source: 'customer',
-          category: 'Registration',
-          name: 'Guarantor 1 Fingerprint',
-          remarks: guarantor1.fingerprint_template ? 'Template Captured' : 'Image Captured',
-          fileUrl: guarantor1.customer_fingerprint_image_url || guarantor1.fingerprint_url,
-          returnedStatus: 'Active',
-          allowDelete: false
-        });
-      }
-    }
-
-    if (guarantor2) {
-      if (guarantor2.customer_photo_url) {
-        list.push({
-          id: 'guarantor2-photo',
-          source: 'customer',
-          category: 'Registration',
-          name: 'Guarantor 2 Photo',
-          remarks: `Aadhaar: ${guarantor2.aadhaar || 'N/A'}`,
-          fileUrl: guarantor2.customer_photo_url,
-          returnedStatus: 'Active',
-          allowDelete: false
-        });
-      }
-      if (guarantor2.customer_fingerprint_image_url || guarantor2.fingerprint_url) {
-        list.push({
-          id: 'guarantor2-fingerprint',
-          source: 'customer',
-          category: 'Registration',
-          name: 'Guarantor 2 Fingerprint',
-          remarks: guarantor2.fingerprint_template ? 'Template Captured' : 'Image Captured',
-          fileUrl: guarantor2.customer_fingerprint_image_url || guarantor2.fingerprint_url,
-          returnedStatus: 'Active',
-          allowDelete: false
-        });
-      }
-    }
-
-    return list;
-  }, [loanDocuments, collateralLog, documentReturned, selectedLoan, guarantor1, guarantor2]);
 
   // Handle payments renewals and closures (Access VBA logic)
   const handleActionSubmit = async (actionType: 'Renew' | 'Partial' | 'Close') => {
@@ -1840,7 +1766,7 @@ const CDLedger: React.FC = () => {
 
               {showNameDropdown && nameSuggestions.length > 0 && (
                 <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
-                  {nameSuggestions.map(loan => (
+                  {nameSuggestions.sort((a,b) => sortNumerically(a.loan_id, b.loan_id)).map(loan => (
                     <button
                       key={loan.id}
                       onMouseDown={() => {
@@ -1882,7 +1808,7 @@ const CDLedger: React.FC = () => {
 
               {showAcDropdown && acSuggestions.length > 0 && (
                 <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
-                  {acSuggestions.map(loan => (
+                  {acSuggestions.sort((a,b) => sortNumerically(a.loan_id, b.loan_id)).map(loan => (
                     <button
                       key={loan.id}
                       onMouseDown={() => {
@@ -1973,7 +1899,7 @@ const CDLedger: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {filtered.map((loan, idx) => (
+                      {filtered.sort((a,b) => sortNumerically(a.loan_id, b.loan_id)).map((loan, idx) => (
                         <tr
                           key={loan.id}
                           className="hover:bg-green-50/50 cursor-pointer transition-colors group"
@@ -2313,9 +2239,18 @@ const CDLedger: React.FC = () => {
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Loan Amount</span>
                         <span className="text-[16px] font-bold text-slate-900">₹{originalLoanAmount.toLocaleString('en-IN')}</span>
                       </div>
-                      <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
-                        <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Rate / Penalty</span>
-                        <span className="text-[16px] font-bold text-slate-900">{Number(selectedLoan.interest_rate).toFixed(2)}% / {Number(selectedLoan.penalty_percent || 0.75).toFixed(2)}%</span>
+                      <div className="col-span-2 grid grid-cols-2 border border-slate-200 rounded-lg bg-slate-50/80 shadow-sm overflow-hidden">
+                        <div className="px-2.5 py-1.5 border-r border-slate-200">
+                          <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Rate / Penalty</span>
+                          <span className="text-[16px] font-bold text-slate-900">{Number(selectedLoan.interest_rate).toFixed(2)}% / {Number(selectedLoan.penalty_percent || 0.75).toFixed(2)}%</span>
+                        </div>
+                        <div 
+                          onClick={() => setShowCompoundModal(true)}
+                          className="px-2.5 py-1.5 hover:bg-slate-100 group cursor-pointer transition-colors"
+                        >
+                          <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">CI</span>
+                          <span className="text-[16px] font-bold text-slate-900 group-hover:underline underline-offset-2">₹{Math.round(compoundInterestData.summary?.compoundInterestEarned || 0).toLocaleString('en-IN')}</span>
+                        </div>
                       </div>
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Loan Date</span>
@@ -2950,6 +2885,7 @@ const CDLedger: React.FC = () => {
                   Open Report
                 </Button>
 
+
                 <Button
                   onClick={() => setShowNpaModal(true)}
                   disabled={false}
@@ -3387,6 +3323,20 @@ const CDLedger: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedLoan && (
+        <CompoundInterestModal
+          isOpen={showCompoundModal}
+          onClose={() => setShowCompoundModal(false)}
+          cdNumber={selectedLoan.loan_id || ''}
+          customerName={selectedLoan.customer?.name || ''}
+          interestRate={Number(selectedLoan.interest_rate) || 3}
+          penaltyPercent={Number(selectedLoan.penalty_percent) || 0.75}
+          loanDate={originalLoanDate || selectedLoan.date}
+          reportRows={compoundInterestData.reportRows}
+          summary={compoundInterestData.summary}
+        />
       )}
     </>
   );

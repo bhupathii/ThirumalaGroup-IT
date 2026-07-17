@@ -4142,7 +4142,6 @@ class SupabaseFinance {
     const { data: cdLoans, error: loansErr } = await supabase
       .from('finance_loans')
       .select('*')
-      .eq('status', 'Active')
       .like('loan_id', 'CD%');
       
     if (loansErr) throw loansErr;
@@ -4366,7 +4365,6 @@ class SupabaseFinance {
       const { data: nonCdLoans, error: loansErr } = await supabase
         .from('finance_loans')
         .select('*')
-        .eq('status', 'Active')
         .not('loan_id', 'like', 'CD%');
 
       if (loansErr) throw loansErr;
@@ -4474,6 +4472,7 @@ class SupabaseFinance {
             g2_name,
             g2_phone,
             partner_name: borrower.partner_name || 'Unassigned',
+            status: loan.status,
             customer_id: loan.customer_id,
             guarantor_1_id: loan.guarantor_1_id,
             guarantor_2_id: loan.guarantor_2_id

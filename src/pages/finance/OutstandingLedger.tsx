@@ -1,13 +1,10 @@
-
+import { sortNumerically } from '../../lib/financialCalculations';
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { Printer, ArrowLeft, Search, AlertTriangle, Download } from 'lucide-react';
+import { Printer, ArrowLeft, Search, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useNavigate } from 'react-router-dom';
-import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
-import { exportToExcel } from '../../utils/excel';
-
 
 interface OverdueDueItem {
   id: string;
@@ -32,12 +29,11 @@ interface OverdueDueItem {
   g2Name: string;
   g2Phone: string;
   partnerName: string;
-  status: string;
 }
 
 type ReportType = 'OUTSTANDING' | 'TOTAL DUE LIST' | 'CD DUE LIST' | 'A -> B DUE LIST' | 'NPA LIST';
 
-const DuesLedger: React.FC = () => {
+const OutstandingLedger: React.FC = () => {
   const navigate = useNavigate();
   
   const [dues, setDues] = useState<OverdueDueItem[]>([]);
@@ -50,30 +46,12 @@ const DuesLedger: React.FC = () => {
   
   const [searchName, setSearchName] = useState('');
   const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState(() => {
-    const today = new Date();
-    today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
-    return today.toISOString().split('T')[0];
-  });
+  const [endDate, setEndDate] = useState('');
   
   const [loading, setLoading] = useState(true);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   useEffect(() => {
-    const loadDefaultStartDate = async () => {
-      try {
-        const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
-        if (oldest) {
-          setStartDate(oldest);
-        } else {
-          setStartDate('2024-01-01');
-        }
-      } catch (err) {
-        console.error(err);
-        setStartDate('2024-01-01');
-      }
-    };
-    loadDefaultStartDate();
     fetchData();
   }, []);
 
@@ -111,8 +89,7 @@ const DuesLedger: React.FC = () => {
         g1Phone: row.g1_phone || '',
         g2Name: row.g2_name || '',
         g2Phone: row.g2_phone || '',
-        partnerName: row.partner_name || 'Unassigned',
-        status: row.status || 'Active'
+        partnerName: row.partner_name || 'Unassigned'
       }));
 
       setDues(formatted);
@@ -135,60 +112,30 @@ const DuesLedger: React.FC = () => {
 
       // 1. Report Type Filter
       if (activeReport === 'OUTSTANDING') {
-        // Active and has present due
-        const isActive = due.status === 'Active';
-        const isDue = due.presentDue > 0;
-        if (!isActive || !isDue) return false;
-      } else if (activeReport === 'TOTAL DUE LIST') {
-        // Show all accounts in ledgers (Active, Closed, NPA_CLOSED)
-        // No status filter
-      } else if (activeReport === 'CD DUE LIST') {
-        // Display only Loan Type = CD, active
-        const isActive = due.status === 'Active';
-        if (due.loanType !== 'CD' || !isActive) return false;
-      } else if (activeReport === 'A -> B DUE LIST') {
-        // Alphabetical customer list of active loans
-        const isActive = due.status === 'Active';
-        if (!isActive) return false;
+        if (due.presentDue <= 0 && due.dueDays <= 0) return false;
       } else if (activeReport === 'NPA LIST') {
-        // Display ONLY NPA CLOSED loans
-        if (due.status !== 'NPA_CLOSED') return false;
+        if (!due.isNPA) return false;
+      } else if (activeReport === 'CD DUE LIST') {
+        if (due.loanType !== 'CD') return false;
+      } else if (activeReport === 'A -> B DUE LIST') {
+        if (startDate && due.currentDueDate < startDate) return false;
+        if (endDate && due.currentDueDate > endDate) return false;
       }
 
-      // 2. Date Filters for all reports
-      if (startDate && due.currentDueDate < startDate) return false;
-      if (endDate && due.currentDueDate > endDate) return false;
-
-      // 3. Partner Filter
+      // 2. Partner Filter
       if (selectedPartner !== 'ALL PARTNERS' && due.partnerName !== selectedPartner) return false;
 
-      // 4. Loan Type Filter
+      // 3. Loan Type Filter
       if (loanTypeFilter !== 'ALL' && due.loanType !== loanTypeFilter) return false;
 
-      // 5. Search Filter
+      // 4. Search Filter
       if (searchName && !due.customerName.toLowerCase().includes(searchName.toLowerCase()) && !due.loanId.toLowerCase().includes(searchName.toLowerCase())) return false;
 
       return true;
     }).sort((a, b) => {
-      if (activeReport === 'OUTSTANDING') {
-        // Default sorting: Due Date ASC (oldest overdue first). If Due Date is same: CD Number ASC (numeric).
-        if (a.currentDueDate !== b.currentDueDate) {
-          return a.currentDueDate.localeCompare(b.currentDueDate);
-        }
-        const numA = Number(a.loanId.replace(/\D/g, '')) || 0;
-        const numB = Number(b.loanId.replace(/\D/g, '')) || 0;
-        if (numA !== numB) return numA - numB;
-        return a.loanId.localeCompare(b.loanId);
-      } else if (activeReport === 'A -> B DUE LIST') {
-        // Borrower Name A -> Z
-        return a.customerName.localeCompare(b.customerName);
-      } else {
-        // Default sorting: CD Number ASC (numeric)
-        const numA = Number(a.loanId.replace(/\D/g, '')) || 0;
-        const numB = Number(b.loanId.replace(/\D/g, '')) || 0;
-        if (numA !== numB) return numA - numB;
-        return a.loanId.localeCompare(b.loanId);
-      }
+      const numA = Number(a.loanId.replace(/\\D/g, '')) || 0;
+      const numB = Number(b.loanId.replace(/\\D/g, '')) || 0;
+      return numA - numB;
     });
   }, [dues, activeReport, selectedPartner, loanTypeFilter, searchName, startDate, endDate]);
 
@@ -214,56 +161,7 @@ const DuesLedger: React.FC = () => {
     return { principal, interestPaid, interest, penaltyPaid, penalty, presentDue, amountToClose };
   }, [filteredDues]);
 
-  const options: ReportType[] = ['OUTSTANDING', 'TOTAL DUE LIST', 'CD DUE LIST', 'A -> B DUE LIST', 'NPA LIST'];
-
-  const handleExportExcel = () => {
-    try {
-      const exportData = filteredDues.map((due, idx) => ({
-        'S.No': idx + 1,
-        'Loan ID': due.loanId,
-        'Customer Name': due.customerName,
-        'Prn Amt': Math.round(due.currentPrincipal),
-        'Int Paid': Math.round(due.interestPaid),
-        'Pend. Int': Math.round(due.pendingInterest),
-        'Penalty': Math.round(due.penalty),
-        'Present Due': Math.round(due.presentDue),
-        'Close Amt': Math.round(due.currentPrincipal + due.pendingInterest + due.penalty),
-        'Due Date': due.currentDueDate.split('-').reverse().join('/'),
-        'Due Days': due.dueDays,
-        'Phone (B)': due.phone || '',
-        'G1 Name': due.g1Name || '',
-        'G1 Phone': due.g1Phone || '',
-        'G2 Name': due.g2Name || '',
-        'G2 Phone': due.g2Phone || ''
-      }));
-
-      // Add Grand Total row
-      exportData.push({
-        'S.No': '',
-        'Loan ID': '',
-        'Customer Name': 'Grand Total:',
-        'Prn Amt': Math.round(totals.principal),
-        'Int Paid': Math.round(totals.interestPaid),
-        'Pend. Int': Math.round(totals.interest),
-        'Penalty': Math.round(totals.penalty),
-        'Present Due': Math.round(totals.presentDue),
-        'Close Amt': Math.round(totals.amountToClose),
-        'Due Date': '',
-        'Due Days': '',
-        'Phone (B)': '',
-        'G1 Name': '',
-        'G1 Phone': '',
-        'G2 Name': '',
-        'G2 Phone': ''
-      } as any);
-
-      exportToExcel(exportData, `Dues_List_${activeReport.replace(/ /g, '_')}_${startDate}_to_${endDate}`, activeReport);
-      toast.success('Excel exported successfully');
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to export Excel');
-    }
-  };
+  const options: ReportType[] = ['OUTSTANDING', 'NPA LIST'];
 
   return (
     <div className="flex flex-col gap-2 w-full max-w-[100%] mx-auto px-4 pt-3 pb-4 print:p-0">
@@ -271,8 +169,8 @@ const DuesLedger: React.FC = () => {
       {/* ── ROW 1: Header ───────────────────────────────────────────────────── */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-[15px] font-black uppercase text-slate-900 tracking-wide leading-none">{activeReport}</h1>
-          <p className="text-[11px] text-slate-500 uppercase font-semibold mt-0.5">Active Loans · NPA · Partner Collection</p>
+          <h1 className="text-[15px] font-black uppercase text-slate-900 tracking-wide leading-none">Outstanding List</h1>
+          <p className="text-[11px] text-slate-500 uppercase font-semibold mt-0.5">Overdue Loans · NPA</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -280,12 +178,6 @@ const DuesLedger: React.FC = () => {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 text-[12px] font-bold uppercase shadow-sm"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Back
-          </button>
-          <button
-            onClick={handleExportExcel}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-700 text-white rounded-lg hover:bg-green-800 text-[12px] font-bold uppercase shadow-sm"
-          >
-            <Download className="w-3.5 h-3.5" /> Excel
           </button>
           <button
             onClick={() => setShowPrintPreview(true)}
@@ -634,4 +526,4 @@ const DuesLedger: React.FC = () => {
   );
 };
 
-export default DuesLedger;
+export default OutstandingLedger;

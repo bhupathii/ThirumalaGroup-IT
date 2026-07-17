@@ -5,14 +5,38 @@ export const normalizeHeadOfAccount = (name: string): string => {
   if (clean === 'CD COMMISSION A/C' || clean === 'CD COMMISSION' || clean === 'CD INTEREST' || clean === 'CD INTEREST A/C') {
     return 'CD INTEREST';
   }
+  if (clean === 'HP COMMISSION A/C' || clean === 'HP COMMISSION' || clean === 'HP INTEREST' || clean === 'HP INTEREST A/C') {
+    return 'HP INTEREST';
+  }
+  if (clean === 'STBD COMMISSION A/C' || clean === 'STBD COMMISSION' || clean === 'STBD INTEREST' || clean === 'STBD INTEREST A/C') {
+    return 'STBD INTEREST';
+  }
+  if (clean === 'COMMISSION A/C' || clean === 'COMMISSION') {
+    return 'TBD INTEREST';
+  }
   if (clean === 'CD A/C' || clean === 'CD PRINCIPAL') {
     return 'CD PRINCIPAL';
+  }
+  if (clean === 'HP A/C' || clean === 'HP PRINCIPAL') {
+    return 'HP PRINCIPAL';
+  }
+  if (clean === 'STBD A/C' || clean === 'STBD PRINCIPAL') {
+    return 'STBD PRINCIPAL';
+  }
+  if (clean === 'TBD A/C' || clean === 'TBD PRINCIPAL') {
+    return 'TBD PRINCIPAL';
   }
   if (clean === 'CD DOCUMENT CHARGES A/C' || clean === 'CD DOCUMENT CHARGES') {
     return 'CD DOCUMENT CHARGES';
   }
   if (clean === 'PENALTY A/C' || clean === 'CD PENALTY' || clean === 'PENALTY CD A/C') {
     return 'CD PENALTY';
+  }
+  if (clean === 'HP PENALTY A/C' || clean === 'HP PENALTY') {
+    return 'HP PENALTY';
+  }
+  if (clean === 'STBD PENALTY A/C' || clean === 'STBD PENALTY') {
+    return 'STBD PENALTY';
   }
   return clean;
 };
@@ -63,11 +87,25 @@ export const dailyFinancialTransactionService = {
 
     const getClassification = (headName: string): 'BALANCE_SHEET' | 'PROFIT_AND_LOSS' | 'UNCLASSIFIED' => {
       const cleanHead = normalizeHeadOfAccount(headName);
+      
       if (cleanHead === 'CAPITAL') return 'BALANCE_SHEET';
-      if (cleanHead === 'CD PRINCIPAL') return 'BALANCE_SHEET';
-      if (cleanHead === 'CD INTEREST' || cleanHead === 'CD DOCUMENT CHARGES' || cleanHead === 'CD PENALTY') {
+      if (cleanHead.includes('PRINCIPAL') || cleanHead === 'CD PRINCIPAL' || cleanHead === 'HP PRINCIPAL' || cleanHead === 'STBD PRINCIPAL' || cleanHead === 'TBD PRINCIPAL') {
+        return 'BALANCE_SHEET';
+      }
+      
+      if (
+        cleanHead.includes('INTEREST') || 
+        cleanHead.includes('COMMISSION') || 
+        cleanHead.includes('DOCUMENT CHARGES') || 
+        cleanHead.includes('PENALTY') ||
+        cleanHead === 'CD PENALTY' || 
+        cleanHead === 'HP PENALTY' || 
+        cleanHead === 'STBD PENALTY' ||
+        cleanHead === 'TBD PENALTY'
+      ) {
         return 'PROFIT_AND_LOSS';
       }
+
       const acc = accountsMap.get(cleanHead.toUpperCase()) || accountsMap.get(headName.toUpperCase());
       if (acc?.report_classification) {
         return acc.report_classification;

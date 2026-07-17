@@ -1,9 +1,10 @@
-import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState } from 'react';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
+import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
 
 interface DaybookItem {
   id: string;
@@ -16,7 +17,7 @@ interface DaybookItem {
 }
 
 const Daybook: React.FC = () => {
-  const [fromDate, setFromDate] = useState(() => getLocalBusinessDateISO());
+  const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState(() => getLocalBusinessDateISO());
   const [loading, setLoading] = useState(true);
   
@@ -28,7 +29,26 @@ const Daybook: React.FC = () => {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   useEffect(() => {
-    fetchDaybookData();
+    const loadDefaultStartDate = async () => {
+      try {
+        const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
+        if (oldest) {
+          setFromDate(oldest);
+        } else {
+          setFromDate(getLocalBusinessDateISO());
+        }
+      } catch (err) {
+        console.error(err);
+        setFromDate(getLocalBusinessDateISO());
+      }
+    };
+    loadDefaultStartDate();
+  }, []);
+
+  useEffect(() => {
+    if (fromDate) {
+      fetchDaybookData();
+    }
   }, [fromDate, toDate]);
 
   const fetchDaybookData = async () => {

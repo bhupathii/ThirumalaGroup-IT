@@ -1,3 +1,4 @@
+import { sortNumerically } from '../../lib/financialCalculations';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
@@ -43,7 +44,7 @@ const HPLedger: React.FC = () => {
 
   useEffect(() => {
     fetchLedgerData();
-  }, []);
+ }, []);
 
   useEffect(() => {
     const q = searchQuery.toLowerCase();
@@ -54,12 +55,12 @@ const HPLedger: React.FC = () => {
     );
     if (startDate) {
       filtered = filtered.filter(row => row.date >= startDate);
-    }
+   }
     if (endDate) {
       filtered = filtered.filter(row => row.date <= endDate);
-    }
+   }
     setFilteredRows(filtered);
-  }, [searchQuery, ledgerRows, startDate, endDate]);
+ }, [searchQuery, ledgerRows, startDate, endDate]);
 
   const fetchLedgerData = async () => {
     setLoading(true);
@@ -108,8 +109,8 @@ const HPLedger: React.FC = () => {
           installmentsPaid: ipaid,
           status: loan.status,
           rawLoan: loanWithTxs
-        };
-      });
+       };
+     });
 
       setLedgerRows(rows);
       setFilteredRows(rows);
@@ -118,14 +119,14 @@ const HPLedger: React.FC = () => {
       if (selectedLoan) {
         const updated = rows.find(r => r.id === selectedLoan.id);
         if (updated) setSelectedLoan(updated);
-      }
-    } catch (err) {
+     }
+   } catch (err) {
       console.error(err);
       toast.error('Failed to compile HP Ledger');
-    } finally {
+   } finally {
       setLoading(false);
-    }
-  };
+   }
+ };
 
   const openLoanDetails = async (loan: any) => {
     setSelectedLoan(loan);
@@ -141,7 +142,7 @@ const HPLedger: React.FC = () => {
     setPayingInsts(overdueCount > 0 ? overdueCount : 1);
     setDiscount(0);
     setWaivedPenalty(0);
-  };
+ };
 
   // Helper to dynamically calculate installment schedule
   const getInstallmentSchedule = (loan: any) => {
@@ -163,12 +164,12 @@ const HPLedger: React.FC = () => {
       if (i <= Math.floor(ipaid)) {
         status = 'Paid';
         paidAmt = installmentAmount;
-      } else if (i === Math.floor(ipaid) + 1 && ipaid % 1 > 0) {
+     } else if (i === Math.floor(ipaid) + 1 && ipaid % 1 > 0) {
         status = 'Partially Paid';
         paidAmt = financeCalculationService.roundRupee((ipaid % 1) * installmentAmount);
-      } else if (dueDate < currentDate) {
+     } else if (dueDate < currentDate) {
         status = 'Overdue';
-      }
+     }
 
       // Calculate delay in days and penalty
       let dueDays = 0;
@@ -178,8 +179,8 @@ const HPLedger: React.FC = () => {
         dueDays = Math.max(0, Math.round(diffTime / (1000 * 60 * 60 * 24)));
         if (dueDays > 5) { // HP grace period is 5 days
           penalty = financeCalculationService.roundRupee(installmentAmount * 0.002 * dueDays);
-        }
-      }
+       }
+     }
 
       schedule.push({
         instNo: i,
@@ -189,10 +190,10 @@ const HPLedger: React.FC = () => {
         dueDays,
         penalty,
         status
-      });
-    }
+     });
+   }
     return schedule;
-  };
+ };
 
   const getPayableCalculations = () => {
     if (!selectedLoan) return { instAmt: 0, penalty: 0, actualPenaltyPaid: 0, total: 0, principalPaid: 0, commissionPaid: 0 };
@@ -229,25 +230,25 @@ const HPLedger: React.FC = () => {
       total: totalPayable,
       principalPaid: splits.principalPaid,
       commissionPaid: splits.commissionPaid
-    };
-  };
+   };
+ };
 
   const postPayment = async () => {
     if (!selectedLoan) return;
     if (payingInsts <= 0) {
       toast.error('Installments count must be positive');
       return;
-    }
+   }
     if (!receiptNo) {
       toast.error('Receipt number is required');
       return;
-    }
+   }
 
     // Check if waiver details are entered when waiver is present
     if ((discount > 0 || waivedPenalty > 0) && (!waiverReason.trim() || !waivedBy.trim())) {
       toast.error('Waiver Reason and Approver Name are required for discount transactions.');
       return;
-    }
+   }
 
     setSubmittingPayment(true);
     try {
@@ -270,22 +271,22 @@ const HPLedger: React.FC = () => {
         waiverReason: (discount > 0 || waivedPenalty > 0) ? waiverReason : undefined,
         waivedBy: (discount > 0 || waivedPenalty > 0) ? waivedBy : undefined,
         waivedDate: (discount > 0 || waivedPenalty > 0) ? paymentDate : undefined
-      });
+     });
 
       if (res.success) {
         toast.success(`Payment posted successfully! Receipt: ${receiptNo}`);
         setWaiverReason('');
         await fetchLedgerData();
-      } else {
+     } else {
         toast.error(res.error || 'Failed to post payment');
-      }
-    } catch (e: any) {
+     }
+   } catch (e: any) {
       console.error(e);
       toast.error('Error submitting transaction');
-    } finally {
+   } finally {
       setSubmittingPayment(false);
-    }
-  };
+   }
+ };
 
   const handleNPACloseSubmit = async () => {
     if (!selectedLoan) return;
@@ -304,7 +305,7 @@ const HPLedger: React.FC = () => {
           status: 'NPA_CLOSED',
           npa_closed: true,
           remarks: updatedRemarks
-        })
+       })
         .eq('id', selectedLoan.id);
       if (loanError) throw loanError;
 
@@ -332,7 +333,7 @@ const HPLedger: React.FC = () => {
         reason: cleanNpaReason,
         closed_by: closedBy,
         closed_at: npaClosedDate
-      });
+     });
 
       // Post transaction if settlement received
       if (npaClosedAmount > 0) {
@@ -344,7 +345,7 @@ const HPLedger: React.FC = () => {
           remarks: `HP NPA Settlement Collection - ${npaReceiptNo} (Prin: ${npaClosedAmount})`,
           collected_by: closedBy,
           receipt_no: npaReceiptNo
-        });
+       });
 
         await supabaseFinance.createCashbookEntry({
           entry_date: paymentDate,
@@ -354,8 +355,8 @@ const HPLedger: React.FC = () => {
           credit: npaClosedAmount,
           debit: 0,
           created_by: closedBy
-        });
-      }
+       });
+     }
 
       // Write waiver record for the remainder
       if (waived_amount > 0) {
@@ -368,20 +369,20 @@ const HPLedger: React.FC = () => {
           waived_penalty: penalty_due,
           waived_commission: 0,
           receipt_no: npaReceiptNo
-        });
-      }
+       });
+     }
 
       await fetchLedgerData();
       toast.success('HP Account closed under NPA successfully');
       setShowNpaModal(false);
       setIsDrawerOpen(false);
-    } catch (e: any) {
+   } catch (e: any) {
       console.error(e);
       toast.error('Error settling HP NPA account');
-    } finally {
+   } finally {
       setIsNpaClosing(false);
-    }
-  };
+   }
+ };
 
   const schedule = selectedLoan ? getInstallmentSchedule(selectedLoan) : [];
   const payCalcs = getPayableCalculations();
@@ -389,7 +390,7 @@ const HPLedger: React.FC = () => {
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
       {/* Header */}
-      <div className={`flex justify-between items-center border-b border-indigo-100 pb-4 ${showPrintPreview || isDrawerOpen ? 'print:hidden' : ''}`}>
+      <div className={`flex justify-between items-center border-b border-indigo-100 pb-4`}>
         <div>
           <h1 className="finance-h1 text-indigo-900">HP Ledger</h1>
           <p className="finance-small-label uppercase">Hire Purchase Account Book</p>
@@ -400,7 +401,7 @@ const HPLedger: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl bg-slate-50 p-4 rounded-xl border ${showPrintPreview || isDrawerOpen ? 'print:hidden' : ''}`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl bg-slate-50 p-4 rounded-xl border`}>
         <div>
           <Input
             label="Filter HP Accounts"
@@ -514,7 +515,7 @@ const HPLedger: React.FC = () => {
                       setNpaReason('');
                       setNpaSettlementAmount('');
                       setShowNpaModal(true);
-                    }}
+                   }}
                     variant="danger"
                     size="sm"
                     icon={ShieldAlert}
@@ -583,7 +584,7 @@ const HPLedger: React.FC = () => {
                                 inst.status === 'Partially Paid' ? 'bg-amber-100 text-amber-700' :
                                 inst.status === 'Overdue' ? 'bg-rose-100 text-rose-700' :
                                 'bg-gray-100 text-gray-500'
-                              }`}>
+                             }`}>
                                 {inst.status}
                               </span>
                             </td>
@@ -749,7 +750,7 @@ const HPLedger: React.FC = () => {
                               <td className="px-3 py-2 text-right font-semibold text-gray-950">₹{Number(tx.amount).toLocaleString('en-IN')}</td>
                             </tr>
                           );
-                        })}
+                       })}
                       </tbody>
                     </table>
                   </div>

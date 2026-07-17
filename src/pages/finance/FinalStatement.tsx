@@ -3,10 +3,11 @@ import React, { useEffect, useState } from 'react';
 import Button from '../../components/UI/Button';
 import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../../services/dailyFinancialTransactionService';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { Printer, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Printer, ArrowLeft, RefreshCw, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useNavigate } from 'react-router-dom';
+import { exportToExcel } from '../../utils/excel';
 
 interface BSAccountBalanceItem {
   accountName: string;
@@ -35,7 +36,7 @@ const FinalStatement: React.FC = () => {
   const [financeMode] = useState<'REGULAR' | 'ITR'>(() => {
     const mode = sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode');
     return mode === 'itr' ? 'ITR' : 'REGULAR';
-  });
+ });
 
   useEffect(() => {
     const loadDefaultStartDate = async () => {
@@ -43,26 +44,26 @@ const FinalStatement: React.FC = () => {
         const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
         if (oldest) {
           setStartDate(oldest);
-        } else {
+       } else {
           const d = new Date();
           d.setMonth(d.getMonth() - 1);
           setStartDate(d.toISOString().split('T')[0]);
-        }
-      } catch (err) {
+       }
+     } catch (err) {
         console.error(err);
         const d = new Date();
         d.setMonth(d.getMonth() - 1);
         setStartDate(d.toISOString().split('T')[0]);
-      }
-    };
+     }
+   };
     loadDefaultStartDate();
-  }, []);
+ }, []);
 
   useEffect(() => {
     if (startDate) {
       fetchStatementData();
-    }
-  }, [startDate, endDate]);
+   }
+ }, [startDate, endDate]);
 
   const fetchStatementData = async () => {
     setLoading(true);
@@ -78,15 +79,15 @@ const FinalStatement: React.FC = () => {
           fromDate: '1970-01-01',
           toDate: prevDateLimitStr,
           financeMode
-        });
-      }
+       });
+     }
 
       // 2. Fetch date range entries
       const rangeTxs = await dailyFinancialTransactionService.getDailyFinancialTransactions({
         fromDate: startDate,
         toDate: endDate,
         financeMode
-      });
+     });
 
       const partners = await supabaseFinance.getPartners();
       setPartnerCount(partners.length || 1);
@@ -95,7 +96,7 @@ const FinalStatement: React.FC = () => {
       let prevCash = 0;
       prevTxs.forEach(t => {
         prevCash += (t.credit - t.debit);
-      });
+     });
       setOpeningCash(prevCash);
 
       let currCredit = 0;
@@ -103,7 +104,7 @@ const FinalStatement: React.FC = () => {
       rangeTxs.forEach(t => {
         currCredit += t.credit;
         currDebit += t.debit;
-      });
+     });
       setCreditTotal(currCredit);
       setDebitTotal(currDebit);
       setClosingCash(prevCash + currCredit - currDebit);
@@ -112,23 +113,23 @@ const FinalStatement: React.FC = () => {
       const bsHeads = new Set<string>();
       prevTxs.forEach(t => {
         if (t.reportClassification === 'BALANCE_SHEET') bsHeads.add(t.headOfAccount);
-      });
+     });
       rangeTxs.forEach(t => {
         if (t.reportClassification === 'BALANCE_SHEET') bsHeads.add(t.headOfAccount);
-      });
+     });
 
       const balances: BSAccountBalanceItem[] = Array.from(bsHeads).map(head => {
         let op = 0;
         prevTxs.filter(t => t.headOfAccount === head).forEach(t => {
           op += (t.credit - t.debit);
-        });
+       });
 
         let cr = 0;
         let dr = 0;
         rangeTxs.filter(t => t.headOfAccount === head).forEach(t => {
           cr += t.credit;
           dr += t.debit;
-        });
+       });
 
         return {
           accountName: head,
@@ -136,18 +137,37 @@ const FinalStatement: React.FC = () => {
           credit: cr,
           debit: dr,
           closing: op + cr - dr
-        };
-      });
+       };
+     });
 
       balances.sort((a, b) => a.accountName.localeCompare(b.accountName));
       setAccountBalances(balances);
 
-    } catch (err) {
+   } catch (err) {
       console.error(err);
       toast.error('Failed to compile Final Statement');
-    } finally {
+   } finally {
       setLoading(false);
-    }
+   }
+ };
+
+  const navigateToDetailedLedger = (head: string) => {
+    navigate(`/finance/detailed-ledger?head=${encodeURIComponent(head)}&from=${startDate}&to=${endDate}`);
+  };
+
+  const handleExportExcel = () => {
+    const data = [
+      { 'Opening Cash': openingCash, 'Closing Cash': closingCash, 'Credit Total': creditTotal, 'Debit Total': debitTotal, 'Net Growth': grandTotal, 'Share Value': shareValue },
+      ...accountBalances.map(item => ({
+        'Account Name': item.accountName,
+        'Opening Balance': item.opening,
+        'Credit': item.credit,
+        'Debit': item.debit,
+        'Closing Balance': item.closing
+      }))
+    ];
+    exportToExcel(data, `Final_Statement_${startDate}_to_${endDate}`);
+    toast.success('Excel Statement Exported!');
   };
 
   const grandTotal = creditTotal - debitTotal;
@@ -156,7 +176,7 @@ const FinalStatement: React.FC = () => {
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto p-6 print:p-0">
       {/* Header */}
-      <div className={`flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <div className={`flex justify-between items-center bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm`}>
         <div>
           <h1 className="finance-h1">Final Statement</h1>
           <p className="finance-small-label uppercase">
@@ -173,11 +193,14 @@ const FinalStatement: React.FC = () => {
           <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white finance-header-time uppercase">
             Print
           </Button>
+          <Button onClick={handleExportExcel} variant="secondary" size="sm" icon={Download} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 finance-header-time uppercase">
+            Excel
+          </Button>
         </div>
       </div>
 
       {/* Top Filter & Share Row */}
-      <div className={`bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row overflow-hidden ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <div className={`bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row overflow-hidden`}>
         {/* Date Filters */}
         <div className="flex-1 grid grid-cols-3 divide-x divide-slate-100 border-b md:border-b-0 md:border-r border-slate-100">
           <div className="px-6 py-4 flex flex-col justify-center">
@@ -214,7 +237,7 @@ const FinalStatement: React.FC = () => {
       </div>
 
       {/* Summary Cards Row 1 */}
-      <div className={`grid grid-cols-1 sm:grid-cols-4 gap-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-4 gap-4`}>
         {/* Credit Total */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
           <span className="text-slate-400 block finance-small-label uppercase">Credit Total</span>
@@ -241,7 +264,7 @@ const FinalStatement: React.FC = () => {
       </div>
 
       {/* Account Balances Table */}
-      <div className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[400px] ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <div className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[400px]`}>
         {/* Table Header */}
         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 relative">
           <div>
@@ -276,19 +299,23 @@ const FinalStatement: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {accountBalances.map((acc, idx) => (
-                  <tr key={idx} className="transition-colors hover:bg-slate-50">
-                    <td className="px-6 py-4 text-slate-500 finance-sidebar-link">{idx + 1}</td>
-                    <td className="px-6 py-4 text-slate-900 font-bold uppercase finance-sidebar-link">{acc.accountName}</td>
-                    <td className={`px-6 py-4 text-right font-medium ${acc.opening >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  <tr 
+                    key={idx} 
+                    className="transition-colors hover:bg-slate-50 cursor-pointer"
+                    onClick={() => navigateToDetailedLedger(acc.accountName)}
+                  >
+                    <td className="px-6 py-4 text-slate-500">{idx + 1}</td>
+                    <td className="px-6 py-4 text-slate-900 hover:text-blue-700 hover:underline font-bold uppercase">{acc.accountName}</td>
+                    <td className={`px-6 py-4 text-right font-medium font-mono ${acc.opening >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                       {Math.abs(acc.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {acc.opening >= 0 ? 'Cr' : 'Dr'}
                     </td>
-                    <td className="px-6 py-4 text-emerald-600 text-right font-medium">
-                      {acc.credit > 0 ? `${acc.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                    <td className="px-6 py-4 text-emerald-600 text-right font-medium font-mono">
+                      {acc.credit > 0 ? `₹${acc.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
-                    <td className="px-6 py-4 text-rose-600 text-right font-medium">
-                      {acc.debit > 0 ? `${acc.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                    <td className="px-6 py-4 text-rose-600 text-right font-medium font-mono">
+                      {acc.debit > 0 ? `₹${acc.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
-                    <td className={`px-6 py-4 text-right font-black ${acc.closing >= 0 ? 'text-emerald-850' : 'text-rose-850'}`}>
+                    <td className={`px-6 py-4 text-right font-black font-mono ${acc.closing >= 0 ? 'text-emerald-850' : 'text-rose-850'}`}>
                       {Math.abs(acc.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {acc.closing >= 0 ? 'Cr' : 'Dr'}
                     </td>
                   </tr>

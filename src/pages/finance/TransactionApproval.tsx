@@ -1,3 +1,4 @@
+import { sortNumerically } from '../../lib/financialCalculations';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseFinance, FinanceTransactionReview } from '../../lib/supabaseFinance';
@@ -12,7 +13,9 @@ import {
   User, 
   AlertCircle,
   Book,
-  X
+  X,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -529,7 +532,7 @@ const TransactionApproval: React.FC = () => {
                   <th className="px-6 py-4 text-right tracking-wider">Amount Breakdown</th>
                   <th className="px-6 py-4 text-left tracking-wider">Entered By</th>
                   <th className="px-6 py-4 text-center tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-center tracking-wider">Actions</th>
+                  <th className="px-6 py-4 text-center tracking-wider min-w-[200px]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -668,13 +671,19 @@ const TransactionApproval: React.FC = () => {
 
                         {/* Actions */}
                         <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
+                          <div className="flex items-center justify-center gap-1.5 flex-nowrap">
+                            <button
+                              onClick={() => toggleExpandReview(item.id)}
+                              className="text-indigo-600 hover:text-indigo-850 text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-150 transition-all focus:outline-none whitespace-nowrap"
+                            >
+                              {isExpanded ? 'Hide Details' : 'View Details'}
+                            </button>
                             {item.review_status === 'PENDING' ? (
                               <>
                                 <button
                                   onClick={() => handleApprove(item.id)}
                                   disabled={actioningId === item.id}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] tracking-wide uppercase px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-all disabled:opacity-50"
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] tracking-wide uppercase px-2 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-all disabled:opacity-50 whitespace-nowrap"
                                 >
                                   {actioningId === item.id ? (
                                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -684,27 +693,28 @@ const TransactionApproval: React.FC = () => {
                                   Approve
                                 </button>
                                 <button
+                                  onClick={() => toast('Edit functionality is currently unavailable.', { icon: '🚧' })}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] tracking-wide uppercase px-2 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-all disabled:opacity-50 whitespace-nowrap"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                  Edit
+                                </button>
+                                <button
                                   onClick={() => handleReject(item.id)}
                                   disabled={actioningId === item.id}
-                                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] tracking-wide uppercase px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-all disabled:opacity-50"
+                                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] tracking-wide uppercase px-2 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-all disabled:opacity-50 whitespace-nowrap"
                                 >
                                   {actioningId === item.id ? (
                                     <Loader2 className="w-3 h-3 animate-spin" />
                                   ) : (
-                                    <X className="w-3 h-3" />
+                                    <Trash2 className="w-3 h-3" />
                                   )}
-                                  Reject
+                                  Delete
                                 </button>
                               </>
                             ) : (
-                              <span className="text-slate-350 text-xs font-semibold uppercase mr-2">Closed</span>
+                              <span className="text-slate-350 text-[10px] font-bold uppercase tracking-wider px-2 py-1 whitespace-nowrap">Closed</span>
                             )}
-                            <button
-                              onClick={() => toggleExpandReview(item.id)}
-                              className="text-indigo-600 hover:text-indigo-850 text-[10px] font-bold uppercase tracking-wider px-2 py-1 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-150 transition-all focus:outline-none"
-                            >
-                              {isExpanded ? 'Hide Details' : 'View Details'}
-                            </button>
                           </div>
                         </td>
 

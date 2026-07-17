@@ -1,10 +1,13 @@
+import { sortNumerically } from '../../lib/financialCalculations';
 import React, { useEffect, useState, useMemo } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import { supabaseFinance, FinanceEditedLog, FinanceDeletedLog } from '../../lib/supabaseFinance';
-import { Trash2, Edit2, Search, Calendar, Database } from 'lucide-react';
+import { Trash2, Edit2, Search, Calendar, Database, X, Printer, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
+import { exportToExcel } from '../../utils/excel';
+import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 export const ignoredKeys = new Set([
   'id',
@@ -124,6 +127,15 @@ export const formatDateHuman = (dateStr: string): string => {
 export const formatLogValue = (field: string, val: any): string => {
   if (val === null || val === undefined) return '-';
   if (typeof val === 'boolean') return val ? 'YES' : 'NO';
+  if (typeof val === 'object') {
+    try {
+      return Object.entries(val)
+        .map(([k, v]) => `${mapFieldLabel(k)}: ${formatLogValue(k, v)}`)
+        .join('\n');
+    } catch {
+      return JSON.stringify(val);
+    }
+  }
 
   const fieldLower = field.toLowerCase();
   const numVal = Number(val);
@@ -289,9 +301,9 @@ const EditedDeletedLogs: React.FC = () => {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
 
-  // Row expansion state
-  const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({});
-  const [expandedDeletedLogs, setExpandedDeletedLogs] = useState<Record<string, boolean>>({});
+  // Modal state for side-by-side viewing
+  const [selectedLogForModal, setSelectedLogForModal] = useState<any>(null);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   useEffect(() => {
     fetchLogs();
@@ -339,19 +351,7 @@ const EditedDeletedLogs: React.FC = () => {
     }
   };
 
-  const toggleExpand = (id: string) => {
-    setExpandedLogs(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
-  };
-
-  const toggleExpandDeleted = (id: string) => {
-    setExpandedDeletedLogs(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
-  };
+  // Cleaned up old expansion toggles
 
   // Lookup maps
   const customerMap = useMemo(() => {
@@ -637,6 +637,38 @@ const EditedDeletedLogs: React.FC = () => {
           <h1 className="finance-h1 font-bold uppercase text-slate-900">AUDIT LOGS REGISTRY</h1>
           <p className="finance-small-label uppercase text-slate-900 font-bold">REVIEW FULL AUDIT HISTORIES OF EDITED OR DELETED FINANCE ENTRIES</p>
         </div>
+        <div className="flex gap-2">
+          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
+            Print
+          </Button>
+          <Button onClick={() => {
+            if (logType === 'edited') {
+              const data = filteredLogs.map(item => ({
+                Timestamp: formatDateHuman(item.edited_at),
+                Operator: item.edited_by,
+                Table: mapTableName(item.table_name),
+                'Loan No': item.displayLoanNo,
+                Customer: item.displayCustomer,
+                Field: mapFieldLabel(item.field),
+                'Old Value': formatLogValue(item.field, item.oldValue),
+                'New Value': formatLogValue(item.field, item.newValue),
+                Source: item.source
+              }));
+              exportToExcel(data, `Edited_Logs_${new Date().toISOString().split('T')[0]}`);
+            } else {
+              const data = filteredDeletedLogs.map(log => ({
+                Timestamp: formatDateHuman(log.deleted_at),
+                Operator: log.deleted_by,
+                Table: mapTableName(log.table_name),
+                Details: getDeletedLogSummary(log)
+              }));
+              exportToExcel(data, `Deleted_Logs_${new Date().toISOString().split('T')[0]}`);
+            }
+            toast.success('Excel Logs Exported!');
+          }} variant="secondary" size="sm" icon={Download}>
+            Excel
+          </Button>
+        </div>
       </div>
 
       {/* Log Type toggle */}
@@ -770,11 +802,9 @@ const EditedDeletedLogs: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
-                  {filteredLogs.map((item) => {
-                    const isExpanded = !!expandedLogs[item.id];
-                    return (
-                      <React.Fragment key={item.id}>
-                        <tr className="hover:bg-slate-50/50 transition-colors">
+                    {filteredLogs.map((item) => {
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-4 py-3.5 whitespace-nowrap text-xs text-slate-500 font-mono">
                             {formatDateHuman(item.edited_at)}
                           </td>
@@ -806,26 +836,16 @@ const EditedDeletedLogs: React.FC = () => {
                           </td>
                           <td className="px-4 py-3.5 whitespace-nowrap">
                             <button
-                              onClick={() => toggleExpand(item.id)}
+                              onClick={() => setSelectedLogForModal(item)}
                               className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors uppercase"
                             >
                               <Database className="w-3.5 h-3.5" />
-                              {isExpanded ? 'HIDE CARD' : 'VIEW CARD'}
+                              VIEW DETAILS
                             </button>
                           </td>
                         </tr>
-                        {isExpanded && (
-                          <tr>
-                            <td colSpan={10} className="px-6 py-4 bg-slate-50 border-t border-slate-100">
-                              <div className="flex justify-start">
-                                {renderReadableCard(item.field, item.oldValue, item.newValue, item.edited_by, item.edited_at)}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
@@ -850,49 +870,45 @@ const EditedDeletedLogs: React.FC = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
                   {filteredDeletedLogs.map((log) => {
-                    const isExpanded = !!expandedDeletedLogs[log.id];
                     return (
-                      <React.Fragment key={log.id}>
-                        <tr className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-4 py-3.5 whitespace-nowrap text-xs text-slate-500 font-mono">
-                            {formatDateHuman(log.deleted_at)}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-slate-900 font-medium">
-                            {log.deleted_by.toUpperCase()}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-slate-600 font-mono">
-                            {mapTableName(log.table_name)}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-slate-700 font-semibold">
-                            {getDeletedLogSummary(log)}
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap text-right flex items-center justify-end gap-3">
-                            <button
-                              onClick={() => toggleExpandDeleted(log.id)}
-                              className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors uppercase"
-                            >
-                              <Database className="w-3.5 h-3.5" />
-                              {isExpanded ? 'HIDE CARDS' : 'VIEW CARDS'}
-                            </button>
-                            <Button
-                              onClick={() => handleRestore(log)}
-                              variant="success"
-                              size="sm"
-                              disabled={restoring === log.id}
-                              className="font-bold uppercase"
-                            >
-                              {restoring === log.id ? 'RESTORING...' : 'RESTORE'}
-                            </Button>
-                          </td>
-                        </tr>
-                        {isExpanded && (
-                          <tr>
-                            <td colSpan={5} className="px-6 py-4 bg-slate-50 border-t border-slate-100">
-                              {renderDeletedRecordCards(log)}
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
+                      <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-4 py-3.5 whitespace-nowrap text-xs text-slate-500 font-mono">
+                          {formatDateHuman(log.deleted_at)}
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-slate-900 font-medium">
+                          {log.deleted_by.toUpperCase()}
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-slate-600 font-mono">
+                          {mapTableName(log.table_name)}
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-slate-700 font-semibold">
+                          {getDeletedLogSummary(log)}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-right flex items-center justify-end gap-3">
+                          <button
+                            onClick={() => setSelectedLogForModal({
+                              table_name: log.table_name,
+                              edited_by: log.deleted_by,
+                              field: 'Snapshot',
+                              oldValue: log.old_values,
+                              newValue: null
+                            })}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors uppercase"
+                          >
+                            <Database className="w-3.5 h-3.5" />
+                            VIEW DETAILS
+                          </button>
+                          <Button
+                            onClick={() => handleRestore(log)}
+                            variant="success"
+                            size="sm"
+                            disabled={restoring === log.id}
+                            className="font-bold uppercase"
+                          >
+                            {restoring === log.id ? 'RESTORING...' : 'RESTORE'}
+                          </Button>
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
@@ -901,6 +917,120 @@ const EditedDeletedLogs: React.FC = () => {
           )}
         </Card>
       )}
+      {/* Side-by-Side Audit Modal */}
+      {selectedLogForModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-gray-150 max-w-[80vw] w-11/12 md:w-[65vw] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="bg-[#0b1329] text-white p-4 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider">Side-by-Side Record Audit</h3>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
+                  Table: {mapTableName(selectedLogForModal.table_name)} — Operator: {(selectedLogForModal.edited_by || selectedLogForModal.deleted_by || '').toUpperCase()}
+                </p>
+              </div>
+              <button onClick={() => setSelectedLogForModal(null)} className="text-slate-400 hover:text-white transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50/40 space-y-4">
+              <div className="grid grid-cols-2 gap-6">
+                {/* Before (Old Value) Column */}
+                <div className="bg-red-50/60 border border-red-200 rounded-xl p-4 space-y-2">
+                  <div className="text-xs font-black text-red-800 border-b border-red-200 pb-1.5 uppercase">Before (Old Value / Removed)</div>
+                  <pre className="text-xs font-mono text-red-700 whitespace-pre-wrap leading-relaxed">
+                    {formatLogValue(selectedLogForModal.field, selectedLogForModal.oldValue)}
+                  </pre>
+                </div>
+                
+                {/* After (New Value) Column */}
+                <div className="bg-emerald-50/60 border border-emerald-250 rounded-xl p-4 space-y-2">
+                  <div className="text-xs font-black text-emerald-800 border-b border-emerald-250 pb-1.5 uppercase">After (New Value / Added)</div>
+                  <pre className="text-xs font-mono text-emerald-800 whitespace-pre-wrap leading-relaxed">
+                    {selectedLogForModal.newValue !== null 
+                      ? formatLogValue(selectedLogForModal.field, selectedLogForModal.newValue)
+                      : 'RECORD DELETED'}
+                  </pre>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-slate-50 px-4 py-3 sm:px-6 border-t border-slate-150 flex justify-end shrink-0">
+              <button onClick={() => setSelectedLogForModal(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-xs font-bold uppercase transition-colors shadow-sm">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audit Logs Print Preview */}
+      <FinancePrintPreview
+        isOpen={showPrintPreview}
+        onClose={() => setShowPrintPreview(false)}
+        title="Audit Logs Report"
+        documentTitle={`AUDIT LOGS REPORT`}
+      >
+        <div className="space-y-6 mt-6 text-[10px]">
+          <div className="flex justify-between items-end border-b-2 border-slate-900 pb-2 mb-4">
+            <div>
+              <p className="text-[12px] uppercase text-slate-700 font-bold">Audit Logs Registry</p>
+            </div>
+          </div>
+
+          {logType === 'edited' ? (
+            <table className="w-full border-collapse border border-slate-300">
+              <thead>
+                <tr className="bg-slate-100 border-b border-slate-300 text-[9px]">
+                  <th className="p-2 text-left border-r border-slate-300">Timestamp</th>
+                  <th className="p-2 text-left border-r border-slate-300">Operator</th>
+                  <th className="p-2 text-left border-r border-slate-300">Table</th>
+                  <th className="p-2 text-left border-r border-slate-300">Loan No</th>
+                  <th className="p-2 text-left border-r border-slate-300">Customer</th>
+                  <th className="p-2 text-left border-r border-slate-300">Field</th>
+                  <th className="p-2 text-left border-r border-slate-300">Old Value</th>
+                  <th className="p-2 text-left">New Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLogs.map((item) => (
+                  <tr key={item.id} className="border-b border-slate-200">
+                    <td className="p-2 border-r border-slate-300">{formatDateHuman(item.edited_at)}</td>
+                    <td className="p-2 border-r border-slate-300">{item.edited_by}</td>
+                    <td className="p-2 border-r border-slate-300">{mapTableName(item.table_name)}</td>
+                    <td className="p-2 border-r border-slate-300">{item.displayLoanNo}</td>
+                    <td className="p-2 border-r border-slate-300">{item.displayCustomer}</td>
+                    <td className="p-2 border-r border-slate-300">{mapFieldLabel(item.field)}</td>
+                    <td className="p-2 border-r border-slate-300">{formatLogValue(item.field, item.oldValue)}</td>
+                    <td className="p-2">{formatLogValue(item.field, item.newValue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full border-collapse border border-slate-300">
+              <thead>
+                <tr className="bg-slate-100 border-b border-slate-300 text-[9px]">
+                  <th className="p-2 text-left border-r border-slate-300">Timestamp</th>
+                  <th className="p-2 text-left border-r border-slate-300">Operator</th>
+                  <th className="p-2 text-left border-r border-slate-300">Table</th>
+                  <th className="p-2 text-left">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDeletedLogs.map((log) => (
+                  <tr key={log.id} className="border-b border-slate-200">
+                    <td className="p-2 border-r border-slate-300">{formatDateHuman(log.deleted_at)}</td>
+                    <td className="p-2 border-r border-slate-300">{log.deleted_by}</td>
+                    <td className="p-2 border-r border-slate-300">{mapTableName(log.table_name)}</td>
+                    <td className="p-2">{getDeletedLogSummary(log)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </FinancePrintPreview>
     </div>
   );
 };

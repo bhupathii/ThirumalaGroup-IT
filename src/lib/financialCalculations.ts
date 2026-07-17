@@ -321,6 +321,18 @@ export class FinancialCalculator {
   }
 }
 
+// CD Number numeric sorting utility
+export const sortNumerically = (aStr: string, bStr: string): number => {
+  const matchA = aStr.match(/\d+/);
+  const matchB = bStr.match(/\d+/);
+  const numA = matchA ? parseInt(matchA[0], 10) : 0;
+  const numB = matchB ? parseInt(matchB[0], 10) : 0;
+  if (numA !== numB) {
+    return numA - numB;
+  }
+  return aStr.localeCompare(bStr);
+};
+
 // Export utility functions for backward compatibility
 export const addAmounts = FinancialCalculator.add;
 export const subtractAmounts = FinancialCalculator.subtract;

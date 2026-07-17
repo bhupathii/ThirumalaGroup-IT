@@ -1,439 +1,535 @@
-import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
+import { sortNumerically } from '../../lib/financialCalculations';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
-import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
-import { Printer, ArrowLeft, FileText, Info } from 'lucide-react';
+import { Printer, ArrowLeft, FileText, ChevronRight, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
-import { useNavigate } from 'react-router-dom';
+import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
+import { exportToExcel } from '../../utils/excel';
 
-interface PartnerBusinessRow {
-  id: string;
-  date: string;
-  customerName: string;
-  loanNo: string;
-  loanType: string;
-  loanAmount: number;
-  paid: number;
-  balance: number;
-  status: string;
-}
-
-interface PartnerOutstandingRow {
-  id: string;
-  customerName: string;
-  loanNo: string;
-  dueDate: string;
+interface BusinessLoanRow {
+  loanId: string;
+  cdNumber: string;
+  borrower: string;
   principal: number;
-  interest: number;
-  penalty: number;
-  totalDue: number;
+  interestReceived: number;
+  penaltyReceived: number;
+  pendingInterest: number;
+  pendingPenalty: number;
+  presentDue: number;
   status: string;
 }
 
 const BusinessReport: React.FC = () => {
   const navigate = useNavigate();
-  
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 1);
-    return d.toISOString().split('T')[0];
-  });
+  const location = useLocation();
+
+  const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState(() => getLocalBusinessDateISO());
-  
   const [loading, setLoading] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
-
   const [partners, setPartners] = useState<any[]>([]);
-  const [selectedPartnerId, setSelectedPartnerId] = useState<string>('ALL');
-
-  // Accounting Flow Metrics (Date Range)
-  const [rangeMetrics, setRangeMetrics] = useState({
-    totalCapital: 0,
-    totalIncome: 0,
-    totalExpense: 0,
-    netProfit: 0,
-    cashPosition: 0
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string>(() => {
+    return location.state?.targetPartnerId || 'ALL';
   });
 
-  // Current Position Metrics (All-time / Active)
-  const [positionMetrics, setPositionMetrics] = useState({
-    cdPrincipalOutstanding: 0,
-    activeCdAccounts: 0
-  });
-
-  const [partnerBusiness, setPartnerBusiness] = useState<PartnerBusinessRow[]>([]);
-  const [partnerOutstanding, setPartnerOutstanding] = useState<PartnerOutstandingRow[]>([]);
-
-  const [financeMode] = useState<'REGULAR' | 'ITR'>(() => {
-    const mode = sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode');
-    return mode === 'itr' ? 'ITR' : 'REGULAR';
-  });
+  const [loans, setLoans] = useState<BusinessLoanRow[]>([]);
+  const [summary, setSummary] = useState({
+    capitalInvested: 0,
+    totalLoans: 0,
+    activeLoans: 0,
+    closedLoans: 0,
+    principalOutstanding: 0,
+    interestReceived: 0,
+    penaltyReceived: 0,
+    pendingInterest: 0,
+    pendingPenalty: 0,
+    totalDue: 0,
+ });
 
   useEffect(() => {
-    fetchBusinessData();
+    const loadDefaultStartDate = async () => {
+      try {
+        const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
+        if (oldest) {
+          setStartDate(oldest);
+        } else {
+          const d = new Date();
+          d.setMonth(d.getMonth() - 1);
+          setStartDate(d.toISOString().split('T')[0]);
+        }
+      } catch (err) {
+        console.error(err);
+        const d = new Date();
+        d.setMonth(d.getMonth() - 1);
+        setStartDate(d.toISOString().split('T')[0]);
+      }
+    };
+    loadDefaultStartDate();
+  }, []);
+
+  useEffect(() => {
+    if (startDate) {
+      fetchBusinessData();
+    }
   }, [startDate, endDate, selectedPartnerId]);
+
+  const navigateToLedger = (loanId: string, cdNumber: string) => {
+    const num = cdNumber.toUpperCase();
+    if (num.startsWith('CD')) {
+      navigate(`/finance/cd-ledger?loanId=${loanId}`);
+    } else if (num.startsWith('HP')) {
+      navigate(`/finance/hp-ledger?loanId=${loanId}`);
+    } else if (num.startsWith('STBD')) {
+      navigate(`/finance/stbd-ledger?loanId=${loanId}`);
+    } else if (num.startsWith('TBD')) {
+      navigate(`/finance/tbd-ledger?loanId=${loanId}`);
+    } else {
+      navigate(`/finance/cd-ledger?loanId=${loanId}`);
+    }
+  };
+
+  const handleExportExcel = () => {
+    const data = [
+      {
+        'Capital Invested': summary.capitalInvested,
+        'Total Loans': summary.totalLoans,
+        'Active Loans': summary.activeLoans,
+        'Closed Loans': summary.closedLoans,
+        'Principal Outstanding': summary.principalOutstanding,
+        'Interest Received': summary.interestReceived,
+        'Penalty Received': summary.penaltyReceived,
+        'Pending Interest': summary.pendingInterest,
+        'Pending Penalty': summary.pendingPenalty,
+        'Total Due': summary.totalDue
+      },
+      ...loans.map(row => ({
+        'CD Number': row.cdNumber,
+        'Borrower': row.borrower,
+        'Principal': row.principal,
+        'Interest Received': row.interestReceived,
+        'Penalty Received': row.penaltyReceived,
+        'Pending Interest': row.pendingInterest,
+        'Pending Penalty': row.pendingPenalty,
+        'Present Due': row.presentDue,
+        'Status': row.status
+      }))
+    ];
+    exportToExcel(data, `Business_Details_${startDate}_to_${endDate}`);
+    toast.success('Excel Statement Exported!');
+  };
 
   const fetchBusinessData = async () => {
     setLoading(true);
     try {
-      const [fetchedPartners, allTxs, loans, rawTxs] = await Promise.all([
-        supabaseFinance.getPartners(),
-        dailyFinancialTransactionService.getDailyFinancialTransactions({
-          fromDate: startDate,
-          toDate: endDate,
-          financeMode
-        }),
-        supabaseFinance.getLoans(),
-        supabaseFinance.getTransactions()
-      ]);
-
+      const fetchedPartners = await supabaseFinance.getPartners();
       setPartners(fetchedPartners);
 
-      // 1. Calculate Accounting Flow Metrics from Canonical Transactions
-      let totalCapital = 0;
-      let totalIncome = 0;
-      let totalExpense = 0;
-      let totalCredit = 0;
-      let totalDebit = 0;
+      const targetPartner =
+        selectedPartnerId === 'ALL'
+          ? null
+          : fetchedPartners.find(p => p.id === selectedPartnerId);
 
-      allTxs.forEach(t => {
-        totalCredit += t.credit;
-        totalDebit += t.debit;
-        if (t.headOfAccount === 'CAPITAL') {
-          totalCapital += (t.credit - t.debit);
-        }
-        if (t.reportClassification === 'PROFIT_AND_LOSS') {
-          totalIncome += t.credit;
-          totalExpense += t.debit;
-        }
-      });
+      const { dues } = await supabaseFinance.getDuesLedgerSummary(endDate);
+      const allLoans = await supabaseFinance.getLoans();
 
-      setRangeMetrics({
-        totalCapital,
-        totalIncome,
-        totalExpense,
-        netProfit: totalIncome - totalExpense,
-        cashPosition: totalCredit - totalDebit
-      });
-
-      // 2. Calculate Current Position Metrics (Active CD outstanding)
-      const activeCd = loans.filter(l => l.status === 'Active' && l.loan_category?.trim().toUpperCase() === 'CD');
-      let cdOutstanding = 0;
-
-      activeCd.forEach(l => {
-        const principal = Number(l.amount) || 0;
-        const colList = rawTxs.filter(t => t.loan_id === l.id && t.type === 'Collection');
-        const collected = colList.reduce((sum, c) => sum + Number(c.amount), 0);
-        // Note: CD outstanding principal = loan principal - collected principal (or net balance estimation)
-        cdOutstanding += Math.max(0, principal - collected);
-      });
-
-      setPositionMetrics({
-        cdPrincipalOutstanding: cdOutstanding,
-        activeCdAccounts: activeCd.length
-      });
-
-      // 3. Fetch specific dues
-      const { data: rawDues } = await supabase
-        .from('finance_dues')
-        .select(`*, finance_loans(*, customer:finance_customers!customer_id(*))`)
-        .gte('due_date', startDate)
-        .lte('due_date', endDate);
-
-      const targetPartner = selectedPartnerId === 'ALL' ? null : fetchedPartners.find(p => p.id === selectedPartnerId);
-
-      // Filter partner business (loans disbursed in range)
-      const filteredLoans = loans.filter(l => {
+      const filteredLoans = allLoans.filter(l => {
         if (l.date < startDate || l.date > endDate) return false;
-        if (targetPartner) return l.customer?.partner_name === targetPartner.name;
+        if (targetPartner && l.customer?.partner_name !== targetPartner.name)
+          return false;
         return true;
       });
 
-      const pbList: PartnerBusinessRow[] = filteredLoans.map(l => {
-        const principal = Number(l.amount);
-        const colList = rawTxs.filter(t => t.loan_id === l.id && t.type === 'Collection');
-        const paid = colList.reduce((sum, c) => sum + Number(c.amount), 0);
-        return {
-          id: l.id,
-          date: l.date,
-          customerName: l.customer?.name || 'Unknown',
-          loanNo: l.loan_id,
-          loanType: l.due_type || '—',
-          loanAmount: principal,
-          paid: paid,
-          balance: Math.max(0, principal - paid),
-          status: l.status
-        };
-      });
-      setPartnerBusiness(pbList);
 
-      // Filter outstanding dues in range
-      const outList: PartnerOutstandingRow[] = [];
-      const dues = rawDues || [];
-      dues.forEach((due: any) => {
-        const loan = due.finance_loans;
-        if (targetPartner && loan?.customer?.partner_name !== targetPartner.name) return;
 
-        if (due.status === 'Pending' || due.status === 'Partially Paid') {
-          let principal = 0;
-          let interest = 0;
-          if (loan) {
-            const totalPrincipal = Number(loan.amount) || 0;
-            const durationMonths = Number(loan.duration_months) || 12;
-            const interestRate = Number(loan.interest_rate) || 3;
-            const totalInterest = totalPrincipal * (interestRate / 100) * durationMonths;
-            const totalLoanRepayable = totalPrincipal + totalInterest;
-            const interestRatio = totalLoanRepayable > 0 ? totalInterest / totalLoanRepayable : 0;
-            const dueAmt = Number(due.amount) || 0;
-            interest = dueAmt * interestRatio;
-            principal = dueAmt * (1 - interestRatio);
-          }
+      const processedLoans: BusinessLoanRow[] = [];
+      let cap = 0,
+        tot = 0,
+        pOut = 0,
+        iRec = 0,
+        pRec = 0,
+        pInt = 0,
+        pPen = 0,
+        tDue = 0,
+        act = 0,
+        clo = 0;
 
-          const dueAmt = Number(due.amount) || 0;
-          const duePaid = Number(due.paid_amount) || 0;
-          const duePending = dueAmt - duePaid;
+      filteredLoans.forEach(l => {
+        tot++;
+        if (l.status === 'Active') act++;
+        if (l.status === 'Closed') clo++;
 
-          outList.push({
-            id: due.id,
-            customerName: loan?.customer?.name || 'Unknown',
-            loanNo: loan?.loan_id || '-',
-            dueDate: due.due_date,
-            principal: principal,
-            interest: interest,
-            penalty: Number(due.penalty_amount) || 0,
-            totalDue: duePending + (Number(due.penalty_amount) || 0),
-            status: due.status
-          });
-        }
-      });
+        const p = Number(l.amount) || 0;
+        cap += p;
 
-      outList.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-      setPartnerOutstanding(outList);
+        const due = dues.find(d => d.loan_id === l.loan_id || d.loanId === l.id);
+        const loanIRec = due ? Number(due.interest_paid || 0) : 0;
+        const loanPRec = due ? Number(due.penalty_paid || 0) : 0;
 
-    } catch (err) {
+        iRec += loanIRec;
+        pRec += loanPRec;
+
+        const outstandingPrincipal = l.status === 'Closed' ? 0 : (due ? Number(due.current_principal || due.principal || 0) : p);
+        pOut += outstandingPrincipal;
+
+        const loanPInt = due ? Number(due.pending_interest || due.interestPending || 0) : 0;
+        const loanPPen = due ? Number(due.penalty || due.penaltyPending || 0) : 0;
+        const loanTDue = due ? Number(due.present_due || due.totalPending || 0) : 0;
+
+        pInt += loanPInt;
+        pPen += loanPPen;
+        tDue += loanTDue;
+
+        processedLoans.push({
+          loanId: l.id,
+          cdNumber: l.loan_id,
+          borrower: l.customer?.name || 'Unknown',
+          principal: p,
+          interestReceived: loanIRec,
+          penaltyReceived: loanPRec,
+          pendingInterest: loanPInt,
+          pendingPenalty: loanPPen,
+          presentDue: outstandingPrincipal + loanTDue,
+          status: l.status,
+       });
+     });
+
+      setLoans(processedLoans);
+      setSummary({
+        capitalInvested: cap,
+        totalLoans: tot,
+        activeLoans: act,
+        closedLoans: clo,
+        principalOutstanding: pOut,
+        interestReceived: iRec,
+        penaltyReceived: pRec,
+        pendingInterest: pInt,
+        pendingPenalty: pPen,
+        totalDue: tDue,
+     });
+   } catch (err) {
       console.error(err);
       toast.error('Failed to load business details');
-    } finally {
+   } finally {
       setLoading(false);
-    }
+   }
   };
 
-  const selectedPartnerName = selectedPartnerId === 'ALL' 
-    ? 'All Partners' 
-    : partners.find(p => p.id === selectedPartnerId)?.name || 'Unknown';
+  const selectedPartnerName =
+    selectedPartnerId === 'ALL'
+      ? 'All Partners'
+      : partners.find(p => p.id === selectedPartnerId)?.name || 'Unknown';
 
   return (
-    <div className="space-y-6 max-w-[1400px] mx-auto p-6 print:p-0">
-      {/* Header */}
-      <div className={`flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm ${showPrintPreview ? 'print:hidden' : ''}`}>
+    <div className='space-y-6 max-w-[1400px] mx-auto p-6 print:p-0'>
+      <div
+        className={`flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm`}
+      >
         <div>
-          <h1 className="finance-h1">Business Details</h1>
-          <p className="finance-small-label uppercase">
-            Partner-wise & MD Business, Outstanding, and Disbursal Activity
+          <h1 className='finance-h1'>Business Report</h1>
+          <p className='finance-small-label uppercase'>
+            Business Details & Portfolio Overview
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 finance-header-time uppercase">
+        <div className='flex gap-2'>
+          <Button
+            onClick={() => navigate(-1)}
+            variant='secondary'
+            size='sm'
+            icon={ArrowLeft}
+            className='bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 finance-header-time uppercase'
+          >
             Back
           </Button>
-          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white finance-header-time uppercase">
+          <Button
+            onClick={() => setShowPrintPreview(true)}
+            variant='primary'
+            size='sm'
+            icon={Printer}
+            className='bg-[#0b1329] hover:bg-slate-800 text-white finance-header-time uppercase'
+          >
             Print
+          </Button>
+          <Button
+            onClick={handleExportExcel}
+            variant='secondary'
+            size='sm'
+            icon={Download}
+            className='bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 finance-header-time uppercase'
+          >
+            Excel
           </Button>
         </div>
       </div>
 
-      {/* Top Filter Row */}
-      <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center">
-          <label className="text-slate-400 mb-1 finance-small-label uppercase">From Date</label>
+      <div
+        className={`grid grid-cols-2 md:grid-cols-4 gap-4`}
+      >
+        <div className='bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center'>
+          <label className='text-slate-400 mb-1 finance-small-label uppercase'>
+            From Date
+          </label>
           <input
-            type="date"
+            type='date'
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase"
+            onChange={e => setStartDate(e.target.value)}
+            className='w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase'
           />
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center">
-          <label className="text-slate-400 mb-1 finance-small-label uppercase">To Date</label>
+        <div className='bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center'>
+          <label className='text-slate-400 mb-1 finance-small-label uppercase'>
+            To Date
+          </label>
           <input
-            type="date"
+            type='date'
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase"
+            onChange={e => setEndDate(e.target.value)}
+            className='w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase'
           />
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center">
-          <label className="text-slate-400 mb-1 finance-small-label uppercase">Partner Filter</label>
+        <div className='bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center'>
+          <label className='text-slate-400 mb-1 finance-small-label uppercase'>
+            Partner Filter
+          </label>
           <select
             value={selectedPartnerId}
-            onChange={(e) => setSelectedPartnerId(e.target.value)}
-            className="w-full bg-transparent border-none p-0 text-[#0b1329] font-black focus:ring-0 finance-h1 uppercase"
+            onChange={e => setSelectedPartnerId(e.target.value)}
+            className='w-full bg-transparent border-none p-0 text-[#0b1329] font-black focus:ring-0 finance-h1 uppercase'
           >
-            <option value="ALL">All Partners</option>
+            <option value='ALL'>All Partners</option>
             {partners.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
             ))}
           </select>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center bg-slate-50">
-          <label className="text-slate-400 mb-1 finance-small-label uppercase">Selected Partner</label>
-          <span className="text-[#0b1329] truncate finance-h1">{selectedPartnerName}</span>
+        <div className='bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center bg-slate-50'>
+          <label className='text-slate-400 mb-1 finance-small-label uppercase'>
+            Selected Partner
+          </label>
+          <span className='text-[#0b1329] truncate finance-h1'>
+            {selectedPartnerName}
+          </span>
         </div>
       </div>
 
-      {/* Metrics Dashboards */}
       {loading ? (
-        <div className="flex justify-center py-20">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-green-500"></div>
+        <div className='flex justify-center py-20'>
+          <div className='animate-spin rounded-full h-10 w-10 border-t-2 border-green-500'></div>
         </div>
       ) : (
         <>
-          <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${showPrintPreview ? 'print:hidden' : ''}`}>
-            
-            {/* Accounting Flow Metrics */}
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-              <h3 className="text-slate-900 font-bold border-b pb-2 uppercase text-xs flex items-center gap-1.5 text-slate-550">
-                <FileText className="w-4 h-4" />
-                Accounting Flow Metrics (Date Range)
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Total Capital Change</span>
-                  <span className="text-sm font-black text-slate-900">₹{rangeMetrics.totalCapital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Net Profit / Loss</span>
-                  <span className={`text-sm font-black ${rangeMetrics.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                    ₹{rangeMetrics.netProfit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Total Income</span>
-                  <span className="text-sm font-black text-emerald-600">₹{rangeMetrics.totalIncome.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold">Total Expense</span>
-                  <span className="text-sm font-black text-rose-600">₹{rangeMetrics.totalExpense.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                </div>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-lg border">
-                <span className="text-[10px] text-slate-500 block uppercase font-bold">Cash Position net flow</span>
-                <span className="text-base font-black text-slate-900">₹{rangeMetrics.cashPosition.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-              </div>
+          {/* Partner Summary Section */}
+          <div
+            className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden  mb-6`}
+          >
+            <div className='p-4 bg-slate-50 border-b border-slate-100'>
+              <h2 className='text-slate-900 font-bold uppercase text-xs flex items-center gap-2'>
+                <FileText className='w-4 h-4 text-slate-500' />
+                Partner Summary
+              </h2>
             </div>
-
-            {/* Current Position Metrics */}
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-              <div>
-                <h3 className="text-slate-900 font-bold border-b pb-2 uppercase text-xs flex items-center gap-1.5 text-slate-550">
-                  <Info className="w-4 h-4" />
-                  Current Loan Position Metrics (All-time Active)
-                </h3>
-                <div className="grid grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block uppercase font-bold">CD Principal Outstanding</span>
-                    <span className="text-lg font-black text-slate-900">₹{positionMetrics.cdPrincipalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block uppercase font-bold">Active CD Accounts</span>
-                    <span className="text-lg font-black text-[#0b1329]">{positionMetrics.activeCdAccounts} Loans</span>
-                  </div>
-                </div>
+            <div className='grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-slate-50/50'>
+              <div className='bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-center'>
+                <span className='text-slate-400 finance-small-label uppercase font-bold'>
+                  Capital Invested
+                </span>
+                <span className='text-lg font-black text-slate-900'>
+                  ₹{summary.capitalInvested.toLocaleString('en-IN')}
+                </span>
               </div>
-              <div className="text-[11px] text-slate-400 bg-blue-50/50 p-2.5 rounded border border-blue-100/50">
-                Note: Outstanding balance uses the audited active CD principal positions directly from the lending ledger.
+              <div className='bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-center'>
+                <span className='text-slate-400 finance-small-label uppercase font-bold'>
+                  Total Loans
+                </span>
+                <span className='text-lg font-black text-blue-800'>
+                  {summary.totalLoans}
+                </span>
               </div>
-            </div>
-
-          </div>
-
-          {/* Disbursals Table */}
-          <div className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden ${showPrintPreview ? 'print:hidden' : ''}`}>
-            <div className="p-4 bg-slate-50 border-b border-slate-100">
-              <h2 className="text-slate-900 font-bold uppercase text-xs">Loans Disbursed in Period ({partnerBusiness.length})</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse finance-caption">
-                <thead>
-                  <tr className="bg-white border-b border-slate-200 text-slate-400">
-                    <th className="px-4 py-3 finance-small-label uppercase">Date</th>
-                    <th className="px-4 py-3 finance-small-label uppercase">Customer Name</th>
-                    <th className="px-4 py-3 finance-small-label uppercase">Loan No</th>
-                    <th className="px-4 py-3 text-right finance-small-label uppercase">Amount Disbursed</th>
-                    <th className="px-4 py-3 text-right finance-small-label uppercase">Paid</th>
-                    <th className="px-4 py-3 text-right finance-small-label uppercase">Outstanding Principal</th>
-                    <th className="px-4 py-3 text-center finance-small-label uppercase">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {partnerBusiness.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-slate-400 finance-input">
-                        No disbursals found for this period.
-                      </td>
-                    </tr>
-                  ) : (
-                    partnerBusiness.map(row => (
-                      <tr key={row.id} className="hover:bg-slate-50/30">
-                        <td className="px-4 py-3 text-slate-650">{row.date.split('-').reverse().join('/')}</td>
-                        <td className="px-4 py-3 text-slate-900 font-bold uppercase">{row.customerName}</td>
-                        <td className="px-4 py-3 font-mono text-slate-900 font-black">{row.loanNo}</td>
-                        <td className="px-4 py-3 text-right text-slate-900">₹{row.loanAmount.toLocaleString('en-IN')}</td>
-                        <td className="px-4 py-3 text-right text-emerald-600">₹{row.paid.toLocaleString('en-IN')}</td>
-                        <td className="px-4 py-3 text-right text-rose-600 font-bold">₹{row.balance.toLocaleString('en-IN')}</td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${row.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-250' : 'bg-slate-150 text-slate-600'}`}>
-                            {row.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
+              <div className='bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-center'>
+                <span className='text-slate-400 finance-small-label uppercase font-bold'>
+                  Active Loans
+                </span>
+                <span className='text-lg font-black text-slate-800'>
+                  {summary.activeLoans}
+                </span>
+              </div>
+              <div className='bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-center'>
+                <span className='text-slate-400 finance-small-label uppercase font-bold'>
+                  Closed Loans
+                </span>
+                <span className='text-lg font-black text-slate-800'>
+                  {summary.closedLoans}
+                </span>
+              </div>
+              <div className='bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-center'>
+                <span className='text-slate-400 finance-small-label uppercase font-bold'>
+                  Principal Out
+                </span>
+                <span className='text-lg font-black text-slate-900'>
+                  ₹
+                  {Math.round(summary.principalOutstanding).toLocaleString(
+                    'en-IN'
                   )}
-                </tbody>
-              </table>
+                </span>
+              </div>
+              <div className='bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm flex flex-col justify-center'>
+                <span className='text-emerald-700 finance-small-label uppercase font-bold'>
+                  Interest Received
+                </span>
+                <span className='text-lg font-black text-emerald-800'>
+                  ₹
+                  {Math.round(summary.interestReceived).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className='bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm flex flex-col justify-center'>
+                <span className='text-emerald-700 finance-small-label uppercase font-bold'>
+                  Penalty Received
+                </span>
+                <span className='text-lg font-black text-emerald-800'>
+                  ₹{Math.round(summary.penaltyReceived).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className='bg-rose-50 p-4 rounded-xl border border-rose-100 shadow-sm flex flex-col justify-center'>
+                <span className='text-rose-700 finance-small-label uppercase font-bold'>
+                  Pending Interest
+                </span>
+                <span className='text-lg font-black text-rose-800'>
+                  ₹{Math.round(summary.pendingInterest).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className='bg-rose-50 p-4 rounded-xl border border-rose-100 shadow-sm flex flex-col justify-center'>
+                <span className='text-rose-700 finance-small-label uppercase font-bold'>
+                  Pending Penalty
+                </span>
+                <span className='text-lg font-black text-rose-800'>
+                  ₹{Math.round(summary.pendingPenalty).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className='bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-center'>
+                <span className='text-slate-400 finance-small-label uppercase font-bold'>
+                  Total Due
+                </span>
+                <span className='text-lg font-black text-rose-700'>
+                  ₹{Math.round(summary.totalDue).toLocaleString('en-IN')}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Outstandings Dues Table */}
-          <div className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden ${showPrintPreview ? 'print:hidden' : ''}`}>
-            <div className="p-4 bg-slate-50 border-b border-slate-100">
-              <h2 className="text-slate-900 font-bold uppercase text-xs">Outstanding Overdue Dues ({partnerOutstanding.length})</h2>
+          {/* Loan Details Section */}
+          <div
+            className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden`}
+          >
+            <div className='p-4 bg-slate-50 border-b border-slate-100'>
+              <h2 className='text-slate-900 font-bold uppercase text-xs flex items-center gap-2'>
+                <FileText className='w-4 h-4 text-slate-500' />
+                Loan Details ({loans.length})
+              </h2>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse finance-caption">
+            <div className='overflow-x-auto'>
+              <table className='w-full text-left border-collapse finance-caption'>
                 <thead>
-                  <tr className="bg-white border-b border-slate-200 text-slate-400">
-                    <th className="px-4 py-3 finance-small-label uppercase">Due Date</th>
-                    <th className="px-4 py-3 finance-small-label uppercase">Customer Name</th>
-                    <th className="px-4 py-3 finance-small-label uppercase">Loan No</th>
-                    <th className="px-4 py-3 text-right finance-small-label uppercase">Principal Due</th>
-                    <th className="px-4 py-3 text-right finance-small-label uppercase">Interest Due</th>
-                    <th className="px-4 py-3 text-right finance-small-label uppercase">Penalty Accrued</th>
-                    <th className="px-4 py-3 text-right finance-small-label uppercase">Total Due</th>
+                  <tr className='bg-white border-b border-slate-200 text-slate-400 text-[10px]'>
+                    <th className='px-3 py-2 uppercase font-bold'>CD No</th>
+                    <th className='px-3 py-2 uppercase font-bold'>Borrower</th>
+                    <th className='px-3 py-2 uppercase font-bold text-right'>
+                      Principal
+                    </th>
+                    <th className='px-3 py-2 uppercase font-bold text-right text-emerald-600'>
+                      Int Recv
+                    </th>
+                    <th className='px-3 py-2 uppercase font-bold text-right text-emerald-600'>
+                      Pen Recv
+                    </th>
+                    <th className='px-3 py-2 uppercase font-bold text-right text-rose-500'>
+                      Pend Int
+                    </th>
+                    <th className='px-3 py-2 uppercase font-bold text-right text-rose-500'>
+                      Pend Pen
+                    </th>
+                    <th className='px-3 py-2 uppercase font-bold text-right text-rose-700'>
+                      Present Due
+                    </th>
+                    <th className='px-3 py-2 uppercase font-bold text-center'>
+                      Status
+                    </th>
+                    <th className='px-3 py-2 w-10'></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {partnerOutstanding.length === 0 ? (
+                <tbody className='divide-y divide-slate-100'>
+                  {loans.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-slate-400 finance-input">
-                        No outstanding dues found.
+                      <td
+                        colSpan={10}
+                        className='px-4 py-8 text-center text-slate-400 finance-input'
+                      >
+                        No loans found for this period.
                       </td>
                     </tr>
                   ) : (
-                    partnerOutstanding.map(row => (
-                      <tr key={row.id} className="hover:bg-slate-50/30">
-                        <td className="px-4 py-3 text-rose-600 font-bold">{row.dueDate.split('-').reverse().join('/')}</td>
-                        <td className="px-4 py-3 text-slate-900 font-bold uppercase">{row.customerName}</td>
-                        <td className="px-4 py-3 font-mono text-slate-900 font-black">{row.loanNo}</td>
-                        <td className="px-4 py-3 text-right">₹{Math.round(row.principal).toLocaleString('en-IN')}</td>
-                        <td className="px-4 py-3 text-right">₹{Math.round(row.interest).toLocaleString('en-IN')}</td>
-                        <td className="px-4 py-3 text-right text-rose-600">₹{row.penalty.toLocaleString('en-IN')}</td>
-                        <td className="px-4 py-3 text-right text-rose-700 font-black">₹{Math.round(row.totalDue).toLocaleString('en-IN')}</td>
-                      </tr>
-                    ))
+                    loans
+                      .sort((a, b) => sortNumerically(a.cdNumber, b.cdNumber))
+                      .map(row => (
+                        <tr
+                          key={row.loanId}
+                          className='hover:bg-slate-50/50 transition-colors cursor-pointer'
+                          onClick={() => navigateToLedger(row.loanId, row.cdNumber)}
+                        >
+                          <td className='px-3 py-2.5 font-mono text-slate-900 font-black'>
+                            {row.cdNumber}
+                          </td>
+                          <td className='px-3 py-2.5 text-slate-900 font-bold uppercase truncate max-w-[150px]'>
+                            {row.borrower}
+                          </td>
+                          <td className='px-3 py-2.5 text-right text-slate-900 font-medium'>
+                            ₹{row.principal.toLocaleString('en-IN')}
+                          </td>
+                          <td className='px-3 py-2.5 text-right text-emerald-650 font-bold'>
+                            ₹
+                            {Math.round(row.interestReceived).toLocaleString(
+                              'en-IN'
+                            )}
+                          </td>
+                          <td className='px-3 py-2.5 text-right text-emerald-600'>
+                            ₹
+                            {Math.round(row.penaltyReceived).toLocaleString(
+                              'en-IN'
+                            )}
+                          </td>
+                          <td className='px-3 py-2.5 text-right text-rose-500'>
+                            ₹
+                            {Math.round(row.pendingInterest).toLocaleString(
+                              'en-IN'
+                            )}
+                          </td>
+                          <td className='px-3 py-2.5 text-right text-rose-500'>
+                            ₹
+                            {Math.round(row.pendingPenalty).toLocaleString(
+                              'en-IN'
+                            )}
+                          </td>
+                          <td className='px-3 py-2.5 text-right text-rose-700 font-black'>
+                            ₹
+                            {Math.round(row.presentDue).toLocaleString('en-IN')}
+                          </td>
+                          <td className='px-3 py-2.5 text-center'>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${row.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-250' : 'bg-slate-150 text-slate-600'}`}
+                            >
+                              {row.status}
+                            </span>
+                          </td>
+                          <td className='px-3 py-2.5 text-slate-400 text-center'>
+                            <ChevronRight className='w-4 h-4' />
+                          </td>
+                        </tr>
+                      ))
                   )}
                 </tbody>
               </table>
@@ -446,38 +542,185 @@ const BusinessReport: React.FC = () => {
       <FinancePrintPreview
         isOpen={showPrintPreview}
         onClose={() => setShowPrintPreview(false)}
-        title="Business Details Report"
+        title='Business Details Report'
         documentTitle={`BUSINESS DETAILS REPORT`}
       >
-        <div className="space-y-6 pb-12 text-[11px]">
-          <div className="flex justify-between items-end border-b border-slate-950 pb-2">
+        <div className='space-y-6 pb-12'>
+          <div className='flex justify-between items-end border-b border-slate-950 pb-2'>
             <div>
-              <h2 className="text-xl font-bold uppercase text-slate-900">Thirumala Group Finance</h2>
-              <p className="text-[13px] uppercase text-slate-500">Business Details & Loan Position Summary</p>
+              <h2 className='text-xl font-bold uppercase text-slate-900'>
+                Thirumala Group Finance
+              </h2>
+              <p className='text-[13px] uppercase text-slate-500'>
+                Business Details & Portfolio Overview
+              </p>
             </div>
-            <div className="text-right text-[12px] text-slate-600">
-              <p>Period: {startDate.split('-').reverse().join('/')} to {endDate.split('-').reverse().join('/')}</p>
+            <div className='text-right text-[12px] text-slate-600'>
+              <p>
+                Period: {startDate.split('-').reverse().join('/')} to{''}
+                {endDate.split('-').reverse().join('/')}
+              </p>
               <p>Partner: {selectedPartnerName}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="border p-3 rounded">
-              <span className="font-bold block uppercase text-[10px] text-slate-550 border-b pb-1 mb-2">Accounting Flow Metrics</span>
-              <p>Total Capital Change: <strong>₹{rangeMetrics.totalCapital.toLocaleString('en-IN')}</strong></p>
-              <p>Net Profit / Loss: <strong>₹{rangeMetrics.netProfit.toLocaleString('en-IN')}</strong></p>
-              <p>Total Income: <strong>₹{rangeMetrics.totalIncome.toLocaleString('en-IN')}</strong></p>
-              <p>Total Expense: <strong>₹{rangeMetrics.totalExpense.toLocaleString('en-IN')}</strong></p>
-              <p className="mt-2 border-t pt-1">Cash Net Flow: <strong>₹{rangeMetrics.cashPosition.toLocaleString('en-IN')}</strong></p>
+          {/* Partner Summary - 10 Items */}
+          <div className='grid grid-cols-5 gap-2 mb-4'>
+            <div className='border p-2 rounded'>
+              <span className='font-bold uppercase text-[9px] block text-slate-500'>
+                Capital Invested
+              </span>
+              <p className='font-black text-sm'>
+                ₹{summary.capitalInvested.toLocaleString('en-IN')}
+              </p>
             </div>
-            <div className="border p-3 rounded flex flex-col justify-between">
-              <div>
-                <span className="font-bold block uppercase text-[10px] text-slate-550 border-b pb-1 mb-2">Lending Book Position</span>
-                <p>CD Outstanding: <strong>₹{positionMetrics.cdPrincipalOutstanding.toLocaleString('en-IN')}</strong></p>
-                <p>Active CD Accounts: <strong>{positionMetrics.activeCdAccounts} Loans</strong></p>
-              </div>
+            <div className='border p-2 rounded'>
+              <span className='font-bold uppercase text-[9px] block text-slate-500'>
+                Total Loans
+              </span>
+              <p className='font-black text-sm text-blue-800'>
+                {summary.totalLoans}
+              </p>
+            </div>
+            <div className='border p-2 rounded'>
+              <span className='font-bold uppercase text-[9px] block text-slate-500'>
+                Active Loans
+              </span>
+              <p className='font-black text-sm text-slate-800'>
+                {summary.activeLoans}
+              </p>
+            </div>
+            <div className='border p-2 rounded'>
+              <span className='font-bold uppercase text-[9px] block text-slate-500'>
+                Closed Loans
+              </span>
+              <p className='font-black text-sm text-slate-800'>
+                {summary.closedLoans}
+              </p>
+            </div>
+            <div className='border p-2 rounded'>
+              <span className='font-bold uppercase text-[9px] block text-slate-500'>
+                Principal Out
+              </span>
+              <p className='font-black text-sm'>
+                ₹
+                {Math.round(summary.principalOutstanding).toLocaleString(
+                  'en-IN'
+                )}
+              </p>
+            </div>
+
+            <div className='border p-2 rounded bg-emerald-50'>
+              <span className='font-bold uppercase text-[9px] block text-emerald-700'>
+                Int Received
+              </span>
+              <p className='font-black text-sm text-emerald-800'>
+                ₹{Math.round(summary.interestReceived).toLocaleString('en-IN')}
+              </p>
+            </div>
+            <div className='border p-2 rounded bg-emerald-50'>
+              <span className='font-bold uppercase text-[9px] block text-emerald-700'>
+                Pen Received
+              </span>
+              <p className='font-black text-sm text-emerald-800'>
+                ₹{Math.round(summary.penaltyReceived).toLocaleString('en-IN')}
+              </p>
+            </div>
+            <div className='border p-2 rounded bg-rose-50'>
+              <span className='font-bold uppercase text-[9px] block text-rose-700'>
+                Pend Int
+              </span>
+              <p className='font-black text-sm text-rose-800'>
+                ₹{Math.round(summary.pendingInterest).toLocaleString('en-IN')}
+              </p>
+            </div>
+            <div className='border p-2 rounded bg-rose-50'>
+              <span className='font-bold uppercase text-[9px] block text-rose-700'>
+                Pend Pen
+              </span>
+              <p className='font-black text-sm text-rose-800'>
+                ₹{Math.round(summary.pendingPenalty).toLocaleString('en-IN')}
+              </p>
+            </div>
+            <div className='border p-2 rounded'>
+              <span className='font-bold uppercase text-[9px] block text-slate-500'>
+                Total Due
+              </span>
+              <p className='font-black text-sm text-rose-700'>
+                ₹{Math.round(summary.totalDue).toLocaleString('en-IN')}
+              </p>
             </div>
           </div>
+
+          <table className='w-full text-left border-collapse border border-slate-300'>
+            <thead>
+              <tr className='bg-slate-100 border-b border-slate-300'>
+                <th className='px-2 py-1.5 border-r border-slate-300 font-bold'>
+                  CD No
+                </th>
+                <th className='px-2 py-1.5 border-r border-slate-300 font-bold'>
+                  Borrower
+                </th>
+                <th className='px-2 py-1.5 border-r border-slate-300 font-bold text-right'>
+                  Principal
+                </th>
+                <th className='px-2 py-1.5 border-r border-slate-300 font-bold text-right'>
+                  Int Recv
+                </th>
+                <th className='px-2 py-1.5 border-r border-slate-300 font-bold text-right'>
+                  Pen Recv
+                </th>
+                <th className='px-2 py-1.5 border-r border-slate-300 font-bold text-right'>
+                  Pend Int
+                </th>
+                <th className='px-2 py-1.5 border-r border-slate-300 font-bold text-right'>
+                  Pend Pen
+                </th>
+                <th className='px-2 py-1.5 border-r border-slate-300 font-bold text-right'>
+                  Present Due
+                </th>
+                <th className='px-2 py-1.5 border-slate-300 font-bold text-center'>
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {loans
+                .sort((a, b) => sortNumerically(a.cdNumber, b.cdNumber))
+                .map(row => (
+                  <tr key={row.loanId} className='border-b border-slate-200'>
+                    <td className='px-2 py-1 border-r border-slate-300 font-bold'>
+                      {row.cdNumber}
+                    </td>
+                    <td className='px-2 py-1 border-r border-slate-300 uppercase truncate max-w-[150px]'>
+                      {row.borrower}
+                    </td>
+                    <td className='px-2 py-1 border-r border-slate-300 text-right'>
+                      ₹{row.principal.toLocaleString('en-IN')}
+                    </td>
+                    <td className='px-2 py-1 border-r border-slate-300 text-right'>
+                      ₹
+                      {Math.round(row.interestReceived).toLocaleString('en-IN')}
+                    </td>
+                    <td className='px-2 py-1 border-r border-slate-300 text-right'>
+                      ₹{Math.round(row.penaltyReceived).toLocaleString('en-IN')}
+                    </td>
+                    <td className='px-2 py-1 border-r border-slate-300 text-right'>
+                      ₹{Math.round(row.pendingInterest).toLocaleString('en-IN')}
+                    </td>
+                    <td className='px-2 py-1 border-r border-slate-300 text-right'>
+                      ₹{Math.round(row.pendingPenalty).toLocaleString('en-IN')}
+                    </td>
+                    <td className='px-2 py-1 border-r border-slate-300 text-right font-black'>
+                      ₹{Math.round(row.presentDue).toLocaleString('en-IN')}
+                    </td>
+                    <td className='px-2 py-1 text-center font-bold text-[10px] uppercase'>
+                      {row.status}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         </div>
       </FinancePrintPreview>
     </div>

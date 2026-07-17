@@ -53,9 +53,9 @@ const GeneralCalculator: React.FC = () => {
       const defaults = activeSetting || FALLBACKS['CD'];
       setRate(String(defaults.rate));
       setOverdue(String(defaults.overdue));
-    };
+   };
     fetchSettings();
-  }, []);
+ }, []);
 
   const handleLoanTypeChange = (type: string) => {
     setLoanType(type);
@@ -67,11 +67,11 @@ const GeneralCalculator: React.FC = () => {
     // Set some sensible default periods based on type to be helpful
     if (type === 'CD') {
       setPeriod('365');
-    } else {
+   } else {
       setPeriod('12');
-    }
+   }
     setOverdueDays('0');
-  };
+ };
 
   // Perform Live Calculation Math
   const calculation = useMemo(() => {
@@ -91,19 +91,19 @@ const GeneralCalculator: React.FC = () => {
       interest = P * (R / 100) * (per / 30);
       // Penalty = Principal × Overdue% × OverdueDays / 30
       penalty = P * (O / 100) * (oDays / 30);
-    } else if (loanType === 'HP' || loanType === 'STBD') {
+   } else if (loanType === 'HP' || loanType === 'STBD') {
       // Treat Period as instalments/months
       // Total Interest = Principal × Rate% × Period / 100
       interest = P * (R / 100) * per;
       // Penalty = Principal × Overdue% × OverdueDays / 30
       penalty = P * (O / 100) * (oDays / 30);
-    } else if (loanType === 'TBD') {
+   } else if (loanType === 'TBD') {
       // Monthly compounding
       const totalCompound = P * Math.pow(1 + (R / 100), per);
       interest = totalCompound - P;
       // Penalty = Principal × Overdue% × OverdueDays / 30
       penalty = P * (O / 100) * (oDays / 30);
-    }
+   }
 
     const payout = P - doc;
     const forClose = P + interest + penalty - paid;
@@ -115,15 +115,15 @@ const GeneralCalculator: React.FC = () => {
       totalBalance: Math.round(totalBalance),
       forClose: Math.round(forClose),
       payout: Math.round(payout),
-    };
-  }, [loanType, principal, rate, overdue, period, overdueDays, documentVal, amountPaid]);
+   };
+ }, [loanType, principal, rate, overdue, period, overdueDays, documentVal, amountPaid]);
 
 
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto select-none print:p-0 font-outfit">
       
       {/* Top Header Actions Bar */}
-      <div className={`flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5 ${showPrintModal ? 'print:hidden' : 'no-print'}`}>
+      <div className={`flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-100 pb-5 no-print`}>
         <div>
           <div className="text-slate-400 flex items-center gap-1.5 finance-small-label uppercase">
             <span>DASHBOARD</span>
@@ -154,7 +154,7 @@ const GeneralCalculator: React.FC = () => {
       </div>
 
       {/* Main Grid Layout */}
-      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 ${showPrintModal ? 'print:hidden' : 'no-print'}`}>
+      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 no-print`}>
         
         {/* Left Column: Inputs Card */}
         <Card
@@ -165,12 +165,12 @@ const GeneralCalculator: React.FC = () => {
                 {loanType}
               </span>
             </div>
-          }
+         }
           subtitle={
             <span className="text-slate-400 finance-small-label uppercase">
               {LOAN_LABELS[loanType]}
             </span>
-          }
+         }
           className="shadow-sm border-slate-150 rounded-xl"
         >
           <div className="space-y-4">

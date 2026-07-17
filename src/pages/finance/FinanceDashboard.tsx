@@ -1,3 +1,4 @@
+
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -17,7 +18,7 @@ import {
   TrendingUp, 
   AlertCircle, 
   ChevronRight,
-  Plus
+  Plus, AlertTriangle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -152,7 +153,8 @@ const FinanceDashboard: React.FC = () => {
     { label: 'Day Book', path: '/finance/daybook', icon: BookOpen },
     { label: 'Daily Report', path: '/finance/new-customers', icon: FileText },
     { label: 'General Ledger', path: '/finance/general-ledger', icon: BookOpen },
-    { label: 'Dues List', path: '/finance/dues-ledger', icon: AlertCircle },
+    { label: 'Total Due List', path: '/finance/dues-ledger', icon: AlertCircle },
+    { label: 'Outstanding List', path: '/finance/outstanding', icon: AlertTriangle },
     { label: 'P&L / Balance Sheet', path: '/finance/pl', icon: TrendingUp },
     { label: 'Final Statement', path: '/finance/final-statement', icon: FileText },
     { label: 'Business Details', path: '/finance/business-report', icon: FileText },

@@ -57,6 +57,7 @@ import STBDLedger from './pages/finance/STBDLedger';
 import HPLedger from './pages/finance/HPLedger';
 import TBDLedger from './pages/finance/TBDLedger';
 import DuesLedger from './pages/finance/DuesLedger';
+import OutstandingLedger from './pages/finance/OutstandingLedger';
 import ProfitAndLoss from './pages/finance/ProfitAndLoss';
 import FinalStatement from './pages/finance/FinalStatement';
 import BusinessReport from './pages/finance/BusinessReport';
@@ -299,6 +300,7 @@ const AppContent: React.FC = () => {
           <Route path='finance/hp-ledger' element={<OfflineGuard><HPLedger /></OfflineGuard>} />
           <Route path='finance/tbd-ledger' element={<OfflineGuard><TBDLedger /></OfflineGuard>} />
           <Route path='finance/dues-ledger' element={<OfflineGuard><DuesLedger /></OfflineGuard>} />
+          <Route path='finance/outstanding' element={<OfflineGuard><OutstandingLedger /></OfflineGuard>} />
           <Route path='finance/payment-followup' element={<OfflineGuard><PaymentFollowUp /></OfflineGuard>} />
           <Route path='finance/call-history' element={<OfflineGuard><CallHistory /></OfflineGuard>} />
           <Route path='finance/pl' element={<OfflineGuard><ProfitAndLoss /></OfflineGuard>} />

@@ -6,12 +6,12 @@ import {
   Search, 
   Download, 
   Printer, 
-  Clock, 
   ChevronRight,
   X,
   Phone
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../contexts/AuthContext';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 
 interface GroupedFollowUp {
@@ -27,6 +27,7 @@ interface GroupedFollowUp {
 }
 
 const CallHistory: React.FC = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [followUps, setFollowUps] = useState<FinanceLoanPaymentFollowup[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,14 +39,10 @@ const CallHistory: React.FC = () => {
   // Modal state
   const [selectedGroup, setSelectedGroup] = useState<GroupedFollowUp | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [isTimelinePrinting, setIsTimelinePrinting] = useState(false);
 
   // Detailed metrics state
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const [loanMetrics, setLoanMetrics] = useState<any>(null);
-  const [borrowerDetails, setBorrowerDetails] = useState<any>(null);
-  const [g1Details, setG1Details] = useState<any>(null);
-  const [g2Details, setG2Details] = useState<any>(null);
-  const [financials, setFinancials] = useState<any>(null);
+
 
   // Print state
   const [isPrinting, setIsPrinting] = useState(false);
@@ -83,94 +80,12 @@ const CallHistory: React.FC = () => {
     }
   };
 
-  const loadAllDetailsForGroup = async (group: GroupedFollowUp) => {
-    setLoadingDetails(true);
-    setLoanMetrics(null);
-    setBorrowerDetails(null);
-    setG1Details(null);
-    setG2Details(null);
-    setFinancials(null);
-    try {
-      // 1. Fetch the loan details including current principal, present due, etc.
-      const { data: loanData, error: loanErr } = await supabase
-        .from('finance_loans')
-        .select('*, customer:finance_customers!customer_id(*), g1:finance_customers!guarantor1_id(*), g2:finance_customers!guarantor2_id(*)')
-        .eq('id', group.db_loan_id)
-        .maybeSingle();
-
-      if (!loanErr && loanData) {
-        setLoanMetrics(loanData);
-        setBorrowerDetails(loanData.customer);
-        setG1Details(loanData.g1);
-        setG2Details(loanData.g2);
-      }
-
-      // 2. Fetch loan transactions and CD entries
-      const { data: txs } = await supabase
-        .from('finance_transactions')
-        .select('*')
-        .eq('loan_id', group.db_loan_id)
-        .order('date', { ascending: true });
-
-      let cdEntries: any[] = [];
-      if (group.loan_number.toUpperCase().startsWith('CD')) {
-        const { data } = await supabase
-          .from('finance_cd_ledger_entries')
-          .select('*')
-          .eq('loan_id', group.db_loan_id)
-          .order('entry_date', { ascending: true });
-        cdEntries = data || [];
-      }
-
-      const collections = (txs || []).filter(t => t.type === 'Collection');
-      const totalPaid = collections.reduce((sum, t) => sum + Number(t.amount || 0), 0);
-      const lastColl = collections[collections.length - 1];
-      const lastPaymentDate = lastColl ? lastColl.date.split('-').reverse().join('/') : '—';
-      const lastReceipt = lastColl ? lastColl.receipt_no || '—' : '—';
-      const operator = lastColl ? lastColl.collected_by || '—' : (txs?.[0]?.collected_by || '—');
-
-      let interestPaid = 0;
-      let penaltyPaid = 0;
-      let renewalPaid = 0;
-
-      cdEntries.forEach(e => {
-        const name = (e.account_name || '').toUpperCase();
-        if (name.includes('INTEREST') || name.includes('COMMISSION')) {
-          interestPaid += Number(e.credit || 0);
-        } else if (name.includes('PENALTY')) {
-          penaltyPaid += Number(e.credit || 0);
-        } else if (name.includes('RENEWAL')) {
-          renewalPaid += Number(e.credit || 0);
-        }
-      });
-
-      setFinancials({
-        interestPaid,
-        penaltyPaid,
-        renewalPaid,
-        totalPaid,
-        lastPaymentDate,
-        lastReceipt,
-        operator
-      });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingDetails(false);
-    }
-  };
-
   const handleOpenModal = (group: GroupedFollowUp) => {
     setSelectedGroup(group);
-    loadAllDetailsForGroup(group);
     setShowModal(true);
   };
 
-  const formatAddress = (details: any) => {
-    if (!details) return '';
-    const parts = [details.address, details.village, details.district].filter(Boolean);
-    return parts.join(', ');
-  };
+
 
   // Group by loan_id (using the string identifier)
   const groupedData = useMemo(() => {
@@ -279,6 +194,142 @@ const CallHistory: React.FC = () => {
     document.body.removeChild(link);
     toast.success('Call History exported successfully');
   };
+
+  const getResultColorClass = (result: string) => {
+    const r = (result || '').toUpperCase();
+    if (r === 'ANSWERED') return 'bg-emerald-50 text-emerald-700 border-emerald-250';
+    if (r === 'PROMISED TO PAY') return 'bg-blue-50 text-blue-700 border-blue-250';
+    if (r === 'CALL BACK') return 'bg-purple-50 text-purple-700 border-purple-250';
+    if (r === 'BUSY') return 'bg-amber-50 text-amber-700 border-amber-250';
+    if (r === 'NO RESPONSE' || r === 'NO ANSWER' || r === 'SWITCHED OFF') return 'bg-slate-50 text-slate-700 border-slate-250';
+    if (r === 'WRONG NUMBER') return 'bg-rose-50 text-rose-700 border-rose-250';
+    if (r === 'INVALID NUMBER') return 'bg-red-950/10 text-red-900 border-red-900/20';
+    return 'bg-slate-50 text-slate-750 border-slate-250';
+  };
+
+  const getResultBadgeColorClass = (result: string) => {
+    const r = (result || '').toUpperCase();
+    if (r === 'ANSWERED') return 'bg-emerald-500 text-white ring-emerald-100';
+    if (r === 'PROMISED TO PAY') return 'bg-blue-500 text-white ring-blue-100';
+    if (r === 'CALL BACK') return 'bg-purple-500 text-white ring-purple-100';
+    if (r === 'BUSY') return 'bg-amber-500 text-white ring-amber-100';
+    if (r === 'NO RESPONSE' || r === 'NO ANSWER' || r === 'SWITCHED OFF') return 'bg-slate-400 text-white ring-slate-100';
+    if (r === 'WRONG NUMBER') return 'bg-rose-500 text-white ring-rose-100';
+    if (r === 'INVALID NUMBER') return 'bg-red-800 text-white ring-red-100';
+    return 'bg-slate-550 text-white ring-slate-100';
+  };
+
+  const stats = useMemo(() => {
+    if (!selectedGroup) return { total: 0, answered: 0, promises: 0, callbacks: 0, pendingFollowUp: 0, lastContact: '—' };
+    const list = selectedGroup.all_follow_ups;
+    const total = list.length;
+    const answered = list.filter(l => l.result === 'ANSWERED').length;
+    const promises = list.filter(l => l.result === 'PROMISED TO PAY').length;
+    const callbacks = list.filter(l => l.result === 'CALL BACK').length;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const pendingFollowUp = list.filter(l => l.next_follow_up_date && l.next_follow_up_date >= todayStr).length;
+    const lastContact = selectedGroup.latest_follow_up?.follow_up_date
+      ? selectedGroup.latest_follow_up.follow_up_date.split('-').reverse().join('/')
+      : '—';
+    return { total, answered, promises, callbacks, pendingFollowUp, lastContact };
+  }, [selectedGroup]);
+
+  const timelinePrintContent = useMemo(() => {
+    if (!selectedGroup) return null;
+    return (
+      <div className="p-8 text-slate-900 font-sans leading-normal uppercase font-bold text-[11px]">
+        {/* Header */}
+        <div className="text-center border-b-2 border-slate-900 pb-3 mb-5">
+          <h1 className="text-xl font-black tracking-wide">THIRUMALA FINANCE</h1>
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-500 mt-0.5">Customer Interaction History</h2>
+        </div>
+
+        {/* Customer Metadata Table */}
+        <table className="w-full border-collapse border border-slate-350 mb-5 text-[11px] font-bold">
+          <tbody>
+            <tr>
+              <td className="border border-slate-350 p-2.5 bg-slate-50 w-[18%]">CD Number</td>
+              <td className="border border-slate-350 p-2.5 font-mono text-sm font-black w-[32%]">{selectedGroup.loan_number}</td>
+              <td className="border border-slate-350 p-2.5 bg-slate-50 w-[18%]">Borrower</td>
+              <td className="border border-slate-350 p-2.5 text-sm w-[32%]">{selectedGroup.customer_name}</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-350 p-2.5 bg-slate-50">Phone</td>
+              <td className="border border-slate-350 p-2.5 font-mono">{selectedGroup.customer_phone || '—'}</td>
+              <td className="border border-slate-350 p-2.5 bg-slate-50">Guarantor</td>
+              <td className="border border-slate-350 p-2.5 text-[10px]">
+                {[selectedGroup.latest_follow_up?.loan?.guarantor_1?.name, selectedGroup.latest_follow_up?.loan?.guarantor_2?.name].filter(Boolean).join(' / ') || '—'}
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-slate-350 p-2.5 bg-slate-50">Generated On</td>
+              <td className="border border-slate-350 p-2.5 font-mono">{new Date().toLocaleString('en-IN')}</td>
+              <td className="border border-slate-350 p-2.5 bg-slate-50">Generated By</td>
+              <td className="border border-slate-350 p-2.5">{user?.username?.toUpperCase() || 'SYSTEM'}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* Interaction History List */}
+        <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 mb-2 border-b pb-1">Interactions (Chronological)</h3>
+        <div className="space-y-3.5">
+          {[...selectedGroup.all_follow_ups].reverse().map((log, idx) => {
+            const dateObj = new Date(log.followed_up_at);
+            const timeStr = dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+            const dateStr = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            return (
+              <div key={log.id} className="border border-slate-300 rounded-xl p-3 bg-white text-[11px] space-y-2">
+                <div className="flex justify-between items-center border-b pb-1.5 font-bold uppercase">
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-slate-900">#{idx + 1} {log.result}</span>
+                    {log.next_follow_up_date && (
+                      <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[9px]">
+                        NEXT: {log.next_follow_up_date.split('-').reverse().join('/')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="font-mono text-slate-600">{dateStr} {timeStr}</div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 uppercase text-[10px] font-bold">
+                  <div><span className="text-slate-400">Contacted:</span> <span className="text-slate-700">{log.contacted_person}</span></div>
+                  <div><span className="text-slate-400">Operator:</span> <span className="text-slate-700">{log.followed_up_by}</span></div>
+                  <div>
+                    {log.promised_amount ? (
+                      <span><span className="text-slate-400">Amount:</span> <span className="text-emerald-700">₹{log.promised_amount.toLocaleString('en-IN')}</span></span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded border border-slate-200 font-medium leading-relaxed">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase block mb-1">Remarks:</span>
+                  {log.narration || 'No remarks recorded.'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer Metrics */}
+        <div className="mt-6 pt-3 border-t-2 border-slate-900 grid grid-cols-3 gap-3.5 text-center uppercase font-bold text-xs">
+          <div className="bg-slate-50 p-2 rounded border border-slate-300">
+            <span className="text-[9px] text-slate-400 block mb-0.5">Total Calls</span>
+            <span className="text-sm font-black text-slate-900">{stats.total}</span>
+          </div>
+          <div className="bg-slate-50 p-2 rounded border border-slate-300">
+            <span className="text-[9px] text-slate-400 block mb-0.5">Last Contact</span>
+            <span className="text-sm font-black text-slate-900 font-mono">{stats.lastContact}</span>
+          </div>
+          <div className="bg-slate-50 p-2 rounded border border-slate-300">
+            <span className="text-[9px] text-slate-400 block mb-0.5">Next Follow-up</span>
+            <span className="text-sm font-black text-amber-700 font-mono">
+              {selectedGroup.latest_follow_up?.next_follow_up_date 
+                ? selectedGroup.latest_follow_up.next_follow_up_date.split('-').reverse().join('/')
+                : '—'}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }, [selectedGroup, stats, user]);
 
   const printableContent = useMemo(() => {
     return (
@@ -504,10 +555,10 @@ const CallHistory: React.FC = () => {
       {/* Centered Large Details Modal (Requirement 6 - Replacing the Drawer) */}
       {showModal && selectedGroup && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-gray-150 max-w-[85vw] w-11/12 md:w-[80vw] lg:w-[75vw] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-2xl border border-gray-150 max-w-[90vw] w-11/12 md:w-[85vw] lg:w-[80vw] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
             
             {/* Modal Header */}
-            <div className="bg-[#0b1329] text-white p-4 flex justify-between items-center">
+            <div className="bg-[#0b1329] text-white p-4 flex justify-between items-center shrink-0">
               <div>
                 <h3 className="text-sm font-black uppercase tracking-wider">Loan Call Logs &amp; Metrics Timeline</h3>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
@@ -522,216 +573,115 @@ const CallHistory: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 scrollbar-thin">
-              {loadingDetails ? (
-                <div className="flex flex-col items-center justify-center py-12 text-slate-500 font-sans text-xs">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-slate-900 mb-2"></div>
-                  Loading Loan details &amp; metrics...
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                  
-                  {/* Left Column: Loan Summary & Financial Summary */}
-                  <div className="lg:col-span-7 space-y-4">
-                    {/* Borrower Identity Header */}
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-start gap-4">
-                      {borrowerDetails?.customer_photo_url ? (
-                        <img 
-                          src={borrowerDetails.customer_photo_url} 
-                          alt="Customer" 
-                          className="w-20 h-20 rounded-lg object-cover border border-slate-200" 
-                        />
-                      ) : (
-                        <div className="w-20 h-20 bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-[10px] font-bold uppercase text-center p-1">
-                          No Photo
-                        </div>
-                      )}
-                      <div className="space-y-1.5 flex-1">
-                        <div>
-                          <span className="text-[9px] text-slate-450 uppercase font-black tracking-wider">Account Number</span>
-                          <div className="text-base font-black text-slate-900">{selectedGroup.loan_number}</div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <span className="text-[9px] text-slate-455 uppercase font-black tracking-wider">Borrower Name</span>
-                            <div className="text-sm font-bold text-slate-900">{selectedGroup.customer_name}</div>
-                          </div>
-                          <div>
-                            <span className="text-[9px] text-slate-450 uppercase font-black tracking-wider">Borrower Phone</span>
-                            <div className="text-xs font-bold text-[#0b1329] font-mono tracking-wide">{borrowerDetails?.phone || selectedGroup.customer_phone || '—'}</div>
-                          </div>
-                        </div>
+            {/* Modal Body */}
+            <div className="flex-1 overflow-hidden p-6 flex flex-col bg-slate-50/40">
+                  {/* Full Width: Statistics & Timeline */}
+                  <div className="w-full flex flex-col overflow-hidden max-h-full">
+                    {/* Quick Metrics Cards */}
+                    <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4 shrink-0 uppercase font-bold text-center text-[10px]">
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                        <span className="text-slate-400 block mb-0.5">Total Calls</span>
+                        <span className="text-base font-black text-slate-900 leading-none">{stats.total}</span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                        <span className="text-slate-400 block mb-0.5">Answered</span>
+                        <span className="text-base font-black text-emerald-600 leading-none">{stats.answered}</span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                        <span className="text-slate-400 block mb-0.5">Promises</span>
+                        <span className="text-base font-black text-blue-600 leading-none">{stats.promises}</span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                        <span className="text-slate-400 block mb-0.5">Callbacks</span>
+                        <span className="text-base font-black text-purple-600 leading-none">{stats.callbacks}</span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center col-span-1">
+                        <span className="text-slate-400 block mb-0.5">Pending</span>
+                        <span className="text-base font-black text-amber-700 leading-none">{stats.pendingFollowUp}</span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center col-span-1">
+                        <span className="text-slate-400 block mb-0.5">Last Call</span>
+                        <span className="text-[11px] font-black text-slate-950 leading-none font-mono">{stats.lastContact}</span>
                       </div>
                     </div>
 
-                    {/* Financial Summary Quick Grid */}
-                    {loanMetrics && (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs font-bold uppercase">
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Status</span>
-                          <span className="text-sm font-black text-slate-900">{loanMetrics.status || 'Active'}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Loan Date</span>
-                          <span className="text-sm font-black text-slate-900 font-mono">{loanMetrics.loan_date ? loanMetrics.loan_date.split('-').reverse().join('/') : '—'}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Due Date</span>
-                          <span className="text-sm font-black text-slate-900 font-mono">{loanMetrics.current_due_date ? loanMetrics.current_due_date.split('-').reverse().join('/') : '—'}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Principal</span>
-                          <span className="text-sm font-black text-slate-900 font-mono">{Math.round(loanMetrics.amount || 0).toLocaleString('en-IN')}</span>
-                        </div>
-                        
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Present Due</span>
-                          <span className="text-sm font-black text-red-600 font-mono">{Math.round(loanMetrics.present_due || 0).toLocaleString('en-IN')}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Outstanding</span>
-                          <span className="text-sm font-black text-slate-900 font-mono">{Math.round(loanMetrics.principal_balance || loanMetrics.amount || 0).toLocaleString('en-IN')}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Current Interest</span>
-                          <span className="text-sm font-black text-slate-900 font-mono">{Math.round(loanMetrics.pending_interest || 0).toLocaleString('en-IN')}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Current Penalty</span>
-                          <span className="text-sm font-black text-slate-900 font-mono">{Math.round(loanMetrics.penalty || 0).toLocaleString('en-IN')}</span>
-                        </div>
-
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Interest Paid</span>
-                          <span className="text-sm font-black text-emerald-600 font-mono">{financials ? Math.round(financials.interestPaid).toLocaleString('en-IN') : '...'}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Penalty Paid</span>
-                          <span className="text-sm font-black text-emerald-600 font-mono">{financials ? Math.round(financials.penaltyPaid).toLocaleString('en-IN') : '...'}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Renewal Paid</span>
-                          <span className="text-sm font-black text-emerald-600 font-mono">{financials ? Math.round(financials.renewalPaid).toLocaleString('en-IN') : '...'}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Total Paid</span>
-                          <span className="text-sm font-black text-emerald-600 font-mono">{financials ? Math.round(financials.totalPaid).toLocaleString('en-IN') : '...'}</span>
-                        </div>
-
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Days Due</span>
-                          <span className="text-sm font-black text-red-600 font-mono">{loanMetrics.due_days || 0} Days</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Last Receipt</span>
-                          <span className="text-sm font-black text-slate-900 font-mono">{financials ? financials.lastReceipt : '...'}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Last Payment</span>
-                          <span className="text-sm font-black text-slate-900 font-mono">{financials ? financials.lastPaymentDate : '...'}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block">Operator</span>
-                          <span className="text-sm font-black text-slate-900">{financials ? financials.operator : '...'}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Guarantors */}
-                    {(g1Details || g2Details) && (
-                      <div className="grid grid-cols-2 gap-3.5">
-                        {g1Details && (
-                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1 text-xs font-bold">
-                            <span className="text-[9px] text-[#0b1329] uppercase font-black tracking-wider border-b pb-0.5 block">Guarantor 1</span>
-                            <div>
-                              <span className="text-[8px] text-slate-400 uppercase">Name:</span> {g1Details.name}
-                            </div>
-                            <div>
-                              <span className="text-[8px] text-slate-400 uppercase">Phone:</span> <span className="font-mono">{g1Details.phone || '—'}</span>
-                            </div>
-                            <div className="text-[10px] text-slate-500 leading-tight">
-                              <span className="text-[8px] text-slate-400 uppercase block">Address</span>
-                              {formatAddress(g1Details)}
-                            </div>
-                          </div>
-                        )}
-                        {g2Details && (
-                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1 text-xs font-bold">
-                            <span className="text-[9px] text-[#0b1329] uppercase font-black tracking-wider border-b pb-0.5 block">Guarantor 2</span>
-                            <div>
-                              <span className="text-[8px] text-slate-400 uppercase">Name:</span> {g2Details.name}
-                            </div>
-                            <div>
-                              <span className="text-[8px] text-slate-400 uppercase">Phone:</span> <span className="font-mono">{g2Details.phone || '—'}</span>
-                            </div>
-                            <div className="text-[10px] text-slate-500 leading-tight">
-                              <span className="text-[8px] text-slate-400 uppercase block">Address</span>
-                              {formatAddress(g2Details)}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right Column: Callback History Timeline */}
-                  <div className="lg:col-span-5 bg-slate-50/50 p-4 rounded-xl border border-slate-150 flex flex-col h-[550px] overflow-hidden">
-                    <h4 className="text-xs font-black uppercase text-indigo-900 border-b pb-2 mb-4 tracking-wider flex items-center gap-1.5 shrink-0">
-                      <Clock className="w-4 h-4" />
-                      Action Timeline ({selectedGroup.all_follow_ups.length} Records)
-                    </h4>
-                    <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin">
-                      <ul role="list" className="-mb-8 pl-1">
-                        {selectedGroup.all_follow_ups.map((log, idx) => (
-                          <li key={log.id}>
-                            <div className="relative pb-8">
-                              {idx !== selectedGroup.all_follow_ups.length - 1 && (
-                                <span className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-slate-200" aria-hidden="true"></span>
-                              )}
-                              <div className="relative flex space-x-3">
-                                <div>
-                                  <span className={`h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white ${
-                                    log.result === 'PROMISED TO PAY' ? 'bg-green-500 text-white' :
-                                    log.result === 'ANSWERED' ? 'bg-blue-500 text-white' :
-                                    log.result === 'CALL BACK' ? 'bg-amber-500 text-white' :
-                                    'bg-rose-500 text-white'
-                                  }`}>
-                                    <Phone className="w-3.5 h-3.5" />
-                                  </span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-xs text-slate-800 font-bold uppercase flex justify-between">
-                                    <span>{log.result}</span>
-                                    <span className="text-slate-400 font-mono">{log.follow_up_date}</span>
+                    {/* Timeline List Scrollable Container */}
+                    <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin space-y-4 pl-1">
+                      <div className="flow-root pl-1">
+                        <ul role="list" className="-mb-8">
+                          {selectedGroup.all_follow_ups.map((log, idx) => (
+                            <li key={log.id}>
+                              <div className="relative pb-8">
+                                {idx !== selectedGroup.all_follow_ups.length - 1 && (
+                                  <span className="absolute top-5 left-5 -ml-px h-full w-[3px] bg-slate-200" aria-hidden="true"></span>
+                                )}
+                                <div className="relative flex space-x-3.5">
+                                  <div>
+                                    <span className={`h-10 w-10 rounded-full flex items-center justify-center ring-4 ring-white shadow-sm shrink-0 ${getResultBadgeColorClass(log.result)}`}>
+                                      <Phone className="w-4 h-4" />
+                                    </span>
                                   </div>
-                                  <div className="mt-1 text-[10px] text-slate-400 uppercase font-black flex items-center gap-2">
-                                    <span>BY: {log.followed_up_by}</span>
-                                    <span>•</span>
-                                    <span>TO: {log.contacted_person}</span>
-                                  </div>
-                                  {log.promised_amount ? (
-                                    <div className="mt-1.5 text-xs text-green-700 font-bold bg-green-50/50 p-1.5 rounded border border-green-200 inline-block font-mono">
-                                      PROMISED AMOUNT: {log.promised_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  <div className="flex-1 min-w-0 bg-white p-4.5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className={`inline-block px-3 py-1.5 rounded-full text-xs font-black uppercase border ${getResultColorClass(log.result)}`}>
+                                          {log.result}
+                                        </span>
+                                        {log.next_follow_up_date && (
+                                          <span className="text-[10px] font-black bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded uppercase">
+                                            Scheduled: {log.next_follow_up_date.split('-').reverse().join('/')}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-xs text-slate-500 font-bold font-mono">
+                                        {new Date(log.followed_up_at).toLocaleString('en-IN', {
+                                          day: '2-digit', month: 'short', year: 'numeric',
+                                          hour: '2-digit', minute: '2-digit', hour12: true
+                                        })}
+                                      </div>
                                     </div>
-                                  ) : null}
-                                  <p className="mt-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-150 font-semibold leading-normal">
-                                    {log.narration || 'No remarks recorded.'}
-                                  </p>
+                                    
+                                    <div className="grid grid-cols-2 gap-4 text-xs font-bold uppercase">
+                                      <div>
+                                        <span className="text-slate-400 text-[10px] block">Contacted Person</span>
+                                        <span className="text-slate-805">{log.contacted_person || '—'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-slate-400 text-[10px] block">Operator / Staff</span>
+                                        <span className="text-slate-805 uppercase">{log.followed_up_by || '—'}</span>
+                                      </div>
+                                    </div>
+
+                                    {/* Remarks as Read-only Card */}
+                                    <div className="text-xs text-slate-700 bg-slate-50/70 p-3.5 rounded-xl border border-slate-150 font-semibold leading-relaxed">
+                                      <span className="text-[9px] text-slate-400 font-black uppercase block mb-1.5">Remarks &amp; Notes</span>
+                                      {log.narration || 'No remarks recorded.'}
+                                    </div>
+
+                                    {log.promised_amount ? (
+                                      <div className="text-xs text-emerald-700 font-bold bg-emerald-50/80 px-3 py-2 rounded-lg border border-emerald-200 inline-block font-mono">
+                                        PROMISED AMOUNT: ₹{log.promised_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
                   </div>
-
-                </div>
-              )}
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 px-4 py-3 sm:px-6 border-t border-slate-150 flex justify-end gap-2 shrink-0">
+            <div className="bg-slate-50 px-4 py-3 sm:px-6 border-t border-slate-150 flex justify-between items-center shrink-0">
+              <button
+                onClick={() => setIsTimelinePrinting(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white hover:bg-slate-800 rounded-lg text-xs font-bold uppercase transition-colors shadow-sm"
+              >
+                <Printer className="w-4 h-4" /> Print Timeline
+              </button>
               <button
                 onClick={() => setShowModal(false)}
                 className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold uppercase transition-colors"
@@ -752,6 +702,16 @@ const CallHistory: React.FC = () => {
         documentTitle="CallHistoryReport"
       >
         {printableContent}
+      </FinancePrintPreview>
+
+      {/* Individual Customer Timeline Print Preview */}
+      <FinancePrintPreview
+        isOpen={isTimelinePrinting}
+        onClose={() => setIsTimelinePrinting(false)}
+        title="Customer Interaction Timeline"
+        documentTitle={`Timeline_${selectedGroup?.loan_number || 'Report'}`}
+      >
+        {timelinePrintContent}
       </FinancePrintPreview>
 
     </div>

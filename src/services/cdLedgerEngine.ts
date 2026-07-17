@@ -279,9 +279,9 @@ export function getCDPrincipalBalance(contract: CDContract, ledgerEvents: CDEven
   const disb = ledgerEvents.find(e => e.entryType === 'original_loan' || e.entryType === 'Disbursement');
   const originalPrincipal = disb ? disb.debit : contract.originalPrincipal;
   
-  // Principal balance = originalPrincipal - sum of principal_payment credit allocations
+  // Principal balance = originalPrincipal - sum of principal_payment/amount_paid credit allocations
   const principalPaid = ledgerEvents
-    .filter(e => e.entryType === 'principal_payment')
+    .filter(e => e.entryType === 'principal_payment' || e.entryType === 'amount_paid' || e.accountName === 'CD Amount Paid')
     .reduce((sum, e) => sum + e.credit, 0);
 
   return Number(Math.max(0, originalPrincipal - principalPaid).toFixed(2));

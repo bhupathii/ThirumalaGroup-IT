@@ -1,3 +1,4 @@
+import { sortNumerically } from '../../lib/financialCalculations';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
@@ -7,6 +8,7 @@ import { Printer, User, Phone, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
+import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
 
 interface NewCustItem {
   id: string;
@@ -23,24 +25,43 @@ const NewCustomers: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<NewCustItem[]>([]);
   const [filteredCusts, setFilteredCusts] = useState<NewCustItem[]>([]);
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 1); // 1 month ago
-    return getLocalBusinessDateISO(d);
-  });
+  const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState(() => getLocalBusinessDateISO());
   const [searchQuery, setSearchQuery] = useState('');
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   useEffect(() => {
-    fetchNewCustomers();
+    const loadDefaultStartDate = async () => {
+      try {
+        const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
+        if (oldest) {
+          setStartDate(oldest);
+        } else {
+          const d = new Date();
+          d.setMonth(d.getMonth() - 1);
+          setStartDate(d.toISOString().split('T')[0]);
+        }
+      } catch (err) {
+        console.error(err);
+        const d = new Date();
+        d.setMonth(d.getMonth() - 1);
+        setStartDate(d.toISOString().split('T')[0]);
+      }
+    };
+    loadDefaultStartDate();
+  }, []);
+
+  useEffect(() => {
+    if (startDate) {
+      fetchNewCustomers();
+    }
   }, [startDate, endDate]);
 
   useEffect(() => {
     if (!searchQuery) {
       setFilteredCusts(customers);
       return;
-    }
+   }
     const q = searchQuery.toLowerCase();
     const filtered = customers.filter(c => 
       c.name.toLowerCase().includes(q) ||
@@ -49,7 +70,7 @@ const NewCustomers: React.FC = () => {
       (c.loanId && c.loanId.toLowerCase().includes(q))
     );
     setFilteredCusts(filtered);
-  }, [searchQuery, customers]);
+ }, [searchQuery, customers]);
 
   const fetchNewCustomers = async () => {
     setLoading(true);
@@ -88,19 +109,19 @@ const NewCustomers: React.FC = () => {
           createdAt: c.created_at,
           loanId: latestLoan ? latestLoan.loan_id : null,
           amount: latestLoan ? Number(latestLoan.amount) : null
-        };
-      });
+       };
+     });
 
       setCustomers(formatted);
       setFilteredCusts(formatted);
 
-    } catch (err) {
+   } catch (err) {
       console.error(err);
       toast.error('Failed to query new registrations');
-    } finally {
+   } finally {
       setLoading(false);
-    }
-  };
+   }
+ };
 
   const renderTable = () => (
     <div className="overflow-x-auto">
@@ -161,7 +182,7 @@ const NewCustomers: React.FC = () => {
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
       {/* Header */}
-      <div className={`flex justify-between items-center border-b border-green-100 pb-4 ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <div className={`flex justify-between items-center border-b border-green-100 pb-4`}>
         <div>
           <h1 className="finance-h1">New Customer Registrations</h1>
           <p className="finance-small-label uppercase">Audit log of customers added within specific calendar ranges</p>
@@ -172,14 +193,14 @@ const NewCustomers: React.FC = () => {
       </div>
 
       {/* Date Filters */}
-      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100`}>
         <Input label="Registered From" type="date" value={startDate} onChange={setStartDate} />
         <Input label="Registered To" type="date" value={endDate} onChange={setEndDate} />
         <Input label="Quick Filter Results" value={searchQuery} onChange={setSearchQuery} placeholder="Search by name, phone..." />
       </div>
 
       {/* Main UI Card */}
-      <Card title="Customer Entry Directory" subtitle={`${filteredCusts.length} new records created`} className={`shadow-md ${showPrintPreview ? 'print:hidden' : ''}`}>
+      <Card title="Customer Entry Directory" subtitle={`${filteredCusts.length} new records created`} className={`shadow-md`}>
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-green-500"></div>

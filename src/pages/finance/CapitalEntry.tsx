@@ -57,7 +57,7 @@ const CapitalEntry: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+ }, []);
 
   const fetchData = async () => {
     setLoading(true);
@@ -67,24 +67,24 @@ const CapitalEntry: React.FC = () => {
 
       const e = await supabaseFinance.getCapitalEntries();
       setEntries(e);
-    } catch (err) {
+   } catch (err) {
       console.error(err);
       toast.error('Failed to load capital database details');
-    } finally {
+   } finally {
       setLoading(false);
-    }
-  };
+   }
+ };
 
   // Mutually exclusive Credit/Debit inputs handlers
   const handleCreditChange = (val: string) => {
     setCredit(val);
     if (val) setDebit('');
-  };
+ };
 
   const handleDebitChange = (val: string) => {
     setDebit(val);
     if (val) setCredit('');
-  };
+ };
 
   const handleResetForm = () => {
     setEditingId(null);
@@ -93,7 +93,7 @@ const CapitalEntry: React.FC = () => {
     setParticulars('');
     setCredit('');
     setDebit('');
-  };
+ };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,8 +114,8 @@ const CapitalEntry: React.FC = () => {
           if (creditAmt > 0 && debitAmt > 0) return 'Cannot enter both Credit and Debit';
           if (creditAmt < 0 || debitAmt < 0) return 'Amount cannot be negative';
           return (creditAmt > 0 || debitAmt > 0) ? null : 'Please enter a valid Credit or Debit amount greater than zero';
-        }
-      }
+       }
+     }
     ];
 
     const { isValid, errors: valErrors } = validateFinanceForm(fields);
@@ -126,9 +126,9 @@ const CapitalEntry: React.FC = () => {
       const match = fields.find(f => f.name === firstError);
       if (match && match.ref && match.ref.current) {
         match.ref.current.focus();
-      }
+     }
       return;
-    }
+   }
 
     setSaving(true);
     try {
@@ -140,9 +140,9 @@ const CapitalEntry: React.FC = () => {
           particulars: particulars.trim(),
           credit: creditAmt,
           debit: debitAmt
-        }, user?.username || 'Staff');
+       }, user?.username || 'Staff');
         toast.success('Capital entry updated');
-      } else {
+     } else {
         await supabaseFinance.createCapitalEntry({
           entry_date: date,
           partner_id: partnerId,
@@ -151,19 +151,19 @@ const CapitalEntry: React.FC = () => {
           credit: creditAmt,
           debit: debitAmt,
           created_by: user?.username || 'Staff'
-        });
+       });
         toast.success('Capital entry saved');
-      }
+     }
 
       handleResetForm();
       fetchData(); // Refresh list
-    } catch (err: any) {
+   } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Failed to save capital transaction');
-    } finally {
+   } finally {
       setSaving(false);
-    }
-  };
+   }
+ };
 
   const handleEditClick = (entry: DisplayCapitalEntry) => {
     setEditingId(entry.id);
@@ -173,7 +173,7 @@ const CapitalEntry: React.FC = () => {
     setCredit(entry.credit > 0 ? entry.credit.toString() : '');
     setDebit(entry.debit > 0 ? entry.debit.toString() : '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+ };
 
   const handleDelete = async (id: string, name: string) => {
     if (!window.confirm(`Are you sure you want to delete entry "${name || 'Capital Transaction'}"?`)) return;
@@ -181,11 +181,11 @@ const CapitalEntry: React.FC = () => {
       await supabaseFinance.deleteCapitalEntry(id, user?.username || 'Staff');
       toast.success('Capital transaction entry deleted');
       fetchData();
-    } catch (err: any) {
+   } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Failed to delete entry');
-    }
-  };
+   }
+ };
 
   const handleBulkSubmit = async (type: 'Credit' | 'Debit') => {
     const amount = type === 'Credit' ? bulkCreditAmount : bulkDebitAmount;
@@ -194,16 +194,16 @@ const CapitalEntry: React.FC = () => {
     if (numAmt <= 0) {
       toast.error(`Please enter a valid ${type} amount greater than zero`);
       return;
-    }
+   }
 
     if (partners.length === 0) {
       toast.error('No partners available for distribution');
       return;
-    }
+   }
 
     if (!window.confirm(`Distribute ₹${numAmt.toLocaleString('en-IN')} equally as ${type} across ${partners.length} partners? (₹${(numAmt / partners.length).toLocaleString('en-IN', { maximumFractionDigits: 2 })} each)`)) {
       return;
-    }
+   }
 
     setBulkPosting(true);
     try {
@@ -219,8 +219,8 @@ const CapitalEntry: React.FC = () => {
           credit: type === 'Credit' ? splitAmount : 0,
           debit: type === 'Debit' ? splitAmount : 0,
           created_by: user?.username || 'Staff'
-        });
-      });
+       });
+     });
 
       await Promise.all(promises);
       toast.success(`Distributed ₹${numAmt.toLocaleString('en-IN')} successfully`);
@@ -230,13 +230,13 @@ const CapitalEntry: React.FC = () => {
       else setBulkDebitAmount('');
 
       fetchData();
-    } catch (err) {
+   } catch (err) {
       console.error(err);
       toast.error('Failed to post bulk distribution entries');
-    } finally {
+   } finally {
       setBulkPosting(false);
-    }
-  };
+   }
+ };
 
   // Group transactions chronologically to compute running balance correctly
   const entriesWithRunningBalance = useMemo(() => {
@@ -244,10 +244,10 @@ const CapitalEntry: React.FC = () => {
       // Primary sort by date
       if (a.entry_date !== b.entry_date) {
         return a.entry_date.localeCompare(b.entry_date);
-      }
+     }
       // Secondary sort by auto ID / created_at timestamp
       return a.created_at.localeCompare(b.created_at);
-    });
+   });
 
     let balance = 0;
     const mapped = sorted.map(e => {
@@ -258,12 +258,12 @@ const CapitalEntry: React.FC = () => {
         partner: partnerObj,
         partner_name: partnerObj?.name || 'Unknown Partner',
         running_balance: balance
-      };
-    });
+     };
+   });
 
     // Return newest first for tabular presentation
     return mapped.reverse();
-  }, [entries, partners]);
+ }, [entries, partners]);
 
   // Compute live ledger summaries
   const summaries = useMemo(() => {
@@ -273,14 +273,14 @@ const CapitalEntry: React.FC = () => {
     entries.forEach(e => {
       totalCapitalIn += e.credit || 0;
       totalDrawings += e.debit || 0;
-    });
+   });
 
     return {
       totalCapitalIn,
       totalDrawings,
       netValue: totalCapitalIn - totalDrawings
-    };
-  }, [entries]);
+   };
+ }, [entries]);
 
   // Partner Wise Balances
   const partnerBalances = useMemo(() => {
@@ -294,9 +294,9 @@ const CapitalEntry: React.FC = () => {
         capitalIn,
         drawings,
         netBalance: capitalIn - drawings
-      };
-    }).sort((a, b) => b.netBalance - a.netBalance);
-  }, [partners, entries]);
+     };
+   }).sort((a, b) => b.netBalance - a.netBalance);
+ }, [partners, entries]);
 
   return (
     <div className="space-y-3 w-full select-none text-slate-800 p-2 font-outfit">
@@ -328,7 +328,7 @@ const CapitalEntry: React.FC = () => {
       </div>
 
       {/* Main Grid Layout - Side-by-Side: 65% Form & 35% Partner Balances */}
-      <div className={`grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch ${showPrintModal ? 'print:hidden' : 'no-print'}`}>
+      <div className={`grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch no-print`}>
         
         {/* Left Side: New Entry Form & Bulk Distribution Toolbar (lg:col-span-8 -> ~65%) */}
         <div className="lg:col-span-8 flex flex-col justify-between gap-3">
@@ -339,12 +339,12 @@ const CapitalEntry: React.FC = () => {
               <span className="text-slate-900 text-[17px] font-bold uppercase">
                 {editingId ? 'EDIT CAPITAL ENTRY' : 'NEW CAPITAL ENTRY'}
               </span>
-            }
+           }
             subtitle={
               <span className="text-slate-400 text-[14px] font-bold uppercase">
                 {editingId ? 'MODIFY PARTNER LEDGER ENTRY RECORD' : 'RECORD PARTNER DEPOSITS OR DRAWINGS'}
               </span>
-            }
+           }
             className="shadow-sm border-slate-200 rounded"
           >
             <form onSubmit={handleSubmit} className="space-y-3">
@@ -519,12 +519,12 @@ const CapitalEntry: React.FC = () => {
                   LIVE
                 </span>
               </div>
-            }
+           }
             subtitle={
               <span className="text-slate-400 text-[14px] font-bold uppercase">
                 {partnerBalances.length} PARTNERS · NET ₹{summaries.netValue.toLocaleString('en-IN')}
               </span>
-            }
+           }
             className="flex-1 bg-white border border-slate-200 shadow-sm rounded overflow-hidden"
           >
             {loading ? (
@@ -572,18 +572,18 @@ const CapitalEntry: React.FC = () => {
       </div>
 
       {/* Transactions Section: Starts immediately below, full width */}
-      <div className={`w-full mt-3 ${showPrintModal ? 'print:hidden' : 'no-print'}`}>
+      <div className={`w-full mt-3 no-print`}>
         <Card
           title={
             <span className="text-slate-900 text-[17px] font-bold uppercase">
               TRANSACTIONS RECORD
             </span>
-          }
+         }
           subtitle={
             <span className="text-slate-400 text-[14px] font-bold uppercase">
               {entriesWithRunningBalance.length} ENTRIES RECORDED
             </span>
-          }
+         }
           className="shadow-sm border-slate-200 rounded"
         >
           {loading ? (

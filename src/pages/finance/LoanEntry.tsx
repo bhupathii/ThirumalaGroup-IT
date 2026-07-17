@@ -1,3 +1,4 @@
+import { sortNumerically } from '../../lib/financialCalculations';
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -617,7 +618,7 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
         .ilike('loan_id', `${upperVal}%`)
         .limit(10);
       if (!error && data) {
-        setCdSuggestions(data.map(l => l.loan_id));
+        setCdSuggestions(data.map(l => l.loan_id).sort((a,b) => sortNumerically(a, b)));
         setShowCdSuggestions(true);
       }
     } catch (err) {
@@ -930,12 +931,22 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
       { name: 'date', label: 'Date', value: date, required: true, ref: dateRef },
       { name: 'loanId', label: 'Loan Number', value: loanId, required: true, ref: loanIdRef },
       { name: 'custName', label: 'Customer Name', value: custName, required: true, ref: custNameRef },
-      { name: 'custPhone', label: 'Customer Phone', value: custPhone, required: true, ref: custPhoneRef },
+      { name: 'custPhone', label: 'Customer Phone', value: custPhone, required: mandatoryFields.borrowerPhone, ref: custPhoneRef },
+      { name: 'custAadhaar', label: 'Customer Aadhaar UID', value: custAadhaar, required: mandatoryFields.borrowerAadhaar },
+      { name: 'g1Name', label: 'Guarantor 1 Name', value: g1Name, required: true },
+      { name: 'g1Aadhaar', label: 'Guarantor 1 Aadhaar', value: g1Aadhaar, required: mandatoryFields.g1Aadhaar },
+      { name: 'g1Phone', label: 'Guarantor 1 Phone', value: g1Phone, required: mandatoryFields.g1Phone },
       { name: 'amount', label: 'Loan Amount', value: amount, required: true, ref: amountRef },
       { name: 'interestRate', label: 'Rate of Interest', value: interestRate, required: true, ref: interestRateRef },
       { name: 'durationMonths', label: 'Period', value: durationMonths, required: true, ref: durationMonthsRef },
       { name: 'particulars', label: 'Particulars', value: particulars, required: true, ref: particularsRef },
     ];
+
+    if (g2Name?.trim() || g2Aadhaar?.trim() || g2Phone?.trim()) {
+      if (!g2Name?.trim()) fields.push({ name: 'g2Name', label: 'Guarantor 2 Name', value: g2Name, required: true });
+      if (mandatoryFields.g2Aadhaar && !g2Aadhaar?.trim()) fields.push({ name: 'g2Aadhaar', label: 'Guarantor 2 Aadhaar', value: g2Aadhaar, required: true });
+      if (mandatoryFields.g2Phone && !g2Phone?.trim()) fields.push({ name: 'g2Phone', label: 'Guarantor 2 Phone', value: g2Phone, required: true });
+    }
 
     const { isValid, errors: newErrors } = validateFinanceForm(fields);
     setErrors(newErrors);

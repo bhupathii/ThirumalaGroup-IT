@@ -71,11 +71,11 @@ const CashBook: React.FC = () => {
   const [financeMode] = useState<'REGULAR' | 'ITR'>(() => {
     const prev = sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode');
     return prev === 'itr' ? 'ITR' : 'REGULAR';
-  });
+ });
 
   useEffect(() => {
     fetchData();
-  }, [financeMode]);
+ }, [financeMode]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -85,13 +85,13 @@ const CashBook: React.FC = () => {
       const fetchedEntries = await supabaseFinance.getCashbookEntries(bookId);
       setAccounts(fetchedAccounts);
       setEntries(fetchedEntries);
-    } catch (err) {
+   } catch (err) {
       console.error('Error fetching data:', err);
       toast.error('Failed to load Day Book data');
-    } finally {
+   } finally {
       setLoading(false);
-    }
-  };
+   }
+ };
 
   // Mutually Exclusive Credit / Debit behavior:
   // Typing in Credit sets Debit to empty and vice versa
@@ -99,25 +99,25 @@ const CashBook: React.FC = () => {
     setCredit(val);
     if (val !== '') {
       setDebit('');
-    }
-  };
+   }
+ };
 
   const handleDebitChange = (val: string) => {
     setDebit(val);
     if (val !== '') {
       setCredit('');
-    }
-  };
+   }
+ };
 
   const handleAccountChange = (accId: string) => {
     setHeadOfAccount(accId);
     const selectedAcc = accounts.find(a => a.id === accId);
     if (selectedAcc && selectedAcc.account_number) {
       setAccountNumber(selectedAcc.account_number);
-    } else {
+   } else {
       setAccountNumber('');
-    }
-  };
+   }
+ };
 
   // Form Reset / Clear
   const handleReset = (confirm = true) => {
@@ -129,7 +129,7 @@ const CashBook: React.FC = () => {
     setCredit('');
     setDebit('');
     setEditId(null);
-  };
+ };
 
   // Save Entry (Create / Update)
   const handleSaveEntry = async (e?: React.FormEvent) => {
@@ -153,7 +153,7 @@ const CashBook: React.FC = () => {
           : (creditVal > 0 || debitVal > 0) 
             ? null 
             : 'Please enter either Credit or Debit amount greater than 0'
-      }
+     }
     ];
 
     const { isValid, errors: newErrors } = validateFinanceForm(fields);
@@ -179,14 +179,14 @@ const CashBook: React.FC = () => {
         created_by: staffName,
         status: 'PENDING',
         book_id: bookId
-      };
+     };
 
       let result;
       if (editId) {
         result = await supabaseFinance.updateCashbookEntry(editId, payload, staffName);
-      } else {
+     } else {
         result = await supabaseFinance.createCashbookEntry(payload, true);
-      }
+     }
 
       if (result) {
         toast.success(editId ? 'Entry updated successfully' : 'Entry saved successfully');
@@ -194,16 +194,16 @@ const CashBook: React.FC = () => {
         // Refresh data
         const fetchedEntries = await supabaseFinance.getCashbookEntries(bookId);
         setEntries(fetchedEntries);
-      } else {
+     } else {
         toast.error('Failed to save Day Book entry');
-      }
-    } catch (err) {
+     }
+   } catch (err) {
       console.error(err);
       toast.error('Error occurred while saving entry');
-    } finally {
+   } finally {
       setSaving(false);
-    }
-  };
+   }
+ };
 
   // Edit action
   const handleEditClick = (entry: FinanceCashbookEntry) => {
@@ -219,15 +219,15 @@ const CashBook: React.FC = () => {
     const match = accounts.find(a => a.account_name === entry.head_of_account);
     if (match) {
       setHeadOfAccount(match.id);
-    } else {
+   } else {
       setHeadOfAccount(entry.head_of_account);
-    }
+   }
 
     if (particularsRef.current) particularsRef.current.focus();
     
     // Smooth scroll to form on mobile
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+ };
 
   // Delete Action
   const handleDeleteClick = async (id: string) => {
@@ -238,11 +238,11 @@ const CashBook: React.FC = () => {
       await supabaseFinance.deleteCashbookEntry(id, staffName);
       toast.success('Entry deleted successfully');
       await fetchData();
-    } catch (err) {
+   } catch (err) {
       console.error(err);
       toast.error('Failed to delete entry');
-    }
-  };
+   }
+ };
 
   // Approve Action
   const handleApproveClick = async (id: string) => {
@@ -254,14 +254,14 @@ const CashBook: React.FC = () => {
       if (result) {
         toast.success('Day Book Entry approved successfully');
         await fetchData();
-      } else {
+     } else {
         toast.error('Failed to approve entry');
-      }
-    } catch (err) {
+     }
+   } catch (err) {
       console.error(err);
       toast.error('Error approving entry');
-    }
-  };
+   }
+ };
 
 
   // Add New Account Modal Submit
@@ -282,12 +282,12 @@ const CashBook: React.FC = () => {
     if (isDuplicate) {
       toast.error('An account with this name already exists.');
       return;
-    }
+   }
 
     if (!newAccountCategory) {
       toast.error('Please select a Category.');
       return;
-    }
+   }
 
     setSavingAccount(true);
     try {
@@ -297,7 +297,7 @@ const CashBook: React.FC = () => {
         report_classification: newAccountCategory as 'BALANCE_SHEET' | 'PROFIT_AND_LOSS',
         report_section: newAccountCategory as 'BALANCE_SHEET' | 'PROFIT_AND_LOSS',
         category: newAccountCategory
-      };
+     };
 
       const result = await supabaseFinance.createCashbookAccount(payload);
       if (result) {
@@ -313,16 +313,16 @@ const CashBook: React.FC = () => {
         // Pre-select the newly created account
         setHeadOfAccount(result.id);
         setAccountNumber('');
-      } else {
+     } else {
         toast.error('Failed to create account. Name might already exist.');
-      }
-    } catch (err) {
+     }
+   } catch (err) {
       console.error(err);
       toast.error('Error occurred while creating account');
-    } finally {
+   } finally {
       setSavingAccount(false);
-    }
-  };
+   }
+ };
 
   // Edit/Classify existing account submit
   const handleEditAccountSubmit = async (e: React.FormEvent) => {
@@ -332,7 +332,7 @@ const CashBook: React.FC = () => {
     if (!editAccountCategory) {
       toast.error('Please select a Category.');
       return;
-    }
+   }
 
     setSavingAccount(true);
     try {
@@ -342,7 +342,7 @@ const CashBook: React.FC = () => {
         report_classification: editAccountCategory as 'BALANCE_SHEET' | 'PROFIT_AND_LOSS',
         report_section: editAccountCategory as 'BALANCE_SHEET' | 'PROFIT_AND_LOSS',
         category: editAccountCategory
-      };
+     };
 
       const result = await supabaseFinance.updateCashbookAccount(editingAccId, payload);
       if (result.success) {
@@ -353,21 +353,21 @@ const CashBook: React.FC = () => {
         // Refresh accounts
         const fetchedAccounts = await supabaseFinance.getCashbookAccounts();
         setAccounts(fetchedAccounts);
-      } else {
+     } else {
         toast.error(result.error || 'Failed to update account details');
-      }
-    } catch (err) {
+     }
+   } catch (err) {
       console.error(err);
       toast.error('Error occurred while updating account');
-    } finally {
+   } finally {
       setSavingAccount(false);
-    }
-  };
+   }
+ };
 
   const handleDeleteAccount = async (account: FinanceCashbookAccount) => {
     if (!window.confirm(`Are you sure you want to delete the Head of Account: "${account.account_name}"?`)) {
       return;
-    }
+   }
 
     try {
       // Perform delete
@@ -380,15 +380,15 @@ const CashBook: React.FC = () => {
         if (headOfAccount === account.id) {
           setHeadOfAccount('');
           setAccountNumber('');
-        }
-      } else {
+       }
+     } else {
         toast.error(result.error || 'Failed to delete account');
-      }
-    } catch (err) {
+     }
+   } catch (err) {
       console.error(err);
       toast.error('Error occurred while deleting Head of Account');
-    }
-  };
+   }
+ };
 
   // Sorting and Filtering logic
   const filteredEntries = useMemo(() => {
@@ -416,13 +416,13 @@ const CashBook: React.FC = () => {
           creditStr.includes(query) ||
           debitStr.includes(query)
         );
-      });
-    }
+     });
+   }
 
     // Filter status
     if (statusFilter !== 'ALL') {
       result = result.filter(e => (e.status || 'PENDING') === statusFilter);
-    }
+   }
 
     // Sort order
     result.sort((a, b) => {
@@ -430,12 +430,12 @@ const CashBook: React.FC = () => {
       const timeB = new Date(b.entry_date).getTime();
       if (sortOrder === 'asc') {
         return timeA - timeB;
-      }
+     }
       return timeB - timeA;
-    });
+   });
 
     return result;
-  }, [entries, searchQuery, statusFilter, sortOrder]);
+ }, [entries, searchQuery, statusFilter, sortOrder]);
 
   // Summaries calculation (based on filtered list)
   const summaries = useMemo(() => {
@@ -445,19 +445,19 @@ const CashBook: React.FC = () => {
     filteredEntries.forEach(e => {
       totalCredits += Number(e.credit) || 0;
       totalDebits += Number(e.debit) || 0;
-    });
+   });
 
     return {
       totalCredits,
       totalDebits,
       net: totalCredits - totalDebits
-    };
-  }, [filteredEntries]);
+   };
+ }, [filteredEntries]);
 
 
   return (
     <>
-    <div className={`space-y-6 p-6 w-full max-w-[100%] mx-auto select-none ${showPrintModal ? 'print:hidden' : ''}`}>
+    <div className={`space-y-6 p-6 w-full max-w-[100%] mx-auto select-none`}>
       
       {/* Top Header Actions Bar */}
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5">
@@ -500,12 +500,12 @@ const CashBook: React.FC = () => {
               <span className="text-slate-900 text-[18px] font-black uppercase">
                 {editId ? 'EDIT ENTRY' : 'NEW ENTRY'}
               </span>
-            }
+           }
             subtitle={
               <span className="text-slate-400 text-[11px] font-bold uppercase">
                 Every field except account number is required
               </span>
-            }
+           }
             className="shadow-sm border-slate-150 rounded-xl"
           >
             <form onSubmit={handleSaveEntry} className="space-y-5">
@@ -670,7 +670,7 @@ const CashBook: React.FC = () => {
                   <option value="asc">OLDEST FIRST</option>
                 </select>
               </div>
-            }
+           }
             subtitle={null}
             className="shadow-sm border-slate-150 rounded-xl flex-1 flex flex-col"
           >
@@ -762,7 +762,7 @@ const CashBook: React.FC = () => {
                               (e.status || 'PENDING') === 'APPROVED' 
                                 ? 'bg-green-100 text-green-800 border border-green-200' 
                                 : 'bg-amber-100 text-amber-800 border border-amber-200'
-                            }`}>
+                           }`}>
                               {e.status || 'PENDING'}
                             </span>
                           </td>
@@ -910,7 +910,7 @@ const CashBook: React.FC = () => {
                         value={editAccountCategory}
                         onChange={(e) => {
                           setEditAccountCategory(e.target.value);
-                        }}
+                       }}
                         className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time font-bold"
                         required
                       >
@@ -973,7 +973,7 @@ const CashBook: React.FC = () => {
                                  setEditingAccId(acc.id);
                                  setEditAccountName(acc.account_name);
                                  setEditAccountCategory(acc.report_classification || 'PROFIT_AND_LOSS');
-                               }}
+                              }}
                                className="text-blue-600 hover:text-blue-800 font-bold uppercase"
                              >
                                Edit

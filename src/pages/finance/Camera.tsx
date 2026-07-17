@@ -1,3 +1,4 @@
+import { sortNumerically } from '../../lib/financialCalculations';
 import React, { useEffect, useState, useRef } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
