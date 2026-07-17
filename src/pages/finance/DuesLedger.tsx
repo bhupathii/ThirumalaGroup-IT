@@ -412,9 +412,9 @@ const DuesLedger: React.FC = () => {
         {!loading && (
           <div className="space-y-4">
             {/* Print Header */}
-            <div className="flex justify-between items-end border-b-2 border-slate-900 pb-2 mb-4" style={{ fontSize: '10px' }}>
+            <div className="flex justify-between items-end border-b-2 border-slate-900 pb-2 mb-4" style={{ fontSize: '9px' }}>
               <div>
-                <h3 className="font-bold uppercase text-slate-900" style={{ fontSize: '12px', margin: 0 }}>THIRUMALA GROUP FINANCE</h3>
+                <h3 className="font-bold uppercase text-slate-900" style={{ fontSize: '11px', margin: 0 }}>THIRUMALA GROUP FINANCE</h3>
                 <p className="text-slate-500" style={{ margin: 0 }}>Collection Dues Ledger</p>
               </div>
               <div className="text-right text-slate-900">
@@ -423,124 +423,106 @@ const DuesLedger: React.FC = () => {
               </div>
             </div>
 
-            <table className="w-full border-collapse" style={{ tableLayout: 'fixed', fontSize: '9px' }}>
-              <colgroup>
-                <col style={{ width: '3%' }} />
-                <col style={{ width: '7%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '9%' }} />
-                <col style={{ width: '8%' }} />
-                <col style={{ width: '8%' }} />
-                <col style={{ width: '8%' }} />
-                <col style={{ width: '8%' }} />
-                <col style={{ width: '9%' }} />
-                <col style={{ width: '9%' }} />
-                <col style={{ width: '7%' }} />
-                <col style={{ width: '4%' }} />
-                <col style={{ width: '10%' }} />
-              </colgroup>
+            {/* table-layout:auto — browser assigns widths based on content */}
+            <table className="w-full border-collapse" style={{ fontSize: '8px' }}>
               <thead>
-                <tr className="border-b-2 border-slate-900 bg-slate-100 font-bold" style={{ fontSize: '9px' }}>
-                  <th className="p-1 border text-center print-nowrap" style={{ whiteSpace: 'nowrap' }}>SL</th>
-                  <th className="p-1 border text-left print-nowrap" style={{ whiteSpace: 'nowrap' }}>LOAN NO</th>
-                  <th className="p-1 border text-left print-wrap" style={{ wordBreak: 'normal', overflowWrap: 'normal', whiteSpace: 'normal' }}>PARTY NAME</th>
-                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>PRINCIPAL</th>
-                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>PAID INTEREST</th>
-                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>PENDING INTEREST</th>
-                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>PAID PENALTY</th>
-                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>PENDING PENALTY</th>
-                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>PRESENT DUE</th>
-                  <th className="p-1 border text-right print-nowrap" style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>CLOSE AMOUNT</th>
-                  <th className="p-1 border text-left print-nowrap" style={{ whiteSpace: 'nowrap' }}>DUE DATE</th>
-                  <th className="p-1 border text-center print-nowrap" style={{ whiteSpace: 'nowrap' }}>DAYS</th>
-                  <th className="p-1 border text-left print-nowrap" style={{ whiteSpace: 'nowrap' }}>CONTACT / G1 / G2</th>
+                <tr className="border-b-2 border-slate-900 bg-slate-100 font-bold" style={{ fontSize: '8px' }}>
+                  <th className="p-1 border text-center print-nowrap">SL</th>
+                  <th className="p-1 border text-left print-nowrap">LOAN NO</th>
+                  <th className="p-1 border text-left print-wrap">PARTY NAME</th>
+                  <th className="p-1 border text-right print-nowrap">PRINCIPAL</th>
+                  <th className="p-1 border text-right print-nowrap">PD INT</th>
+                  <th className="p-1 border text-right print-nowrap">PND INT</th>
+                  <th className="p-1 border text-right print-nowrap">PD PENALTY</th>
+                  <th className="p-1 border text-right print-nowrap">PND PENALTY</th>
+                  <th className="p-1 border text-right print-nowrap">PRESENT DUE</th>
+                  <th className="p-1 border text-right print-nowrap">CLOSE AMT</th>
+                  <th className="p-1 border text-left print-nowrap">DUE DATE</th>
+                  <th className="p-1 border text-center print-nowrap">DAYS</th>
+                  <th className="p-1 border text-left print-nowrap">B / G1 / G2</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredDues.map((due, idx) => (
                   <tr key={due.id} className="border-b" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-                    <td className="p-1 border text-center print-nowrap" style={{ whiteSpace: 'nowrap' }}>{idx + 1}</td>
-                    <td className="p-1 border font-black text-blue-800 print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.loanId}</td>
-                    <td className="p-1 border font-bold print-wrap" style={{ wordBreak: 'normal', overflowWrap: 'normal', whiteSpace: 'normal', minWidth: '90px' }}>
+                    <td className="p-1 border text-center print-nowrap">{idx + 1}</td>
+                    <td className="p-1 border font-black text-blue-800 print-nowrap">{due.loanId}</td>
+                    <td className="p-1 border font-bold print-wrap" style={{ wordBreak: 'normal', overflowWrap: 'normal', whiteSpace: 'normal', minWidth: '60px', maxWidth: '110px' }}>
                       {due.customerName}
                     </td>
-                    <td className="p-1 border text-right print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.currentPrincipal < 0 ? `-${Math.abs(Math.round(due.currentPrincipal)).toLocaleString('en-IN')}` : `${Math.round(due.currentPrincipal).toLocaleString('en-IN')}`}
+                    <td className="p-1 border text-right print-amount">
+                      {due.currentPrincipal < 0 ? `-${Math.abs(Math.round(due.currentPrincipal)).toLocaleString('en-IN')}` : Math.round(due.currentPrincipal).toLocaleString('en-IN')}
                     </td>
-                    <td className="p-1 border text-right text-green-700 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.interestPaid < 0 ? `-${Math.abs(Math.round(due.interestPaid)).toLocaleString('en-IN')}` : `${Math.round(due.interestPaid).toLocaleString('en-IN')}`}
+                    <td className="p-1 border text-right text-green-700 print-amount">
+                      {due.interestPaid < 0 ? `-${Math.abs(Math.round(due.interestPaid)).toLocaleString('en-IN')}` : Math.round(due.interestPaid).toLocaleString('en-IN')}
                     </td>
-                    <td className="p-1 border text-right text-orange-700 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.pendingInterest < 0 ? `-${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : `${Math.round(due.pendingInterest).toLocaleString('en-IN')}`}
+                    <td className="p-1 border text-right text-orange-700 print-amount">
+                      {due.pendingInterest < 0 ? `-${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : Math.round(due.pendingInterest).toLocaleString('en-IN')}
                     </td>
-                    <td className="p-1 border text-right text-green-700 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.penaltyPaid < 0 ? `-${Math.abs(Math.round(due.penaltyPaid)).toLocaleString('en-IN')}` : `${Math.round(due.penaltyPaid).toLocaleString('en-IN')}`}
+                    <td className="p-1 border text-right text-green-700 print-amount">
+                      {due.penaltyPaid < 0 ? `-${Math.abs(Math.round(due.penaltyPaid)).toLocaleString('en-IN')}` : Math.round(due.penaltyPaid).toLocaleString('en-IN')}
                     </td>
-                    <td className="p-1 border text-right text-red-600 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.penalty < 0 ? `-${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : `${Math.round(due.penalty).toLocaleString('en-IN')}`}
+                    <td className="p-1 border text-right text-red-600 print-amount">
+                      {due.penalty < 0 ? `-${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : Math.round(due.penalty).toLocaleString('en-IN')}
                     </td>
-                    <td className="p-1 border text-right font-black text-red-755 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.presentDue < 0 ? `-${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : `${Math.round(due.presentDue).toLocaleString('en-IN')}`}
+                    <td className="p-1 border text-right font-black print-amount">
+                      {due.presentDue < 0 ? `-${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : Math.round(due.presentDue).toLocaleString('en-IN')}
                     </td>
-                    <td className="p-1 border text-right font-black text-blue-900 print-amount" style={{ whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {due.currentPrincipal + due.pendingInterest + due.penalty < 0 ? `-${Math.abs(Math.round(due.currentPrincipal + due.pendingInterest + due.penalty)).toLocaleString('en-IN')}` : `${Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}`}
+                    <td className="p-1 border text-right font-black text-blue-900 print-amount">
+                      {Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}
                     </td>
-                    <td className="p-1 border print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.currentDueDate.split('-').reverse().join('/')}</td>
-                    <td className="p-1 border text-center text-red-600 font-bold print-nowrap" style={{ whiteSpace: 'nowrap' }}>{due.dueDays}</td>
-                    <td className="p-1 border font-sans leading-tight print-nowrap" style={{ whiteSpace: 'nowrap', fontSize: '8.5px' }}>
-                      {due.phone && (
-                        <div style={{ whiteSpace: 'nowrap' }}><span className="font-semibold text-slate-850">B:</span> {due.phone}</div>
-                      )}
-                      {due.g1Phone && (
-                        <div style={{ whiteSpace: 'nowrap' }}><span className="font-semibold text-slate-850">G1:</span> {due.g1Phone}</div>
-                      )}
-                      {due.g2Phone && (
-                        <div style={{ whiteSpace: 'nowrap' }}><span className="font-semibold text-slate-850">G2:</span> {due.g2Phone}</div>
-                      )}
+                    <td className="p-1 border print-nowrap">{due.currentDueDate.split('-').reverse().join('/')}</td>
+                    <td className="p-1 border text-center text-red-600 font-bold print-nowrap">{due.dueDays}</td>
+                    {/* Contact: phone numbers only, one per line, no guarantor names to save width */}
+                    <td className="p-1 border print-nowrap leading-tight" style={{ fontSize: '7.5px' }}>
+                      {due.phone && <div><span className="font-semibold">B:</span> {due.phone}</div>}
+                      {due.g1Phone && <div><span className="font-semibold">G1:</span> {due.g1Phone}</div>}
+                      {due.g2Phone && <div><span className="font-semibold">G2:</span> {due.g2Phone}</div>}
                     </td>
                   </tr>
                 ))}
+
+                {/* Grand Total Row */}
+                <tr className="border-t-2 border-slate-900 font-black" style={{ breakInside: 'avoid' }}>
+                  <td colSpan={3} className="p-1 border text-right uppercase text-slate-700">GRAND TOTAL</td>
+                  <td className="p-1 border text-right print-amount">{Math.round(totals.principal).toLocaleString('en-IN')}</td>
+                  <td className="p-1 border text-right text-green-700 print-amount">{Math.round(totals.interestPaid).toLocaleString('en-IN')}</td>
+                  <td className="p-1 border text-right text-orange-700 print-amount">{Math.round(totals.interest).toLocaleString('en-IN')}</td>
+                  <td className="p-1 border text-right text-green-700 print-amount">{Math.round(totals.penaltyPaid).toLocaleString('en-IN')}</td>
+                  <td className="p-1 border text-right text-red-600 print-amount">{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
+                  <td className="p-1 border text-right print-amount">{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
+                  <td className="p-1 border text-right text-blue-900 print-amount">{Math.round(totals.amountToClose).toLocaleString('en-IN')}</td>
+                  <td colSpan={3} className="p-1 border"></td>
+                </tr>
               </tbody>
             </table>
 
-            {/* Totals Section */}
-            <div className="mt-6 flex justify-end" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-              <div className="w-[450px] border-2 border-slate-900 rounded-lg p-4 bg-slate-50" style={{ fontSize: '11px', fontFamily: 'sans-serif' }}>
-                <h4 className="font-bold text-center border-b-2 border-slate-900 pb-2 mb-3 uppercase tracking-wider" style={{ fontSize: '12px', margin: 0 }}>Report Totals</h4>
-                <div className="space-y-2">
-                  <div className="flex justify-between border-b border-slate-300 pb-1">
-                    <span className="font-semibold text-slate-700 uppercase">Outstanding Principal:</span>
-                    <span className="font-bold" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.principal).toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-300 pb-1">
-                    <span className="font-semibold text-slate-700 uppercase">Interest Paid:</span>
-                    <span className="font-bold text-green-700" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.interestPaid).toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-300 pb-1">
-                    <span className="font-semibold text-slate-700 uppercase">Pending Interest:</span>
-                    <span className="font-bold text-orange-700" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.interest).toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-300 pb-1">
-                    <span className="font-semibold text-slate-700 uppercase">Paid Penalty:</span>
-                    <span className="font-bold text-green-700" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.penaltyPaid).toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-300 pb-1">
-                    <span className="font-semibold text-slate-700 uppercase">Pending Penalty:</span>
-                    <span className="font-bold text-red-600" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.penalty).toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-300 pb-1">
-                    <span className="font-semibold text-slate-700 uppercase">Present Due:</span>
-                    <span className="font-bold text-red-700" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.presentDue).toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t-2 border-slate-900 mt-2 bg-slate-900 text-white p-2 rounded" style={{ fontSize: '13px' }}>
-                    <span className="font-black uppercase tracking-wide">Total Amount to Close:</span>
-                    <span className="font-black" style={{ whiteSpace: 'nowrap' }}>{Math.round(totals.amountToClose).toLocaleString('en-IN')}</span>
+            {/* Totals Summary Box */}
+            <div className="mt-4 flex justify-end" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+              <div className="border-2 border-slate-900 rounded p-3 bg-slate-50" style={{ fontSize: '9px', minWidth: '320px' }}>
+                <h4 className="font-bold text-center border-b-2 border-slate-900 pb-1 mb-2 uppercase tracking-wider" style={{ fontSize: '10px', margin: 0 }}>Report Totals</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '3px 12px' }}>
+                  <span className="font-semibold text-slate-700 uppercase">Outstanding Principal:</span>
+                  <span className="font-bold text-right">{Math.round(totals.principal).toLocaleString('en-IN')}</span>
+                  <span className="font-semibold text-slate-700 uppercase">Interest Paid:</span>
+                  <span className="font-bold text-right text-green-700">{Math.round(totals.interestPaid).toLocaleString('en-IN')}</span>
+                  <span className="font-semibold text-slate-700 uppercase">Pending Interest:</span>
+                  <span className="font-bold text-right text-orange-700">{Math.round(totals.interest).toLocaleString('en-IN')}</span>
+                  <span className="font-semibold text-slate-700 uppercase">Paid Penalty:</span>
+                  <span className="font-bold text-right text-green-700">{Math.round(totals.penaltyPaid).toLocaleString('en-IN')}</span>
+                  <span className="font-semibold text-slate-700 uppercase">Pending Penalty:</span>
+                  <span className="font-bold text-right text-red-600">{Math.round(totals.penalty).toLocaleString('en-IN')}</span>
+                  <span className="font-semibold text-slate-700 uppercase">Present Due:</span>
+                  <span className="font-bold text-right text-red-700">{Math.round(totals.presentDue).toLocaleString('en-IN')}</span>
+                </div>
+                <div className="mt-2 border-t-2 border-slate-900 pt-2 flex justify-between items-center bg-slate-900 text-white px-2 py-1 rounded" style={{ fontSize: '10px' }}>
+                  <span className="font-black uppercase tracking-wide">Total to Close:</span>
+                  <span className="font-black">{Math.round(totals.amountToClose).toLocaleString('en-IN')}</span>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
       </FinancePrintPreview>
     </div>
   );

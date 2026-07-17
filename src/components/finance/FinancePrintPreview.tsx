@@ -40,7 +40,7 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
   return createPortal(
     <>
       <div className="fixed inset-0 z-[100] overflow-y-auto print:static print:overflow-visible print-preview-modal-root bg-slate-900/60 backdrop-blur-sm p-4 md:p-8 flex justify-center items-start print:bg-white print:block print:p-0 print:min-h-0">
-        <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-5xl w-full overflow-hidden print:max-w-none print:border-none print:shadow-none print:rounded-none">
+        <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-7xl w-full overflow-hidden print:max-w-none print:border-none print:shadow-none print:rounded-none">
           {/* Header Actions */}
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 print:hidden">
             <div>
@@ -123,10 +123,10 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
           .print-document th,
           .print-document td {
             border: 1px solid #000000 !important;
-            padding: 4px 5px !important;
+            padding: 2px 3px !important;
             color: black !important;
-            font-size: 9px !important;
-            line-height: 1.35 !important;
+            font-size: 8px !important;
+            line-height: 1.3 !important;
             vertical-align: middle !important;
           }
 
@@ -158,14 +158,12 @@ const FinancePrintPreview: React.FC<FinancePrintPreviewProps> = ({
           }
 
           /* ─── AMOUNT CELLS ───────────────────────────────────────────── */
-          /* Slightly larger to ensure ₹ amounts stay on one line           */
           .print-document td.print-amount,
           .print-document th.print-amount {
             white-space: nowrap !important;
             word-break: keep-all !important;
             font-weight: bold !important;
             text-align: right !important;
-            min-width: 80pt !important;
           }
 
           /* Total row — keep amounts on single line, allow slightly smaller */
