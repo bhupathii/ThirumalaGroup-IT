@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
 
 const TransactionApproval: React.FC = () => {
   const { user } = useAuth();
@@ -125,6 +126,15 @@ const TransactionApproval: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const initDates = async () => {
+      const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
+      setFromDate(oldest || '2020-01-01');
+      setToDate(new Date().toISOString().split('T')[0]);
+    };
+    initDates();
+  }, []);
 
   // Clear stale selections on filter changes
   useEffect(() => {

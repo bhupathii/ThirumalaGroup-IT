@@ -4,6 +4,7 @@ import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer, ArrowLeft, Search, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
+import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
 import { useNavigate } from 'react-router-dom';
 
 interface OverdueDueItem {
@@ -58,6 +59,11 @@ const OutstandingLedger: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // Load default dates
+      const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
+      setStartDate(oldest || '2020-01-01');
+      setEndDate(new Date().toISOString().split('T')[0]);
+
       // 1. Fetch Partners
       const partnersData = await supabaseFinance.getPartners();
       setPartners(partnersData.map(p => ({ id: p.id, name: p.name })));

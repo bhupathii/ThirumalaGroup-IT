@@ -299,15 +299,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
+  const parseUA = (uaString: string) => {
+    let browser = 'Unknown Browser';
+    let os = 'Unknown OS';
+    let device = 'Desktop';
+    if (uaString.includes('Firefox')) browser = 'Firefox';
+    else if (uaString.includes('Chrome')) browser = 'Chrome';
+    else if (uaString.includes('Safari')) browser = 'Safari';
+    else if (uaString.includes('Edge')) browser = 'Edge';
+
+    if (uaString.includes('Windows')) os = 'Windows';
+    else if (uaString.includes('Macintosh')) os = 'Mac OS';
+    else if (uaString.includes('Android')) os = 'Android';
+    else if (uaString.includes('iPhone') || uaString.includes('iPad')) os = 'iOS';
+
+    if (uaString.includes('Mobile') || uaString.includes('Android') || uaString.includes('iPhone')) device = 'Mobile';
+    else if (uaString.includes('Tablet') || uaString.includes('iPad')) device = 'Tablet';
+    return { browser, os, device };
+  };
+
   const login = async (username: string, password: string) => {
     try {
       if (!username.trim() || !password.trim()) {
         return { success: false, error: 'Username and password are required' };
       }
 
-      // 1. Fetch user from users table with user type (case-insensitive)
-      // Use textSearch or fetch all and filter - ilike can cause encoding issues with Supabase REST
       const trimmedUsername = username.trim();
+      const ua = navigator.userAgent;
+      const { browser, os, device } = parseUA(ua);
+      let ip = '127.0.0.1';
+      try {
+        const ipRes = await fetch('https://api.ipify.org?format=json').then(res => res.json());
+        if (ipRes && ipRes.ip) ip = ipRes.ip;
+      } catch (err) {
+        console.warn('Could not retrieve client IP address:', err);
+      }
+
+      // 1. Fetch user
       const { data: allUsers, error: fetchError } = await supabase
         .from('users')
         .select(`
@@ -319,36 +347,99 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         return { success: false, error: 'Invalid username or password' };
       }
       
-      // Find user with case-insensitive match
       const dbUser = allUsers.find(u => 
         u.username && u.username.toLowerCase() === trimmedUsername.toLowerCase()
       );
       
       if (!dbUser) {
+        // Record failed attempt for non-existing user
+        await supabase.from('login_history').insert({
+          username: trimmedUsername,
+          success: false,
+          failure_reason: 'User not found',
+          ip_address: ip,
+          browser,
+          device,
+          os
+        });
         return { success: false, error: 'Invalid username or password' };
       }
 
-      // 2. Check password using bcryptjs
+      // Check status/activation
+      const currentStatus = dbUser.status || (dbUser.is_active === false ? 'Disabled' : 'Active');
+      if (['Disabled', 'Locked', 'Suspended', 'Deleted'].includes(currentStatus)) {
+        await supabase.from('login_history').insert({
+          user_id: dbUser.id,
+          username: dbUser.username,
+          success: false,
+          failure_reason: `Account is ${currentStatus.toLowerCase()}`,
+          ip_address: ip,
+          browser,
+          device,
+          os
+        });
+        return { success: false, error: `Account is ${currentStatus.toLowerCase()}` };
+      }
+
+      // 2. Check password
       const passwordMatch = await bcrypt.compare(password, dbUser.password_hash);
       if (!passwordMatch) {
-        return { success: false, error: 'Invalid username or password' };
+        // Increment failed attempts
+        const attempts = (dbUser.failed_login_attempts || 0) + 1;
+        const updates: any = { failed_login_attempts: attempts };
+        if (attempts >= 5) {
+          updates.status = 'Locked';
+        }
+        await supabase.from('users').update(updates).eq('id', dbUser.id);
+
+        await supabase.from('login_history').insert({
+          user_id: dbUser.id,
+          username: dbUser.username,
+          success: false,
+          failure_reason: attempts >= 5 ? 'Account locked: too many failures' : 'Invalid password',
+          ip_address: ip,
+          browser,
+          device,
+          os
+        });
+
+        return {
+          success: false,
+          error: attempts >= 5 
+            ? 'Account is locked due to too many failed attempts' 
+            : 'Invalid username or password'
+        };
       }
 
-      // 3. Check if user is active (default to true if column missing)
-      if (dbUser.is_active === false) {
-        return { success: false, error: 'Account is deactivated' };
+      // 3. Success login
+      await supabase.from('users').update({
+        failed_login_attempts: 0,
+        last_login: new Date().toISOString(),
+        login_count: (dbUser.login_count || 0) + 1
+      }).eq('id', dbUser.id);
+
+      // Write login success
+      const { data: histData } = await supabase.from('login_history').insert({
+        user_id: dbUser.id,
+        username: dbUser.username,
+        success: true,
+        ip_address: ip,
+        browser,
+        device,
+        os
+      }).select('id').single();
+
+      if (histData?.id) {
+        sessionStorage.setItem('thirumala_login_history_id', histData.id);
       }
 
-      // 4. Determine if user is admin based on user type
       const isAdmin = dbUser.user_types?.user_type === 'Admin';
-
-      // 5. Load features grouped by mode
       let featuresByMode: Record<ModeKey, string[]> = createEmptyModeFeatureMap();
       try {
         const results = await loadFeaturesForUser(dbUser.id, isAdmin);
         featuresByMode = results.featuresByMode;
       } catch (featureError) {
-        console.error('❌ Error loading user features:', featureError);
+        console.error('Error loading user features:', featureError);
       }
       const activeMode = getStoredMode();
       const features = isAdmin
@@ -361,27 +452,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         is_admin: isAdmin,
         features: features || [],
         featuresByMode,
-        mode: dbUser.mode || null, // Include user's mode from database
+        mode: dbUser.mode || null,
       };
-      
-      console.log('🔐 Login successful - User data:', {
-        username: userData.username,
-        is_admin: userData.is_admin,
-        featuresCount: userData.features.length,
-        features: userData.features,
-        userId: userData.id,
-        mode: userData.mode
-      });
       
       setUser(userData);
       supabaseDB.setUserId(userData.id);
       sessionStorage.setItem('thirumala_user', JSON.stringify(userData));
       sessionStorage.setItem('thirumala_session_time', Date.now().toString());
 
-      // Unlock/init audio context since the login was a button click interaction
       initAudioContext();
 
-      // Trigger background sync of master data cache
       if (navigator.onLine) {
         import('../lib/offlineMasterData').then(({ syncAllMasterData }) => {
           syncAllMasterData().catch(err => console.error('Error syncing master data on login:', err));
@@ -397,7 +477,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const logout = async () => {
     try {
-      // Clear localStorage items
+      const histId = sessionStorage.getItem('thirumala_login_history_id');
+      const sessionStart = sessionStorage.getItem('thirumala_session_time');
+      if (histId && sessionStart) {
+        const durationSec = Math.round((Date.now() - parseInt(sessionStart)) / 1000);
+        const durationText = durationSec > 60 
+          ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s` 
+          : `${durationSec}s`;
+        
+        await supabase.from('login_history').update({
+          logout_time: new Date().toISOString(),
+          session_duration: durationText
+        }).eq('id', histId);
+      }
+
       localStorage.removeItem('table_mode');
       localStorage.removeItem('selectedMode');
       localStorage.removeItem('regularSelectedBook');
@@ -405,15 +498,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       localStorage.removeItem('financeSelectedBook');
       localStorage.removeItem('currentBookId');
 
-      // Clear sessionStorage items
       sessionStorage.removeItem('thirumala_user');
       sessionStorage.removeItem('thirumala_session_time');
+      sessionStorage.removeItem('thirumala_login_history_id');
       sessionStorage.removeItem('table_mode');
       sessionStorage.removeItem('selectedMode');
 
-      // Clear React Query cache
       queryClient.clear();
-
       setUser(null);
       supabaseDB.setUserId('');
     } catch (error) {

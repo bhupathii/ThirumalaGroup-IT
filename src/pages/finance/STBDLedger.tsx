@@ -9,6 +9,7 @@ import { Printer, X, Eye, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { financeLedgerSettingsService } from '../../services/financeLedgerSettingsService';
+import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
 import { financeCalculationService } from '../../services/financeCalculationService';
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 
@@ -65,6 +66,10 @@ const STBDLedger: React.FC = () => {
   const fetchLedgerData = async () => {
     setLoading(true);
     try {
+      const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
+      setStartDate(oldest || '2020-01-01');
+      setEndDate(new Date().toISOString().split('T')[0]);
+
       const [loans, txs, settings, pending] = await Promise.all([
         supabaseFinance.getLoans(),
         supabaseFinance.getTransactions(),

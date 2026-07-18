@@ -4489,7 +4489,27 @@ class SupabaseFinance {
       throw error;
     }
   }
-}
 
+  async getOldestLoanDate(): Promise<string> {
+    try {
+      const { data, error } = await supabase
+        .from('finance_loans')
+        .select('loan_date')
+        .order('loan_date', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('Error fetching oldest loan date:', error);
+        return '2020-01-01';
+      }
+
+      return data?.loan_date || '2020-01-01';
+    } catch (err) {
+      console.error('Error in getOldestLoanDate:', err);
+      return '2020-01-01';
+    }
+  }
+}
 
 export const supabaseFinance = new SupabaseFinance();

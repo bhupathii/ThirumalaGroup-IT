@@ -426,40 +426,19 @@ export const dailyFinancialTransactionService = {
 
   async getOldestTransactionDate(): Promise<string> {
     try {
-      const { data: cdData } = await supabase
-        .from('finance_cd_ledger_entries')
-        .select('entry_date')
-        .neq('account_name', 'CD Amount Paid')
-        .order('entry_date', { ascending: true })
-        .limit(1);
+      const { data, error } = await supabase
+        .from('finance_loans')
+        .select('loan_date')
+        .order('loan_date', { ascending: true })
+        .limit(1)
+        .maybeSingle();
 
-      const { data: capData } = await supabase
-        .from('finance_capital_entries')
-        .select('entry_date')
-        .order('entry_date', { ascending: true })
-        .limit(1);
+      if (error) {
+        console.warn('Error fetching oldest loan date:', error);
+        return '2020-01-01';
+      }
 
-      const { data: cbData } = await supabase
-        .from('finance_cashbook_entries')
-        .select('entry_date')
-        .order('entry_date', { ascending: true })
-        .limit(1);
-
-      const dates: string[] = [];
-      const extractDate = (val: any) => {
-        if (typeof val === 'string') {
-          const match = val.match(/^(\d{4}-\d{2}-\d{2})/);
-          if (match) dates.push(match[1]);
-        }
-      };
-
-      if (cdData?.[0]) extractDate(cdData[0].entry_date);
-      if (capData?.[0]) extractDate(capData[0].entry_date);
-      if (cbData?.[0]) extractDate(cbData[0].entry_date);
-
-      if (dates.length === 0) return '2020-01-01'; // safety fallback
-      dates.sort();
-      return dates[0];
+      return data?.loan_date || '2020-01-01';
     } catch (e) {
       console.error('Error getting oldest transaction date:', e);
       return '2020-01-01';

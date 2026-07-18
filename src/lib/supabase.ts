@@ -39,6 +39,8 @@ const SHARED_TABLES = [
   'user_credentials_log',
   'login_attempts',
   'login_activities',
+  'login_history',
+  'user_activities',
   'features',
   'audit_logs',
   'notification_settings',
