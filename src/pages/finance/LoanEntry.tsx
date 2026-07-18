@@ -924,6 +924,18 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
     toast.success('Form cleared successfully');
   };
 
+  // Mandatory field toggles — controls which "optional" fields become required during save.
+  // Phone and Aadhaar for borrower/guarantors are optional by default but can be
+  // tightened here or driven from ledger settings in the future.
+  const mandatoryFields = {
+    borrowerPhone: false,
+    borrowerAadhaar: false,
+    g1Aadhaar: false,
+    g1Phone: false,
+    g2Aadhaar: false,
+    g2Phone: false,
+  };
+
   const handleSaveLoan = async (e: React.FormEvent) => {
     e.preventDefault();
 
