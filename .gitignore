@@ -149,3 +149,11 @@ forensic_verify.mjs
 scratch.ts
 legacy_system_audit.md
 test_cd_dues.ts
+
+# Root-level scratch scripts and logs
+/*.mjs
+/*.py
+/*.txt
+/*.docx
+/*.pdf
+/and package versions*
