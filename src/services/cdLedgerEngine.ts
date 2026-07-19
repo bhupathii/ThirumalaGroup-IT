@@ -278,10 +278,24 @@ export function getCDPrincipalBalance(contract: CDContract, ledgerEvents: CDEven
   // Find original loan disbursement amount first
   const disb = ledgerEvents.find(e => e.entryType === 'original_loan' || e.entryType === 'Disbursement');
   const originalPrincipal = disb ? disb.debit : contract.originalPrincipal;
-  
-  // Principal balance = originalPrincipal - sum of principal_payment/amount_paid credit allocations
+
+  // BUSINESS RULE: Principal balance reduces ONLY when money is explicitly allocated
+  // to principal via a 'principal_payment' entry.
+  //
+  // 'amount_paid'        = gross cash receipt audit row (the total cash received).
+  //                        It is the RECEIPT HEADER, NOT a principal allocation.
+  // 'CD Amount Paid'     = the account_name of that same audit row in the ledger.
+  //
+  // These MUST NOT reduce principal:
+  //   - Interest Paid, Penalty Paid, Renewal, Document Charges, Commission, Waivers,
+  //     Adjustments, or any gross receipt (amount_paid / CD Amount Paid) entry.
+  //
+  // ONLY these may reduce principal:
+  //   - entry_type === 'principal_payment'  (partial-payment principal portion)
+  //   - entry_type === 'principal_payment'  (close-account principal payoff)
+  //   - Any future explicit principal allocation entry type
   const principalPaid = ledgerEvents
-    .filter(e => e.entryType === 'principal_payment' || e.entryType === 'amount_paid' || e.accountName === 'CD Amount Paid')
+    .filter(e => e.entryType === 'principal_payment')
     .reduce((sum, e) => sum + e.credit, 0);
 
   return Number(Math.max(0, originalPrincipal - principalPaid).toFixed(2));
