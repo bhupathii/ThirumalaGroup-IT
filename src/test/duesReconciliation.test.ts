@@ -102,6 +102,9 @@ describe('Dues Reconciliation Verification', () => {
       fetchedFollowups = []; // fallback to empty array
     }
 
+    expect(followUpsFailed).toBe(true);
+    expect(fetchedFollowups).toEqual([]);
+
     // Dues query succeeded:
     const dues = summaryResult.dues;
     expect(dues.length).toBeGreaterThan(0);
@@ -111,18 +114,27 @@ describe('Dues Reconciliation Verification', () => {
     expect(activeDueLoans.length).toBeGreaterThan(0);
   });
 
-  test("verifies callback scheduling and tab classification chronological rules", () => {
+  it("verifies callback scheduling and tab classification chronological rules", () => {
     const todayDateStr = "2026-07-10";
+
+    const CALLBACK_RESULTS = [
+      'CALL BACK',
+      'NO ANSWER',
+      'ANSWERED',
+      'BUSY',
+      'SWITCHED OFF',
+      'REQUESTED LATER'
+    ];
 
     // Helper simulation function representing the chronological loop in PaymentFollowUp.tsx
     function getActivePendingAction(loanFollowups: any[], transactions: any[]): any {
       let activePendingAction: any = null;
 
       for (const f of loanFollowups) {
-        if (f.result === 'CALL BACK' && f.next_follow_up_date) {
+        if (CALLBACK_RESULTS.includes(f.result) && f.next_follow_up_date) {
           activePendingAction = f;
         } else if (f.result === 'PROMISED TO PAY' && f.next_follow_up_date) {
-          if (activePendingAction && activePendingAction.result === 'CALL BACK') {
+          if (activePendingAction && CALLBACK_RESULTS.includes(activePendingAction.result)) {
             activePendingAction = null;
           }
           const promiseDateStr = f.follow_up_date;
@@ -159,7 +171,7 @@ describe('Dues Reconciliation Verification', () => {
             }
           }
         } else {
-          if (activePendingAction && activePendingAction.result === 'CALL BACK') {
+          if (activePendingAction && CALLBACK_RESULTS.includes(activePendingAction.result)) {
             activePendingAction = null;
           }
         }

@@ -1,4 +1,3 @@
-import { sortNumerically } from '../../lib/financialCalculations';
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import { financeCalculationService } from '../../services/financeCalculationService';
 import React, { useEffect, useState, useMemo } from 'react';
@@ -7,7 +6,6 @@ import { supabaseFinance, FinanceLoanPaymentFollowup } from '../../lib/supabaseF
 import { supabase } from '../../lib/supabase';
 import { 
   ArrowLeft, 
-  User, 
   Printer, 
   Search,
   MessageSquare
@@ -63,6 +61,24 @@ const XIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   </svg>
 );
 
+export const CALLBACK_RESULTS = [
+  'CALL BACK',
+  'NO ANSWER',
+  'ANSWERED',
+  'BUSY',
+  'SWITCHED OFF',
+  'REQUESTED LATER'
+];
+
+export const TERMINAL_OUTCOMES = [
+  'PAID_CLOSED',
+  'WRONG NUMBER',
+  'NUMBER_DOESNT_EXIST',
+  'LOAN_CLOSED',
+  'CUSTOMER_DECEASED',
+  'DUPLICATE_ENTRY'
+];
+
 const PaymentFollowUp: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -101,7 +117,21 @@ const PaymentFollowUp: React.FC = () => {
 
   // Form Fields
   const [contactedPerson, setContactedPerson] = useState<'CUSTOMER' | 'GUARANTOR_1' | 'GUARANTOR_2' | 'OTHER'>('CUSTOMER');
-  const [result, setResult] = useState<'ANSWERED' | 'NO ANSWER' | 'BUSY' | 'SWITCHED OFF' | 'WRONG NUMBER' | 'CALL BACK' | 'PROMISED TO PAY'>('ANSWERED');
+  const [result, setResult] = useState<
+    | 'ANSWERED'
+    | 'NO ANSWER'
+    | 'BUSY'
+    | 'SWITCHED OFF'
+    | 'REQUESTED LATER'
+    | 'WRONG NUMBER'
+    | 'CALL BACK'
+    | 'PROMISED TO PAY'
+    | 'PAID_CLOSED'
+    | 'NUMBER_DOESNT_EXIST'
+    | 'LOAN_CLOSED'
+    | 'CUSTOMER_DECEASED'
+    | 'DUPLICATE_ENTRY'
+  >('ANSWERED');
   const [narration, setNarration] = useState('');
   const [nextFollowUpDate, setNextFollowUpDate] = useState('');
   const [promisedAmount, setPromisedAmount] = useState('');
@@ -203,11 +233,11 @@ const PaymentFollowUp: React.FC = () => {
 
         // Process follow-ups in chronological order to find the active pending action (promise or callback)
         for (const f of loanFollowups) {
-          if ((f.result === 'CALL BACK' || f.result === 'NO ANSWER') && f.next_follow_up_date) {
+          if (CALLBACK_RESULTS.includes(f.result) && f.next_follow_up_date) {
             activePendingAction = f;
           } else if (f.result === 'PROMISED TO PAY' && f.next_follow_up_date) {
             // A newer logged call (promise) completes older pending callback schedules
-            if (activePendingAction && (activePendingAction.result === 'CALL BACK' || activePendingAction.result === 'NO ANSWER')) {
+            if (activePendingAction && CALLBACK_RESULTS.includes(activePendingAction.result)) {
               activePendingAction = null;
             }
             const promiseDateStr = f.follow_up_date;
@@ -248,7 +278,7 @@ const PaymentFollowUp: React.FC = () => {
             }
           } else {
             // Any other call completes older pending callback schedules
-            if (activePendingAction && (activePendingAction.result === 'CALL BACK' || activePendingAction.result === 'NO ANSWER')) {
+            if (activePendingAction && CALLBACK_RESULTS.includes(activePendingAction.result)) {
               activePendingAction = null;
             }
           }
@@ -463,17 +493,6 @@ const PaymentFollowUp: React.FC = () => {
     setNextFollowUpDate(d.toISOString().split('T')[0]);
   };
 
-  const formatAddress = (details: any) => {
-    if (!details) return '';
-    const parts = [
-      details.address || details.present_address || details.aadhaar_address,
-      details.village || details.present_village || details.aadhaar_village,
-      details.mandal || details.present_mandal || details.aadhaar_mandal,
-      details.district || details.present_district || details.aadhaar_district
-    ].filter(Boolean);
-    return parts.join(', ');
-  };
-
   // Save followup record
   const handleSaveFollowUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -494,7 +513,7 @@ const PaymentFollowUp: React.FC = () => {
       contacted_person: contactedPerson,
       result: result,
       narration: narration.trim(),
-      next_follow_up_date: (result === 'PROMISED TO PAY' || result === 'CALL BACK' || result === 'NO ANSWER') ? nextFollowUpDate || null : null,
+      next_follow_up_date: !TERMINAL_OUTCOMES.includes(result) ? nextFollowUpDate || null : null,
       promised_amount: result === 'PROMISED TO PAY' && promisedAmount ? Number(promisedAmount) : null
     };
 
@@ -851,14 +870,14 @@ const PaymentFollowUp: React.FC = () => {
                           <div>
                             <div className="text-[11px] font-black uppercase tracking-wider mb-0.5 flex flex-wrap gap-1 items-center">
                               {activeTab === 'MISSED' && due.activePendingAction ? (
-                                (due.activePendingAction.result === 'CALL BACK' || due.activePendingAction.result === 'NO ANSWER') ? (
+                                CALLBACK_RESULTS.includes(due.activePendingAction.result) ? (
                                   <span className="text-red-700 font-black">CALL OVERDUE • Scheduled {due.activePendingAction.next_follow_up_date.split('-').reverse().join('/')}</span>
                                 ) : (
                                   <span className="text-red-700 font-black">PAYMENT PROMISE MISSED • Due {due.activePendingAction.next_follow_up_date.split('-').reverse().join('/')}</span>
                                 )
                               ) : due.activePendingAction ? (
-                                (due.activePendingAction.result === 'CALL BACK' || due.activePendingAction.result === 'NO ANSWER') ? (
-                                  <span className="text-amber-700 font-black">CALL BACK • Next call {due.activePendingAction.next_follow_up_date.split('-').reverse().join('/')}</span>
+                                CALLBACK_RESULTS.includes(due.activePendingAction.result) ? (
+                                  <span className="text-amber-700 font-black">{due.activePendingAction.result} • Next call {due.activePendingAction.next_follow_up_date.split('-').reverse().join('/')}</span>
                                 ) : (
                                   <span className="text-blue-700 font-black">
                                     PROMISED TO PAY • {due.activePendingAction.promised_amount ? '₹' + Number(due.activePendingAction.promised_amount).toLocaleString('en-IN') + ' ' : ''}by {due.activePendingAction.next_follow_up_date.split('-').reverse().join('/')}
@@ -1211,13 +1230,23 @@ const PaymentFollowUp: React.FC = () => {
                               onChange={(e) => setResult(e.target.value as any)}
                               className="w-full text-slate-900 border border-slate-200 rounded-lg px-3 py-2 bg-white font-bold text-[15px] uppercase cursor-pointer focus:outline-none focus:border-slate-700"
                             >
-                              <option value="ANSWERED">Answered</option>
-                              <option value="NO ANSWER">No Answer</option>
-                              <option value="BUSY">Busy</option>
-                              <option value="SWITCHED OFF">Switched Off</option>
-                              <option value="WRONG NUMBER">Wrong Number</option>
-                              <option value="CALL BACK">Call Back</option>
-                              <option value="PROMISED TO PAY">Promised to Pay</option>
+                              <optgroup label="Non-Terminal Outcomes">
+                                <option value="ANSWERED">Answered</option>
+                                <option value="CALL BACK">Call Back</option>
+                                <option value="PROMISED TO PAY">Promised to Pay</option>
+                                <option value="BUSY">Busy</option>
+                                <option value="NO ANSWER">No Answer</option>
+                                <option value="SWITCHED OFF">Switched Off</option>
+                                <option value="REQUESTED LATER">Requested Later</option>
+                              </optgroup>
+                              <optgroup label="Terminal Outcomes">
+                                <option value="PAID_CLOSED">Paid / Closed</option>
+                                <option value="WRONG NUMBER">Wrong Number</option>
+                                <option value="NUMBER_DOESNT_EXIST">Number Doesn't Exist</option>
+                                <option value="LOAN_CLOSED">Loan Closed</option>
+                                <option value="CUSTOMER_DECEASED">Customer Deceased</option>
+                                <option value="DUPLICATE_ENTRY">Duplicate Entry</option>
+                              </optgroup>
                             </select>
                           </div>
                         </div>
@@ -1235,7 +1264,7 @@ const PaymentFollowUp: React.FC = () => {
                         </div>
 
                         {/* Call Back extra fields */}
-                        {(result === 'CALL BACK' || result === 'NO ANSWER') && (
+                        {CALLBACK_RESULTS.includes(result) && (
                           <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 shrink-0">
                             <div className="grid grid-cols-2 gap-2">
                               <div>
@@ -1246,7 +1275,6 @@ const PaymentFollowUp: React.FC = () => {
                                   min={getLocalBusinessDateISO()}
                                   onChange={(e) => setNextFollowUpDate(e.target.value)}
                                   className="w-full border border-amber-300 rounded-lg px-2.5 py-1.5 text-[14px] font-bold bg-white text-slate-900"
-                                  required
                                 />
                               </div>
                               <div>
