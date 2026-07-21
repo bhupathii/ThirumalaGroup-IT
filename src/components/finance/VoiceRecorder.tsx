@@ -14,9 +14,10 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onTranscriptionCompleted,
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(0);
 
-  // MAX DURATION: 3 minutes (180 seconds)
-  const MAX_RECORDING_TIME = 180;
+  // MAX DURATION: 45 seconds
+  const MAX_RECORDING_TIME = 45;
 
   useEffect(() => {
     return () => {
@@ -61,8 +62,9 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onTranscriptionCompleted,
         // Stop all tracks to release mic
         stream.getTracks().forEach(track => track.stop());
         
-        if (recordingTime < 1) {
-          toast.error('Recording too short.');
+        const elapsed = (Date.now() - startTimeRef.current) / 1000;
+        if (elapsed < 2) {
+          toast.error('Recording too short (minimum 2 seconds).');
           return;
         }
         
@@ -72,6 +74,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onTranscriptionCompleted,
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingTime(0);
+      startTimeRef.current = Date.now();
 
       timerRef.current = setInterval(() => {
         setRecordingTime(prev => {
