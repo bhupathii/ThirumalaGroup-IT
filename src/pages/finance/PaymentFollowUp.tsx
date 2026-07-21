@@ -13,6 +13,7 @@ import {
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useAuth } from '../../contexts/AuthContext';
+import VoiceRecorder from '../../components/finance/VoiceRecorder';
 
 interface ActiveDueLoan {
   id: string;
@@ -1253,7 +1254,13 @@ const PaymentFollowUp: React.FC = () => {
 
                         {/* Remarks — grows to fill available space */}
                         <div className="flex-1 flex flex-col min-h-0">
-                          <label className="text-[13px] font-black uppercase text-slate-500 block mb-1">Remarks</label>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-[13px] font-black uppercase text-slate-500 block">Remarks</label>
+                            <VoiceRecorder onTranscriptionCompleted={(text) => {
+                              console.log('[DEBUG] 6. Final text written into Remarks:', text);
+                              setNarration(prev => prev ? prev + ' ' + text : text);
+                            }} disabled={submitting} />
+                          </div>
                           <textarea
                             placeholder="ENTER CALL REMARKS..."
                             value={narration}

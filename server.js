@@ -6,6 +6,10 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import multer from 'multer';
+import FormData from 'form-data';
+import fetch from 'node-fetch';
+import fs from 'fs';
 
 // Load environment variables
 dotenv.config();
@@ -76,6 +80,70 @@ app.get('/api/status', (req, res) => {
     status: 'operational',
     timestamp: new Date().toISOString(),
   });
+});
+
+const upload = multer({ dest: 'uploads/' });
+
+app.post('/api/transcribe', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No audio file provided' });
+    }
+    
+    if (!process.env.GROQ_API_KEY) {
+      fs.unlinkSync(req.file.path);
+      return res.status(500).json({ error: 'GROQ_API_KEY not configured on server' });
+    }
+
+    console.log('\n=== GROQ TRANSCRIPTION DEBUG ===');
+    console.log('[DEBUG] 1. Uploaded filename:', req.file.originalname);
+    console.log('[DEBUG] 2. MIME type:', req.file.mimetype);
+    console.log('[DEBUG] 3. Audio file size (bytes):', req.file.size);
+
+    const formData = new FormData();
+    formData.append('model', 'whisper-large-v3');
+    formData.append('temperature', '0');
+    formData.append('response_format', 'verbose_json');
+    formData.append('file', fs.createReadStream(req.file.path), {
+      filename: req.file.originalname,
+      contentType: req.file.mimetype,
+    });
+
+    console.log('[DEBUG] 4. Groq request payload config:', {
+      model: 'whisper-large-v3',
+      temperature: '0',
+      response_format: 'verbose_json',
+      filename: req.file.originalname,
+    });
+
+    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+        ...formData.getHeaders()
+      },
+      body: formData,
+    });
+
+    // Cleanup temp file immediately
+    fs.unlinkSync(req.file.path);
+
+    if (!response.ok) {
+      const errData = await response.text();
+      console.error('Groq API Error:', errData);
+      return res.status(response.status).json({ error: 'Transcription failed' });
+    }
+
+    const data = await response.json();
+    console.log('[DEBUG] 5. Raw Groq JSON response:', JSON.stringify(data, null, 2));
+    res.json({ text: data.text });
+  } catch (error) {
+    console.error('Transcription route error:', error);
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ error: 'Internal server error during transcription' });
+  }
 });
 
 // Serve static files from the React app build directory
