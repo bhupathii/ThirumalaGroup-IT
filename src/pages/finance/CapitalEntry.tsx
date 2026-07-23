@@ -540,24 +540,24 @@ const CapitalEntry: React.FC = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[16px] divide-y divide-slate-100">
+                <table className="w-full divide-y divide-slate-100">
                   <thead>
-                    <tr className="border-b border-slate-150">
-                      <th className="pb-2 text-left text-slate-500 text-[15px] uppercase">Partner</th>
-                      <th className="pb-2 text-right text-slate-500 text-[15px] uppercase">Capital</th>
-                      <th className="pb-2 text-right text-slate-500 text-[15px] uppercase">Balance</th>
+                    <tr className="border-b border-slate-200 bg-slate-50/50">
+                      <th className="py-2 px-2.5 text-left font-bold text-slate-600 text-[12px] uppercase">Partner</th>
+                      <th className="py-2 px-2.5 text-right font-bold text-slate-600 text-[12px] uppercase">Capital</th>
+                      <th className="py-2 px-2.5 text-right font-bold text-slate-600 text-[12px] uppercase">Balance</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50 bg-white">
+                  <tbody className="divide-y divide-slate-100 bg-white">
                     {partnerBalances.map((pb) => (
-                      <tr key={pb.partnerId} className="hover:bg-slate-50/30" style={{ height: '38px' }}>
-                        <td className="py-1.5 text-slate-850 font-bold uppercase truncate max-w-[100px]">
+                      <tr key={pb.partnerId} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="py-2.5 px-2.5 text-slate-900 font-bold uppercase text-[13px] leading-tight" title={pb.partnerName}>
                           {pb.partnerName}
                         </td>
-                        <td className="py-1.5 text-right font-mono text-emerald-600 font-bold whitespace-nowrap">
+                        <td className="py-2.5 px-2.5 text-right font-mono text-emerald-600 font-bold text-[13px] whitespace-nowrap">
                           ₹{pb.capitalIn.toLocaleString('en-IN')}
                         </td>
-                        <td className="py-1.5 text-right font-mono text-slate-900 font-bold whitespace-nowrap">
+                        <td className="py-2.5 px-2.5 text-right font-mono text-slate-900 font-bold text-[13px] whitespace-nowrap">
                           ₹{pb.netBalance.toLocaleString('en-IN')}
                         </td>
                       </tr>
@@ -620,7 +620,7 @@ const CapitalEntry: React.FC = () => {
                       <td className="px-3 py-1.5 text-slate-700 font-mono">
                         {e.entry_date.split('-').reverse().join('/')}
                       </td>
-                      <td className="px-3 py-1.5 text-slate-900 uppercase truncate">
+                      <td className="px-3 py-1.5 text-slate-900 uppercase truncate" title={e.partner_name || e.partner?.name || ''}>
                         {e.partner_name?.toUpperCase() || e.partner?.name?.toUpperCase() || '—'}
                       </td>
                       <td className="px-3 py-1.5 text-slate-650 truncate uppercase" title={e.particulars || ''}>
