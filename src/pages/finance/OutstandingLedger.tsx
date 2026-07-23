@@ -334,16 +334,17 @@ const OutstandingLedger: React.FC = () => {
                   <th className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-10 bg-slate-50 finance-small-label">SL</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-20 bg-slate-50 finance-small-label">CD Number</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-44 bg-slate-50 finance-small-label">Borrower</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Pending Interest</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Paid Interest</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Pending Penalty</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Paid Penalty</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Pending Interest</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Pending Penalty</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-32 bg-slate-50 finance-small-label font-black">Present Due</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Principal</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-32 bg-slate-50 finance-small-label font-black text-blue-900">Closing Amount</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-28 bg-slate-50 finance-small-label">Due Date</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-28 bg-slate-50 finance-small-label">Date</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-16 bg-slate-50 finance-small-label">Days</th>
-                  <th className="px-2 py-1.5 text-slate-800 text-left bg-slate-50 finance-small-label">Guarantor</th>
+                  <th className="px-2 py-1.5 text-slate-800 text-left bg-slate-50 finance-small-label">Contact</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-100 font-mono text-[14px]">
@@ -352,17 +353,17 @@ const OutstandingLedger: React.FC = () => {
                     <td className="px-2 py-1.5 border-r border-slate-100 text-slate-500 font-sans text-center text-[14px] font-bold">{idx + 1}</td>
                     <td className="px-2 py-1.5 border-r border-slate-100 font-black text-blue-650 text-[14px] whitespace-nowrap">{due.loanId}</td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-slate-905 font-sans font-bold text-[14px]">{due.customerName}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-orange-605 text-[14px] font-bold whitespace-nowrap">
-                      {due.pendingInterest < 0 ? `-${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : `${Math.round(due.pendingInterest).toLocaleString('en-IN')}`}
-                    </td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-right text-emerald-700 text-[14px] font-bold whitespace-nowrap">
                       {due.interestPaid < 0 ? `-${Math.abs(Math.round(due.interestPaid)).toLocaleString('en-IN')}` : `${Math.round(due.interestPaid).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-red-650 text-[14px] font-bold whitespace-nowrap">
-                      {due.penalty < 0 ? `-${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : `${Math.round(due.penalty).toLocaleString('en-IN')}`}
-                    </td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-right text-emerald-700 text-[14px] font-bold whitespace-nowrap">
                       {due.penaltyPaid < 0 ? `-${Math.abs(Math.round(due.penaltyPaid)).toLocaleString('en-IN')}` : `${Math.round(due.penaltyPaid).toLocaleString('en-IN')}`}
+                    </td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-orange-605 text-[14px] font-bold whitespace-nowrap">
+                      {due.pendingInterest < 0 ? `-${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : `${Math.round(due.pendingInterest).toLocaleString('en-IN')}`}
+                    </td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-red-650 text-[14px] font-bold whitespace-nowrap">
+                      {due.penalty < 0 ? `-${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : `${Math.round(due.penalty).toLocaleString('en-IN')}`}
                     </td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-[14px] font-black whitespace-nowrap">
                       {due.presentDue < 0 ? `-${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : `${Math.round(due.presentDue).toLocaleString('en-IN')}`}
@@ -373,7 +374,8 @@ const OutstandingLedger: React.FC = () => {
                     <td className="px-2 py-1.5 border-r border-slate-100 text-right text-blue-900 font-sans text-[14px] font-black whitespace-nowrap">
                       {due.currentPrincipal + due.pendingInterest + due.penalty < 0 ? `-${Math.abs(Math.round(due.currentPrincipal + due.pendingInterest + due.penalty)).toLocaleString('en-IN')}` : `${Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-[14px] font-bold">{due.currentDueDate.split('-').reverse().join('/')}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-[14px] font-bold">{due.currentDueDate ? due.currentDueDate.split('-').reverse().join('/') : '—'}</td>
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-[14px]">{due.loanDate ? due.loanDate.split('-').reverse().join('/') : '—'}</td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-center text-red-650 text-[14px] font-black whitespace-nowrap">{due.dueDays}</td>
                     <td className="px-2 py-1.5 font-sans text-[14px] text-slate-600 space-y-0.5">
                       <div><span className="font-semibold text-slate-900">B:</span> {due.phone || '—'}</div>
@@ -390,14 +392,14 @@ const OutstandingLedger: React.FC = () => {
                 {/* Grand Total Row */}
                 <tr className="bg-slate-50 font-sans font-black border-t-2 border-slate-200 text-[14px]">
                   <td colSpan={3} className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 uppercase">Grand Total:</td>
-                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-orange-750 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.interest).toLocaleString('en-IN')}</td>
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-emerald-700 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.interestPaid).toLocaleString('en-IN')}</td>
-                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-red-655 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-emerald-700 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.penaltyPaid).toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-orange-750 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.interest).toLocaleString('en-IN')}</td>
+                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-red-655 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-950 font-black text-[14px] whitespace-nowrap">{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.principal).toLocaleString('en-IN')}</td>
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-blue-955 font-black text-[14px] whitespace-nowrap">{Math.round(totals.amountToClose).toLocaleString('en-IN')}</td>
-                  <td colSpan={3}></td>
+                  <td colSpan={4}></td>
                 </tr>
               </tbody>
             </table>
@@ -434,16 +436,17 @@ const OutstandingLedger: React.FC = () => {
                   <th className="p-1 border text-center print-nowrap">SL</th>
                   <th className="p-1 border text-left print-nowrap">CD NUMBER</th>
                   <th className="p-1 border text-left print-wrap">BORROWER</th>
-                  <th className="p-1 border text-right print-nowrap">PND INT</th>
                   <th className="p-1 border text-right print-nowrap">PD INT</th>
-                  <th className="p-1 border text-right print-nowrap">PND PENALTY</th>
                   <th className="p-1 border text-right print-nowrap">PD PENALTY</th>
+                  <th className="p-1 border text-right print-nowrap">PND INT</th>
+                  <th className="p-1 border text-right print-nowrap">PND PENALTY</th>
                   <th className="p-1 border text-right print-nowrap">PRESENT DUE</th>
                   <th className="p-1 border text-right print-nowrap">PRINCIPAL</th>
                   <th className="p-1 border text-right print-nowrap">CLOSE AMT</th>
                   <th className="p-1 border text-left print-nowrap">DUE DATE</th>
+                  <th className="p-1 border text-left print-nowrap">DATE</th>
                   <th className="p-1 border text-center print-nowrap">DAYS</th>
-                  <th className="p-1 border text-left print-nowrap">GUARANTOR</th>
+                  <th className="p-1 border text-left print-nowrap">CONTACT</th>
                 </tr>
               </thead>
               <tbody>
@@ -454,17 +457,17 @@ const OutstandingLedger: React.FC = () => {
                     <td className="p-1 border font-bold print-wrap" style={{ wordBreak: 'normal', overflowWrap: 'normal', whiteSpace: 'normal', minWidth: '60px', maxWidth: '110px' }}>
                       {due.customerName}
                     </td>
-                    <td className="p-1 border text-right text-orange-700 print-amount">
-                      {due.pendingInterest < 0 ? `-${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : Math.round(due.pendingInterest).toLocaleString('en-IN')}
-                    </td>
                     <td className="p-1 border text-right text-green-700 print-amount">
                       {due.interestPaid < 0 ? `-${Math.abs(Math.round(due.interestPaid)).toLocaleString('en-IN')}` : Math.round(due.interestPaid).toLocaleString('en-IN')}
                     </td>
-                    <td className="p-1 border text-right text-red-600 print-amount">
-                      {due.penalty < 0 ? `-${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : Math.round(due.penalty).toLocaleString('en-IN')}
-                    </td>
                     <td className="p-1 border text-right text-green-700 print-amount">
                       {due.penaltyPaid < 0 ? `-${Math.abs(Math.round(due.penaltyPaid)).toLocaleString('en-IN')}` : Math.round(due.penaltyPaid).toLocaleString('en-IN')}
+                    </td>
+                    <td className="p-1 border text-right text-orange-700 print-amount">
+                      {due.pendingInterest < 0 ? `-${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : Math.round(due.pendingInterest).toLocaleString('en-IN')}
+                    </td>
+                    <td className="p-1 border text-right text-red-600 print-amount">
+                      {due.penalty < 0 ? `-${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : Math.round(due.penalty).toLocaleString('en-IN')}
                     </td>
                     <td className="p-1 border text-right font-black print-amount">
                       {due.presentDue < 0 ? `-${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : Math.round(due.presentDue).toLocaleString('en-IN')}
@@ -475,9 +478,9 @@ const OutstandingLedger: React.FC = () => {
                     <td className="p-1 border text-right font-black text-blue-900 print-amount">
                       {Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}
                     </td>
-                    <td className="p-1 border print-nowrap">{due.currentDueDate.split('-').reverse().join('/')}</td>
+                    <td className="p-1 border print-nowrap">{due.currentDueDate ? due.currentDueDate.split('-').reverse().join('/') : ''}</td>
+                    <td className="p-1 border print-nowrap">{due.loanDate ? due.loanDate.split('-').reverse().join('/') : ''}</td>
                     <td className="p-1 border text-center text-red-600 font-bold print-nowrap">{due.dueDays}</td>
-                    {/* Contact: phone numbers only, one per line, no guarantor names to save width */}
                     <td className="p-1 border print-nowrap leading-tight" style={{ fontSize: '7.5px' }}>
                       {due.phone && <div><span className="font-semibold">B:</span> {due.phone}</div>}
                       {due.g1Phone && <div><span className="font-semibold">G1:</span> {due.g1Phone}</div>}
@@ -489,14 +492,14 @@ const OutstandingLedger: React.FC = () => {
                 {/* Grand Total Row */}
                 <tr className="border-t-2 border-slate-900 font-black" style={{ breakInside: 'avoid' }}>
                   <td colSpan={3} className="p-1 border text-right uppercase text-slate-700">GRAND TOTAL</td>
-                  <td className="p-1 border text-right text-orange-700 print-amount">{Math.round(totals.interest).toLocaleString('en-IN')}</td>
                   <td className="p-1 border text-right text-green-700 print-amount">{Math.round(totals.interestPaid).toLocaleString('en-IN')}</td>
-                  <td className="p-1 border text-right text-red-600 print-amount">{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
                   <td className="p-1 border text-right text-green-700 print-amount">{Math.round(totals.penaltyPaid).toLocaleString('en-IN')}</td>
+                  <td className="p-1 border text-right text-orange-700 print-amount">{Math.round(totals.interest).toLocaleString('en-IN')}</td>
+                  <td className="p-1 border text-right text-red-600 print-amount">{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
                   <td className="p-1 border text-right print-amount">{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
                   <td className="p-1 border text-right print-amount">{Math.round(totals.principal).toLocaleString('en-IN')}</td>
                   <td className="p-1 border text-right text-blue-900 print-amount">{Math.round(totals.amountToClose).toLocaleString('en-IN')}</td>
-                  <td colSpan={3} className="p-1 border"></td>
+                  <td colSpan={4} className="p-1 border"></td>
                 </tr>
               </tbody>
             </table>

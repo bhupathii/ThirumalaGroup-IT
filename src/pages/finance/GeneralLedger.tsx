@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import Button from '../../components/UI/Button';
 import Card from '../../components/UI/Card';
 import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../../services/dailyFinancialTransactionService';
-import { Printer, RefreshCw, ArrowLeft, ChevronRight, X, Search } from 'lucide-react';
+import { Printer, RefreshCw, ArrowLeft, ChevronRight, X, Search, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +12,9 @@ const GeneralLedger: React.FC = () => {
   const navigate = useNavigate();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState(() => getLocalBusinessDateISO());
+  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'CD' | 'CAPITAL' | 'BANK' | 'SALARY' | 'EXPENSE' | 'OTHER'>('ALL');
+  const [headFilter, setHeadFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [allEntries, setAllEntries] = useState<DailyFinancialTransaction[]>([]);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -21,7 +24,17 @@ const GeneralLedger: React.FC = () => {
   const [financeMode] = useState<'REGULAR' | 'ITR'>(() => {
     const mode = sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode');
     return mode === 'itr' ? 'ITR' : 'REGULAR';
- });
+  });
+
+  const categories = [
+    { value: 'ALL', label: 'All Categories' },
+    { value: 'CD', label: 'CD Ledger' },
+    { value: 'CAPITAL', label: 'Partner Capital' },
+    { value: 'BANK', label: 'Bank Book' },
+    { value: 'SALARY', label: 'Salary Ledger' },
+    { value: 'EXPENSE', label: 'Expenses' },
+    { value: 'OTHER', label: 'Other Daybook' }
+  ];
 
   useEffect(() => {
     const loadDefaultStartDate = async () => {
@@ -29,26 +42,26 @@ const GeneralLedger: React.FC = () => {
         const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
         if (oldest) {
           setStartDate(oldest);
-       } else {
+        } else {
           const d = new Date();
           d.setDate(1);
           setStartDate(d.toISOString().split('T')[0]);
-       }
-     } catch (err) {
+        }
+      } catch (err) {
         console.error(err);
         const d = new Date();
         d.setDate(1);
         setStartDate(d.toISOString().split('T')[0]);
-     }
-   };
+      }
+    };
     loadDefaultStartDate();
- }, []);
+  }, []);
 
   useEffect(() => {
     if (startDate) {
       fetchLedgerData();
-   }
- }, [startDate, endDate]);
+    }
+  }, [startDate, endDate]);
 
   const fetchLedgerData = async () => {
     setLoading(true);
@@ -57,29 +70,63 @@ const GeneralLedger: React.FC = () => {
         fromDate: startDate,
         toDate: endDate,
         financeMode
-     });
+      });
       setAllEntries(data);
-   } catch (err) {
+    } catch (err) {
       console.error(err);
       toast.error('Failed to load general ledger data');
-   } finally {
+    } finally {
       setLoading(false);
-   }
- };
+    }
+  };
 
-  // Group and summarize by normalized Head of Account
+  // Extract all unique head of accounts from all entries in date range
+  const uniqueHeads = useMemo(() => {
+    const heads = new Set<string>();
+    allEntries.forEach(t => {
+      if (t.headOfAccount) heads.add(t.headOfAccount);
+    });
+    return Array.from(heads).sort();
+  }, [allEntries]);
+
+  // Apply Category, Head of Account, and Search Query filters to all entries
+  const filteredEntries = useMemo(() => {
+    let list = [...allEntries];
+
+    if (categoryFilter !== 'ALL') {
+      list = list.filter(t => t.category === categoryFilter);
+    }
+
+    if (headFilter !== 'ALL') {
+      list = list.filter(t => t.headOfAccount === headFilter);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(t =>
+        (t.headOfAccount && t.headOfAccount.toLowerCase().includes(q)) ||
+        (t.particulars && t.particulars.toLowerCase().includes(q)) ||
+        (t.accountOrLoanNo && t.accountOrLoanNo.toLowerCase().includes(q)) ||
+        (t.customerName && t.customerName.toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }, [allEntries, categoryFilter, headFilter, searchQuery]);
+
+  // Group and summarize filtered entries by normalized Head of Account
   const summaryData = useMemo(() => {
     const map: Record<string, { debit: number; credit: number; count: number; classification: string }> = {};
 
-    allEntries.forEach(entry => {
+    filteredEntries.forEach(entry => {
       const head = entry.headOfAccount || 'UNCLASSIFIED';
       if (!map[head]) {
         map[head] = { debit: 0, credit: 0, count: 0, classification: entry.reportClassification };
-     }
+      }
       map[head].debit += entry.debit || 0;
       map[head].credit += entry.credit || 0;
       map[head].count += 1;
-   });
+    });
 
     return Object.entries(map).map(([head, data]) => {
       const balance = data.credit - data.debit;
@@ -90,26 +137,25 @@ const GeneralLedger: React.FC = () => {
         balance,
         count: data.count,
         classification: data.classification
-     };
-   }).sort((a, b) => a.head.localeCompare(b.head));
- }, [allEntries]);
+      };
+    }).sort((a, b) => a.head.localeCompare(b.head));
+  }, [filteredEntries]);
 
-  // Totals for the entire general ledger
+  // Totals for the entire general ledger summary
   const overallTotals = useMemo(() => {
     let debit = 0;
     let credit = 0;
     summaryData.forEach(s => {
       debit += s.debit;
       credit += s.credit;
-   });
+    });
     return { debit, credit, balance: credit - debit };
- }, [summaryData]);
+  }, [summaryData]);
 
   // Filter entries for drill-down view modal
   const drillDownEntries = useMemo(() => {
     if (!selectedHead) return [];
-    // For drill-down, only show period entries
-    let list = allEntries.filter(e => e.headOfAccount === selectedHead && e.transactionDate >= startDate);
+    let list = filteredEntries.filter(e => e.headOfAccount === selectedHead);
 
     if (drillSearchQuery.trim()) {
       const q = drillSearchQuery.toLowerCase().trim();
@@ -118,15 +164,15 @@ const GeneralLedger: React.FC = () => {
         (e.accountOrLoanNo && e.accountOrLoanNo.toLowerCase().includes(q)) ||
         (e.customerName && e.customerName.toLowerCase().includes(q))
       );
-   }
+    }
 
     return list.sort((a, b) => {
       if (a.transactionDate !== b.transactionDate) {
         return a.transactionDate.localeCompare(b.transactionDate);
-     }
+      }
       return (a.createdAt || '').localeCompare(b.createdAt || '');
-   });
- }, [allEntries, selectedHead, drillSearchQuery]);
+    });
+  }, [filteredEntries, selectedHead, drillSearchQuery]);
 
   // Compute live drill-down summary
   const drillTotals = useMemo(() => {
@@ -135,11 +181,44 @@ const GeneralLedger: React.FC = () => {
     drillDownEntries.forEach(e => {
       debit += e.debit || 0;
       credit += e.credit || 0;
-   });
+    });
     return { debit, credit, balance: credit - debit };
- }, [drillDownEntries]);
+  }, [drillDownEntries]);
 
-  const displayDateRange = `${new Date(startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-')} TO ${new Date(endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-')}`;
+  const handleExportCSV = () => {
+    if (summaryData.length === 0) {
+      toast.error('No summary data to export');
+      return;
+    }
+    const headers = ['Head of Account', 'Credit (Cr)', 'Debit (Dr)', 'Net Balance'];
+    const rows = summaryData.map(s => [
+      `"${s.head}"`,
+      s.credit,
+      s.debit,
+      `"${Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${s.balance >= 0 ? 'Cr' : 'Dr'}"`
+    ]);
+
+    rows.push([
+      '"Grand Total"',
+      overallTotals.credit,
+      overallTotals.debit,
+      `"${Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${overallTotals.balance >= 0 ? 'Cr' : 'Dr'}"`
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `General_Ledger_${startDate}_to_${endDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('General Ledger summary exported to CSV!');
+  };
+
+  const displayDateRange = `${startDate ? new Date(startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-') : ''} TO ${endDate ? new Date(endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-') : ''}`;
 
   return (
     <div className="space-y-3 w-full select-none text-slate-800 p-2 font-outfit">
@@ -157,14 +236,17 @@ const GeneralLedger: React.FC = () => {
           <Button onClick={fetchLedgerData} variant="secondary" size="sm" icon={RefreshCw} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-250 font-bold text-xs h-[48px] px-3 uppercase">
             Refresh
           </Button>
+          <Button onClick={handleExportCSV} variant="secondary" size="sm" icon={FileSpreadsheet} className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 font-bold text-xs h-[48px] px-4 uppercase">
+            Excel
+          </Button>
           <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white font-bold text-xs h-[48px] px-4 uppercase">
             Print Summary
           </Button>
         </div>
       </div>
 
-      {/* Date Filters in One Row */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-white border border-slate-200 rounded-lg shadow-sm`}>
+      {/* Date & Category & Search Filters in One Row */}
+      <div className={`grid grid-cols-1 md:grid-cols-5 gap-3 p-3 bg-white border border-slate-200 rounded-lg shadow-sm items-end`}>
         <div className="space-y-1">
           <label className="text-[15px] font-bold text-slate-500 uppercase block">FROM DATE</label>
           <input
@@ -183,6 +265,44 @@ const GeneralLedger: React.FC = () => {
             className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] focus:outline-none h-[48px] font-bold"
           />
         </div>
+        <div className="space-y-1">
+          <label className="text-[15px] font-bold text-slate-500 uppercase block">Category Filter</label>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value as any)}
+            className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] focus:outline-none h-[48px] font-bold uppercase"
+          >
+            {categories.map(cat => (
+              <option key={cat.value} value={cat.value}>{cat.label.toUpperCase()}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[15px] font-bold text-slate-500 uppercase block">Head of Account</label>
+          <select
+            value={headFilter}
+            onChange={(e) => setHeadFilter(e.target.value)}
+            className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] focus:outline-none h-[48px] font-bold uppercase"
+          >
+            <option value="ALL">ALL HEADS</option>
+            {uniqueHeads.map(h => (
+              <option key={h} value={h}>{h.toUpperCase()}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[15px] font-bold text-slate-500 uppercase block">Search Transaction</label>
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search..."
+              className="w-full pl-9 pr-3 bg-white border border-slate-250 rounded text-[16px] focus:outline-none h-[48px] font-bold"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Summary Table */}
@@ -195,8 +315,8 @@ const GeneralLedger: React.FC = () => {
                 {displayDateRange}
               </span>
             </div>
-         }
-          subtitle="Click any row to drill down into transaction details"
+          }
+          subtitle={`Showing ${summaryData.length} account heads matching filters. Click any row to drill down into transaction details.`}
           className="shadow-sm border-slate-200 rounded overflow-hidden"
         >
           {loading ? (
@@ -217,42 +337,52 @@ const GeneralLedger: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-100 divide-x divide-slate-55 font-semibold text-slate-800">
-                    {summaryData.map(s => (
-                      <tr 
-                        key={s.head} 
-                        onClick={() => setSelectedHead(s.head)}
-                        className="hover:bg-slate-50/50 cursor-pointer transition-colors"
-                        style={{ height: '38px' }}
-                      >
-                        <td className="px-3 py-1.5 text-slate-900 font-bold uppercase truncate">{s.head}</td>
-                        <td className="px-3 py-1.5 text-right text-emerald-700 font-bold font-mono whitespace-nowrap">
-                          {s.credit > 0 ? `${s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                        </td>
-                        <td className="px-3 py-1.5 text-right text-red-700 font-bold font-mono whitespace-nowrap">
-                          {s.debit > 0 ? `${s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                        </td>
-                        <td className={`px-3 py-1.5 text-right font-black font-mono whitespace-nowrap ${s.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                          {Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}
-                        </td>
-                        <td className="px-2 py-1.5 text-center text-slate-400">
-                          <ChevronRight className="w-4 h-4 mx-auto" />
+                    {summaryData.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-12 text-center text-slate-400 font-bold uppercase">
+                          No account heads found matching selected filters.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      summaryData.map(s => (
+                        <tr 
+                          key={s.head} 
+                          onClick={() => setSelectedHead(s.head)}
+                          className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+                          style={{ height: '38px' }}
+                        >
+                          <td className="px-3 py-1.5 text-slate-900 font-bold uppercase truncate">{s.head}</td>
+                          <td className="px-3 py-1.5 text-right text-emerald-700 font-bold font-mono whitespace-nowrap">
+                            {s.credit > 0 ? `${s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                          </td>
+                          <td className="px-3 py-1.5 text-right text-red-700 font-bold font-mono whitespace-nowrap">
+                            {s.debit > 0 ? `${s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                          </td>
+                          <td className={`px-3 py-1.5 text-right font-black font-mono whitespace-nowrap ${s.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                            {Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}
+                          </td>
+                          <td className="px-2 py-1.5 text-center text-slate-400">
+                            <ChevronRight className="w-4 h-4 mx-auto" />
+                          </td>
+                        </tr>
+                      ))
+                    )}
                     {/* Overall totals */}
-                    <tr className="bg-slate-50 font-black divide-x divide-slate-150 border-t-2 border-slate-200" style={{ height: '42px' }}>
-                      <td className="px-3 py-2 text-slate-800 uppercase text-[15px]">Grand Total:</td>
-                      <td className="px-3 py-2 text-right text-emerald-700 font-black font-mono whitespace-nowrap">
-                        {overallTotals.credit > 0 ? `${overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                      </td>
-                      <td className="px-3 py-2 text-right text-red-700 font-black font-mono whitespace-nowrap">
-                        {overallTotals.debit > 0 ? `${overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                      </td>
-                      <td className={`px-3 py-2 text-right font-black font-mono whitespace-nowrap ${overallTotals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                        {Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}
-                      </td>
-                      <td className="px-3 py-2 text-slate-400"></td>
-                    </tr>
+                    {summaryData.length > 0 && (
+                      <tr className="bg-slate-50 font-black divide-x divide-slate-150 border-t-2 border-slate-200" style={{ height: '42px' }}>
+                        <td className="px-3 py-2 text-slate-800 uppercase text-[15px]">Grand Total:</td>
+                        <td className="px-3 py-2 text-right text-emerald-700 font-black font-mono whitespace-nowrap">
+                          {overallTotals.credit > 0 ? `${overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right text-red-700 font-black font-mono whitespace-nowrap">
+                          {overallTotals.debit > 0 ? `${overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                        </td>
+                        <td className={`px-3 py-2 text-right font-black font-mono whitespace-nowrap ${overallTotals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                          {Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}
+                        </td>
+                        <td className="px-3 py-2 text-slate-400"></td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -402,7 +532,7 @@ const GeneralLedger: React.FC = () => {
           <div>
             <span className="text-slate-500 text-[9px] uppercase font-bold block">NET LEDGER VALUE</span>
             <span className="text-slate-900 text-lg font-black font-mono">
-              {overallTotals.balance >= 0 ? 'Cr ' : 'Dr'}{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              {overallTotals.balance >= 0 ? 'Cr ' : 'Dr '}{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </span>
           </div>
         </div>
