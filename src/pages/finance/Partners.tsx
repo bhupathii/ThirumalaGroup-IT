@@ -438,7 +438,7 @@ const Partners: React.FC = () => {
                               </td>
                               <td className="px-4 py-2.5">{tx.created_by || 'Staff'}</td>
                               <td className="px-4 py-2.5 text-slate-400 font-mono text-[11px]">
-                                {tx.created_at ? new Date(tx.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                                {tx.created_at ? new Date(tx.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}
                               </td>
                             </tr>
                           ))}

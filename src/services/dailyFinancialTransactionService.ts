@@ -87,30 +87,47 @@ export const dailyFinancialTransactionService = {
 
     const getClassification = (headName: string): 'BALANCE_SHEET' | 'PROFIT_AND_LOSS' | 'UNCLASSIFIED' => {
       const cleanHead = normalizeHeadOfAccount(headName);
+      const upper = cleanHead.toUpperCase();
       
-      if (cleanHead === 'CAPITAL') return 'BALANCE_SHEET';
-      if (cleanHead.includes('PRINCIPAL') || cleanHead === 'CD PRINCIPAL' || cleanHead === 'HP PRINCIPAL' || cleanHead === 'STBD PRINCIPAL' || cleanHead === 'TBD PRINCIPAL') {
+      if (upper === 'CAPITAL' || upper.startsWith('CAPITAL')) return 'BALANCE_SHEET';
+      if (
+        upper.includes('PRINCIPAL') || 
+        upper === 'CD PRINCIPAL' || 
+        upper === 'HP PRINCIPAL' || 
+        upper === 'STBD PRINCIPAL' || 
+        upper === 'TBD PRINCIPAL' ||
+        upper.startsWith('BANK') ||
+        upper.endsWith('BANK')
+      ) {
         return 'BALANCE_SHEET';
       }
       
       if (
-        cleanHead.includes('INTEREST') || 
-        cleanHead.includes('COMMISSION') || 
-        cleanHead.includes('DOCUMENT CHARGES') || 
-        cleanHead.includes('PENALTY') ||
-        cleanHead === 'CD PENALTY' || 
-        cleanHead === 'HP PENALTY' || 
-        cleanHead === 'STBD PENALTY' ||
-        cleanHead === 'TBD PENALTY'
+        upper.includes('INTEREST') || 
+        upper.includes('COMMISSION') || 
+        upper.includes('DOCUMENT CHARGES') || 
+        upper.includes('PENALTY') ||
+        upper.includes('SALARY') ||
+        upper.includes('RENT') ||
+        upper.includes('ELECTRICITY') ||
+        upper.includes('STATIONERY') ||
+        upper.includes('PRINTING') ||
+        upper.includes('FUEL') ||
+        upper.includes('TEA') ||
+        upper.includes('EXPENSE') ||
+        upper.includes('REPAIR') ||
+        upper.includes('MAINTENANCE') ||
+        upper.includes('DISCOUNT') ||
+        upper.includes('CHARGES')
       ) {
         return 'PROFIT_AND_LOSS';
       }
 
-      const acc = accountsMap.get(cleanHead.toUpperCase()) || accountsMap.get(headName.toUpperCase());
+      const acc = accountsMap.get(upper) || accountsMap.get(headName.toUpperCase());
       if (acc?.report_classification) {
         return acc.report_classification;
       }
-      return 'UNCLASSIFIED';
+      return 'PROFIT_AND_LOSS';
     };
 
     // 2. Fetch CD Ledger Entries
@@ -134,7 +151,7 @@ export const dailyFinancialTransactionService = {
     if (capError) console.error('Error fetching capital entries for Daily Report:', capError);
     console.log(`[DAILY REPORT DEBUG] Capital raw rows fetched: ${capEntries?.length || 0}`);
 
-    // 4. Fetch Day Book Entries (cashbook entries) - only APPROVED ones
+    // 4. Fetch Day Book Entries (cashbook entries)
     const { data: bookData } = await supabase
       .from('finance_books')
       .select('id')
@@ -148,7 +165,7 @@ export const dailyFinancialTransactionService = {
       .lte('entry_date', toDate);
 
     if (bookData?.id) {
-      cbQuery = cbQuery.eq('book_id', bookData.id);
+      cbQuery = cbQuery.or(`book_id.eq.${bookData.id},book_id.is.null`);
     }
 
     const { data: cbEntries, error: cbError } = await cbQuery;
@@ -340,7 +357,6 @@ export const dailyFinancialTransactionService = {
   }): Promise<string | null> {
     const { currentDate, direction, financeMode } = params;
     const isPrev = direction === 'prev';
-    const compOp = isPrev ? 'lt' : 'gt';
     const orderOptions = { ascending: !isPrev };
 
     try {
@@ -428,8 +444,8 @@ export const dailyFinancialTransactionService = {
     try {
       const { data, error } = await supabase
         .from('finance_loans')
-        .select('loan_date')
-        .order('loan_date', { ascending: true })
+        .select('date')
+        .order('date', { ascending: true })
         .limit(1)
         .maybeSingle();
 
@@ -438,7 +454,7 @@ export const dailyFinancialTransactionService = {
         return '2020-01-01';
       }
 
-      return data?.loan_date || '2020-01-01';
+      return (data as any)?.date ? (data as any).date.split('T')[0] : '2020-01-01';
     } catch (e) {
       console.error('Error getting oldest transaction date:', e);
       return '2020-01-01';

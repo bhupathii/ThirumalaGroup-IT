@@ -2944,18 +2944,81 @@ class SupabaseFinance {
   // --- Audit Logs ---
   async logEdit(tableName: string, recordId: string, oldValues: any, newValues: any, editedBy: string): Promise<void> {
     try {
+      const isCreate = !oldValues || Object.keys(oldValues || {}).length === 0;
+
+      if (isCreate) {
+        // Record Creation (Insert Operation) - Log as RECORD CREATED
+        const payloadNewValues = {
+          ...(typeof newValues === 'object' && newValues !== null ? newValues : { value: newValues }),
+          source: 'RECORD CREATED'
+        };
+
+        await supabase
+          .from('finance_edited_logs')
+          .insert([{
+            table_name: tableName,
+            record_id: recordId,
+            old_values: {},
+            new_values: payloadNewValues,
+            edited_by: editedBy
+          }]);
+        return;
+      }
+
+      // Record Update Operation - Diff fields & ignore no-ops / metadata
+      const ignoredKeys = new Set([
+        'id', 'created_at', 'updated_at', 'deleted_at', 'customer_id',
+        'fingerprint_url', 'fingerprint_template', 'fingerprint_added',
+        'customer_fingerprint_template', 'customer_fingerprint_image_url',
+        'customer_fingerprint_added', 'surety_fingerprint_template',
+        'surety_fingerprint_image_url', 'surety_fingerprint_added',
+        'photo_url', 'customer_photo_url', 'surety_photo_url',
+        'fingerprint_status', 'fingerprint_id',
+      ]);
+
+      const changedOld: Record<string, any> = {};
+      const changedNew: Record<string, any> = {};
+      let hasRealChanges = false;
+
+      const allKeys = Array.from(new Set([...Object.keys(oldValues || {}), ...Object.keys(newValues || {})]));
+
+      for (const key of allKeys) {
+        if (ignoredKeys.has(key)) continue;
+
+        const oldV = oldValues ? oldValues[key] : undefined;
+        const newV = newValues ? newValues[key] : undefined;
+
+        const oldStr = (oldV === null || oldV === undefined) ? '' : (typeof oldV === 'object' ? JSON.stringify(oldV) : String(oldV).trim());
+        const newStr = (newV === null || newV === undefined) ? '' : (typeof newV === 'object' ? JSON.stringify(newV) : String(newV).trim());
+
+        if (oldStr !== newStr && (oldStr !== '' || newStr !== '')) {
+          changedOld[key] = oldV;
+          changedNew[key] = newV;
+          hasRealChanges = true;
+        }
+      }
+
+      // Ignore saves where no actual business value changed
+      if (!hasRealChanges) {
+        return;
+      }
+
       await supabase
         .from('finance_edited_logs')
         .insert([{
           table_name: tableName,
           record_id: recordId,
-          old_values: oldValues,
-          new_values: newValues,
+          old_values: changedOld,
+          new_values: changedNew,
           edited_by: editedBy
         }]);
     } catch (error) {
       console.error('Error writing edit log:', error);
     }
+  }
+
+  async logCreate(tableName: string, recordId: string, initialValues: any, createdBy: string): Promise<void> {
+    return this.logEdit(tableName, recordId, {}, initialValues, createdBy);
   }
 
   async logDelete(tableName: string, recordId: string, oldValues: any, deletedBy: string): Promise<void> {
@@ -3489,11 +3552,25 @@ class SupabaseFinance {
         if (filters.date) {
           query = query.eq('transaction_date', filters.date);
         }
-        if (filters.fromDate) {
-          query = query.gte('transaction_date', filters.fromDate);
-        }
-        if (filters.toDate) {
-          query = query.lte('transaction_date', filters.toDate);
+        if (filters.status === 'APPROVED' && (filters.fromDate || filters.toDate)) {
+          if (filters.fromDate && filters.toDate) {
+            const fromTs = `${filters.fromDate}T00:00:00`;
+            const toTs = `${filters.toDate}T23:59:59`;
+            query = query.or(`and(transaction_date.gte.${filters.fromDate},transaction_date.lte.${filters.toDate}),and(approved_at.gte.${fromTs},approved_at.lte.${toTs})`);
+          } else if (filters.fromDate) {
+            const fromTs = `${filters.fromDate}T00:00:00`;
+            query = query.or(`transaction_date.gte.${filters.fromDate},approved_at.gte.${fromTs}`);
+          } else if (filters.toDate) {
+            const toTs = `${filters.toDate}T23:59:59`;
+            query = query.or(`transaction_date.lte.${filters.toDate},approved_at.lte.${toTs}`);
+          }
+        } else {
+          if (filters.fromDate) {
+            query = query.gte('transaction_date', filters.fromDate);
+          }
+          if (filters.toDate) {
+            query = query.lte('transaction_date', filters.toDate);
+          }
         }
         if (filters.enteredBy) {
           query = query.ilike('entered_by', `%${filters.enteredBy}%`);
@@ -3938,6 +4015,44 @@ class SupabaseFinance {
     }
   }
 
+  async getAllTransactionReviewDates(): Promise<{ c_date: string }[]> {
+    try {
+      const results = await Promise.all([
+        supabase.from('finance_transaction_reviews').select('transaction_date, created_at'),
+        supabase.from('finance_cd_ledger_entries').select('entry_date'),
+        supabase.from('finance_cashbook_entries').select('entry_date'),
+        supabase.from('finance_capital_entries').select('entry_date')
+      ]);
+
+      const datesSet = new Set<string>();
+      const addDate = (d: any) => {
+        if (!d) return;
+        const str = String(d);
+        const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (match) {
+          datesSet.add(match[1]);
+        } else if (str.includes('T')) {
+          const dateObj = new Date(str);
+          if (!isNaN(dateObj.getTime())) {
+            const y = dateObj.getFullYear();
+            const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            datesSet.add(`${y}-${m}-${day}`);
+          }
+        }
+      };
+
+      results[0].data?.forEach((r: any) => { addDate(r.transaction_date); addDate(r.created_at); });
+      results[1].data?.forEach((r: any) => addDate(r.entry_date));
+      results[2].data?.forEach((r: any) => addDate(r.entry_date));
+      results[3].data?.forEach((r: any) => addDate(r.entry_date));
+
+      return Array.from(datesSet).map(d => ({ c_date: d }));
+    } catch (err) {
+      console.error('Error fetching transaction review dates:', err);
+      return [];
+    }
+  }
 
   async getUnifiedLedgerEntries(filters?: { startDate?: string; endDate?: string }): Promise<UnifiedLedgerEntry[]> {
     try {

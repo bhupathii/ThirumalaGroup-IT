@@ -1,4 +1,3 @@
-import { sortNumerically } from '../../lib/financialCalculations';
 import React, { useEffect, useState, useMemo } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
@@ -191,6 +190,27 @@ export const mapTableName = (table: string): string => {
   }
 };
 
+export interface ChangedField {
+  field: string;
+  fieldLabel: string;
+  oldValue: any;
+  newValue: any;
+}
+
+export interface GroupedEditAuditEvent {
+  id: string; // Audit log database UUID
+  eventType: 'CREATE' | 'EDIT';
+  timestamp: string; // ISO string
+  operator: string;
+  tableName: string;
+  recordId: string;
+  displayLoanNo: string;
+  displayCustomer: string;
+  source: string;
+  changedFields: ChangedField[];
+  rawLog: FinanceEditedLog;
+}
+
 export interface FlattenedLog {
   id: string;
   logId: string;
@@ -207,11 +227,11 @@ export interface FlattenedLog {
   rawLog: FinanceEditedLog;
 }
 
+// Backward compatibility export for tests
 export const flattenLog = (log: FinanceEditedLog): FlattenedLog[] => {
   const oldVals = log.old_values || {};
   const newVals = log.new_values || {};
 
-  // Check if it is the structured single-field audit log format
   if (typeof newVals === 'object' && newVals !== null && 'field_name' in newVals) {
     const field = newVals.field_name;
     const oldValue = 'value' in oldVals ? oldVals.value : (oldVals[field] !== undefined ? oldVals[field] : null);
@@ -237,7 +257,6 @@ export const flattenLog = (log: FinanceEditedLog): FlattenedLog[] => {
     }];
   }
 
-  // Otherwise, generic JSON object format
   const flattened: FlattenedLog[] = [];
   const allKeys = Array.from(new Set([...Object.keys(oldVals), ...Object.keys(newVals)]));
 
@@ -284,6 +303,50 @@ export const flattenLog = (log: FinanceEditedLog): FlattenedLog[] => {
   return flattened;
 };
 
+export const getEventChangedFields = (log: FinanceEditedLog): ChangedField[] => {
+  const oldVals = log.old_values || {};
+  const newVals = log.new_values || {};
+
+  if (typeof newVals === 'object' && newVals !== null && 'field_name' in newVals) {
+    const field = newVals.field_name;
+    const oldV = 'value' in oldVals ? oldVals.value : oldVals[field];
+    const newV = newVals.value !== undefined ? newVals.value : newVals[field];
+    if (oldV !== newV) {
+      return [{
+        field,
+        fieldLabel: mapFieldLabel(field),
+        oldValue: oldV,
+        newValue: newV
+      }];
+    }
+    return [];
+  }
+
+  const allKeys = Array.from(new Set([...Object.keys(oldVals), ...Object.keys(newVals)]));
+  const changed: ChangedField[] = [];
+
+  for (const key of allKeys) {
+    if (ignoredKeys.has(key)) continue;
+
+    const oldV = oldVals[key];
+    const newV = newVals[key];
+
+    const oldStr = (oldV === null || oldV === undefined) ? '' : (typeof oldV === 'object' ? JSON.stringify(oldV) : String(oldV).trim());
+    const newStr = (newV === null || newV === undefined) ? '' : (typeof newV === 'object' ? JSON.stringify(newV) : String(newV).trim());
+
+    if (oldStr !== newStr && (oldStr !== '' || newStr !== '')) {
+      changed.push({
+        field: key,
+        fieldLabel: mapFieldLabel(key),
+        oldValue: oldV,
+        newValue: newV
+      });
+    }
+  }
+
+  return changed;
+};
+
 const EditedDeletedLogs: React.FC = () => {
   const { user } = useAuth();
   const [logType, setLogType] = useState<'edited' | 'deleted'>('edited');
@@ -301,8 +364,9 @@ const EditedDeletedLogs: React.FC = () => {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
 
-  // Modal state for side-by-side viewing
-  const [selectedLogForModal, setSelectedLogForModal] = useState<any>(null);
+  // Modal state for view details
+  const [selectedEventForModal, setSelectedEventForModal] = useState<GroupedEditAuditEvent | null>(null);
+  const [selectedDeleteForModal, setSelectedDeleteForModal] = useState<FinanceDeletedLog | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   useEffect(() => {
@@ -351,8 +415,6 @@ const EditedDeletedLogs: React.FC = () => {
     }
   };
 
-  // Cleaned up old expansion toggles
-
   // Lookup maps
   const customerMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -366,6 +428,7 @@ const EditedDeletedLogs: React.FC = () => {
     const map: Record<string, any> = {};
     loans.forEach(l => {
       map[l.id] = l;
+      if (l.loan_id) map[l.loan_id] = l;
     });
     return map;
   }, [loans]);
@@ -379,59 +442,84 @@ const EditedDeletedLogs: React.FC = () => {
     return map;
   }, [loans]);
 
-  // Resolved Edited logs
-  const resolvedFlattenedLogs = useMemo(() => {
-    const result: (FlattenedLog & { displayLoanNo: string; displayCustomer: string })[] = [];
-    
+  // Grouped Edit Audit Events (Distinguishing CREATE vs EDIT Events)
+  const groupedEditEvents = useMemo(() => {
+    const result: GroupedEditAuditEvent[] = [];
+
     editedLogs.forEach(log => {
-      const flattened = flattenLog(log);
-      flattened.forEach(item => {
-        let displayLoanNo = item.loanNo || '';
-        let displayCustomer = item.customer || '';
+      const oldVals = log.old_values || {};
+      const newVals = log.new_values || {};
 
-        const oldVals = item.rawLog.old_values || {};
-        const newVals = item.rawLog.new_values || {};
+      let displayLoanNo = '';
+      let displayCustomer = '';
 
-        if (!displayLoanNo) {
-          if (item.table_name === 'finance_loans') {
-            const lObj = loanMap[item.record_id];
-            displayLoanNo = lObj?.loan_id || oldVals.loan_id || newVals.loan_id || '';
-          } else if (item.table_name === 'finance_loans_collateral') {
-            const lObj = loanMap[item.record_id];
-            displayLoanNo = lObj?.loan_id || '';
-          } else if (item.table_name === 'finance_guarantors') {
-            const lObj = guarantorLoanMap[item.record_id];
-            displayLoanNo = lObj?.loan_id || '';
-          } else if (item.table_name === 'finance_customers') {
-            const matchedLoan = loans.find(l => l.customer_id === item.record_id);
-            displayLoanNo = matchedLoan?.loan_id || '';
-          }
-        }
+      if (log.table_name === 'finance_loans') {
+        const lObj = loanMap[log.record_id];
+        displayLoanNo = lObj?.loan_id || oldVals.loan_id || newVals.loan_id || oldVals.loan_number || newVals.loan_number || '';
+        displayCustomer = lObj?.customer?.name || customerMap[oldVals.customer_id] || customerMap[newVals.customer_id] || oldVals.customer_name || newVals.customer_name || '';
+      } else if (log.table_name === 'finance_loans_collateral') {
+        const lObj = loanMap[log.record_id];
+        displayLoanNo = lObj?.loan_id || '';
+        displayCustomer = lObj?.customer?.name || '';
+      } else if (log.table_name === 'finance_guarantors') {
+        const lObj = guarantorLoanMap[log.record_id];
+        displayLoanNo = lObj?.loan_id || '';
+        displayCustomer = lObj?.customer?.name || oldVals.name || newVals.name || '';
+      } else if (log.table_name === 'finance_customers') {
+        const matchedLoan = loans.find(l => l.customer_id === log.record_id);
+        displayLoanNo = matchedLoan?.loan_id || '';
+        displayCustomer = oldVals.name || newVals.name || customerMap[log.record_id] || '';
+      }
 
-        if (!displayCustomer) {
-          if (item.table_name === 'finance_loans') {
-            const lObj = loanMap[item.record_id];
-            displayCustomer = lObj?.customer?.name || customerMap[oldVals.customer_id] || customerMap[newVals.customer_id] || '';
-          } else if (item.table_name === 'finance_loans_collateral') {
-            const lObj = loanMap[item.record_id];
-            displayCustomer = lObj?.customer?.name || '';
-          } else if (item.table_name === 'finance_customers') {
-            displayCustomer = oldVals.name || newVals.name || customerMap[item.record_id] || '';
-          } else if (item.table_name === 'finance_guarantors') {
-            const lObj = guarantorLoanMap[item.record_id];
-            displayCustomer = lObj?.customer?.name || '';
-          }
-        }
+      const isCreate = !oldVals || Object.keys(oldVals).length === 0 || (newVals && newVals.source === 'RECORD CREATED');
+
+      if (isCreate) {
+        // Record Creation Event
+        const initialFields = Object.entries(newVals)
+          .filter(([key]) => !ignoredKeys.has(key) && key !== 'source')
+          .map(([key, val]) => ({
+            field: key,
+            fieldLabel: mapFieldLabel(key),
+            oldValue: null,
+            newValue: val
+          }));
 
         result.push({
-          ...item,
+          id: log.id,
+          eventType: 'CREATE',
+          timestamp: log.edited_at,
+          operator: log.edited_by || 'SYSTEM',
+          tableName: log.table_name,
+          recordId: log.record_id,
           displayLoanNo: displayLoanNo || '-',
           displayCustomer: displayCustomer || '-',
+          source: 'RECORD CREATED',
+          changedFields: initialFields,
+          rawLog: log,
         });
-      });
+      } else {
+        // Edit Event (Update Operation)
+        const changedFields = getEventChangedFields(log);
+        if (changedFields.length === 0) return; // Ignore no-ops
+
+        result.push({
+          id: log.id,
+          eventType: 'EDIT',
+          timestamp: log.edited_at,
+          operator: log.edited_by || 'SYSTEM',
+          tableName: log.table_name,
+          recordId: log.record_id,
+          displayLoanNo: displayLoanNo || '-',
+          displayCustomer: displayCustomer || '-',
+          source: newVals?.source || 'RECORD EDITED',
+          changedFields,
+          rawLog: log,
+        });
+      }
     });
 
-    return result;
+    // Sort newest first
+    return result.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [editedLogs, loans, customers, customerMap, loanMap, guarantorLoanMap]);
 
   // Unique operators list
@@ -446,44 +534,51 @@ const EditedDeletedLogs: React.FC = () => {
     return Array.from(ops).sort();
   }, [editedLogs, deletedLogs]);
 
-  // Filtered edited logs
-  const filteredLogs = useMemo(() => {
-    return resolvedFlattenedLogs.filter(item => {
+  // Filtered edited events
+  const filteredEvents = useMemo(() => {
+    return groupedEditEvents.filter(item => {
       if (searchQuery) {
-        const q = searchQuery.toLowerCase();
+        const q = searchQuery.toLowerCase().trim();
         const matchLoan = item.displayLoanNo.toLowerCase().includes(q);
         const matchCustomer = item.displayCustomer.toLowerCase().includes(q);
-        const matchOperator = item.edited_by.toLowerCase().includes(q);
-        const matchField = item.field.toLowerCase().includes(q);
-        if (!matchLoan && !matchCustomer && !matchOperator && !matchField) {
+        const matchOperator = item.operator.toLowerCase().includes(q);
+        const matchTable = mapTableName(item.tableName).toLowerCase().includes(q);
+        const matchFields = item.changedFields.some(f => 
+          f.fieldLabel.toLowerCase().includes(q) ||
+          f.field.toLowerCase().includes(q) ||
+          formatLogValue(f.field, f.oldValue).toLowerCase().includes(q) ||
+          formatLogValue(f.field, f.newValue).toLowerCase().includes(q)
+        );
+        if (!matchLoan && !matchCustomer && !matchOperator && !matchTable && !matchFields) {
           return false;
         }
       }
 
-      if (filterTableType !== 'all' && item.table_name !== filterTableType) {
+      if (filterTableType !== 'all' && item.tableName !== filterTableType) {
         return false;
       }
 
-      if (filterOperator !== 'all' && item.edited_by !== filterOperator) {
+      if (filterOperator !== 'all' && item.operator.toUpperCase() !== filterOperator.toUpperCase()) {
         return false;
       }
 
       if (filterStartDate) {
         const start = new Date(filterStartDate);
         start.setHours(0, 0, 0, 0);
-        const itemDate = new Date(item.edited_at);
+        const itemDate = new Date(item.timestamp);
         if (itemDate < start) return false;
       }
+
       if (filterEndDate) {
         const end = new Date(filterEndDate);
         end.setHours(23, 59, 59, 999);
-        const itemDate = new Date(item.edited_at);
+        const itemDate = new Date(item.timestamp);
         if (itemDate > end) return false;
       }
 
       return true;
     });
-  }, [resolvedFlattenedLogs, searchQuery, filterTableType, filterOperator, filterStartDate, filterEndDate]);
+  }, [groupedEditEvents, searchQuery, filterTableType, filterOperator, filterStartDate, filterEndDate]);
 
   // Helper for deleted log summary
   const getDeletedLogSummary = (log: FinanceDeletedLog): string => {
@@ -508,7 +603,7 @@ const EditedDeletedLogs: React.FC = () => {
   const filteredDeletedLogs = useMemo(() => {
     return deletedLogs.filter(log => {
       if (searchQuery) {
-        const q = searchQuery.toLowerCase();
+        const q = searchQuery.toLowerCase().trim();
         const summary = getDeletedLogSummary(log).toLowerCase();
         const operator = (log.deleted_by || '').toLowerCase();
         const tableName = mapTableName(log.table_name).toLowerCase();
@@ -521,7 +616,7 @@ const EditedDeletedLogs: React.FC = () => {
         return false;
       }
 
-      if (filterOperator !== 'all' && log.deleted_by !== filterOperator) {
+      if (filterOperator !== 'all' && log.deleted_by.toUpperCase() !== filterOperator.toUpperCase()) {
         return false;
       }
 
@@ -531,111 +626,27 @@ const EditedDeletedLogs: React.FC = () => {
         const itemDate = new Date(log.deleted_at);
         if (itemDate < start) return false;
       }
+
       if (filterEndDate) {
-        const end = new Date(log.deleted_at);
+        const end = new Date(filterEndDate);
         end.setHours(23, 59, 59, 999);
         const itemDate = new Date(log.deleted_at);
         if (itemDate > end) return false;
       }
 
       return true;
-    });
+    }).sort((a, b) => new Date(b.deleted_at).getTime() - new Date(a.deleted_at).getTime());
   }, [deletedLogs, searchQuery, filterTableType, filterOperator, filterStartDate, filterEndDate, customerMap]);
-
-  // Format value rendering cell with coloring (old is red, new is green)
-  const renderFormattedValue = (field: string, val: any, isNew: boolean) => {
-    const formatted = formatLogValue(field, val);
-    const colorClass = isNew 
-      ? 'text-emerald-700 bg-emerald-50 border-emerald-100' 
-      : 'text-rose-700 bg-rose-50 border-rose-100';
-    
-    if (formatted.length > 50) {
-      return (
-        <div className={`p-2 rounded text-xs border max-h-24 overflow-y-auto whitespace-pre-wrap ${colorClass}`}>
-          {formatted}
-        </div>
-      );
-    }
-    
-    return (
-      <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold border ${colorClass}`}>
-        {formatted}
-      </span>
-    );
-  };
-
-  // Render a clean readable card from a log change
-  const renderReadableCard = (field: string, oldVal: any, newVal: any, changedBy: string, changedOn: string) => {
-    return (
-      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm max-w-sm space-y-3 font-sans">
-        <div>
-          <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">FIELD:</div>
-          <div className="text-sm font-bold text-slate-950 uppercase">{mapFieldLabel(field)}</div>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">OLD VALUE:</div>
-            <div className="text-sm font-semibold text-rose-700">{formatLogValue(field, oldVal)}</div>
-          </div>
-          <div>
-            <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">NEW VALUE:</div>
-            <div className="text-sm font-semibold text-emerald-700">{formatLogValue(field, newVal)}</div>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2">
-          <div>
-            <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">CHANGED BY:</div>
-            <div className="text-xs font-semibold text-slate-950 uppercase">{changedBy}</div>
-          </div>
-          <div>
-            <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">CHANGED ON:</div>
-            <div className="text-[11px] font-semibold text-slate-600">{formatDateHuman(changedOn)}</div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Render a grid of cards for a deleted record
-  const renderDeletedRecordCards = (log: FinanceDeletedLog) => {
-    const vals = log.old_values || {};
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {Object.entries(vals)
-          .filter(([key]) => !ignoredKeys.has(key))
-          .map(([key, val]) => (
-            <div key={key} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm space-y-2 font-sans">
-              <div>
-                <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">FIELD:</div>
-                <div className="text-xs font-bold text-slate-950 uppercase">{mapFieldLabel(key)}</div>
-              </div>
-              <div>
-                <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">DELETED VALUE:</div>
-                <div className="text-xs font-semibold text-rose-700">{formatLogValue(key, val)}</div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2">
-                <div>
-                  <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">DELETED BY:</div>
-                  <div className="text-[11px] font-semibold text-slate-955 uppercase">{log.deleted_by}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">DELETED ON:</div>
-                  <div className="text-[11px] font-semibold text-slate-600">{formatDateHuman(log.deleted_at)}</div>
-                </div>
-              </div>
-            </div>
-          ))}
-      </div>
-    );
-  };
 
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center border-b border-green-100 pb-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-green-100 pb-4 gap-4">
         <div>
           <h1 className="finance-h1 font-bold uppercase text-slate-900">AUDIT LOGS REGISTRY</h1>
-          <p className="finance-small-label uppercase text-slate-900 font-bold">REVIEW FULL AUDIT HISTORIES OF EDITED OR DELETED FINANCE ENTRIES</p>
+          <p className="finance-small-label uppercase text-slate-900 font-bold">
+            GROUPED FINANCIAL AUDIT EVENTS · RECONCILED UPDATE & DELETION LOGS
+          </p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
@@ -643,18 +654,17 @@ const EditedDeletedLogs: React.FC = () => {
           </Button>
           <Button onClick={() => {
             if (logType === 'edited') {
-              const data = filteredLogs.map(item => ({
-                Timestamp: formatDateHuman(item.edited_at),
-                Operator: item.edited_by,
-                Table: mapTableName(item.table_name),
+              const data = filteredEvents.map(item => ({
+                Timestamp: formatDateHuman(item.timestamp),
+                Operator: item.operator,
+                Table: mapTableName(item.tableName),
                 'Loan No': item.displayLoanNo,
                 Customer: item.displayCustomer,
-                Field: mapFieldLabel(item.field),
-                'Old Value': formatLogValue(item.field, item.oldValue),
-                'New Value': formatLogValue(item.field, item.newValue),
+                'Total Fields Changed': item.changedFields.length,
+                'Changed Field Names': item.changedFields.map(f => f.fieldLabel).join(', '),
                 Source: item.source
               }));
-              exportToExcel(data, `Edited_Logs_${new Date().toISOString().split('T')[0]}`);
+              exportToExcel(data, `Grouped_Edit_Audit_Logs_${new Date().toISOString().split('T')[0]}`);
             } else {
               const data = filteredDeletedLogs.map(log => ({
                 Timestamp: formatDateHuman(log.deleted_at),
@@ -662,70 +672,78 @@ const EditedDeletedLogs: React.FC = () => {
                 Table: mapTableName(log.table_name),
                 Details: getDeletedLogSummary(log)
               }));
-              exportToExcel(data, `Deleted_Logs_${new Date().toISOString().split('T')[0]}`);
+              exportToExcel(data, `Deleted_Audit_Logs_${new Date().toISOString().split('T')[0]}`);
             }
-            toast.success('Excel Logs Exported!');
+            toast.success('Excel Audit Logs Exported!');
           }} variant="secondary" size="sm" icon={Download}>
             Excel
           </Button>
         </div>
       </div>
 
-      {/* Log Type toggle */}
-      <div className="flex gap-2 mb-2 max-w-xs">
-        <button
-          onClick={() => setLogType('edited')}
-          className={`flex-1 py-2 px-4 rounded-lg border transition-all flex justify-center items-center gap-2 ${ logType === 'edited' ? 'bg-green-100 text-green-700 border-green-300 shadow-sm font-semibold' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' }`}
-        >
-          <Edit2 className="w-4 h-4" />
-          EDITED LOGS
-        </button>
-        <button
-          onClick={() => setLogType('deleted')}
-          className={`flex-1 py-2 px-4 rounded-lg border transition-all flex justify-center items-center gap-2 ${ logType === 'deleted' ? 'bg-red-100 text-red-700 border-red-300 shadow-sm font-semibold' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' }`}
-        >
-          <Trash2 className="w-4 h-4" />
-          DELETED LOGS
-        </button>
+      {/* Log Type Toggle & Count Summary */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex gap-2 max-w-xs">
+          <button
+            onClick={() => setLogType('edited')}
+            className={`flex-1 py-2 px-4 rounded-lg border transition-all flex justify-center items-center gap-2 text-xs font-bold uppercase ${ logType === 'edited' ? 'bg-green-100 text-green-700 border-green-300 shadow-sm' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' }`}
+          >
+            <Edit2 className="w-4 h-4" />
+            EDITED LOGS ({filteredEvents.length})
+          </button>
+          <button
+            onClick={() => setLogType('deleted')}
+            className={`flex-1 py-2 px-4 rounded-lg border transition-all flex justify-center items-center gap-2 text-xs font-bold uppercase ${ logType === 'deleted' ? 'bg-red-100 text-red-700 border-red-300 shadow-sm' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' }`}
+          >
+            <Trash2 className="w-4 h-4" />
+            DELETED LOGS ({filteredDeletedLogs.length})
+          </button>
+        </div>
+
+        <div className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+          Showing {logType === 'edited' ? `${filteredEvents.length} Grouped Edit Audit Event(s)` : `${filteredDeletedLogs.length} Deleted Log Event(s)`}
+        </div>
       </div>
 
       {/* Premium Filter Panel */}
       {!loading && (
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-4">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
           <div className="flex flex-col md:flex-row gap-4">
             {/* Search Input */}
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="SEARCH BY LOAN NO, CUSTOMER, OPERATOR, OR FIELD..."
+                placeholder="SEARCH LOAN NO, CUSTOMER, OPERATOR, FIELD, TABLE, OR VALUE..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all uppercase"
+                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all uppercase"
               />
             </div>
 
             {/* Table Type Selector */}
-            <div className="w-full md:w-48">
+            <div className="w-full md:w-52">
               <select
                 value={filterTableType}
                 onChange={(e) => setFilterTableType(e.target.value)}
-                className="w-full py-2 px-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all uppercase"
+                className="w-full py-2 px-3 border border-slate-200 rounded-lg text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all uppercase"
               >
                 <option value="all">ALL TABLES</option>
                 <option value="finance_loans">LOANS</option>
                 <option value="finance_customers">CUSTOMERS</option>
                 <option value="finance_loans_collateral">COLLATERAL</option>
                 <option value="finance_guarantors">GUARANTORS</option>
+                <option value="finance_partners">PARTNERS</option>
+                <option value="finance_capital_entries">CAPITAL ENTRIES</option>
               </select>
             </div>
 
             {/* Operator Selector */}
-            <div className="w-full md:w-48">
+            <div className="w-full md:w-52">
               <select
                 value={filterOperator}
                 onChange={(e) => setFilterOperator(e.target.value)}
-                className="w-full py-2 px-3 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all uppercase"
+                className="w-full py-2 px-3 border border-slate-200 rounded-lg text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all uppercase"
               >
                 <option value="all">ALL OPERATORS</option>
                 {uniqueOperators.map(op => (
@@ -736,24 +754,24 @@ const EditedDeletedLogs: React.FC = () => {
           </div>
 
           {/* Date Range & Clear Filters */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-2 border-t border-slate-50">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-3 border-t border-slate-100">
             <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-gray-400" />
-              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">DATE RANGE:</span>
+              <Calendar className="h-4 w-4 text-slate-500" />
+              <span className="text-xs font-black text-slate-800 uppercase tracking-wider">DATE RANGE FILTER:</span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <input
                 type="date"
                 value={filterStartDate}
                 onChange={(e) => setFilterStartDate(e.target.value)}
-                className="py-1 px-2 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                className="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-green-500 bg-slate-50"
               />
-              <span className="text-gray-400 text-xs uppercase">TO</span>
+              <span className="text-slate-400 text-xs font-bold uppercase">TO</span>
               <input
                 type="date"
                 value={filterEndDate}
                 onChange={(e) => setFilterEndDate(e.target.value)}
-                className="py-1 px-2 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                className="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-green-500 bg-slate-50"
               />
             </div>
 
@@ -766,7 +784,7 @@ const EditedDeletedLogs: React.FC = () => {
                   setFilterStartDate('');
                   setFilterEndDate('');
                 }}
-                className="text-xs font-bold text-red-500 hover:text-red-600 transition-colors sm:ml-auto uppercase"
+                className="text-xs font-bold text-rose-600 hover:text-rose-800 transition-colors sm:ml-auto uppercase tracking-wider"
               >
                 CLEAR FILTERS
               </button>
@@ -780,120 +798,122 @@ const EditedDeletedLogs: React.FC = () => {
           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-green-500"></div>
         </div>
       ) : logType === 'edited' ? (
-        /* Edited Logs View */
-        <Card title="EDITED RECORDS LOGS" subtitle="TRACKING UPDATES TO PARTNER, LOAN AND CUSTOMER CARDS" className="shadow-md">
-          {filteredLogs.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 uppercase font-bold text-sm">NO EDIT LOGS MATCH THE FILTERS</div>
+        /* Grouped Edited Logs Table View (1 Event = 1 Row) */
+        <Card title="EDITED RECORDS LOGS" subtitle="EACH ROW REPRESENTS EXACTLY ONE AUDIT EDIT EVENT WITH GROUPED CHANGED FIELDS" className="shadow-md">
+          {filteredEvents.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 uppercase font-bold text-xs">NO EDIT AUDIT LOGS MATCH THE FILTERS</div>
           ) : (
-            <div className="overflow-x-auto border border-slate-100 rounded-xl">
-              <table className="min-w-full divide-y divide-gray-200">
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">TIMESTAMP</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">OPERATOR</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">TABLE</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">LOAN NO</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">CUSTOMER</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">FIELD CHANGED</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">OLD VALUE</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">NEW VALUE</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">SOURCE</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">ACTIONS</th>
+                    <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider">TIMESTAMP</th>
+                    <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider">OPERATOR</th>
+                    <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider">TABLE</th>
+                    <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider">LOAN NO</th>
+                    <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider">CUSTOMER</th>
+                    <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider">CHANGED FIELDS</th>
+                    <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider">SOURCE</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-800 uppercase tracking-wider">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
-                    {filteredLogs.map((item) => {
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-4 py-3.5 whitespace-nowrap text-xs text-slate-500 font-mono">
-                            {formatDateHuman(item.edited_at)}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-slate-900 font-medium">
-                            {item.edited_by.toUpperCase()}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-slate-600 font-mono">
-                            {mapTableName(item.table_name)}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-slate-700 font-mono font-medium">
-                            {item.displayLoanNo}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-slate-900 font-semibold">
-                            {item.displayCustomer}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-slate-700 font-medium uppercase">
-                            {mapFieldLabel(item.field)}
-                          </td>
-                          <td className="px-4 py-3.5">
-                            {renderFormattedValue(item.field, item.oldValue, false)}
-                          </td>
-                          <td className="px-4 py-3.5">
-                            {renderFormattedValue(item.field, item.newValue, true)}
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap">
-                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600">
-                              {item.source}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap">
-                            <button
-                              onClick={() => setSelectedLogForModal(item)}
-                              className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors uppercase"
-                            >
-                              <Database className="w-3.5 h-3.5" />
-                              VIEW DETAILS
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                  {filteredEvents.map((item) => {
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-3.5 whitespace-nowrap text-xs text-slate-600 font-mono">
+                          {formatDateHuman(item.timestamp)}
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-slate-900 font-bold uppercase">
+                          {item.operator}
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-slate-700 font-mono font-bold">
+                          {mapTableName(item.tableName)}
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-blue-900 font-mono font-black">
+                          {item.displayLoanNo}
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-slate-900 font-bold">
+                          {item.displayCustomer}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          {item.eventType === 'CREATE' ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wider">
+                                RECORD CREATED
+                              </span>
+                              <span className="text-xs text-slate-500 font-medium truncate">Initial Record Creation</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 flex-wrap max-w-md">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-50 text-blue-700 border border-blue-200">
+                                {item.changedFields.length} Field{item.changedFields.length > 1 ? 's' : ''} Edited
+                              </span>
+                              <span className="text-xs text-slate-700 font-medium truncate">
+                                {item.changedFields.map(f => f.fieldLabel).join(', ')}
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                            {item.source}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                          <button
+                            onClick={() => setSelectedEventForModal(item)}
+                            className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-colors uppercase"
+                          >
+                            <Database className="w-3.5 h-3.5" />
+                            VIEW DETAILS
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </Card>
       ) : (
-        /* Deleted Logs View */
+        /* Deleted Logs Table View */
         <Card title="DELETED RECORDS LOGS" subtitle="TRACKING REMOVED ENTRIES FROM THE FINANCE TABLES" className="shadow-md">
           {filteredDeletedLogs.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 uppercase font-bold text-sm">NO DELETION LOGS MATCH THE FILTERS</div>
+            <div className="text-center py-8 text-slate-400 uppercase font-bold text-xs">NO DELETION AUDIT LOGS MATCH THE FILTERS</div>
           ) : (
-            <div className="overflow-x-auto border border-slate-100 rounded-xl">
-              <table className="min-w-full divide-y divide-gray-200">
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">TIMESTAMP</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">OPERATOR</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">TABLE</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-900 uppercase tracking-wider">DETAILS</th>
-                    <th className="px-4 py-3 text-right text-xs font-bold text-slate-900 uppercase tracking-wider">ACTIONS</th>
+                    <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider">TIMESTAMP</th>
+                    <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider">OPERATOR</th>
+                    <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider">TABLE</th>
+                    <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider">DETAILS</th>
+                    <th className="px-4 py-3 text-right text-xs font-black text-slate-800 uppercase tracking-wider">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
                   {filteredDeletedLogs.map((log) => {
                     return (
-                      <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-3.5 whitespace-nowrap text-xs text-slate-500 font-mono">
+                      <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="px-4 py-3.5 whitespace-nowrap text-xs text-slate-600 font-mono">
                           {formatDateHuman(log.deleted_at)}
                         </td>
-                        <td className="px-4 py-3.5 text-xs text-slate-900 font-medium">
-                          {log.deleted_by.toUpperCase()}
+                        <td className="px-4 py-3.5 text-xs text-slate-900 font-bold uppercase">
+                          {log.deleted_by}
                         </td>
-                        <td className="px-4 py-3.5 text-xs text-slate-600 font-mono">
+                        <td className="px-4 py-3.5 text-xs text-slate-700 font-mono font-bold">
                           {mapTableName(log.table_name)}
                         </td>
-                        <td className="px-4 py-3.5 text-xs text-slate-700 font-semibold">
+                        <td className="px-4 py-3.5 text-xs text-slate-900 font-bold">
                           {getDeletedLogSummary(log)}
                         </td>
-                        <td className="px-4 py-3.5 whitespace-nowrap text-right flex items-center justify-end gap-3">
+                        <td className="px-4 py-3.5 whitespace-nowrap text-right flex items-center justify-end gap-2">
                           <button
-                            onClick={() => setSelectedLogForModal({
-                              table_name: log.table_name,
-                              edited_by: log.deleted_by,
-                              field: 'Snapshot',
-                              oldValue: log.old_values,
-                              newValue: null
-                            })}
-                            className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors uppercase"
+                            onClick={() => setSelectedDeleteForModal(log)}
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-colors uppercase"
                           >
                             <Database className="w-3.5 h-3.5" />
                             VIEW DETAILS
@@ -903,7 +923,7 @@ const EditedDeletedLogs: React.FC = () => {
                             variant="success"
                             size="sm"
                             disabled={restoring === log.id}
-                            className="font-bold uppercase"
+                            className="font-bold uppercase text-xs"
                           >
                             {restoring === log.id ? 'RESTORING...' : 'RESTORE'}
                           </Button>
@@ -917,46 +937,149 @@ const EditedDeletedLogs: React.FC = () => {
           )}
         </Card>
       )}
-      {/* Side-by-Side Audit Modal */}
-      {selectedLogForModal && (
+
+      {/* Expandable Grouped Edit Event Audit Modal */}
+      {selectedEventForModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-gray-150 max-w-[80vw] w-11/12 md:w-[65vw] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="bg-[#0b1329] text-white p-4 flex justify-between items-center shrink-0">
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-wider">Side-by-Side Record Audit</h3>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
-                  Table: {mapTableName(selectedLogForModal.table_name)} — Operator: {(selectedLogForModal.edited_by || selectedLogForModal.deleted_by || '').toUpperCase()}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${selectedEventForModal.eventType === 'CREATE' ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'}`}>
+                    {selectedEventForModal.eventType === 'CREATE' ? 'RECORD CREATED' : mapTableName(selectedEventForModal.tableName)}
+                  </span>
+                  <h3 className="text-sm font-black uppercase tracking-wider">
+                    {selectedEventForModal.eventType === 'CREATE' ? 'RECORD CREATION AUDIT LOG' : 'GROUPED EDIT AUDIT EVENT'}
+                  </h3>
+                </div>
+                <p className="text-[11px] text-slate-300">
+                  Loan No: <strong className="text-white font-mono">{selectedEventForModal.displayLoanNo}</strong> · Customer: <strong className="text-white">{selectedEventForModal.displayCustomer}</strong> · Operator: <strong className="text-white">{selectedEventForModal.operator}</strong>
                 </p>
               </div>
-              <button onClick={() => setSelectedLogForModal(null)} className="text-slate-400 hover:text-white transition-colors">
-                <X className="w-5 h-5" />
+              <button 
+                onClick={() => setSelectedEventForModal(null)} 
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6" />
               </button>
             </div>
-            
-            <div className="flex-1 overflow-y-auto p-6 bg-slate-50/40 space-y-4">
-              <div className="grid grid-cols-2 gap-6">
-                {/* Before (Old Value) Column */}
-                <div className="bg-red-50/60 border border-red-200 rounded-xl p-4 space-y-2">
-                  <div className="text-xs font-black text-red-800 border-b border-red-200 pb-1.5 uppercase">Before (Old Value / Removed)</div>
-                  <pre className="text-xs font-mono text-red-700 whitespace-pre-wrap leading-relaxed">
-                    {formatLogValue(selectedLogForModal.field, selectedLogForModal.oldValue)}
-                  </pre>
-                </div>
-                
-                {/* After (New Value) Column */}
-                <div className="bg-emerald-50/60 border border-emerald-250 rounded-xl p-4 space-y-2">
-                  <div className="text-xs font-black text-emerald-800 border-b border-emerald-250 pb-1.5 uppercase">After (New Value / Added)</div>
-                  <pre className="text-xs font-mono text-emerald-800 whitespace-pre-wrap leading-relaxed">
-                    {selectedLogForModal.newValue !== null 
-                      ? formatLogValue(selectedLogForModal.field, selectedLogForModal.newValue)
-                      : 'RECORD DELETED'}
-                  </pre>
-                </div>
+
+            {/* Sub-header info banner */}
+            <div className="bg-slate-100 px-6 py-3 border-b border-slate-200 text-xs flex flex-wrap justify-between items-center gap-2 shrink-0">
+              <div>
+                <span className="font-bold text-slate-500 uppercase">TIMESTAMP: </span>
+                <span className="font-mono font-bold text-slate-900">{formatDateHuman(selectedEventForModal.timestamp)}</span>
+              </div>
+              <div>
+                <span className="font-bold text-slate-500 uppercase">EVENT CLASSIFICATION: </span>
+                <span className={`font-bold px-2 py-0.5 rounded border ${selectedEventForModal.eventType === 'CREATE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                  {selectedEventForModal.eventType === 'CREATE' ? 'NEW RECORD INSERT' : `${selectedEventForModal.changedFields.length} FIELD(S) EDITED`}
+                </span>
               </div>
             </div>
-            
-            <div className="bg-slate-50 px-4 py-3 sm:px-6 border-t border-slate-150 flex justify-end shrink-0">
-              <button onClick={() => setSelectedLogForModal(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-xs font-bold uppercase transition-colors shadow-sm">
+
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 space-y-4">
+              {selectedEventForModal.eventType === 'CREATE' ? (
+                /* Initial Creation Snapshot Cards */
+                <div className="space-y-3">
+                  <div className="text-xs font-black uppercase text-emerald-800 tracking-wider">
+                    INITIAL CREATED RECORD SNAPSHOT
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {selectedEventForModal.changedFields.map((f, idx) => (
+                      <div key={idx} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-1">
+                        <div className="text-[10px] font-black text-slate-400 uppercase">{f.fieldLabel}</div>
+                        <div className="text-xs font-bold text-slate-900 font-mono whitespace-pre-wrap">
+                          {formatLogValue(f.field, f.newValue)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                /* Edit Diff Table */
+                <table className="min-w-full divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm">
+                  <thead className="bg-slate-100">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider w-1/4">FIELD NAME</th>
+                      <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider w-3/8">BEFORE (OLD VALUE)</th>
+                      <th className="px-4 py-3 text-left text-xs font-black text-slate-800 uppercase tracking-wider w-3/8">AFTER (NEW VALUE)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {selectedEventForModal.changedFields.map((f, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 text-xs font-bold text-slate-900 uppercase align-top">
+                          {f.fieldLabel}
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="p-2.5 rounded-lg border text-xs font-mono whitespace-pre-wrap leading-relaxed text-rose-700 bg-rose-50 border-rose-200">
+                            {formatLogValue(f.field, f.oldValue)}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <div className="p-2.5 rounded-lg border text-xs font-mono whitespace-pre-wrap leading-relaxed text-emerald-800 bg-emerald-50 border-emerald-250">
+                            {formatLogValue(f.field, f.newValue)}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 flex justify-end shrink-0">
+              <button 
+                onClick={() => setSelectedEventForModal(null)} 
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold uppercase transition-colors shadow-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deleted Record Snapshot Modal */}
+      {selectedDeleteForModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-rose-950 text-white p-4 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider">DELETED RECORD AUDIT SNAPSHOT</h3>
+                <p className="text-[11px] text-rose-200 uppercase mt-0.5">
+                  Table: {mapTableName(selectedDeleteForModal.table_name)} · Operator: {selectedDeleteForModal.deleted_by.toUpperCase()}
+                </p>
+              </div>
+              <button 
+                onClick={() => setSelectedDeleteForModal(null)} 
+                className="text-rose-300 hover:text-white p-1 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {Object.entries(selectedDeleteForModal.old_values || {})
+                  .filter(([key]) => !ignoredKeys.has(key))
+                  .map(([key, val]) => (
+                    <div key={key} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-1.5">
+                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{mapFieldLabel(key)}</div>
+                      <div className="text-xs font-semibold text-rose-700 font-mono whitespace-pre-wrap">{formatLogValue(key, val)}</div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            <div className="bg-slate-100 px-6 py-3 border-t border-slate-200 flex justify-between items-center shrink-0">
+              <span className="text-xs font-mono font-bold text-slate-500">Deleted On: {formatDateHuman(selectedDeleteForModal.deleted_at)}</span>
+              <button 
+                onClick={() => setSelectedDeleteForModal(null)} 
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold uppercase transition-colors shadow-sm"
+              >
                 Close
               </button>
             </div>
@@ -969,12 +1092,12 @@ const EditedDeletedLogs: React.FC = () => {
         isOpen={showPrintPreview}
         onClose={() => setShowPrintPreview(false)}
         title="Audit Logs Report"
-        documentTitle={`AUDIT LOGS REPORT`}
+        documentTitle="AUDIT_LOGS_REPORT"
       >
         <div className="space-y-6 mt-6 text-[10px]">
           <div className="flex justify-between items-end border-b-2 border-slate-900 pb-2 mb-4">
             <div>
-              <p className="text-[12px] uppercase text-slate-700 font-bold">Audit Logs Registry</p>
+              <p className="text-[12px] uppercase text-slate-700 font-bold">Grouped Audit Logs Registry</p>
             </div>
           </div>
 
@@ -987,22 +1110,20 @@ const EditedDeletedLogs: React.FC = () => {
                   <th className="p-2 text-left border-r border-slate-300">Table</th>
                   <th className="p-2 text-left border-r border-slate-300">Loan No</th>
                   <th className="p-2 text-left border-r border-slate-300">Customer</th>
-                  <th className="p-2 text-left border-r border-slate-300">Field</th>
-                  <th className="p-2 text-left border-r border-slate-300">Old Value</th>
-                  <th className="p-2 text-left">New Value</th>
+                  <th className="p-2 text-left border-r border-slate-300">Changed Fields</th>
+                  <th className="p-2 text-left">Source</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredLogs.map((item) => (
+                {filteredEvents.map((item) => (
                   <tr key={item.id} className="border-b border-slate-200">
-                    <td className="p-2 border-r border-slate-300">{formatDateHuman(item.edited_at)}</td>
-                    <td className="p-2 border-r border-slate-300">{item.edited_by}</td>
-                    <td className="p-2 border-r border-slate-300">{mapTableName(item.table_name)}</td>
+                    <td className="p-2 border-r border-slate-300">{formatDateHuman(item.timestamp)}</td>
+                    <td className="p-2 border-r border-slate-300">{item.operator}</td>
+                    <td className="p-2 border-r border-slate-300">{mapTableName(item.tableName)}</td>
                     <td className="p-2 border-r border-slate-300">{item.displayLoanNo}</td>
                     <td className="p-2 border-r border-slate-300">{item.displayCustomer}</td>
-                    <td className="p-2 border-r border-slate-300">{mapFieldLabel(item.field)}</td>
-                    <td className="p-2 border-r border-slate-300">{formatLogValue(item.field, item.oldValue)}</td>
-                    <td className="p-2">{formatLogValue(item.field, item.newValue)}</td>
+                    <td className="p-2 border-r border-slate-300">{item.changedFields.map(f => f.fieldLabel).join(', ')}</td>
+                    <td className="p-2">{item.source}</td>
                   </tr>
                 ))}
               </tbody>

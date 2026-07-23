@@ -1,21 +1,23 @@
-import { sortNumerically } from '../../lib/financialCalculations';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseFinance, FinanceTransactionReview } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import Card from '../../components/UI/Card';
+import CustomCalendar from '../../components/UI/CustomCalendar';
 import { 
   Check, 
   Search, 
   RotateCcw, 
   FileCheck, 
   Loader2, 
-  User, 
   AlertCircle,
   Book,
   X,
-  Pencil,
-  Trash2
+  Trash2,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  Calendar
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -39,10 +41,138 @@ const TransactionApproval: React.FC = () => {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [filterOperator, setFilterOperator] = useState('ALL');
-  const [actionType, setActionType] = useState<'ALL' | 'EDIT' | 'DELETE'>('ALL');
+  const [actionType, setActionType] = useState<'ALL' | 'EDIT' | 'DELETE' | 'CREATE'>('ALL');
   const [filterLoanType, setFilterLoanType] = useState('ALL');
   const [filterAccountNo, setFilterAccountNo] = useState('');
   const [filterReceiptNo, setFilterReceiptNo] = useState('');
+
+  // Quick Transaction Date Navigation States & Popover Refs
+  const [selectedTxDate, setSelectedTxDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [showHeaderCalendar, setShowHeaderCalendar] = useState(false);
+  const [activityDates, setActivityDates] = useState<{ c_date: string }[]>([]);
+  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
+
+  const calendarRef = useRef<HTMLDivElement>(null);
+  const calendarButtonRef = useRef<HTMLButtonElement>(null);
+
+  const toggleCalendarPopover = () => {
+    if (!showHeaderCalendar && calendarButtonRef.current) {
+      const rect = calendarButtonRef.current.getBoundingClientRect();
+      const calendarWidth = 310;
+      const calendarHeight = 340;
+
+      // X placement: align right edge of popover to right edge of button
+      let left = rect.right - calendarWidth;
+      if (left < 16) left = 16;
+      if (left + calendarWidth > window.innerWidth - 16) {
+        left = window.innerWidth - calendarWidth - 16;
+      }
+
+      // Y placement: open below button, or open above if bottom exceeds viewport
+      let top = rect.bottom + 8;
+      if (top + calendarHeight > window.innerHeight - 16) {
+        top = rect.top - calendarHeight - 8;
+        if (top < 16) top = 16;
+      }
+
+      setPopoverStyle({
+        position: 'fixed',
+        top: `${top}px`,
+        left: `${left}px`,
+        zIndex: 99999,
+      });
+    }
+    setShowHeaderCalendar((prev) => !prev);
+  };
+
+  // Close calendar popover on Click Outside or ESC key
+  useEffect(() => {
+    if (!showHeaderCalendar) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        calendarRef.current &&
+        !calendarRef.current.contains(event.target as Node) &&
+        calendarButtonRef.current &&
+        !calendarButtonRef.current.contains(event.target as Node)
+      ) {
+        setShowHeaderCalendar(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowHeaderCalendar(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showHeaderCalendar]);
+
+  const fetchActivityDates = async () => {
+    try {
+      const dates = await supabaseFinance.getAllTransactionReviewDates();
+      setActivityDates(dates || []);
+    } catch (err) {
+      console.error('Error loading review activity dates:', err);
+    }
+  };
+
+  const handleTodayTxDate = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    setSelectedTxDate(todayStr);
+    setFromDate(todayStr);
+    setToDate(todayStr);
+  };
+
+  const handlePrevTxDate = () => {
+    const sorted = Array.from(new Set(activityDates.map((a) => a.c_date))).sort();
+    const earlier = sorted.filter((d) => d < selectedTxDate);
+    if (earlier.length > 0) {
+      const target = earlier[earlier.length - 1];
+      setSelectedTxDate(target);
+      setFromDate(target);
+      setToDate(target);
+    } else {
+      const d = new Date(selectedTxDate);
+      d.setDate(d.getDate() - 1);
+      const prevStr = format(d, 'yyyy-MM-dd');
+      setSelectedTxDate(prevStr);
+      setFromDate(prevStr);
+      setToDate(prevStr);
+    }
+  };
+
+  const handleNextTxDate = () => {
+    const sorted = Array.from(new Set(activityDates.map((a) => a.c_date))).sort();
+    const later = sorted.filter((d) => d > selectedTxDate);
+    if (later.length > 0) {
+      const target = later[0];
+      setSelectedTxDate(target);
+      setFromDate(target);
+      setToDate(target);
+    } else {
+      const d = new Date(selectedTxDate);
+      d.setDate(d.getDate() + 1);
+      const nextStr = format(d, 'yyyy-MM-dd');
+      setSelectedTxDate(nextStr);
+      setFromDate(nextStr);
+      setToDate(nextStr);
+    }
+  };
+
+  const handleSelectCalendarDate = (dateStr: string) => {
+    setSelectedTxDate(dateStr);
+    setFromDate(dateStr);
+    setToDate(dateStr);
+    setShowHeaderCalendar(false);
+  };
 
   // Operators List & Summary Counts States
   const [operators, setOperators] = useState<string[]>([]);
@@ -56,8 +186,7 @@ const TransactionApproval: React.FC = () => {
   const fetchOperators = async () => {
     try {
       const { data, error } = await supabase
-        .schema('finance')
-        .from('transaction_reviews')
+        .from('finance_transaction_reviews')
         .select('entered_by');
       if (error) throw error;
       const uniqueOps = Array.from(new Set((data || []).map(r => r.entered_by).filter(Boolean)));
@@ -73,8 +202,7 @@ const TransactionApproval: React.FC = () => {
       todayStart.setHours(0, 0, 0, 0);
 
       const { data, error } = await supabase
-        .schema('finance')
-        .from('transaction_reviews')
+        .from('finance_transaction_reviews')
         .select('review_status, action_type, approved_at');
 
       if (error) throw error;
@@ -127,10 +255,14 @@ const TransactionApproval: React.FC = () => {
     }
   };
 
+  const [oldestDate, setOldestDate] = useState('2020-01-01');
+
   useEffect(() => {
     const initDates = async () => {
       const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
-      setFromDate(oldest || '2020-01-01');
+      const initialOldest = oldest || '2020-01-01';
+      setOldestDate(initialOldest);
+      setFromDate(initialOldest);
       setToDate(new Date().toISOString().split('T')[0]);
     };
     initDates();
@@ -146,6 +278,7 @@ const TransactionApproval: React.FC = () => {
     fetchReviews();
     fetchOperators();
     fetchSummaryCounts();
+    fetchActivityDates();
   }, [statusFilter, fromDate, toDate, filterOperator, actionType, filterLoanType]);
 
   const handleApplyFilters = (e: React.FormEvent) => {
@@ -154,15 +287,14 @@ const TransactionApproval: React.FC = () => {
   };
 
   const handleResetFilters = () => {
-    setFromDate('');
-    setToDate('');
+    setFromDate(oldestDate);
+    setToDate(new Date().toISOString().split('T')[0]);
     setFilterOperator('ALL');
     setActionType('ALL');
     setStatusFilter('PENDING');
     setFilterLoanType('ALL');
     setFilterAccountNo('');
     setFilterReceiptNo('');
-    fetchReviews();
   };
 
   const [expandedReviewIds, setExpandedReviewIds] = useState<Set<string>>(new Set());
@@ -322,40 +454,195 @@ const TransactionApproval: React.FC = () => {
     });
   };
 
+  const formatCompactCurrency = (val: number | undefined) => {
+    if (val === undefined || val === 0) return '₹0';
+    const hasDecimals = val % 1 !== 0;
+    return `₹${val.toLocaleString('en-IN', {
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+      maximumFractionDigits: hasDecimals ? 2 : 0,
+    })}`;
+  };
+
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto font-outfit select-none">
-           {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-        <div>
-          <span className="text-slate-500 finance-caption uppercase">ADMIN PANEL</span>
-          <h1 className="mt-1 finance-h1 text-[#0f172a] flex items-center gap-2">
-            <FileCheck className="w-7 h-7 text-[#0f172a]" />
-            TRANSACTION APPROVALS
-          </h1>
-          <p className="text-slate-400 finance-small-label uppercase mt-0.5">
-            Verify and approve operator-entered financial transactions
-          </p>
+           {/* Header with Inline Quick Transaction Date Navigation */}
+      <div>
+        <span className="text-slate-500 finance-caption uppercase">ADMIN PANEL</span>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mt-1">
+          <div className="flex flex-wrap items-center gap-4">
+            <h1 className="finance-h1 text-[#0f172a] flex items-center gap-2">
+              <FileCheck className="w-7 h-7 text-[#0f172a]" />
+              TRANSACTION APPROVALS
+            </h1>
+
+            {/* Quick Transaction Date Navigator (Inline beside Title) */}
+            <div className="flex items-center gap-1.5 relative">
+              {/* TODAY Button */}
+              <button
+                type="button"
+                onClick={handleTodayTxDate}
+                className="px-3 h-9 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs uppercase rounded-lg shadow-sm transition-colors cursor-pointer"
+              >
+                TODAY
+              </button>
+
+              {/* PREVIOUS DAY Button (<) */}
+              <button
+                type="button"
+                onClick={handlePrevTxDate}
+                title="Previous Day"
+                className="w-9 h-9 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-lg flex items-center justify-center shadow-2xs transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              {/* NEXT DAY Button (>) */}
+              <button
+                type="button"
+                onClick={handleNextTxDate}
+                title="Next Day"
+                className="w-9 h-9 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-lg flex items-center justify-center shadow-2xs transition-colors cursor-pointer"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              {/* CALENDAR DISPLAY Button (📅 23/07/2026) */}
+              <button
+                ref={calendarButtonRef}
+                type="button"
+                onClick={toggleCalendarPopover}
+                className="px-3 h-9 bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-extrabold text-xs font-mono rounded-lg flex items-center gap-2 shadow-2xs transition-colors cursor-pointer"
+              >
+                <Calendar className="w-4 h-4 text-indigo-600" />
+                <span>{format(new Date(selectedTxDate), 'dd/MM/yyyy')}</span>
+              </button>
+
+              {/* CustomCalendar Floating Popover (Fixed Overlay) */}
+              {showHeaderCalendar && (
+                <div
+                  ref={calendarRef}
+                  style={popoverStyle}
+                  className="animate-in fade-in zoom-in-95 duration-150 drop-shadow-2xl"
+                >
+                  <CustomCalendar
+                    className="relative z-50 shadow-2xl rounded-xl"
+                    selectedDate={selectedTxDate}
+                    onDateSelect={handleSelectCalendarDate}
+                    onClose={() => setShowHeaderCalendar(false)}
+                    entries={activityDates}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
+        <p className="text-slate-400 finance-small-label uppercase mt-1">
+          Verify and approve operator-entered financial transactions
+        </p>
       </div>
 
-      {/* Summary Cards */}
+      {/* Summary Cards (Interactive Quick Filters) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 shadow-sm flex flex-col justify-between">
-          <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Pending</span>
-          <span className="text-2xl font-black text-amber-800 mt-2">{summaryCounts.pending}</span>
-        </div>
-        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 shadow-sm flex flex-col justify-between">
-          <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Edit Pending</span>
-          <span className="text-2xl font-black text-blue-800 mt-2">{summaryCounts.editPending}</span>
-        </div>
-        <div className="bg-rose-50 border border-rose-100 rounded-xl p-4 shadow-sm flex flex-col justify-between">
-          <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Delete Pending</span>
-          <span className="text-2xl font-black text-rose-800 mt-2">{summaryCounts.deletePending}</span>
-        </div>
-        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 shadow-sm flex flex-col justify-between">
-          <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Approved Today</span>
-          <span className="text-2xl font-black text-emerald-800 mt-2">{summaryCounts.approvedToday}</span>
-        </div>
+        {/* Total Pending Card */}
+        <button
+          type="button"
+          onClick={() => {
+            setStatusFilter('PENDING');
+            setActionType('ALL');
+            setFilterOperator('ALL');
+            setFromDate(oldestDate);
+            setToDate(new Date().toISOString().split('T')[0]);
+          }}
+          className={`text-left rounded-xl p-4 transition-all duration-150 cursor-pointer shadow-sm border ${
+            statusFilter === 'PENDING' && actionType === 'ALL'
+              ? 'bg-amber-100/90 border-amber-400 ring-2 ring-amber-500 shadow-md scale-[1.01]'
+              : 'bg-amber-50/70 border-amber-100 hover:bg-amber-100/50 hover:border-amber-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-slate-600 text-xs font-bold uppercase tracking-wider">Total Pending</span>
+            {statusFilter === 'PENDING' && actionType === 'ALL' && (
+              <span className="text-[10px] font-extrabold bg-amber-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wide">ACTIVE</span>
+            )}
+          </div>
+          <span className="text-2xl font-black text-amber-900 mt-2 block">{summaryCounts.pending}</span>
+        </button>
+
+        {/* Edit Pending Card */}
+        <button
+          type="button"
+          onClick={() => {
+            setStatusFilter('PENDING');
+            setActionType('EDIT');
+            setFilterOperator('ALL');
+            setFromDate(oldestDate);
+            setToDate(new Date().toISOString().split('T')[0]);
+          }}
+          className={`text-left rounded-xl p-4 transition-all duration-150 cursor-pointer shadow-sm border ${
+            statusFilter === 'PENDING' && actionType === 'EDIT'
+              ? 'bg-blue-100/90 border-blue-400 ring-2 ring-blue-500 shadow-md scale-[1.01]'
+              : 'bg-blue-50/70 border-blue-100 hover:bg-blue-100/50 hover:border-blue-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-slate-600 text-xs font-bold uppercase tracking-wider">Edit Pending</span>
+            {statusFilter === 'PENDING' && actionType === 'EDIT' && (
+              <span className="text-[10px] font-extrabold bg-blue-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wide">ACTIVE</span>
+            )}
+          </div>
+          <span className="text-2xl font-black text-blue-900 mt-2 block">{summaryCounts.editPending}</span>
+        </button>
+
+        {/* Delete Pending Card */}
+        <button
+          type="button"
+          onClick={() => {
+            setStatusFilter('PENDING');
+            setActionType('DELETE');
+            setFilterOperator('ALL');
+            setFromDate(oldestDate);
+            setToDate(new Date().toISOString().split('T')[0]);
+          }}
+          className={`text-left rounded-xl p-4 transition-all duration-150 cursor-pointer shadow-sm border ${
+            statusFilter === 'PENDING' && actionType === 'DELETE'
+              ? 'bg-rose-100/90 border-rose-400 ring-2 ring-rose-500 shadow-md scale-[1.01]'
+              : 'bg-rose-50/70 border-rose-100 hover:bg-rose-100/50 hover:border-rose-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-slate-600 text-xs font-bold uppercase tracking-wider">Delete Pending</span>
+            {statusFilter === 'PENDING' && actionType === 'DELETE' && (
+              <span className="text-[10px] font-extrabold bg-rose-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wide">ACTIVE</span>
+            )}
+          </div>
+          <span className="text-2xl font-black text-rose-900 mt-2 block">{summaryCounts.deletePending}</span>
+        </button>
+
+        {/* Approved Today Card */}
+        <button
+          type="button"
+          onClick={() => {
+            const todayStr = new Date().toISOString().split('T')[0];
+            setStatusFilter('APPROVED');
+            setActionType('ALL');
+            setFilterOperator('ALL');
+            setFromDate(todayStr);
+            setToDate(todayStr);
+          }}
+          className={`text-left rounded-xl p-4 transition-all duration-150 cursor-pointer shadow-sm border ${
+            statusFilter === 'APPROVED'
+              ? 'bg-emerald-100/90 border-emerald-400 ring-2 ring-emerald-500 shadow-md scale-[1.01]'
+              : 'bg-emerald-50/70 border-emerald-100 hover:bg-emerald-100/50 hover:border-emerald-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-slate-600 text-xs font-bold uppercase tracking-wider">Approved Today</span>
+            {statusFilter === 'APPROVED' && (
+              <span className="text-[10px] font-extrabold bg-emerald-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wide">ACTIVE</span>
+            )}
+          </div>
+          <span className="text-2xl font-black text-emerald-900 mt-2 block">{summaryCounts.approvedToday}</span>
+        </button>
       </div>
 
       {/* Filter Section */}
@@ -408,6 +695,7 @@ const TransactionApproval: React.FC = () => {
               className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
             >
               <option value="ALL">ALL</option>
+              <option value="CREATE">CREATE</option>
               <option value="EDIT">EDIT</option>
               <option value="DELETE">DELETE</option>
             </select>
@@ -465,7 +753,7 @@ const TransactionApproval: React.FC = () => {
             <span className="text-sm font-bold text-indigo-900 uppercase tracking-wide">
               {selectedReviewIds.size > 0 
                 ? `${selectedReviewIds.size} Selected` 
-                : `${reviews.filter(r => r.review_status === 'PENDING').length} Pending Matches`}
+                : `Showing ${reviews.filter(r => r.review_status === 'PENDING').length} Pending Transactions`}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -525,219 +813,215 @@ const TransactionApproval: React.FC = () => {
             </div>
             <div>
               <h3 className="font-bold text-slate-800 text-lg uppercase tracking-wide">No Transactions Found</h3>
-              <p className="text-slate-400 text-sm max-w-sm mt-1">
-                There are no transaction records matching the current filters and approval status tab.
+              <p className="text-slate-500 text-sm max-w-sm mt-1 font-medium">
+                No transaction approvals found for {fromDate === toDate && fromDate ? format(new Date(fromDate), 'dd/MM/yyyy') : 'the selected date'}.
               </p>
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-150 text-slate-500 font-bold uppercase finance-small-label">
-                  {statusFilter === 'PENDING' && <th className="px-6 py-4 text-left w-12"></th>}
-                  <th className="px-6 py-4 text-left tracking-wider">Date & Ref</th>
-                  <th className="px-6 py-4 text-left tracking-wider">Transaction Details</th>
-                  <th className="px-6 py-4 text-left tracking-wider">Source Type</th>
-                  <th className="px-6 py-4 text-right tracking-wider">Amount Breakdown</th>
-                  <th className="px-6 py-4 text-left tracking-wider">Entered By</th>
-                  <th className="px-6 py-4 text-center tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-center tracking-wider min-w-[200px]">Actions</th>
+          <div className="w-full border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden">
+            <table className="w-full text-left border-collapse table-fixed text-xs">
+              <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[11px]">
+                <tr>
+                  {statusFilter === 'PENDING' && (
+                    <th className="w-10 px-2 py-2.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={
+                          selectedReviewIds.size === reviews.filter(r => r.review_status === 'PENDING').length &&
+                          reviews.filter(r => r.review_status === 'PENDING').length > 0
+                        }
+                        onChange={handleSelectAll}
+                        className="h-4.5 w-4.5 text-indigo-600 focus:ring-indigo-500 border-slate-300 rounded cursor-pointer"
+                      />
+                    </th>
+                  )}
+                  <th className="w-10 px-2 py-2.5 text-center">#</th>
+                  <th className="px-3 py-2.5">Transaction Details</th>
+                  <th className="w-32 px-3 py-2.5 text-right">Amount</th>
+                  <th className="w-28 px-3 py-2.5">Entered By</th>
+                  <th className="w-28 px-2 py-2.5 text-center">Status</th>
+                  <th className="w-64 px-3 py-2.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {reviews.map((item) => {
-                  const hasSplits = (item.penalty_amount || 0) > 0 || (item.interest_amount || 0) > 0 || (item.principal_amount || 0) > 0;
+                {reviews.map((item, index) => {
                   const isExpanded = expandedReviewIds.has(item.id);
                   const details = reviewDetails[item.id] || [];
                   const isDetailsLoading = loadingDetails[item.id];
                   
-                  const loanCategory = (item as any).finance_loans?.loan_category || '';
                   const customerName = (item as any).finance_loans?.customer?.name || 'Manual Daybook Entry';
+                  const refNo = item.receipt_number || (item as any).finance_loans?.loan_id || (item.loan_id ? `ID:${item.loan_id}` : 'RC2258');
 
                   return (
                     <React.Fragment key={item.id}>
-                       <tr className={`transition-colors ${selectedReviewIds.has(item.id) ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`}>
-                        
+                      <tr
+                        onClick={() => toggleExpandReview(item.id)}
+                        title="Click row to expand/collapse details"
+                        className={`transition-colors cursor-pointer select-none even:bg-slate-50/50 odd:bg-white hover:bg-slate-100/90 ${
+                          selectedReviewIds.has(item.id) ? '!bg-indigo-50/90' : ''
+                        }`}
+                      >
                         {/* Checkbox */}
                         {statusFilter === 'PENDING' && (
-                          <td className="px-6 py-4">
-                            <button
-                              onClick={() => handleSelectToggle(item.id)}
-                              className="w-5 h-5 rounded border border-slate-300 flex items-center justify-center bg-white text-indigo-600 focus:outline-none transition-all hover:border-indigo-400"
-                            >
-                              {selectedReviewIds.has(item.id) && <Check className="w-3.5 h-3.5 font-bold" />}
-                            </button>
+                          <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedReviewIds.has(item.id)}
+                              onChange={() => handleSelectToggle(item.id)}
+                              className="h-4.5 w-4.5 text-indigo-600 focus:ring-indigo-500 border-slate-300 rounded cursor-pointer"
+                            />
                           </td>
                         )}
 
-                        {/* Date & Ref */}
-                        <td className="px-6 py-4">
-                          <div className="font-bold text-slate-800 finance-header-time">
-                            {format(new Date(item.transaction_date), 'dd MMM yyyy')}
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-semibold tracking-wider mt-0.5">
-                            RC: {item.receipt_number || 'N/A'}
-                          </div>
+                        {/* S.No */}
+                        <td className="px-2 py-3 text-center font-mono font-black text-slate-900 text-sm">
+                          {index + 1}
                         </td>
 
-                        {/* Transaction Details */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                              item.action_type === 'EDIT'
-                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                : item.action_type === 'DELETE'
-                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                                : 'bg-green-100 text-green-800 border border-green-200'
-                            }`}>
-                              {item.action_type || 'CREATE'}
+                        {/* Transaction Details Hierarchy */}
+                        <td className="px-3 py-2.5">
+                          <div className="flex flex-col min-w-0">
+                            {/* Primary (Bold Ref / CD) */}
+                            <span className="text-sm font-black font-mono text-blue-700 tracking-tight uppercase">
+                              {refNo}
                             </span>
-                            <div className="font-bold text-slate-850 finance-input">
-                              {item.transaction_type.toUpperCase()}
+                            {/* Secondary (Customer / Entry Name) */}
+                            <span className="text-xs font-bold text-slate-900 uppercase truncate mt-0.5">
+                              {customerName}
+                            </span>
+                            {/* Muted Text + Prominent Bold Date */}
+                            <div className="text-xs font-medium text-slate-600 truncate mt-0.5 flex items-center gap-1">
+                              <span>{item.transaction_type}</span>
+                              <span className="text-slate-400 font-bold">•</span>
+                              <span className="text-xs font-black text-slate-900 font-mono tracking-tight">
+                                {format(new Date(item.transaction_date), 'dd-MMM-yyyy')}
+                              </span>
                             </div>
                           </div>
-                          <div className="text-slate-400 text-xs font-bold mt-0.5">
-                            {item.loan_id ? (
-                              <span className="space-x-1.5">
-                                <span className="text-slate-700">{(item as any).finance_loans?.loan_id}</span>
-                                <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[10px]">{loanCategory}</span>
-                                <span className="text-slate-900 font-black">{customerName}</span>
-                              </span>
-                            ) : (
-                              <span className="text-slate-500 italic">Daybook Account Entry</span>
-                            )}
-                          </div>
                         </td>
 
-                        {/* Source Type */}
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                            item.source_type === 'Loan Payment' 
-                              ? 'bg-blue-50 text-blue-600 border border-blue-100'
-                              : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
-                          }`}>
-                            {item.source_type}
+                        {/* Amount */}
+                        <td className="px-3 py-2.5 text-right font-mono">
+                          <span className="text-sm font-black text-slate-900">
+                            {formatCompactCurrency(item.amount)}
                           </span>
                         </td>
 
-                        {/* Amount Breakdown */}
-                        <td className="px-6 py-4 text-right">
-                          <div className="font-bold text-slate-900 text-sm finance-header-time">
-                            {formatCurrency(item.amount)}
-                          </div>
-                          {hasSplits && (
-                            <div className="text-[10px] text-slate-400 font-semibold space-x-1.5 mt-0.5">
-                              {item.principal_amount ? <span>P: {formatCurrency(item.principal_amount)}</span> : null}
-                              {item.interest_amount ? <span>I: {formatCurrency(item.interest_amount)}</span> : null}
-                              {item.penalty_amount ? <span>Pen: {formatCurrency(item.penalty_amount)}</span> : null}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Entered By */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-1.5 text-slate-650 finance-caption">
-                            <User className="w-3.5 h-3.5 text-slate-400" />
-                            <span className="font-semibold">{item.entered_by.toUpperCase()}</span>
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-medium mt-0.5">
-                            {format(new Date(item.entered_at), 'hh:mm a')}
+                        {/* Operator & Prominent Time */}
+                        <td className="px-3 py-2.5 font-mono">
+                          <div className="flex flex-col leading-tight">
+                            <span className="font-bold text-slate-800 text-xs uppercase truncate">
+                              {item.entered_by.toUpperCase()}
+                            </span>
+                            <span className="text-xs font-black text-indigo-700 font-mono mt-0.5 uppercase">
+                              {format(new Date(item.entered_at), 'hh:mm a')}
+                            </span>
                           </div>
                         </td>
 
-                        {/* Status */}
-                        <td className="px-6 py-4 text-center">
+                        {/* Status Pill */}
+                        <td className="px-2 py-2.5 text-center">
                           {item.review_status === 'APPROVED' ? (
-                            <div className="inline-flex flex-col items-center">
-                              <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase">
-                                <Check className="w-3.5 h-3.5" />
-                                Approved
-                              </span>
-                              {item.approved_by && (
-                                <span className="text-[9px] text-slate-400 font-medium mt-1 uppercase">
-                                  By {item.approved_by}
-                                </span>
-                              )}
-                            </div>
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs uppercase">
+                              Approved
+                            </span>
                           ) : item.review_status === 'REJECTED' ? (
-                            <div className="inline-flex flex-col items-center">
-                              <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase">
-                                <X className="w-3.5 h-3.5" />
-                                Rejected
-                              </span>
-                              {item.approved_by && (
-                                <span className="text-[9px] text-slate-400 font-medium mt-1 uppercase">
-                                  By {item.approved_by}
-                                </span>
-                              )}
-                            </div>
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 shadow-2xs uppercase">
+                              Rejected
+                            </span>
                           ) : (
-                            <span className="bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 shadow-2xs uppercase">
                               Pending
                             </span>
                           )}
                         </td>
 
-                        {/* Actions */}
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5 flex-nowrap">
+                        {/* Actions (Order: View -> Approve -> Delete) */}
+                        <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-2">
+                            {/* 1. VIEW Button */}
                             <button
                               onClick={() => toggleExpandReview(item.id)}
-                              className="text-indigo-600 hover:text-indigo-850 text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-150 transition-all focus:outline-none whitespace-nowrap"
+                              title={isExpanded ? 'Hide Details' : 'View Details'}
+                              className={`min-h-[36px] px-3 font-bold text-xs rounded-lg inline-flex items-center gap-1.5 transition-colors uppercase border cursor-pointer ${
+                                isExpanded
+                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300/80'
+                              }`}
                             >
-                              {isExpanded ? 'Hide Details' : 'View Details'}
+                              <Eye className="w-3.5 h-3.5" />
+                              View
                             </button>
-                            {item.review_status === 'PENDING' ? (
+
+                            {item.review_status === 'PENDING' && (
                               <>
+                                {/* 2. APPROVE Button */}
                                 <button
                                   onClick={() => handleApprove(item.id)}
                                   disabled={actioningId === item.id}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] tracking-wide uppercase px-2 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-all disabled:opacity-50 whitespace-nowrap"
+                                  title="Approve Transaction"
+                                  className="min-h-[36px] px-3 font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg inline-flex items-center gap-1.5 shadow-sm transition-colors uppercase disabled:opacity-50 cursor-pointer"
                                 >
                                   {actioningId === item.id ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                   ) : (
-                                    <Check className="w-3 h-3" />
+                                    <Check className="w-3.5 h-3.5" />
                                   )}
                                   Approve
                                 </button>
-                                <button
-                                  onClick={() => toast('Edit functionality is currently unavailable.', { icon: '🚧' })}
-                                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] tracking-wide uppercase px-2 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-all disabled:opacity-50 whitespace-nowrap"
-                                >
-                                  <Pencil className="w-3 h-3" />
-                                  Edit
-                                </button>
+
+                                {/* 3. DELETE Button */}
                                 <button
                                   onClick={() => handleReject(item.id)}
                                   disabled={actioningId === item.id}
-                                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] tracking-wide uppercase px-2 py-1.5 rounded-lg flex items-center justify-center gap-1 shadow-sm transition-all disabled:opacity-50 whitespace-nowrap"
+                                  title="Delete / Reject Transaction"
+                                  className="min-h-[36px] px-3 font-bold text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-lg inline-flex items-center gap-1.5 shadow-sm transition-colors uppercase disabled:opacity-50 cursor-pointer"
                                 >
                                   {actioningId === item.id ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                   ) : (
-                                    <Trash2 className="w-3 h-3" />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   )}
                                   Delete
                                 </button>
                               </>
-                            ) : (
-                              <span className="text-slate-350 text-[10px] font-bold uppercase tracking-wider px-2 py-1 whitespace-nowrap">Closed</span>
                             )}
                           </div>
                         </td>
-
                       </tr>
 
                       {/* View Details Sub-table */}
                       {isExpanded && (
-                        <tr className="bg-slate-50/50">
-                          <td colSpan={7} className="px-8 py-4 border-b border-slate-200">
+                        <tr className="bg-slate-50/80">
+                          <td colSpan={statusFilter === 'PENDING' ? 7 : 6} className="px-5 py-4 border-b border-slate-200">
                             <div className="space-y-3">
+                              {/* Financial Amount Breakdown Banner */}
+                              <div className="bg-white p-3.5 border border-slate-200 rounded-xl shadow-2xs text-xs font-mono">
+                                <h5 className="font-bold text-slate-800 uppercase text-[11px] tracking-wider mb-2">Financial Breakdown</h5>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-slate-700">
+                                  <div>
+                                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Total Amount</span>
+                                    <span className="font-black text-slate-900 text-sm">{formatCompactCurrency(item.amount)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Principal</span>
+                                    <span className="font-bold text-slate-800">{formatCompactCurrency(item.principal_amount || 0)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Interest</span>
+                                    <span className="font-bold text-amber-700">{formatCompactCurrency(item.interest_amount || 0)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Penalty</span>
+                                    <span className="font-bold text-rose-700">{formatCompactCurrency(item.penalty_amount || 0)}</span>
+                                  </div>
+                                </div>
+                              </div>
+
                               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                                 <Book className="w-4 h-4 text-indigo-500" />
-                                Generated Ledger / Cashbook Journal Entries Splits
+                                Ledger / Cashbook Journal Entries Splits
                               </h4>
                               {isDetailsLoading ? (
                                 <div className="flex items-center gap-2 py-4 justify-center text-slate-400">

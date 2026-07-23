@@ -220,7 +220,7 @@ const ProfitAndLoss: React.FC = () => {
   const totalIncome = useMemo(() => incomeHeads.reduce((sum, item) => sum + item.amount, 0), [incomeHeads]);
   const totalExpenses = useMemo(() => expenseHeads.reduce((sum, item) => sum + item.amount, 0), [expenseHeads]);
   const totalProfit = totalIncome - totalExpenses;
-  const shareValue = totalProfit / partnerCount;
+  const shareValue = partnerCount > 0 ? totalProfit / partnerCount : totalProfit;
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto p-6 print:p-0">

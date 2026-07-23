@@ -20,6 +20,7 @@ interface CustomCalendarProps {
   dotColor?: 'green' | 'red' | 'dark-red';
   tooltipLabel?: string;
   onMonthChange?: (month: number, year: number) => void;
+  className?: string;
 }
 
 const CustomCalendar = ({
@@ -30,6 +31,7 @@ const CustomCalendar = ({
   dotColor = 'red',
   tooltipLabel,
   onMonthChange,
+  className,
 }: CustomCalendarProps) => {
   const { mode: tableMode } = useTableMode();
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -178,7 +180,7 @@ const CustomCalendar = ({
   }, []);
 
   return (
-    <div className="CustomCalendar absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 p-4 min-w-[280px]">
+    <div className={`CustomCalendar bg-white border border-gray-300 rounded-lg shadow-lg p-4 min-w-[280px] ${className !== undefined ? className : 'absolute top-full left-0 mt-1 z-50'}`}>
       <div className="flex items-center justify-between mb-4 gap-1">
         <button
           onClick={() => navigateMonth('prev')}

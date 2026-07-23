@@ -120,7 +120,7 @@ const Customers: React.FC = () => {
         .limit(1);
 
       const lastUpdatedStr = lastLog && lastLog[0] 
-        ? new Date(lastLog[0].edited_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        ? new Date(lastLog[0].edited_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
         : '—';
 
       setStats({

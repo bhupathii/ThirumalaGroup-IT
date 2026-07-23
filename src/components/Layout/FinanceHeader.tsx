@@ -57,7 +57,7 @@ const FinanceHeader: React.FC = () => {
         {/* Date and dynamic clock */}
         <div className="text-right hidden sm:block">
           <p className="text-slate-400 tracking-[0.16px] finance-header-time">
-            {format(time, 'dd MMM yyyy, HH:mm').toUpperCase()}
+            {format(time, 'dd MMM yyyy, hh:mm a').toUpperCase()}
           </p>
         </div>
 

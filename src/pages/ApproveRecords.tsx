@@ -14,16 +14,16 @@ import { getTableName } from '../lib/tableNames';
 import { getSharedPrintStyles } from '../utils/print';
 import { useBook } from '../contexts/BookContext';
 import {
-  FileText,
-  Users,
   CheckCircle,
-  X,
   AlertCircle,
   Trash2,
   Clock,
   AlertTriangle,
-  RefreshCw,
   Calendar,
+  Eye,
+  Check,
+  Edit3,
+  Filter,
 } from 'lucide-react';
 
 interface ApprovalFilters {
@@ -79,6 +79,22 @@ const ApproveRecords: React.FC = () => {
     return `${day}/${month}/${year}`;
   };
 
+  // Quick filter modes for dynamic KPI cards: 'total_pending' | 'edit_pending' | 'delete_pending' | 'approved_today'
+  const [quickFilter, setQuickFilter] = useState<'total_pending' | 'edit_pending' | 'delete_pending' | 'approved_today'>('total_pending');
+
+  const formatCompactCurrency = (amount: number | string | null | undefined): string => {
+    if (amount === null || amount === undefined || amount === '') return '₹0';
+    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (isNaN(num) || num === 0) return '₹0';
+    const hasDecimals = num % 1 !== 0;
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: hasDecimals ? 2 : 0,
+      minimumFractionDigits: 0,
+    }).format(num);
+  };
+
   const [allPendingEntries, setAllPendingEntries] = useState<any[]>([]);
   const [approvedEntries, setApprovedEntries] = useState<any[]>([]);
   const [filteredEntries, setFilteredEntries] = useState<any[]>([]);
@@ -98,6 +114,11 @@ const ApproveRecords: React.FC = () => {
   const [viewEditing, setViewEditing] = useState(false);
   const [viewDraft, setViewDraft] = useState<any | null>(null);
   const [showCalendar, setShowCalendar] = useState(false);
+
+  // Reset page when quickFilter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [quickFilter]);
 
   // Derive unique sorted dates containing pending records
   const pendingDates = useMemo(() => {
@@ -541,8 +562,8 @@ const ApproveRecords: React.FC = () => {
   };
 
   const handleSelectAll = () => {
-    const currentPageEntries = getCurrentPageEntries();
-    const allSelected = currentPageEntries.every(entry =>
+    const currentPageEntries = getCurrentActivePageEntries();
+    const allSelected = currentPageEntries.every((entry: any) =>
       selectedEntries.has(entry.id)
     );
 
@@ -550,10 +571,10 @@ const ApproveRecords: React.FC = () => {
 
     if (allSelected) {
       // Deselect all on current page
-      currentPageEntries.forEach(entry => newSelected.delete(entry.id));
+      currentPageEntries.forEach((entry: any) => newSelected.delete(entry.id));
     } else {
       // Select all on current page
-      currentPageEntries.forEach(entry => newSelected.add(entry.id));
+      currentPageEntries.forEach((entry: any) => newSelected.add(entry.id));
     }
 
     setSelectedEntries(newSelected);
@@ -631,6 +652,41 @@ const ApproveRecords: React.FC = () => {
     } catch (error) {
       console.error('Error cancelling approval:', error);
       toast.error('Error cancelling approval');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteEntry = async (entry: any) => {
+    if (currentBook?.is_locked) {
+      toast.error('This Book is Locked (Read Only). Writing/Editing/Deletion is blocked.');
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to delete transaction #${entry.sno || ''} (${entry.company_name || ''} - ${formatCompactCurrency(entry.credit || entry.debit || 0)})?`)) {
+      return;
+    }
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from(getTableName('cash_book'))
+        .delete()
+        .eq('id', entry.id);
+
+      if (error) {
+        console.error('Error deleting record:', error);
+        toast.error('Failed to delete record');
+        return;
+      }
+
+      toast.success('Record deleted successfully!');
+      setAllPendingEntries(prev => prev.filter(e => e.id !== entry.id));
+      await loadEntries();
+      
+      localStorage.setItem('dashboard-refresh', Date.now().toString());
+      window.dispatchEvent(new CustomEvent('dashboard-refresh'));
+    } catch (err) {
+      console.error('Error deleting record:', err);
+      toast.error('Error deleting record');
     } finally {
       setLoading(false);
     }
@@ -1203,7 +1259,7 @@ const ApproveRecords: React.FC = () => {
         return;
       }
 
-      const currentPageEntries = getCurrentPageEntries();
+      const currentPageEntries = getCurrentActivePageEntries();
       const title = `Approve Records - ${filters.date}`;
 
       const printContent = `
@@ -1257,7 +1313,7 @@ const ApproveRecords: React.FC = () => {
               <tbody>
                 ${currentPageEntries
                   .map(
-                    (entry, index) => `
+                    (entry: any, index: number) => `
                   <tr class="${entry.approved ? 'approved' : 'pending'}">
                     <td class="col-sno text-center">${index + 1}</td>
                     <td class="col-date">${format(new Date(entry.c_date), 'dd/MM/yyyy')}</td>
@@ -1409,16 +1465,30 @@ const ApproveRecords: React.FC = () => {
     window.close();
   };
 
-  const getCurrentPageEntries = () => {
-    const startIndex = (currentPage - 1) * recordsPerPage;
-    const endIndex = startIndex + recordsPerPage;
-    return filteredEntries.slice(startIndex, endIndex);
-  };
+  const editPendingCount = useMemo(() => {
+    return filteredEntries.filter(e => e.edited === true || e.edited === 'true').length;
+  }, [filteredEntries]);
 
-  const getApprovedPageEntries = () => {
-    const startIndex = (approvedPage - 1) * recordsPerPage;
-    const endIndex = startIndex + recordsPerPage;
-    return filteredApprovedEntries.slice(startIndex, endIndex);
+  const activeTableEntries = useMemo(() => {
+    if (quickFilter === 'edit_pending') {
+      return filteredEntries.filter(e => e.edited === true || e.edited === 'true');
+    }
+    if (quickFilter === 'delete_pending') {
+      return filteredDeletedEntries;
+    }
+    if (quickFilter === 'approved_today') {
+      return filteredApprovedEntries;
+    }
+    return filteredEntries;
+  }, [quickFilter, filteredEntries, filteredDeletedEntries, filteredApprovedEntries]);
+
+  const activeTotalPages = useMemo(() => {
+    return Math.ceil(activeTableEntries.length / recordsPerPage) || 1;
+  }, [activeTableEntries, recordsPerPage]);
+
+  const getCurrentActivePageEntries = () => {
+    const startIndex = (currentPage - 1) * recordsPerPage;
+    return activeTableEntries.slice(startIndex, startIndex + recordsPerPage);
   };
 
 
@@ -1683,722 +1753,454 @@ const ApproveRecords: React.FC = () => {
         </div>
       </Card>
 
-      {/* Summary Cards */}
-      <div className='grid grid-cols-1 md:grid-cols-5 gap-4'>
-        <Card className='bg-gradient-to-r from-gray-500 to-gray-600 text-white'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <p className='text-gray-100 text-sm font-medium'>Total Records</p>
-              <p className='text-2xl font-bold'>{summary.totalRecords}</p>
+      {/* Dynamic KPI Quick Filter Cards */}
+      <div className='grid grid-cols-2 md:grid-cols-4 gap-3'>
+        {/* Total Pending Card */}
+        <div
+          onClick={() => setQuickFilter('total_pending')}
+          className={`cursor-pointer transition-all duration-150 p-3.5 rounded-xl border flex items-center justify-between select-none ${
+            quickFilter === 'total_pending'
+              ? 'bg-amber-500/10 border-amber-500 ring-2 ring-amber-400/40 shadow-md scale-[1.01]'
+              : 'bg-white hover:bg-slate-50 border-slate-200 shadow-2xs'
+          }`}
+        >
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className={`text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                quickFilter === 'total_pending' ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-800'
+              }`}>
+                Pending Only
+              </span>
             </div>
-            <FileText className='w-8 h-8 text-gray-200' />
+            <p className='text-slate-500 text-[11px] font-medium'>Total Pending</p>
+            <p className='text-2xl font-black text-amber-600 font-mono'>{summary.pendingRecords}</p>
           </div>
-        </Card>
+          <Clock className={`w-8 h-8 ${quickFilter === 'total_pending' ? 'text-amber-600' : 'text-amber-400'}`} />
+        </div>
 
-        <Card className='bg-white text-gray-900'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <p className='text-green-700 text-sm font-medium'>Approved</p>
-              <p className='text-2xl font-bold'>{summary.approvedRecords}</p>
+        {/* Edit Pending Card */}
+        <div
+          onClick={() => setQuickFilter('edit_pending')}
+          className={`cursor-pointer transition-all duration-150 p-3.5 rounded-xl border flex items-center justify-between select-none ${
+            quickFilter === 'edit_pending'
+              ? 'bg-pink-500/10 border-pink-500 ring-2 ring-pink-400/40 shadow-md scale-[1.01]'
+              : 'bg-white hover:bg-slate-50 border-slate-200 shadow-2xs'
+          }`}
+        >
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className={`text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                quickFilter === 'edit_pending' ? 'bg-pink-500 text-white' : 'bg-pink-100 text-pink-800'
+              }`}>
+                Action = Edit
+              </span>
             </div>
-            <CheckCircle className='w-8 h-8 text-green-500' />
+            <p className='text-slate-500 text-[11px] font-medium'>Edit Pending</p>
+            <p className='text-2xl font-black text-pink-600 font-mono'>{editPendingCount}</p>
           </div>
-        </Card>
+          <Edit3 className={`w-8 h-8 ${quickFilter === 'edit_pending' ? 'text-pink-600' : 'text-pink-400'}`} />
+        </div>
 
-        <Card className='bg-white text-gray-900'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <p className='text-red-700 text-sm font-medium'>Rejected</p>
-              <p className='text-2xl font-bold'>{summary.rejectedRecords}</p>
+        {/* Delete Pending Card */}
+        <div
+          onClick={() => setQuickFilter('delete_pending')}
+          className={`cursor-pointer transition-all duration-150 p-3.5 rounded-xl border flex items-center justify-between select-none ${
+            quickFilter === 'delete_pending'
+              ? 'bg-rose-500/10 border-rose-500 ring-2 ring-rose-400/40 shadow-md scale-[1.01]'
+              : 'bg-white hover:bg-slate-50 border-slate-200 shadow-2xs'
+          }`}
+        >
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className={`text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                quickFilter === 'delete_pending' ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-800'
+              }`}>
+                Action = Delete
+              </span>
             </div>
-            <X className='w-8 h-8 text-red-500' />
+            <p className='text-slate-500 text-[11px] font-medium'>Delete Pending</p>
+            <p className='text-2xl font-black text-rose-600 font-mono'>{deletedSummary.pendingDeleted}</p>
           </div>
-        </Card>
+          <Trash2 className={`w-8 h-8 ${quickFilter === 'delete_pending' ? 'text-rose-600' : 'text-rose-400'}`} />
+        </div>
 
-        <Card className='bg-gradient-to-r from-orange-500 to-orange-600 text-white'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <p className='text-orange-100 text-sm font-medium'>Pending</p>
-              <p className='text-2xl font-bold'>{summary.pendingRecords}</p>
+        {/* Approved Today Card */}
+        <div
+          onClick={() => setQuickFilter('approved_today')}
+          className={`cursor-pointer transition-all duration-150 p-3.5 rounded-xl border flex items-center justify-between select-none ${
+            quickFilter === 'approved_today'
+              ? 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-400/40 shadow-md scale-[1.01]'
+              : 'bg-white hover:bg-slate-50 border-slate-200 shadow-2xs'
+          }`}
+        >
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className={`text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                quickFilter === 'approved_today' ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-800'
+              }`}>
+                Status = Approved Today
+              </span>
             </div>
-            <Clock className='w-8 h-8 text-orange-200' />
+            <p className='text-slate-500 text-[11px] font-medium'>Approved Today</p>
+            <p className='text-2xl font-black text-emerald-600 font-mono'>{summary.approvedRecords}</p>
           </div>
-        </Card>
-
-        <Card className='bg-gradient-to-r from-purple-500 to-purple-600 text-white'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <p className='text-purple-100 text-sm font-medium'>Selected</p>
-              <p className='text-2xl font-bold'>{summary.selectedCount}</p>
-            </div>
-            <Users className='w-8 h-8 text-purple-200' />
-          </div>
-        </Card>
-
-        {/* Deleted Records Summary */}
-        <Card className='bg-white text-gray-900'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <p className='text-red-700 text-sm font-medium'>Deleted Pending</p>
-              <p className='text-2xl font-bold'>{deletedSummary.pendingDeleted}</p>
-            </div>
-            <Trash2 className='w-8 h-8 text-red-500' />
-          </div>
-        </Card>
-        <Card className='bg-white text-gray-900'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <p className='text-green-700 text-sm font-medium'>Deleted Approved</p>
-              <p className='text-2xl font-bold'>{deletedSummary.approvedDeleted}</p>
-            </div>
-            <CheckCircle className='w-8 h-8 text-green-500' />
-          </div>
-        </Card>
-        <Card className='bg-white text-gray-900'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <p className='text-red-700 text-sm font-medium'>Deleted Rejected</p>
-              <p className='text-2xl font-bold'>{deletedSummary.rejectedDeleted}</p>
-            </div>
-            <X className='w-8 h-8 text-red-500' />
-          </div>
-        </Card>
+          <CheckCircle className={`w-8 h-8 ${quickFilter === 'approved_today' ? 'text-emerald-600' : 'text-emerald-400'}`} />
+        </div>
       </div>
 
-      {/* Records Table */}
+      {/* Main Approval Table Container (Zero Horizontal Scroll) */}
       {!loading && (
-        <Card
-          title='Records for Approval'
-          subtitle={`Showing ${getCurrentPageEntries().length} of ${filteredEntries.length} records`}
-        >
-          <div className='overflow-x-auto'>
-            <table className='w-full text-sm'>
-              <thead className='bg-gray-50 border-b border-gray-200'>
+        <div className="space-y-3">
+          {/* Sticky Bulk Action Top Toolbar */}
+          <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl p-2.5 shadow-sm flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5 text-blue-600" />
+                {quickFilter === 'total_pending' && `Pending Records (${summary.pendingRecords})`}
+                {quickFilter === 'edit_pending' && `Edit Pending (${editPendingCount})`}
+                {quickFilter === 'delete_pending' && `Deleted Pending (${deletedSummary.pendingDeleted})`}
+                {quickFilter === 'approved_today' && `Approved Today (${summary.approvedRecords})`}
+              </span>
+              {selectedEntries.size > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                  {selectedEntries.size} Selected
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {quickFilter !== 'approved_today' && quickFilter !== 'delete_pending' && (
+                <button
+                  onClick={approveAllWithoutConfirmation}
+                  disabled={loading || activeTableEntries.length === 0}
+                  title="Approve all currently filtered records instantly"
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 shadow-2xs transition-colors disabled:opacity-50 uppercase"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Approve All Filtered
+                </button>
+              )}
+              {filters.company && quickFilter !== 'approved_today' && (
+                <button
+                  onClick={approveAllCompanywise}
+                  disabled={loading}
+                  className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold inline-flex items-center gap-1 shadow-2xs transition-colors uppercase"
+                >
+                  Approve {filters.company}
+                </button>
+              )}
+              {filters.staff && quickFilter !== 'approved_today' && (
+                <button
+                  onClick={approveAllStaffwise}
+                  disabled={loading}
+                  className="px-2.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[11px] font-bold inline-flex items-center gap-1 shadow-2xs transition-colors uppercase"
+                >
+                  Approve {filters.staff}
+                </button>
+              )}
+              {selectedEntries.size > 0 && quickFilter !== 'approved_today' && (
+                <button
+                  onClick={approveSelected}
+                  disabled={loading}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold inline-flex items-center gap-1 shadow-2xs transition-colors uppercase"
+                >
+                  Approve Selected ({selectedEntries.size})
+                </button>
+              )}
+              {quickFilter === 'approved_today' && (
+                <button
+                  onClick={cancelApprove}
+                  disabled={loading || filteredApprovedEntries.length === 0}
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 shadow-2xs transition-colors uppercase"
+                >
+                  Cancel Approvals
+                </button>
+              )}
+            </div>
+          </div>
+          {/* High-Density ERP Compact Non-Scrolling Table */}
+          <div className="w-full border border-slate-200 rounded-xl bg-white shadow-2xs overflow-hidden">
+            <table className="w-full text-left border-collapse table-fixed text-[11px]">
+              <thead className="bg-slate-100/90 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[10px]">
                 <tr>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
+                  <th className="w-7 px-1 py-1.5 text-center">
                     <input
-                      type='checkbox'
+                      type="checkbox"
                       checked={
-                        selectedEntries.size === filteredEntries.length &&
-                        filteredEntries.length > 0
+                        selectedEntries.size === activeTableEntries.length &&
+                        activeTableEntries.length > 0
                       }
                       onChange={handleSelectAll}
-                      className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
+                      className="h-3 w-3 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
                     />
                   </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    S.No
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Date
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Company
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Account
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Sub Account
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Particulars
-                  </th>
-                  <th className='px-3 py-2 text-right font-medium text-gray-700'>
-                    Credit
-                  </th>
-                  <th className='px-3 py-2 text-right font-medium text-gray-700'>
-                    Debit
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Staff
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    User
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Entry Date & Time
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Status
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Actions
-                  </th>
+                  <th className="w-8 px-1 py-1.5 text-center">#</th>
+                  <th className="px-2 py-1.5">Transaction & Account</th>
+                  <th className="w-28 px-2 py-1.5 text-right">Amount</th>
+                  <th className="w-24 px-2 py-1.5">Operator</th>
+                  <th className="w-16 px-1 py-1.5 text-center">Status</th>
+                  <th className="w-28 px-1.5 py-1.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {getCurrentPageEntries().length === 0 ? (
+              <tbody className="divide-y divide-slate-100">
+                {getCurrentActivePageEntries().length === 0 ? (
                   <tr>
-                    <td colSpan={14} className='text-center py-8 text-gray-500'>
-                      No pending records found matching the selected filters.
+                    <td colSpan={7} className="text-center py-8 text-slate-400 font-medium">
+                      No records found for the selected filter ({quickFilter.replace('_', ' ')}).
                     </td>
                   </tr>
                 ) : (
-                  getCurrentPageEntries().map((entry, index) => (
-                    <tr
-                      key={entry.id}
-                      className={`border-b transition-colors cursor-pointer ${
-                        entry.edited === true || entry.edited === 'true'
-                          ? 'bg-[#FDE7F3] hover:bg-[#FBCFE8]'
-                          : 'bg-orange-50 hover:bg-orange-100'
-                      }`}
-                      onClick={e => {
-                        if (
-                          (e.target as HTMLElement).closest(
-                            'input[type="checkbox"]'
-                          ) ||
-                          (e.target as HTMLElement).closest('button')
-                        ) {
-                          return;
-                        }
-                        handleSelectEntry(entry.id);
-                      }}
-                      onDoubleClick={() => {
-                        setViewEntry(entry);
-                        setViewDraft({ ...entry });
-                        setViewEditing(false);
-                        setViewOpen(true);
-                      }}
-                      title="Double click to view details"
-                    >
-                      <td className='px-3 py-2'>
-                        <input
-                          type='checkbox'
-                          checked={selectedEntries.has(entry.id)}
-                          onChange={e => {
-                            e.stopPropagation();
-                            handleSelectEntry(entry.id);
-                          }}
-                          className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
-                        />
-                      </td>
-                      <td className='px-3 py-2 font-medium'>{index + 1 + (currentPage - 1) * recordsPerPage}</td>
-                      <td className='px-3 py-2'>
-                        {format(new Date(entry.c_date), 'dd/MM/yyyy')}
-                      </td>
-                      <td className='px-3 py-2 font-medium text-blue-600'>
-                        {entry.company_name}
-                      </td>
-                      <td className='px-3 py-2'>{entry.acc_name}</td>
-                      <td className='px-3 py-2'>{entry.sub_acc_name || '-'}</td>
-                      <td
-                        className='px-3 py-2 max-w-xs truncate'
-                        title={entry.particulars}
+                  getCurrentActivePageEntries().map((entry, index) => {
+                    const isSelected = selectedEntries.has(entry.id);
+                    const isEdited = entry.edited === true || entry.edited === 'true';
+                    const isDeletedRecord = quickFilter === 'delete_pending';
+                    const isApprovedRecord = quickFilter === 'approved_today';
+
+                    const cdNo = entry.cd_number || entry.ref_no || entry.voucher_no || (entry.sno ? `ID:${entry.sno}` : 'CD-000');
+                    const txnTypeBadge = entry.cd_number ? 'CD' : (entry.particulars?.toLowerCase().includes('payment') ? 'LP' : isEdited ? '+E' : '+C');
+
+                    return (
+                      <tr
+                        key={entry.id || index}
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('input[type="checkbox"]') || (e.target as HTMLElement).closest('button')) {
+                            return;
+                          }
+                          handleSelectEntry(entry.id);
+                        }}
+                        onDoubleClick={() => {
+                          setViewEntry(entry);
+                          setViewDraft({ ...entry });
+                          setViewEditing(false);
+                          setViewOpen(true);
+                        }}
+                        title="Double click to view details"
+                        className={`transition-colors cursor-pointer select-none h-11 ${
+                          isSelected
+                            ? 'bg-blue-50/90 hover:bg-blue-100/90'
+                            : isEdited
+                            ? 'bg-pink-50/70 hover:bg-pink-100/70'
+                            : isDeletedRecord
+                            ? 'bg-rose-50/70 hover:bg-rose-100/70'
+                            : isApprovedRecord
+                            ? 'bg-emerald-50/40 hover:bg-emerald-100/50'
+                            : 'hover:bg-slate-50/80'
+                        }`}
                       >
-                        {entry.particulars}
-                      </td>
-                      <td className='px-3 py-2 text-right font-medium text-green-600'>
-                        {entry.credit > 0
-                          ? `${entry.credit.toLocaleString()}`
-                          : '-'}
-                      </td>
-                      <td className='px-3 py-2 text-right font-medium text-red-600'>
-                        {entry.debit > 0
-                          ? `${entry.debit.toLocaleString()}`
-                          : '-'}
-                      </td>
-                      <td className='px-3 py-2'>{entry.staff}</td>
-                      <td className='px-3 py-2'>{entry.users}</td>
-                      <td className='px-3 py-2'>
-                        {`${format(new Date(entry.c_date), 'dd/MM/yyyy')} ${format(new Date(entry.entry_time), 'hh:mm:ss a')}`}
-                      </td>
-                      <td className='px-3 py-2'>
-                        {entry.edited === true || entry.edited === 'true' ? (
-                          <span className='inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-pink-100 text-pink-800 border border-pink-200'>
-                            ✏️ Edited
-                          </span>
-                        ) : (
-                          <span className='inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200'>
-                            📝 New
-                          </span>
-                        )}
-                      </td>
-                      <td className='px-3 py-2'>
-                        <div className='flex gap-1.5'>
-                          <Button
-                            variant='secondary'
-                            onClick={(e) => {
+                        {/* Checkbox */}
+                        <td className="px-1 py-1.5 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
                               e.stopPropagation();
-                              setViewEntry(entry);
-                              setViewDraft({ ...entry });
-                              setViewEditing(false);
-                              setViewOpen(true);
+                              handleSelectEntry(entry.id);
                             }}
-                            className='text-xs px-2 py-1'
-                          >
-                            View
-                          </Button>
-                          <Button
-                            variant='secondary'
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDirectApprove(entry.id);
-                            }}
-                            disabled={entry.approved === true}
-                            className='text-xs px-2 py-1'
-                          >
-                            Approve
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            className="h-3 w-3 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                          />
+                        </td>
+
+                        {/* S.No */}
+                        <td className="px-1 py-1.5 text-center font-mono font-bold text-slate-400 text-[10px]">
+                          {index + 1 + (currentPage - 1) * recordsPerPage}
+                        </td>
+
+                        {/* Merged Info Block (Loan No BIG & CLEAR) */}
+                        <td className="px-2 py-1">
+                          <div className="flex flex-col min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[13px] font-black font-mono text-blue-700 tracking-tight uppercase">
+                                {cdNo}
+                              </span>
+                              <span className={`px-1 py-0.2 rounded text-[8.5px] font-black uppercase tracking-wider ${
+                                txnTypeBadge === 'CD' ? 'bg-blue-100 text-blue-800' : txnTypeBadge === 'LP' ? 'bg-purple-100 text-purple-800' : 'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {txnTypeBadge}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-medium truncate leading-tight mt-0.5">
+                              <span className="font-bold text-slate-900 uppercase">{entry.particulars || entry.acc_name || 'Cash Entry'}</span>
+                              {entry.sub_acc_name && <span className="text-slate-400"> · {entry.sub_acc_name}</span>}
+                              {entry.company_name && <span className="text-slate-400"> · {entry.company_name}</span>}
+                              <span className="text-slate-400 font-mono"> · {entry.c_date ? format(new Date(entry.c_date), 'dd-MMM') : '-'}</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Combined Amount (Single Row - Clean) */}
+                        <td className="px-2 py-1 text-right font-mono">
+                          {entry.credit > 0 ? (
+                            <span className="font-black text-emerald-700 text-[12px]">
+                              +{formatCompactCurrency(entry.credit)}
+                            </span>
+                          ) : entry.debit > 0 ? (
+                            <span className="font-black text-rose-700 text-[12px]">
+                              -{formatCompactCurrency(entry.debit)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[10px]">-</span>
+                          )}
+                        </td>
+
+                        {/* Combine Operator & Time */}
+                        <td className="px-2 py-1 font-mono">
+                          <div className="flex flex-col leading-tight">
+                            <span className="font-bold text-slate-800 text-[10.5px] uppercase truncate">
+                              {entry.staff || entry.users || entry.deleted_by || 'STAFF'}
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-semibold">
+                              {entry.entry_time ? format(new Date(entry.entry_time), 'HH:mm') : entry.created_at ? format(new Date(entry.created_at), 'HH:mm') : '-'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Tiny Status Pill */}
+                        <td className="px-1.5 py-1 text-center">
+                          {isDeletedRecord ? (
+                            <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black bg-rose-100 text-rose-800 border border-rose-200 uppercase">
+                              DEL
+                            </span>
+                          ) : isApprovedRecord ? (
+                            <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase">
+                              APPR
+                            </span>
+                          ) : isEdited ? (
+                            <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black bg-pink-100 text-pink-800 border border-pink-200 uppercase">
+                              EDIT
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black bg-amber-100 text-amber-800 border border-amber-200 uppercase">
+                              PEND
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Fixed Actions Column (Icon-Only with Tooltips) */}
+                        <td className="px-1.5 py-1 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {/* 👁️ View Button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setViewEntry(entry);
+                                setViewDraft({ ...entry });
+                                setViewEditing(false);
+                                setViewOpen(true);
+                              }}
+                              title="View Details"
+                              className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center border border-slate-200/80 transition-colors"
+                            >
+                              <Eye className="w-3 h-3 text-slate-600" />
+                            </button>
+
+                            {/* ✔️ Approve Button */}
+                            {isApprovedRecord ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCancelDirectApprove(entry.id);
+                                }}
+                                title="Cancel Approval"
+                                className="px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded text-[9.5px] font-bold transition-colors uppercase border border-slate-300"
+                              >
+                                Cancel
+                              </button>
+                            ) : isDeletedRecord ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeletedApprove(entry.id);
+                                }}
+                                title="Approve Deletion"
+                                className="w-6 h-6 rounded bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-2xs transition-colors"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDirectApprove(entry.id);
+                                }}
+                                title="Approve"
+                                className="w-6 h-6 rounded bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-2xs transition-colors"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* ✏️ Edit Button */}
+                            {!isApprovedRecord && !isDeletedRecord && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewEntry(entry);
+                                  setViewDraft({ ...entry });
+                                  setViewEditing(true);
+                                  setViewOpen(true);
+                                }}
+                                title="Edit"
+                                className="w-6 h-6 rounded bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-2xs transition-colors"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* 🗑️ Delete Button */}
+                            {!isApprovedRecord && !isDeletedRecord && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteEntry(entry);
+                                }}
+                                title="Delete"
+                                className="w-6 h-6 rounded bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-2xs transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination */}
-          <div className='flex items-center justify-between mt-4 px-2 py-3 sm:px-6'>
-            <div className='flex-1 flex justify-between sm:hidden'>
+          {/* Compact Pagination Bar */}
+          <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-mono">
+            <span className="text-slate-600">
+              Showing <span className="font-bold text-slate-900">{activeTableEntries.length === 0 ? 0 : (currentPage * recordsPerPage - recordsPerPage + 1)}</span> to{' '}
+              <span className="font-bold text-slate-900">{Math.min(currentPage * recordsPerPage, activeTableEntries.length)}</span> of{' '}
+              <span className="font-bold text-slate-900">{activeTableEntries.length}</span> records
+            </span>
+            <div className="flex items-center gap-1.5">
               <Button
-                variant='secondary'
+                variant="secondary"
+                size="sm"
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
+                className="px-2.5 py-1 text-[11px]"
               >
                 Previous
               </Button>
+              <span className="text-[11px] font-bold text-slate-700 px-2">
+                Page {currentPage} of {activeTotalPages}
+              </span>
               <Button
-                variant='secondary'
-                onClick={() =>
-                  setCurrentPage(prev => Math.min(totalPages, prev + 1))
-                }
-                disabled={currentPage === totalPages}
+                variant="secondary"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(activeTotalPages, prev + 1))}
+                disabled={currentPage === activeTotalPages}
+                className="px-2.5 py-1 text-[11px]"
               >
                 Next
               </Button>
             </div>
-            <div className='hidden sm:flex-1 sm:flex sm:items-center sm:justify-between'>
-              <div className='flex-1 text-sm text-center'>
-                <p className='text-sm text-gray-700'>
-                  Showing{' '}
-                  <span className='font-semibold'>
-                    {filteredEntries.length === 0 ? 0 : (currentPage * recordsPerPage - recordsPerPage + 1)}
-                  </span>{' '}
-                  to{' '}
-                  <span className='font-semibold'>
-                    {Math.min(
-                      currentPage * recordsPerPage,
-                      filteredEntries.length
-                    )}
-                  </span>{' '}
-                  of{' '}
-                  <span className='font-semibold'>
-                    {filteredEntries.length}
-                  </span>{' '}
-                  results
-                </p>
-              </div>
-              <div>
-                <nav
-                  className='relative z-0 inline-flex rounded-md shadow-sm -space-x-px'
-                  aria-label='Pagination'
-                >
-                  <Button
-                    variant='secondary'
-                    onClick={() =>
-                      setCurrentPage(prev => Math.max(1, prev - 1))
-                    }
-                    disabled={currentPage === 1}
-                    className='rounded-l-md'
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant='secondary'
-                    onClick={() =>
-                      setCurrentPage(prev => Math.min(totalPages, prev + 1))
-                    }
-                    disabled={currentPage === totalPages}
-                    className='rounded-r-md'
-                  >
-                    Next
-                  </Button>
-                </nav>
-              </div>
-            </div>
           </div>
-        </Card>
-      )}
-
-      {/* Approved Records Table */}
-      {!loading && (
-        <Card
-          title='Approved Records'
-          subtitle={`Showing ${getApprovedPageEntries().length} of ${filteredApprovedEntries.length} records`}
-        >
-          <div className='overflow-x-auto'>
-            <table className='w-full text-sm'>
-              <thead className='bg-gray-50 border-b border-gray-200'>
-                <tr>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700 w-12'>
-                    S.No
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Date
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Company
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Account
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Sub Account
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Particulars
-                  </th>
-                  <th className='px-3 py-2 text-right font-medium text-gray-700'>
-                    Credit
-                  </th>
-                  <th className='px-3 py-2 text-right font-medium text-gray-700'>
-                    Debit
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Staff
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    User
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Entry Date & Time
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Status
-                  </th>
-                  <th className='px-3 py-2 text-left font-medium text-gray-700'>
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {getApprovedPageEntries().length === 0 ? (
-                  <tr>
-                    <td colSpan={13} className='text-center py-8 text-gray-500'>
-                      No approved records found matching the selected filters.
-                    </td>
-                  </tr>
-                ) : (
-                  getApprovedPageEntries().map((entry, index) => (
-                    <tr
-                      key={entry.id}
-                      className={`border-b transition-colors cursor-pointer ${
-                        index % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-25 hover:bg-gray-50'
-                      }`}
-                      onDoubleClick={() => {
-                        setViewEntry(entry);
-                        setViewDraft({ ...entry });
-                        setViewEditing(false);
-                        setViewOpen(true);
-                      }}
-                      title="Double click to view details"
-                    >
-                      <td className='px-3 py-2 font-medium'>{index + 1 + (approvedPage - 1) * recordsPerPage}</td>
-                      <td className='px-3 py-2'>
-                        {format(new Date(entry.c_date), 'dd/MM/yyyy')}
-                      </td>
-                      <td className='px-3 py-2 font-medium text-blue-600'>
-                        {entry.company_name}
-                      </td>
-                      <td className='px-3 py-2'>{entry.acc_name}</td>
-                      <td className='px-3 py-2'>{entry.sub_acc_name || '-'}</td>
-                      <td
-                        className='px-3 py-2 max-w-xs truncate'
-                        title={entry.particulars}
-                      >
-                        {entry.particulars}
-                      </td>
-                      <td className='px-3 py-2 text-right font-medium text-green-600'>
-                        {entry.credit > 0
-                          ? `${entry.credit.toLocaleString()}`
-                          : '-'}
-                      </td>
-                      <td className='px-3 py-2 text-right font-medium text-red-600'>
-                        {entry.debit > 0
-                          ? `${entry.debit.toLocaleString()}`
-                          : '-'}
-                      </td>
-                      <td className='px-3 py-2'>{entry.staff}</td>
-                      <td className='px-3 py-2'>{entry.users}</td>
-                      <td className='px-3 py-2'>
-                        {`${format(new Date(entry.c_date), 'dd/MM/yyyy')} ${format(new Date(entry.entry_time), 'hh:mm:ss a')}`}
-                      </td>
-                      <td className='px-3 py-2'>
-                        <span className='inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 border border-green-200'>
-                          ✅ Approved
-                        </span>
-                      </td>
-                      <td className='px-3 py-2'>
-                        <div className='flex gap-1.5'>
-                          <Button
-                            variant='secondary'
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setViewEntry(entry);
-                              setViewDraft({ ...entry });
-                              setViewEditing(false);
-                              setViewOpen(true);
-                            }}
-                            className='text-xs px-2 py-1'
-                          >
-                            View
-                          </Button>
-                          <Button
-                            variant='secondary'
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCancelDirectApprove(entry.id);
-                            }}
-                            className='text-xs px-2 py-1'
-                          >
-                            Cancel Approve
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div className='flex items-center justify-between mt-4 px-2 py-3 sm:px-6'>
-            <div className='flex-1 flex justify-between sm:hidden'>
-              <Button
-                variant='secondary'
-                onClick={() => setApprovedPage(prev => Math.max(1, prev - 1))}
-                disabled={approvedPage === 1}
-              >
-                Previous
-              </Button>
-              <Button
-                variant='secondary'
-                onClick={() =>
-                  setApprovedPage(prev => Math.min(approvedTotalPages, prev + 1))
-                }
-                disabled={approvedPage === approvedTotalPages}
-              >
-                Next
-              </Button>
-            </div>
-            <div className='hidden sm:flex-1 sm:flex sm:items-center sm:justify-between'>
-              <div className='flex-1 text-sm text-center'>
-                <p className='text-sm text-gray-700'>
-                  Showing{' '}
-                  <span className='font-semibold'>
-                    {filteredApprovedEntries.length === 0 ? 0 : (approvedPage * recordsPerPage - recordsPerPage + 1)}
-                  </span>{' '}
-                  to{' '}
-                  <span className='font-semibold'>
-                    {Math.min(
-                      approvedPage * recordsPerPage,
-                      filteredApprovedEntries.length
-                    )}
-                  </span>{' '}
-                  of{' '}
-                  <span className='font-semibold'>
-                    {filteredApprovedEntries.length}
-                  </span>{' '}
-                  results
-                </p>
-              </div>
-              <div>
-                <nav
-                  className='relative z-0 inline-flex rounded-md shadow-sm -space-x-px'
-                  aria-label='Pagination'
-                >
-                  <Button
-                    variant='secondary'
-                    onClick={() =>
-                      setApprovedPage(prev => Math.max(1, prev - 1))
-                    }
-                    disabled={approvedPage === 1}
-                    className='rounded-l-md'
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant='secondary'
-                    onClick={() =>
-                      setApprovedPage(prev => Math.min(approvedTotalPages, prev + 1))
-                    }
-                    disabled={approvedPage === approvedTotalPages}
-                    className='rounded-r-md'
-                  >
-                    Next
-                  </Button>
-                </nav>
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Deleted Records Approval */}
-      {!loading && (
-        <Card title='Deleted Records' subtitle={`Showing ${filteredDeletedEntries.length} of ${deletedSummary.totalRecords} deleted records`}>
-          <div className='mb-4 flex gap-2'>
-            <Button
-              variant='secondary'
-              size='sm'
-              onClick={async () => {
-                console.log('🔍 Debug: Checking deleted records...');
-                console.log('🔍 Deleted entries from state:', deletedEntries);
-                console.log('🔍 Filtered deleted entries:', filteredDeletedEntries);
-                console.log('🔍 Deleted summary:', deletedSummary);
-                
-                // Try to fetch fresh data
-                const freshDeleted = await supabaseDB.getDeletedCashBook();
-                console.log('🔍 Fresh deleted records from DB:', freshDeleted);
-                
-                toast.success('Debug info logged to console');
-              }}
-              className='flex items-center gap-2'
-            >
-              <AlertTriangle className='w-4 h-4' />
-              Debug Deleted Records
-            </Button>
-            <Button
-              variant='secondary'
-              size='sm'
-              onClick={loadEntries}
-              disabled={loading}
-            >
-              <RefreshCw className='w-4 h-4' />
-              Refresh
-            </Button>
-          </div>
-          <div className='overflow-x-auto'>
-            <table className='w-full text-xs table-fixed'>
-              <thead className='sticky top-0 bg-gray-50 z-10'>
-                <tr className='border-b border-gray-200'>
-                  <th className='w-12 px-1 py-1 text-left font-medium text-gray-700'>
-                    S.No
-                  </th>
-                  <th className='w-16 px-1 py-1 text-left font-medium text-gray-700'>
-                    Date
-                  </th>
-                  <th className='w-20 px-1 py-1 text-left font-medium text-gray-700'>
-                    Company
-                  </th>
-                  <th className='w-20 px-1 py-1 text-left font-medium text-gray-700'>
-                    Account
-                  </th>
-                  <th className='w-20 px-1 py-1 text-left font-medium text-gray-700'>
-                    Sub Account
-                  </th>
-                  <th className='w-32 px-1 py-1 text-left font-medium text-gray-700'>
-                    Particulars
-                  </th>
-                  <th className='w-16 px-1 py-1 text-right font-medium text-gray-700'>
-                    Credit
-                  </th>
-                  <th className='w-16 px-1 py-1 text-right font-medium text-gray-700'>
-                    Debit
-                  </th>
-                  <th className='w-16 px-1 py-1 text-left font-medium text-gray-700'>
-                    Staff
-                  </th>
-                  <th className='w-16 px-1 py-1 text-left font-medium text-gray-700'>
-                    User
-                  </th>
-                  <th className='w-20 px-1 py-1 text-left font-medium text-gray-700'>
-                    Deleted At
-                  </th>
-                  <th className='w-20 px-1 py-1 text-center font-medium text-gray-700'>
-                    Status
-                  </th>
-                  <th className='w-24 px-1 py-1 text-center font-medium text-gray-700'>
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredDeletedEntries.map((d, index) => (
-                  <tr key={d.id} className={`border-b transition-colors ${
-                    !isApprovedStatus(d.approved) && d.approved !== 'rejected' 
-                      ? 'bg-red-50 hover:bg-red-100' 
-                      : 'hover:bg-gray-50'
-                  }`}>
-                    <td className='w-12 px-1 py-1 font-medium text-xs'>{index + 1}</td>
-                    <td className='w-16 px-1 py-1 text-xs'>
-                      {format(new Date(d.c_date), 'dd/MM/yyyy')}
-                    </td>
-                    <td className='w-20 px-1 py-1 font-medium text-blue-600 text-xs truncate' title={d.company_name}>
-                      {d.company_name}
-                    </td>
-                    <td className='w-20 px-1 py-1 text-xs truncate' title={d.acc_name?.replace(/\[DELETED\]\s*/g, '')}>
-                      {d.acc_name?.replace(/\[DELETED\]\s*/g, '') || '-'}
-                    </td>
-                    <td className='w-20 px-1 py-1 text-xs truncate' title={d.sub_acc_name?.replace(/\[DELETED\]\s*/g, '')}>
-                      {d.sub_acc_name?.replace(/\[DELETED\]\s*/g, '') || '-'}
-                    </td>
-                    <td className='w-32 px-1 py-1 text-xs truncate' title={d.particulars?.replace(/\[DELETED\]\s*/g, '')}>
-                      {d.particulars?.replace(/\[DELETED\]\s*/g, '') || '-'}
-                    </td>
-                    <td className='w-16 px-1 py-1 text-right font-medium text-green-600 text-xs'>
-                      {d.credit ? `${Number(d.credit).toLocaleString()}` : '-'}
-                    </td>
-                    <td className='w-16 px-1 py-1 text-right font-medium text-red-600 text-xs'>
-                      {d.debit ? `${Number(d.debit).toLocaleString()}` : '-'}
-                    </td>
-                    <td className='w-16 px-1 py-1 text-xs truncate' title={d.staff}>
-                      {d.staff}
-                    </td>
-                    <td className='w-16 px-1 py-1 text-xs truncate' title={d.users}>
-                      {d.users}
-                    </td>
-                    <td className='w-20 px-1 py-1 text-xs'>
-                      {format(new Date(d.deleted_at), 'hh:mm:ss a')}
-                    </td>
-                    <td className='w-20 px-1 py-1 text-center'>
-                      {isApprovedStatus(d.approved) ? (
-                        <span className='inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 border border-green-200'>
-                          ✅ Approved
-                        </span>
-                      ) : d.approved === 'rejected' ? (
-                        <span className='inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200'>
-                          Rejected
-                        </span>
-                      ) : (
-                        <span className='inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200 animate-pulse'>
-                          🗑️ Delete Request
-                        </span>
-                      )}
-                    </td>
-                    <td className='w-24 px-1 py-1 text-center'>
-                      <div className='flex flex-row gap-1'>
-                        <Button
-                          variant='secondary'
-                          onClick={() => {
-                            handleDeletedApprove(d.id);
-                          }}
-                          disabled={d.approved === true || d.approved === 'true'}
-                          className='text-xs px-1 py-0.5'
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          variant='secondary'
-                          onClick={() => {
-                            handleDeletedReject(d.id);
-                          }}
-                          disabled={d.approved === 'rejected'}
-                          className='text-xs px-2 py-1'
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        </div>
       )}
       {/* View/Edit Modal */}
       {viewOpen && viewEntry && (
@@ -2425,6 +2227,31 @@ const ApproveRecords: React.FC = () => {
               <Input label='Debit' value={viewDraft?.debit ?? ''} onChange={v => setViewDraft((p:any)=>({ ...p, debit: Number((parseFloat(v)||0).toFixed(2)) }))} disabled={!viewEditing} type='number' min='0' step='any' />
               <Input label='Staff' value={viewDraft?.staff || ''} onChange={v => setViewDraft((p:any)=>({ ...p, staff: v }))} disabled={!viewEditing} />
             </div>
+
+            {/* Amount Breakdown & Audit Metadata Section (Only in View Mode) */}
+            {!viewEditing && (
+              <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2 font-mono">
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Financial Breakdown & Metadata</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-slate-700">
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">Loan / Ref ID</span>
+                    <span className="font-bold text-blue-700">{viewEntry.cd_number || viewEntry.ref_no || viewEntry.voucher_no || viewEntry.sno || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">Interest Amt</span>
+                    <span className="font-bold text-amber-700">{viewEntry.interest ? formatCompactCurrency(viewEntry.interest) : '₹0'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">Penalty Amt</span>
+                    <span className="font-bold text-rose-700">{viewEntry.penalty ? formatCompactCurrency(viewEntry.penalty) : '₹0'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">Timestamp</span>
+                    <span className="font-semibold">{viewEntry.entry_time ? format(new Date(viewEntry.entry_time), 'dd-MMM hh:mm a') : '-'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className='flex justify-end gap-2 mt-4'>
               {!viewEditing ? (
                 <>
