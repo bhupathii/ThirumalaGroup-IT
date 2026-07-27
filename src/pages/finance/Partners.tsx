@@ -272,8 +272,8 @@ const Partners: React.FC = () => {
                     <td className="px-3 py-3 text-slate-500 finance-input">
                       {index + 1}
                     </td>
-                    <td className="px-3 py-3 font-mono text-slate-800 finance-input">
-                      #{partner.partner_id || '—'}
+                    <td className="px-3 py-3 font-mono font-bold text-slate-800 finance-input">
+                      {partner.partner_code || (partner.partner_id ? `P${String(partner.partner_id).padStart(2, '0')}` : '—')}
                     </td>
                     <td className="px-3 py-3 text-slate-900 finance-input">
                       {partner.name}

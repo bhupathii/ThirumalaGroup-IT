@@ -107,6 +107,24 @@ const Customers: React.FC = () => {
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
+  // Listen to instant customer photo updates
+  useEffect(() => {
+    const handlePhotoUpdated = (e: Event) => {
+      const customEvt = e as CustomEvent<{ customerId: string; photoUrl: string }>;
+      if (customEvt.detail?.customerId && customEvt.detail?.photoUrl) {
+        setCustomers(prev =>
+          prev.map(c =>
+            c.id === customEvt.detail.customerId
+              ? { ...c, customer_photo_url: customEvt.detail.photoUrl }
+              : c
+          )
+        );
+      }
+    };
+    window.addEventListener('customer_photo_updated', handlePhotoUpdated);
+    return () => window.removeEventListener('customer_photo_updated', handlePhotoUpdated);
+  }, []);
+
   // Fetch summary counters
   const fetchStats = async () => {
     try {

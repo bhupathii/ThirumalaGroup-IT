@@ -6,7 +6,6 @@ import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { ArrowLeft, RotateCcw, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { validateFinanceForm, ValidationField } from '../../utils/financeValidation';
 import { useAuth } from '../../contexts/AuthContext';
 
 const NewPartner: React.FC = () => {
@@ -46,42 +45,33 @@ const NewPartner: React.FC = () => {
         throw new Error('Book configuration is missing.');
       }
 
+      // Fetch all partner codes / partner_ids to find maximum existing sequence index
       const { data, error } = await supabase
         .from('finance_partners')
-        .select('partner_id')
-        .eq('book_id', bookId)
-        .order('partner_id', { ascending: false })
-        .limit(1);
+        .select('partner_id, partner_code')
+        .eq('book_id', bookId);
 
       if (error) throw error;
 
-      // Load serial settings starting number
-      const { data: settingsData } = await supabase
-        .from('ledger_settings')
-        .select('*')
-        .eq('code', 'SERIAL_SETTINGS')
-        .maybeSingle();
-
-      let startNo = 1;
-      if (settingsData && settingsData.method) {
-        try {
-          const parsed = JSON.parse(settingsData.method);
-          if (parsed.partner) {
-            startNo = parseInt(parsed.partner, 10) || 1;
-          }
-        } catch (e) {
-          console.warn('Error parsing serial settings', e);
-        }
-      }
-
+      let maxSeq = 0;
       if (data && data.length > 0) {
-        setPartnerId(Math.max(startNo, (data[0].partner_id || 0) + 1));
-      } else {
-        setPartnerId(startNo);
+        data.forEach(p => {
+          if (p.partner_code && /^P\d+$/i.test(p.partner_code)) {
+            const num = parseInt(p.partner_code.replace(/[^0-9]/g, ''), 10);
+            if (!isNaN(num) && num > maxSeq) maxSeq = num;
+          }
+          if (p.partner_id && typeof p.partner_id === 'number' && p.partner_id > maxSeq) {
+            maxSeq = p.partner_id;
+          }
+        });
       }
+
+      const nextNum = maxSeq + 1;
+      const formattedCode = `P${nextNum.toString().padStart(2, '0')}`;
+      setPartnerId(formattedCode);
     } catch (err) {
       console.error('Error fetching next partner ID:', err);
-      setPartnerId(1); // Default fallback
+      setPartnerId('P01'); // Default fallback
     }
   };
 
@@ -96,7 +86,7 @@ const NewPartner: React.FC = () => {
       if (error) throw error;
       
       if (data) {
-        setPartnerId(data.partner_id || '');
+        setPartnerId(data.partner_code || (data.partner_id ? `P${String(data.partner_id).padStart(2, '0')}` : 'P01'));
         setRole(data.is_md ? 'MANAGING PARTNER' : 'PARTNER');
         setName(data.name || '');
         setPhone(data.phone || '');
@@ -131,27 +121,25 @@ const NewPartner: React.FC = () => {
     if (e && e.preventDefault) e.preventDefault();
     if (saving) return; // Prevent double submit
 
-    const fields: ValidationField[] = [
-      { name: 'name', label: 'Name', value: name, required: true, ref: nameRef },
-      { name: 'role', label: 'Role', value: role, required: true },
-      { 
-        name: 'phone', 
-        label: 'Phone', 
-        value: phone, 
-        customValidation: (val) => {
-          if (val && !/^\d{10}$/.test(val.replace(/[^\d]/g, ''))) {
-            return 'Phone number must be exactly 10 digits';
-          }
-          return null;
-        },
-        ref: phoneRef as any
-      }
-    ];
+    const validationErrors: Record<string, boolean> = {};
 
-    const { isValid, errors: newErrors } = validateFinanceForm(fields);
-    setErrors(newErrors);
+    if (!name.trim()) validationErrors.name = true;
+    if (!phone.trim()) validationErrors.phone = true;
+    if (!village.trim()) validationErrors.village = true;
+    if (!address.trim()) validationErrors.address = true;
 
-    if (!isValid) return;
+    if (phone.trim() && !/^\d{10}$/.test(phone.replace(/[^\d]/g, ''))) {
+      validationErrors.phone = true;
+      toast.error('Phone number must be exactly 10 digits');
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      toast.error('Please complete all mandatory fields (Name, Phone, Village, Address)');
+      if (validationErrors.name) nameRef.current?.focus();
+      else if (validationErrors.phone) phoneRef.current?.focus();
+      return;
+    }
 
     setSaving(true);
     const savingToastId = toast.loading(editId ? 'Updating partner details...' : 'Registering partner...');
@@ -163,6 +151,8 @@ const NewPartner: React.FC = () => {
         throw new Error('Book configuration is missing.');
       }
 
+      const seqNum = parseInt(String(partnerId).replace(/[^0-9]/g, ''), 10) || 1;
+
       const payload = {
         name: name.trim(),
         is_md: role === 'MANAGING PARTNER',
@@ -170,7 +160,9 @@ const NewPartner: React.FC = () => {
         home_phone: homePhone.trim() || null,
         village: village.trim() || null,
         address: address.trim() || null,
-        book_id: bookId
+        book_id: bookId,
+        partner_code: String(partnerId),
+        partner_id: seqNum
       };
 
       let result;
@@ -181,7 +173,7 @@ const NewPartner: React.FC = () => {
       }
 
       if (result) {
-        toast.success(editId ? 'Partner details updated!' : `Partner "${name.trim()}" registered!`, { id: savingToastId });
+        toast.success(editId ? 'Partner details updated!' : `Partner "${name.trim()}" (${partnerId}) registered!`, { id: savingToastId });
         navigate('/finance/partners');
       } else {
         toast.error(editId ? 'Failed to update partner' : 'Failed to register partner', { id: savingToastId });
@@ -253,7 +245,7 @@ const NewPartner: React.FC = () => {
               {/* Partner ID & Role Checkbox Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
-                  label="PARTNER ID"
+                  label="PARTNER ID *"
                   value={partnerId}
                   readOnly={true}
                   disabled={true}
@@ -276,7 +268,7 @@ const NewPartner: React.FC = () => {
 
               {/* Name (Full Width) */}
               <Input
-                label="NAME"
+                label="NAME *"
                 value={name}
                 onChange={(val) => { setName(val); setErrors(p => ({...p, name: false})) }}
                 placeholder="Full Name"
@@ -288,10 +280,10 @@ const NewPartner: React.FC = () => {
               {/* Phones (Grid of 2) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
-                  label="PHONE"
+                  label="PHONE *"
                   value={phone}
                   onChange={(val) => { setPhone(val); setErrors(p => ({...p, phone: false})) }}
-                  placeholder="Primary contact number"
+                  placeholder="Primary contact number (10 digits)"
                   ref={phoneRef}
                   error={errors.phone}
                 />
@@ -305,32 +297,35 @@ const NewPartner: React.FC = () => {
 
               {/* Village */}
               <Input
-                label="VILLAGE"
+                label="VILLAGE *"
                 value={village}
-                onChange={setVillage}
+                onChange={(val) => { setVillage(val); setErrors(p => ({...p, village: false})) }}
                 placeholder="Village / Location"
+                error={errors.village}
               />
 
               {/* Address (Textarea) */}
               <div>
                 <label className="finance-caption uppercase">
-                  ADDRESS
+                  ADDRESS <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  onChange={(e) => { setAddress(e.target.value); setErrors(p => ({...p, address: false})) }}
                   placeholder="Residential or Office address"
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-855 focus:ring-1 focus:ring-slate-950 focus:outline-none h-24 finance-header-time"
+                  className={`w-full bg-white border rounded-lg p-2 text-slate-855 focus:outline-none h-24 finance-header-time ${errors.address ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-955'}`}
                 />
+                {errors.address && <p className="text-xs text-red-500 font-bold mt-1">Address is required</p>}
               </div>
 
             </div>
           </Card>
         </form>
       </div>
-
     </div>
   );
 };
 
 export default NewPartner;
+
+

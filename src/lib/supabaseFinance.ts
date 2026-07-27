@@ -2,11 +2,13 @@ import { getLocalBusinessDateISO } from '../utils/dateUtils';
 import { supabase } from './supabaseDatabase';
 import { financeCalculationService } from '../services/financeCalculationService';
 import { cdLedgerRebuildService } from '../services/cdLedgerRebuildService';
+import { FinanceCalculationEngine } from '../services/FinanceCalculationEngine';
 
 // TypeScript Interfaces for Finance Mode
 export interface FinancePartner {
   id: string;
   partner_id?: number;
+  partner_code?: string | null;
   name: string;
   is_md?: boolean;
   share_percent?: number;
