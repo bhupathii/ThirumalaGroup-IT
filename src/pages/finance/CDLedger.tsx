@@ -33,6 +33,7 @@ import { exportToExcel, exportToCSV } from '../../utils/excel';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import CompoundInterestModal from '../../components/finance/CompoundInterestModal';
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
+import { cdCompoundInterestEngine, TOOLTIP_TEXT } from '../../services/cdCompoundInterestEngine';
 
 
 
@@ -877,124 +878,24 @@ const CDLedger: React.FC = () => {
       .reduce((sum, e) => sum + Number(e.credit), 0);
   }, [displayedStatementEntries]);
 
-  // Compound Interest Calculation Engine (Integrated into Ledger Timeline)
+  // Compound Interest Calculation Engine (Timeline Display Engine - Informational Only)
   const compoundInterestData = useMemo(() => {
     if (!selectedLoan || !originalLoanDate) return { summary: null, reportRows: [] };
 
-    const rawEvents = displayedStatementEntries.map(e => ({
-      date: new Date(e.entry_date),
-      type: e.entry_type,
-      credit: Number(e.credit) || 0,
-      debit: Number(e.debit) || 0,
-      particulars: e.particulars || 'Transaction',
-      accountName: (e.account_name || '').toUpperCase()
-    }));
-
-    // Filter events to only keep original loan/disbursement and principal repayments
-    const events = rawEvents.filter(e => {
-      const typeLower = (e.type || '').toLowerCase();
-      const partLower = (e.particulars || '').toLowerCase();
-      const accLower = (e.accountName || '').toLowerCase();
-
-      // Original Loan/Disbursement
-      if (typeLower === 'original_loan' || typeLower === 'disbursement') {
-        return true;
-      }
-      
-      // Principal repayments
-      if (
-        typeLower === 'principal_payment' || 
-        typeLower === 'amount_paid' || 
-        accLower === 'cd amount paid' || 
-        partLower.includes('principal paid')
-      ) {
-        return e.credit > 0;
-      }
-
-      return false;
-    });
-
-    const targetDate = paymentDate ? new Date(paymentDate) : new Date();
-    const sortedEvents = [...events].sort((a, b) => a.date.getTime() - b.date.getTime());
-    
-    if (sortedEvents.length === 0 || sortedEvents[sortedEvents.length - 1].date.toDateString() !== targetDate.toDateString()) {
-      sortedEvents.push({
-        date: targetDate,
-        type: 'target_date',
-        credit: 0,
-        debit: 0,
-        particulars: 'Interest Accrued to Date',
-        accountName: ''
-      });
-    }
-
-    const interestRate = Number(selectedLoan.interest_rate) || 3;
-    let initialPrincipal = 0;
-    let remainingPrincipal = 0;
-    let compoundInterestEarned = 0;
-    let lastDate = new Date(originalLoanDate);
-    let principalPaid = 0;
-    
-    const reportRows = [];
-    
-    for (const ev of sortedEvents) {
-      if (ev.date < lastDate && ev.type !== 'original_loan' && ev.type !== 'Disbursement') continue;
-      
-      const diffTime = Math.max(0, ev.date.getTime() - lastDate.getTime());
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      
-      const startingBalance = remainingPrincipal + compoundInterestEarned;
-      
-      // Generate compound interest for this period on the remaining principal
-      let interestAdded = 0;
-      if (diffDays > 0 && remainingPrincipal > 0) {
-        interestAdded = Number(((remainingPrincipal * (interestRate / 100) * diffDays) / 30).toFixed(2));
-        compoundInterestEarned += interestAdded;
-      }
-      
-      // Process event
-      if (ev.type === 'original_loan' || ev.type === 'Disbursement') {
-        initialPrincipal += ev.debit;
-        remainingPrincipal += ev.debit;
-      } else if (ev.credit > 0) {
-        principalPaid += ev.credit;
-        remainingPrincipal = Math.max(0, remainingPrincipal - ev.credit);
-      }
-      
-      const endingBalance = remainingPrincipal + compoundInterestEarned;
-
-      if (diffDays > 0 || ev.credit > 0 || ev.debit > 0 || ev.type === 'original_loan' || ev.type === 'Disbursement') {
-        reportRows.push({
-          date: ev.date.toISOString().split('T')[0],
-          particulars: ev.particulars,
-          days: diffDays,
-          startingBalance,
-          interestAdded,
-          paymentReceived: ev.credit,
-          adjustment: ev.debit,
-          endingBalance
-        });
-      }
-      lastDate = ev.date;
-    }
-    
-    const finalCompoundBalance = remainingPrincipal + compoundInterestEarned;
-    
-    return {
-      summary: {
-        initialPrincipal,
-        principalPaid,
-        interestAdded: compoundInterestEarned,
-        interestPaid: 0,
-        penaltyPaid: 0,
-        adjustments: 0,
-        finalCompoundBalance,
-        compoundInterestEarned,
-        calculatedUntil: targetDate.toISOString().split('T')[0]
+    return cdCompoundInterestEngine.calculateCITimeline(
+      {
+        id: selectedLoan.id,
+        loan_id: selectedLoan.loan_id,
+        amount: Number(selectedLoan.amount) || 0,
+        date: originalLoanDate,
+        interest_rate: Number(selectedLoan.interest_rate) || 3,
+        status: selectedLoan.status,
+        closed_at: (selectedLoan as any).closed_at || null
       },
-      reportRows
-    };
-  }, [selectedLoan, displayedStatementEntries, originalLoanDate, paymentDate]);
+      displayedStatementEntries,
+      paymentDate || undefined
+    );
+  }, [selectedLoan, originalLoanDate, displayedStatementEntries, paymentDate]);
 
   // Grouped payment entries for receipt-centric statement reports (Change 6, 8, 9, 10, 11, 12, 13)
   const groupedPayments = useMemo(() => {
@@ -2268,6 +2169,7 @@ const CDLedger: React.FC = () => {
                         </div>
                         <div 
                           onClick={() => setShowCompoundModal(true)}
+                          title={TOOLTIP_TEXT}
                           className="px-2.5 py-1.5 hover:bg-slate-100 group cursor-pointer transition-colors"
                         >
                           <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">CI</span>
