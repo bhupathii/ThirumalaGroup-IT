@@ -1,4 +1,4 @@
-import { supabaseFinance } from '../lib/supabaseFinance';
+import { supabaseFinance, fetchAllPages } from '../lib/supabaseFinance';
 import { supabase } from '../lib/supabase';
 import { financeCalculationService } from './financeCalculationService';
 
@@ -325,8 +325,8 @@ export class FinanceCalculationEngine {
     
     const allLoans = await supabaseFinance.getLoans();
     const { dues } = await supabaseFinance.getDuesLedgerSummary(toDate);
-    const { data: capEntries } = await supabase.from('finance_capital_entries').select('*');
-    const { data: cdEntries } = await supabase.from('finance_cd_ledger_entries').select('*');
+    const capEntries = await fetchAllPages<any>((from, to) => supabase.from('finance_capital_entries').select('*').range(from, to));
+    const cdEntries = await fetchAllPages<any>((from, to) => supabase.from('finance_cd_ledger_entries').select('*').range(from, to));
 
     return partners.map(partner => {
       const partnerId = partner.id;

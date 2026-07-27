@@ -1,555 +1,652 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import Card from '../components/UI/Card';
-import Button from '../components/UI/Button';
-import Select from '../components/UI/Select';
 import { supabaseDB, User } from '../lib/supabaseDatabase';
+import { supabaseFinance, FinanceEditedLog, FinanceDeletedLog } from '../lib/supabaseFinance';
 import { useTableMode } from '../contexts/TableModeContext';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import ModeLabel from '../components/UI/ModeLabel';
-import { useBook } from '../contexts/BookContext';
-import { RefreshCw, AlertTriangle } from 'lucide-react';
-type AuditLogEntry = {
+import { RefreshCw, Search, Printer, FileSpreadsheet, ChevronDown, ChevronRight } from 'lucide-react';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface AuditRow {
   id: string;
-  cash_book_id: string;
-  old_values: string;
-  new_values: string;
-  edited_by: string;
-  edited_at: string;
-  action?: string;
-};
+  eventType: 'EDIT' | 'DELETE';
+  dateStr: string;   // YYYY-MM-DD
+  timeStr: string;   // hh:mm AM/PM
+  rawTimestamp: string;
+  operator: string;
+  module: string;
+  tableName: string;
+  loanNo: string;
+  customer: string;
+  fieldChanges: Array<{ field: string; before: string; after: string }>;
+  deletedSnapshot?: Record<string, any>;
+}
 
-const FIELDS = [
-  { key: 'c_date', label: 'Date' },
-  { key: 'company_name', label: 'Company' },
-  { key: 'acc_name', label: 'Main A/c' },
-  { key: 'sub_acc_name', label: 'SubAccount' },
-  { key: 'particulars', label: 'Particulars' },
-  { key: 'sale_qty', label: 'Purchase Qty' },
-  { key: 'purchase_qty', label: 'Sale Qty' },
-  { key: 'credit', label: 'Credit' },
-  { key: 'debit', label: 'Debit' },
-  { key: 'staff', label: 'Staff' },
-  { key: 'users', label: 'User' },
-  { key: 'entry_time', label: 'Entry Time' },
-] as const;
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-type FieldKey = (typeof FIELDS)[number]['key'];
+const IGNORED_KEYS = new Set([
+  'id', 'created_at', 'updated_at', 'deleted_at',
+  'fingerprint_url', 'fingerprint_template', 'fingerprint_added',
+  'customer_fingerprint_template', 'customer_fingerprint_image_url',
+  'customer_fingerprint_added', 'surety_fingerprint_template',
+  'surety_fingerprint_image_url', 'surety_fingerprint_added',
+  'photo_url', 'customer_photo_url', 'surety_photo_url',
+  'fingerprint_status', 'fingerprint_id',
+]);
 
-type CashBookPartial = Partial<Record<FieldKey, any>>;
-
-const PAGE_SIZE = 20;
-
-const highlightClass = 'bg-yellow-100 font-semibold';
-
-const getFieldDisplay = (field: FieldKey, value: any) => {
-  if (field === 'credit' || field === 'debit') {
-    return value ? `${Number(value).toLocaleString()}` : '-';
-  }
-  if (field === 'sale_qty' || field === 'purchase_qty') {
-    return value !== null && value !== undefined && value !== '' 
-      ? `${Number(value).toLocaleString()}` 
-      : '-';
-  }
-  if (field === 'c_date' && value) {
-    return !isNaN(new Date(value).getTime())
-      ? format(new Date(value), 'dd/MM/yyyy')
-      : value;
-  }
-  if (field === 'entry_time' && value) {
-    return !isNaN(new Date(value).getTime())
-      ? format(new Date(value), 'HH:mm:ss')
-      : value;
-  }
-  // No cleaning needed - data comes clean from database
-  return value || '-';
-};
-
-const getChangedFields = (oldObj: CashBookPartial, newObj: CashBookPartial) => {
-  const changed: Record<FieldKey, boolean> = {} as Record<FieldKey, boolean>;
-  for (const { key } of FIELDS) {
-    if ((oldObj?.[key] ?? '') !== (newObj?.[key] ?? '')) {
-      changed[key] = true;
+function diffObjects(
+  oldObj: Record<string, any>,
+  newObj: Record<string, any>
+): Array<{ field: string; before: string; after: string }> {
+  const diffs: Array<{ field: string; before: string; after: string }> = [];
+  const keys = Array.from(new Set([...Object.keys(oldObj), ...Object.keys(newObj)]));
+  for (const k of keys) {
+    if (IGNORED_KEYS.has(k)) continue;
+    const before = oldObj[k] != null ? String(oldObj[k]).trim() : '';
+    const after  = newObj[k] != null ? String(newObj[k]).trim() : '';
+    if (before !== after) {
+      diffs.push({ field: k, before: before || '—', after: after || '—' });
     }
   }
-  return changed;
-};
+  return diffs;
+}
 
-const EditedRecords = () => {
+function parseJson(v: any): Record<string, any> {
+  if (!v) return {};
+  if (typeof v === 'string') {
+    try { return JSON.parse(v); } catch { return {}; }
+  }
+  return v;
+}
+
+function toTimeParts(iso: string): { dateStr: string; timeStr: string } {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return { dateStr: '', timeStr: '' };
+  return {
+    dateStr: format(d, 'yyyy-MM-dd'),
+    timeStr: format(d, 'hh:mm a'),
+  };
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+const EditedRecords: React.FC = () => {
   const { mode: tableMode } = useTableMode();
-  const { currentBook } = useBook();
-  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState('');
-  const [userFilter, setUserFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const [isLoadingData, setIsLoadingData] = useState(false);
-  const [editedDates, setEditedDates] = useState<string[]>([]);
 
-  // Reload data when mode or book changes
-  useEffect(() => {
-    loadData();
-  }, [tableMode, currentBook?.id]);
+  const [loading, setLoading]       = useState(false);
+  const [rows, setRows]             = useState<AuditRow[]>([]);
+  const [expanded, setExpanded]     = useState<Set<string>>(new Set());
 
-  // Listen for dashboard refresh events to reload data when records are deleted
-  useEffect(() => {
-    const onRefresh = () => {
-      console.log('[EditedRecords] Dashboard refresh triggered, reloading data...');
-      loadData();
-    };
-    window.addEventListener('dashboard-refresh', onRefresh);
-    return () => window.removeEventListener('dashboard-refresh', onRefresh);
-  }, []);
+  // Applied filter state
+  const [search, setSearch]     = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate]     = useState('');
+  const [tableF, setTableF]     = useState('');
+  const [opF, setOpF]           = useState('');
+  const [actionF, setActionF]   = useState('');
 
-  // Listen for dashboard refresh events to reload data
-  useEffect(() => {
-    const handleDashboardRefresh = () => {
-      console.log('🔄 Dashboard refresh event received, reloading Edited Records data...');
-      loadData();
-    };
+  // Temp (pre-Apply) state
+  const [tSearch, setTSearch]     = useState('');
+  const [tFrom, setTFrom]         = useState('');
+  const [tTo, setTTo]             = useState('');
+  const [tTable, setTTable]       = useState('');
+  const [tOp, setTOp]             = useState('');
+  const [tAction, setTAction]     = useState('');
 
-    window.addEventListener('dashboard-refresh', handleDashboardRefresh);
-    return () => window.removeEventListener('dashboard-refresh', handleDashboardRefresh);
-  }, []);
+  useEffect(() => { load(); }, [tableMode]);
 
-  const loadData = async () => {
-    if (isLoadingData) {
-      console.log('⚠️ Already loading data, ignoring duplicate call');
-      return;
-    }
-    
-    setIsLoadingData(true);
+  // ── Data Loading ─────────────────────────────────────────────────────────
+
+  const load = async () => {
     setLoading(true);
-    
     try {
-      console.log('🔄 Loading Edited Records data...');
-      
-      // Load edit audit log, users, and distinct edited dates
-      const [log, users, distinctDates] = await Promise.all([
-        supabaseDB.getEditAuditLog(),
-        supabaseDB.getUsers(),
-        supabaseDB.getDistinctEditedDates(),
+      const [cbEdits, userList, finEdits, finDels] = await Promise.all([
+        supabaseDB.getEditAuditLog().catch(() => []),
+        supabaseDB.getUsers().catch(() => []),
+        supabaseFinance.getEditedLogs().catch(() => []),
+        supabaseFinance.getDeletedLogs().catch(() => []),
       ]);
-      
-      // Set the distinct edited dates for the dropdown
-      setEditedDates(distinctDates);
-      
-      setAuditLog((log || []) as AuditLogEntry[]);
-      setUsers((users || []) as User[]);
-      
-      console.log(`✅ Loaded Edited Records data:`, {
-        editLog: (log || []).length,
-        users: (users || []).length,
+
+      // Build user map
+      const userMap: Record<string, string> = {};
+      (userList as User[]).forEach(u => {
+        if (u.id)       userMap[u.id]       = u.username;
+        if (u.username) userMap[u.username] = u.username;
       });
-      
-      // Debug: Log the actual data structure
-      if (log && log.length > 0) {
-        console.log('📝 Sample audit log record:', log[0]);
-        console.log('📝 Audit log record keys:', Object.keys(log[0]));
+
+      const out: AuditRow[] = [];
+
+      // ── 1. Cash Book Edits (from edit_cash_book) ─────────────────────────
+      for (const item of (cbEdits as any[])) {
+        if (!item) continue;
+
+        const oldObj = parseJson(item.old_values);
+        const newObj = parseJson(item.new_values);
+
+        // Strict: skip if action is CREATE or old_values empty
+        if (item.action === 'CREATE') continue;
+        if (Object.keys(oldObj).length === 0) continue;
+
+        const isDelete = item.action === 'DELETE' || (!item.new_values && item.old_values);
+        const ts = item.edited_at || new Date().toISOString();
+        const { dateStr, timeStr } = toTimeParts(ts);
+
+        out.push({
+          id: `cb_${item.id}`,
+          eventType: isDelete ? 'DELETE' : 'EDIT',
+          dateStr,
+          timeStr,
+          rawTimestamp: ts,
+          operator: userMap[item.edited_by] || item.edited_by || 'SYSTEM',
+          module: 'Cash Book',
+          tableName: 'cash_book',
+          loanNo: oldObj.acc_name || newObj.acc_name || oldObj.sub_acc_name || '—',
+          customer: oldObj.particulars || newObj.particulars || oldObj.acc_name || '—',
+          fieldChanges: isDelete ? [] : diffObjects(oldObj, newObj),
+          deletedSnapshot: isDelete ? oldObj : undefined,
+        });
       }
-      
-      // Show consolidated message
-      const editCount = (log || []).length;
-      if (editCount > 0) {
-          const isShowingRecords = (log || []).some(rec => rec.action === 'SHOWING_RECORDS' || rec.action === 'SHOWING_RECENT_ENTRIES');
-          if (isShowingRecords) {
-            toast(`Showing ${editCount} recent entries from cash_book (no edit history available yet)`);
-          } else {
-            toast.success(`Loaded ${editCount} edit records`);
-          }
-      } else {
-        toast('No edit records found. This is normal if no records have been modified yet.');
+
+      // ── 2. Finance Edits ─────────────────────────────────────────────────
+      for (const log of (finEdits as FinanceEditedLog[])) {
+        if (!log) continue;
+        const oldObj = log.old_values || {};
+        const newObj = log.new_values || {};
+
+        // Strict: skip anything that looks like a create event
+        if (Object.keys(oldObj).length === 0) continue;
+        if ((newObj as any).source === 'RECORD CREATED') continue;
+
+        const ts = log.edited_at || new Date().toISOString();
+        const { dateStr, timeStr } = toTimeParts(ts);
+
+        out.push({
+          id: `fin_edit_${log.id}`,
+          eventType: 'EDIT',
+          dateStr,
+          timeStr,
+          rawTimestamp: ts,
+          operator: userMap[log.edited_by] || log.edited_by || 'SYSTEM',
+          module: 'Finance',
+          tableName: log.table_name || 'finance_loans',
+          loanNo: oldObj.loan_no || newObj.loan_no || oldObj.loan_id || newObj.loan_id || '—',
+          customer: oldObj.customer_name || newObj.customer_name || oldObj.customer || '—',
+          fieldChanges: diffObjects(oldObj, newObj),
+        });
       }
-      
-    } catch (error) {
-      console.error('❌ Error loading Edited Records data:', error);
-      setAuditLog([]);
-      setUsers([]);
-      toast.error('Failed to load Edited Records data. Please try again.');
+
+      // ── 3. Finance Deletes ───────────────────────────────────────────────
+      for (const log of (finDels as FinanceDeletedLog[])) {
+        if (!log) continue;
+        const oldObj = log.old_values || {};
+        const ts = log.deleted_at || new Date().toISOString();
+        const { dateStr, timeStr } = toTimeParts(ts);
+
+        out.push({
+          id: `fin_del_${log.id}`,
+          eventType: 'DELETE',
+          dateStr,
+          timeStr,
+          rawTimestamp: ts,
+          operator: userMap[log.deleted_by] || log.deleted_by || 'SYSTEM',
+          module: 'Finance',
+          tableName: log.table_name || 'finance_loans',
+          loanNo: oldObj.loan_no || oldObj.loan_id || '—',
+          customer: oldObj.customer_name || oldObj.customer || '—',
+          fieldChanges: [],
+          deletedSnapshot: oldObj,
+        });
+      }
+
+      out.sort((a, b) => new Date(b.rawTimestamp).getTime() - new Date(a.rawTimestamp).getTime());
+      setRows(out);
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to load audit trail');
     } finally {
       setLoading(false);
-      setIsLoadingData(false);
     }
   };
 
-  // Map userId to username
-  const userMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    users.forEach(u => {
-      map[u.id] = u.username;
-    });
-    return map;
-  }, [users]);
+  // ── Filters ──────────────────────────────────────────────────────────────
 
-  // Build dropdown of distinct edited dates (YYYY-MM-DD) - using dates fetched from database
-  const editedDateOptions = useMemo(() => {
-    // Use the dates fetched directly from database, sorted in descending order (newest first)
-    const sortedDates = [...editedDates].sort((a, b) => (a < b ? 1 : -1));
-    return [
-      { value: '', label: 'All Dates' },
-      ...sortedDates.map(d => ({ 
-        value: d, 
-        label: format(new Date(d), 'dd/MM/yyyy') 
-      }))
-    ];
-  }, [editedDates]);
-
-  // Filtered and searched log
-  const filteredLog = useMemo(() => {
-    console.log('🔍 Filtering audit log:', {
-      totalAuditLog: auditLog.length,
-      selectedDate,
-      userFilter
-    });
-    
-    const filtered = auditLog.filter(log => {
-      const oldObj: CashBookPartial = log.old_values
-        ? JSON.parse(log.old_values)
-        : {};
-      const newObj: CashBookPartial = log.new_values
-        ? JSON.parse(log.new_values)
-        : {};
-      // Compute if any field actually changed
-      const changedMap = getChangedFields(oldObj, newObj);
-      const hasAnyChange = Object.values(changedMap).some(Boolean);
-      
-      // Date-wise filter: normalize edited_at date to YYYY-MM-DD format
-      // Use the same extraction method as getDistinctEditedDates (slice(0, 10))
-      let editedDate = '';
-      if (log.edited_at) {
-        try {
-          const dateStr = String(log.edited_at);
-          // Extract first 10 characters (YYYY-MM-DD) - same as getDistinctEditedDates
-          editedDate = dateStr.slice(0, 10);
-          
-          // Validate that we got a valid date format
-          if (!editedDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            // If slice didn't work, try regex extraction
-            const dateMatch = dateStr.match(/(\d{4}-\d{2}-\d{2})/);
-            if (dateMatch) {
-              editedDate = dateMatch[1];
-            } else {
-              // Fallback: try parsing as Date object
-              const parsedDate = new Date(dateStr);
-              if (!isNaN(parsedDate.getTime())) {
-                editedDate = format(parsedDate, 'yyyy-MM-dd');
-              }
-            }
-          }
-        } catch (error) {
-          console.warn('Error parsing edited_at date:', log.edited_at, error);
-        }
-      }
-      
-      // Debug logging for date matching (only when filter is active)
-      if (selectedDate && selectedDate !== '') {
-        console.log('🔍 Date filter check:', {
-          logId: log.id,
-          edited_at_raw: log.edited_at,
-          editedDate_extracted: editedDate,
-          selectedDate,
-          matches: editedDate === selectedDate,
-          matchLength: editedDate.length,
-          selectedLength: selectedDate.length
-        });
-      }
-      
-      const matchesDate = selectedDate === '' || editedDate === selectedDate;
-      
-      // User filter: match by username (edited_by contains username, userFilter now contains username)
-      const matchesUser = userFilter === '' || log.edited_by === userFilter;
-      
-      // Exclude deletes and synthetic recent entries
-      const isDelete = log.action === 'DELETE' || (log.new_values == null && log.old_values != null);
-      const isSyntheticRecent = log.action === 'SHOWING_RECENT_ENTRIES';
-      const result = matchesDate && matchesUser && !isDelete && !isSyntheticRecent && hasAnyChange;
-      
-      if (!result && (selectedDate || userFilter)) {
-        console.log('🔍 Filtered out record:', {
-          id: log.id,
-          editedDate,
-          selectedDate,
-          matchesDate,
-          editedBy: log.edited_by,
-          userFilter,
-          matchesUser,
-          isDelete,
-          isSyntheticRecent,
-          hasAnyChange
-        });
-      }
-      
-      return result;
-    });
-    
-    console.log('🔍 Filtered result:', filtered.length, 'records out of', auditLog.length);
-    return filtered;
-  }, [auditLog, selectedDate, userFilter, users]);
-
-
-  // Pagination
-  const totalPages = Math.ceil(filteredLog.length / PAGE_SIZE);
-  const paginatedLog = filteredLog.slice(
-    (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE
-  );
-
-
-
-  // Print
-  const handlePrint = () => {
-    const printWindow = window.open('', '', 'width=1200,height=800');
-    if (!printWindow) return;
-    printWindow.document.write('<html><head><title>Edit Audit Log</title>');
-    printWindow.document.write(
-      '<style>table { border-collapse: collapse; width: 100%; font-size: 12px; } th, td { border: 1px solid #ccc; padding: 4px; } th { background: #f9fafb; }</style>'
-    );
-    printWindow.document.write('</head><body>');
-    printWindow.document.write('<h2>Edit Audit Log</h2>');
-    printWindow.document.write('<table><thead><tr>');
-    printWindow.document.write('<th>S.No</th>');
-    FIELDS.forEach(f =>
-      printWindow.document.write(`<th>${f.label} (Before)</th>`)
-    );
-    FIELDS.forEach(f =>
-      printWindow.document.write(`<th>${f.label} (After)</th>`)
-    );
-    printWindow.document.write(
-      '<th>Edited By</th><th>Edited At</th></tr></thead><tbody>'
-    );
-    filteredLog.forEach((log, idx) => {
-      const oldObj = log.old_values ? JSON.parse(log.old_values) : {};
-      const newObj = log.new_values ? JSON.parse(log.new_values) : {};
-      printWindow.document.write('<tr>');
-      printWindow.document.write(`<td>${idx + 1}</td>`);
-      FIELDS.forEach(f =>
-        printWindow.document.write(
-          `<td>${getFieldDisplay(f.key, oldObj[f.key])}</td>`
-        )
-      );
-      FIELDS.forEach(f =>
-        printWindow.document.write(
-          `<td>${getFieldDisplay(f.key, newObj[f.key])}</td>`
-        )
-      );
-      printWindow.document.write(
-        `<td>${userMap[log.edited_by] || log.edited_by}</td>`
-      );
-      printWindow.document.write(
-        `<td>${log.edited_at && !isNaN(new Date(log.edited_at).getTime()) ? format(new Date(log.edited_at), 'dd/MM/yyyy HH:mm') : ''}</td>`
-      );
-      printWindow.document.write('</tr>');
-    });
-    printWindow.document.write('</tbody></table></body></html>');
-    printWindow.document.close();
-    printWindow.print();
+  const apply = () => {
+    setSearch(tSearch); setFromDate(tFrom); setToDate(tTo);
+    setTableF(tTable); setOpF(tOp); setActionF(tAction);
   };
 
+  const reset = () => {
+    setTSearch(''); setSearch('');
+    setTFrom('');   setFromDate('');
+    setTTo('');     setToDate('');
+    setTTable('');  setTableF('');
+    setTOp('');     setOpF('');
+    setTAction(''); setActionF('');
+  };
 
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return rows.filter(r => {
+      if (fromDate  && r.dateStr < fromDate)  return false;
+      if (toDate    && r.dateStr > toDate)    return false;
+      if (tableF    && r.tableName !== tableF) return false;
+      if (opF       && r.operator.toLowerCase() !== opF.toLowerCase()) return false;
+      if (actionF   && r.eventType !== actionF) return false;
+      if (q) {
+        const hit =
+          r.loanNo.toLowerCase().includes(q) ||
+          r.customer.toLowerCase().includes(q) ||
+          r.operator.toLowerCase().includes(q) ||
+          r.tableName.toLowerCase().includes(q) ||
+          r.fieldChanges.some(f =>
+            f.field.toLowerCase().includes(q) ||
+            f.before.toLowerCase().includes(q) ||
+            f.after.toLowerCase().includes(q)
+          ) ||
+          (r.deletedSnapshot && Object.entries(r.deletedSnapshot).some(
+            ([k, v]) => k.toLowerCase().includes(q) || String(v).toLowerCase().includes(q)
+          ));
+        if (!hit) return false;
+      }
+      return true;
+    });
+  }, [rows, search, fromDate, toDate, tableF, opF, actionF]);
 
-  // Check if we're showing recent entries instead of actual edits
-  const isShowingRecentEntries = filteredLog.some(rec => rec.action === 'SHOWING_RECENT_ENTRIES');
+  // ── Derived counts ───────────────────────────────────────────────────────
+
+  const editCount   = rows.filter(r => r.eventType === 'EDIT').length;
+  const deleteCount = rows.filter(r => r.eventType === 'DELETE').length;
+
+  const uniqueTables  = Array.from(new Set(rows.map(r => r.tableName))).sort();
+  const uniqueOps     = Array.from(new Set(rows.map(r => r.operator))).sort();
+
+  const toggle = (id: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  // ── Excel export ─────────────────────────────────────────────────────────
+
+  const exportExcel = () => {
+    const headers = ['Date','Time','Operator','Module','Table','Loan','Customer','Action','Changes'];
+    const csvRows = [
+      headers.join(','),
+      ...filtered.map(r => [
+        r.dateStr, r.timeStr, r.operator, r.module, r.tableName,
+        r.loanNo, `"${r.customer}"`,
+        r.eventType,
+        r.eventType === 'EDIT' ? `${r.fieldChanges.length} Fields Changed` : 'DELETED'
+      ].join(','))
+    ];
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `audit_log_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────
+
   return (
-    <div className='space-y-6'>
-      {/* Locked Book Banner */}
-      {currentBook?.is_locked && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl shadow-sm flex items-center gap-3 no-print">
-          <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 animate-pulse" />
-          <div>
-            <h3 className="text-sm font-bold text-red-800">This Book Is Locked (Read Only)</h3>
-            <p className="text-xs text-red-700">Writing, editing, and deletion operations are disabled for this accounting period.</p>
-          </div>
-        </div>
-      )}
+    <div className="space-y-3">
 
-      {/* Header */}
-      <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-4'>
-        <div>
-          <h1 className='text-2xl font-bold text-gray-900 flex items-center gap-2.5'>
-            {isShowingRecentEntries ? 'Recent Records (No Edit History Available)' : 'Edited Records'}
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-              currentBook?.is_locked 
-                ? 'bg-red-100 text-red-700' 
-                : tableMode === 'itr' 
-                  ? 'bg-emerald-100 text-emerald-700' 
-                  : 'bg-blue-100 text-blue-700'
-            }`}>
-              {tableMode === 'itr' ? 'ITR Mode' : 'Regular Mode'} | {currentBook?.book_code || 'No Book'}
-            </span>
+      {/* ═══ HEADER ══════════════════════════════════════════════════════════ */}
+      <div className="flex items-center justify-between no-print pb-2 border-b border-gray-200">
+        <div className="flex items-center gap-4">
+          <h1 className="text-base font-extrabold text-gray-900 uppercase tracking-widest">
+            AUDIT LOGS
           </h1>
-          <p className='text-gray-600 mt-1'>
-            {isShowingRecentEntries ? `Showing ${filteredLog.length} recent entries` : `Edits: ${filteredLog.length}`}
-          </p>
+          <span className="text-xs font-semibold text-yellow-700 bg-yellow-50 border border-yellow-200 px-2 py-0.5 rounded-full">
+            Edited: {editCount}
+          </span>
+          <span className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+            Deleted: {deleteCount}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+          >
+            <Printer className="w-3.5 h-3.5" /> Print
+          </button>
+          <button
+            onClick={exportExcel}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+          </button>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </div>
       </div>
 
-      <ModeLabel />
-      <Card>
-      <div className='flex flex-wrap gap-3 mb-4 items-end'>
-        <Select
-          label='Edited Date'
-          value={selectedDate}
-          onChange={setSelectedDate}
-          options={editedDateOptions}
-          className='w-48'
-        />
-        <Select
-          label='Edited By'
-          value={userFilter}
-          onChange={setUserFilter}
-          options={[
-            { value: '', label: 'All Users' },
-            ...users.map(u => ({ value: u.username, label: u.username })),
-          ]}
-          className='w-48'
-        />
-        <Button 
-          onClick={loadData} 
-          variant='secondary' 
-          size='sm'
-          disabled={loading}
-          className='flex items-center gap-2'
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          {loading ? 'Loading...' : 'Refresh'}
-        </Button>
-        <Button onClick={handlePrint} variant='secondary' size='sm'>
-          Print
-        </Button>
-      </div>
-      {loading ? (
-        <div className='text-center py-8 text-blue-600 font-semibold'>
-          Loading edit history...
-        </div>
-      ) : filteredLog.length === 0 ? (
-        <div className='text-center py-8'>
-          <div className='text-gray-500 mb-2'>
-            No edit history found.
-          </div>
-          <div className='text-sm text-gray-400'>
-            This is normal if no records have been edited yet.
-          </div>
-        </div>
-      ) : (
-        <>
+      {/* ═══ FILTER BAR — ONE ROW ════════════════════════════════════════════ */}
+      <div className="no-print flex items-end gap-2 flex-wrap">
 
-          <div className='overflow-x-auto'>
-          <table className='w-full text-xs table-fixed border border-gray-200'>
-            <thead className='sticky top-0 bg-gray-50 z-10'>
-              <tr className='border-b border-gray-200'>
-                <th className='w-12 px-1 py-1 text-left font-medium text-gray-700'>
-                  S.No
-                </th>
-                <th className='w-16 px-1 py-1 text-left font-medium text-gray-700'>
-                  Type
-                </th>
-                {FIELDS.map(f => (
-                  <th key={f.key} className='w-20 px-1 py-1 text-left font-medium text-gray-700'>
-                    {f.label}
-                  </th>
-                ))}
-                <th className='w-20 px-1 py-1 text-left font-medium text-gray-700'>
-                  Edited By
-                </th>
-                <th className='w-20 px-1 py-1 text-left font-medium text-gray-700'>
-                  Edited At
-                </th>
+        {/* Search */}
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Search</label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              value={tSearch}
+              onChange={e => setTSearch(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && apply()}
+              placeholder="Loan, customer, field..."
+              className="pl-7 pr-2 py-1.5 border border-gray-300 rounded text-xs w-44 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+            />
+          </div>
+        </div>
+
+        {/* Date From */}
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Date</label>
+          <input
+            type="date" value={tFrom} onChange={e => setTFrom(e.target.value)}
+            className="px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+          />
+        </div>
+
+        {/* Date To */}
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">To</label>
+          <input
+            type="date" value={tTo} onChange={e => setTTo(e.target.value)}
+            className="px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+          />
+        </div>
+
+        {/* Table */}
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Table</label>
+          <select
+            value={tTable} onChange={e => setTTable(e.target.value)}
+            className="px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 min-w-[110px]"
+          >
+            <option value="">All Tables</option>
+            {uniqueTables.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+
+        {/* Operator */}
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Operator</label>
+          <select
+            value={tOp} onChange={e => setTOp(e.target.value)}
+            className="px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 min-w-[110px]"
+          >
+            <option value="">All Operators</option>
+            {uniqueOps.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+
+        {/* Action Type */}
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Action Type</label>
+          <select
+            value={tAction} onChange={e => setTAction(e.target.value)}
+            className="px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+          >
+            <option value="">All</option>
+            <option value="EDIT">Edited</option>
+            <option value="DELETE">Deleted</option>
+          </select>
+        </div>
+
+        {/* Apply */}
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[10px] invisible">x</label>
+          <button
+            onClick={apply}
+            className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
+          >
+            Apply
+          </button>
+        </div>
+
+        {/* Reset */}
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[10px] invisible">x</label>
+          <button
+            onClick={reset}
+            className="px-4 py-1.5 text-xs font-semibold text-gray-600 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 transition-colors"
+          >
+            Reset
+          </button>
+        </div>
+
+        {/* Result count */}
+        <div className="flex flex-col gap-0.5 ml-auto">
+          <label className="text-[10px] invisible">x</label>
+          <span className="text-xs text-gray-500 py-1.5">
+            {filtered.length} record{filtered.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
+
+      {/* ═══ TABLE ═══════════════════════════════════════════════════════════ */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left border-collapse">
+            <thead className="bg-gray-100 text-gray-600 font-bold uppercase tracking-wider text-[10px] border-b border-gray-200">
+              <tr>
+                <th className="px-3 py-2.5 border-r border-gray-200 w-[90px]">Date</th>
+                <th className="px-3 py-2.5 border-r border-gray-200 w-[72px]">Time</th>
+                <th className="px-3 py-2.5 border-r border-gray-200 w-[90px]">Operator</th>
+                <th className="px-3 py-2.5 border-r border-gray-200 w-[100px]">Module</th>
+                <th className="px-3 py-2.5 border-r border-gray-200 w-[80px]">Loan</th>
+                <th className="px-3 py-2.5 border-r border-gray-200 w-[140px]">Customer</th>
+                <th className="px-3 py-2.5 border-r border-gray-200 w-[72px] text-center">Action</th>
+                <th className="px-3 py-2.5 border-r border-gray-200 w-[110px] text-center">Changes</th>
+                <th className="px-3 py-2.5">Preview</th>
               </tr>
             </thead>
-            <tbody>
-              {paginatedLog.map((log, idx) => {
-                const oldObj = log.old_values ? JSON.parse(log.old_values) : {};
-                const newObj = log.new_values ? JSON.parse(log.new_values) : {};
-                const changed = getChangedFields(oldObj, newObj);
-                return (
-                  <React.Fragment key={log.id}>
-                    {/* Before Edit Row (no background color) */}
-                    <tr className='border-b border-gray-100 hover:bg-gray-50'>
-                      <td className='w-12 px-1 py-1 text-center text-sm font-bold' rowSpan={1}>
-                        {(page - 1) * PAGE_SIZE + idx + 1}
-                      </td>
-                      <td className='w-16 px-1 py-1 font-semibold text-red-600 text-sm font-bold'>
-                        {log.action === 'SHOWING_RECENT_ENTRIES' ? 'Entry' : 'Before'}
-                      </td>
-                      {FIELDS.map(f => (
-                        <td
-                          key={f.key + '-before'}
-                          className='w-20 px-1 py-1 text-sm truncate font-bold'
-                          title={getFieldDisplay(f.key, oldObj[f.key])}
-                        >
-                          {getFieldDisplay(f.key, oldObj[f.key])}
+            <tbody className="bg-white divide-y divide-gray-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={9} className="py-10 text-center text-gray-400">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-1.5 text-blue-400" />
+                    Loading audit trail…
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-10 text-center text-gray-400">
+                    No audit records found.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map(row => {
+                  const isExpanded = expanded.has(row.id);
+                  const isDelete   = row.eventType === 'DELETE';
+
+                  return (
+                    <React.Fragment key={row.id}>
+                      {/* ── MAIN ROW ─────────────────────────────────────── */}
+                      <tr
+                        className={`cursor-pointer transition-colors ${
+                          isExpanded ? 'bg-blue-50/60' : 'hover:bg-gray-50/80'
+                        }`}
+                        onClick={() => toggle(row.id)}
+                      >
+                        {/* Date */}
+                        <td className="px-3 py-2 font-medium text-gray-800 border-r border-gray-100 whitespace-nowrap">
+                          {row.dateStr}
                         </td>
-                      ))}
-                      <td className='w-20 px-1 py-1 text-sm truncate font-bold' title={userMap[log.edited_by] || log.edited_by}>
-                        {userMap[log.edited_by] || log.edited_by}
-                      </td>
-                      <td className='w-20 px-1 py-1 text-sm font-bold'>
-                        {log.edited_at &&
-                        !isNaN(new Date(log.edited_at).getTime())
-                          ? format(new Date(log.edited_at), 'dd/MM/yyyy HH:mm')
-                          : ''}
-                      </td>
-                    </tr>
-                    {/* After Edit Row */}
-                    <tr className='border-b border-gray-100 hover:bg-gray-50'>
-                      <td className='w-12 px-1 py-1 text-center text-sm'></td>
-                      <td className='w-16 px-1 py-1 font-semibold text-green-700 text-sm font-bold'>
-                        {log.action === 'SHOWING_RECENT_ENTRIES' ? 'Details' : 'After'}
-                      </td>
-                      {FIELDS.map(f => (
-                        <td
-                          key={f.key + '-after'}
-                          className={`w-20 px-1 py-1 text-sm truncate font-bold ${changed[f.key] ? highlightClass : ''}`}
-                          title={getFieldDisplay(f.key, newObj[f.key])}
-                        >
-                          {getFieldDisplay(f.key, newObj[f.key])}
+
+                        {/* Time */}
+                        <td className="px-3 py-2 text-gray-500 border-r border-gray-100 whitespace-nowrap">
+                          {row.timeStr}
                         </td>
-                      ))}
-                      <td className='w-20 px-1 py-1 text-sm truncate font-bold' title={userMap[log.edited_by] || log.edited_by}>
-                        {userMap[log.edited_by] || log.edited_by}
-                      </td>
-                      <td className='w-20 px-1 py-1 text-sm font-bold'>
-                        {log.edited_at &&
-                        !isNaN(new Date(log.edited_at).getTime())
-                          ? format(new Date(log.edited_at), 'dd/MM/yyyy HH:mm')
-                          : ''}
-                      </td>
-                    </tr>
-                  </React.Fragment>
-                );
-              })}
+
+                        {/* Operator */}
+                        <td className="px-3 py-2 font-semibold text-gray-800 border-r border-gray-100 whitespace-nowrap">
+                          {row.operator}
+                        </td>
+
+                        {/* Module (table name) */}
+                        <td className="px-3 py-2 border-r border-gray-100">
+                          <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">
+                            {row.tableName}
+                          </span>
+                        </td>
+
+                        {/* Loan */}
+                        <td className="px-3 py-2 font-medium text-gray-800 border-r border-gray-100 whitespace-nowrap">
+                          {row.loanNo}
+                        </td>
+
+                        {/* Customer */}
+                        <td className="px-3 py-2 text-gray-700 border-r border-gray-100 max-w-[140px] truncate">
+                          {row.customer}
+                        </td>
+
+                        {/* Action badge */}
+                        <td className="px-3 py-2 border-r border-gray-100 text-center">
+                          {isDelete ? (
+                            <span className="text-[10px] font-bold text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                              Deleted
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-yellow-700 bg-yellow-100 border border-yellow-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                              Edited
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Changes */}
+                        <td className="px-3 py-2 border-r border-gray-100 text-center text-gray-600 font-medium whitespace-nowrap">
+                          {isDelete
+                            ? <span className="text-red-500 font-semibold">DELETED</span>
+                            : row.fieldChanges.length === 0
+                              ? <span className="text-gray-400 italic">No diff</span>
+                              : `${row.fieldChanges.length} Field${row.fieldChanges.length !== 1 ? 's' : ''} Changed`
+                          }
+                        </td>
+
+                        {/* Preview — inline diff, first 3 changes */}
+                        <td className="px-3 py-2">
+                          <div className="flex items-start gap-1">
+                            <span className="text-gray-400 mt-0.5 flex-shrink-0">
+                              {isExpanded
+                                ? <ChevronDown className="w-3.5 h-3.5" />
+                                : <ChevronRight className="w-3.5 h-3.5" />}
+                            </span>
+                            {!isExpanded && (
+                              <div className="flex flex-col gap-0.5 min-w-0">
+                                {isDelete ? (
+                                  <span className="text-red-400 italic text-[11px]">Entire record removed</span>
+                                ) : (
+                                  <>
+                                    {row.fieldChanges.slice(0, 3).map((f, i) => (
+                                      <div key={i} className="flex items-center gap-1 truncate max-w-[260px]">
+                                        <span className="font-semibold text-gray-500 flex-shrink-0">{f.field}:</span>
+                                        <span className="text-red-500 line-through truncate">{f.before}</span>
+                                        <span className="text-gray-400 flex-shrink-0">→</span>
+                                        <span className="text-green-600 font-semibold truncate">{f.after}</span>
+                                      </div>
+                                    ))}
+                                    {row.fieldChanges.length > 3 && (
+                                      <span className="text-blue-500 text-[11px] font-medium">
+                                        +{row.fieldChanges.length - 3} More
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* ── EXPANDED ROW ─────────────────────────────────── */}
+                      {isExpanded && (
+                        <tr className="bg-gray-50/80">
+                          <td colSpan={9} className="px-4 py-3">
+                            {isDelete ? (
+                              // Deleted snapshot
+                              <div className="bg-white border border-red-200 rounded-lg p-3">
+                                <div className="text-[11px] font-bold uppercase text-red-700 mb-2 pb-1.5 border-b border-red-100 tracking-wider">
+                                  Deleted Snapshot
+                                </div>
+                                {row.deletedSnapshot && Object.keys(row.deletedSnapshot).length > 0 ? (
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-2">
+                                    {Object.entries(row.deletedSnapshot).map(([k, v]) => {
+                                      if (IGNORED_KEYS.has(k)) return null;
+                                      return (
+                                        <div key={k} className="flex flex-col gap-0.5">
+                                          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">{k}</span>
+                                          <span className="text-[11px] text-gray-800 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded truncate" title={String(v)}>
+                                            {v != null && v !== '' ? String(v) : '—'}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-gray-400 italic">No snapshot data available.</span>
+                                )}
+                              </div>
+                            ) : (
+                              // Edit diff table
+                              <div className="bg-white border border-gray-200 rounded-lg p-3">
+                                <div className="text-[11px] font-bold uppercase text-gray-600 mb-2 pb-1.5 border-b border-gray-100 tracking-wider">
+                                  Field Changes — {row.fieldChanges.length} field{row.fieldChanges.length !== 1 ? 's' : ''}
+                                </div>
+                                {row.fieldChanges.length > 0 ? (
+                                  <table className="w-full border-collapse text-[11px]">
+                                    <thead>
+                                      <tr className="text-[10px] uppercase tracking-wider text-gray-500">
+                                        <th className="py-1 px-2 border border-gray-200 bg-gray-50 font-bold text-left w-[25%]">Field</th>
+                                        <th className="py-1 px-2 border border-gray-200 bg-red-50 text-red-700 font-bold text-left w-[37.5%]">Before</th>
+                                        <th className="py-1 px-2 border border-gray-200 bg-green-50 text-green-700 font-bold text-left w-[37.5%]">After</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {row.fieldChanges.map((f, i) => (
+                                        <tr key={i} className="hover:bg-gray-50/80">
+                                          <td className="py-1.5 px-2 border border-gray-200 font-semibold text-gray-700 break-words">{f.field}</td>
+                                          <td className="py-1.5 px-2 border border-gray-200 text-red-600 break-words bg-red-50/40">{f.before}</td>
+                                          <td className="py-1.5 px-2 border border-gray-200 text-green-700 font-semibold break-words bg-green-50/40">{f.after}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                ) : (
+                                  <span className="text-[11px] text-gray-400 italic">No field differences detected.</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              )}
             </tbody>
           </table>
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className='flex justify-center items-center gap-2 mt-4'>
-              <Button
-                size='sm'
-                variant='secondary'
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                Prev
-              </Button>
-              <span className='text-sm'>
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                size='sm'
-                variant='secondary'
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          )}
-          </div>
-        </>
-      )}
+        </div>
+      </div>
 
-      </Card>
+      {/* ═══ PRINT STYLES ════════════════════════════════════════════════════ */}
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          body { font-size: 11px; }
+        }
+      `}</style>
     </div>
   );
 };

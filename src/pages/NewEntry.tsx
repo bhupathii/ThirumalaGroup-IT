@@ -2292,7 +2292,12 @@ const NewEntry: React.FC = () => {
                       <CustomCalendar
                         onDateSelect={(date) => {
                           handleInputChange('date', date);
-                          setMainDateInput(format(new Date(date), 'dd/MM/yyyy'));
+                          const parts = date.split('-');
+                          if (parts.length === 3) {
+                            setMainDateInput(`${parts[2]}/${parts[1]}/${parts[0]}`);
+                          } else {
+                            setMainDateInput(date);
+                          }
                           setShowMainCalendar(false);
                         }}
                         selectedDate={entry.date}

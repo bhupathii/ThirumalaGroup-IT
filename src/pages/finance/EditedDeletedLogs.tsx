@@ -755,48 +755,56 @@ const EditedDeletedLogs: React.FC = () => {
           </div>
 
           {/* Date Range & Clear Filters */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-3 border-t border-slate-100">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-slate-500" />
-              <span className="text-xs font-black text-slate-800 uppercase tracking-wider">DATE RANGE FILTER:</span>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="w-[140px]">
-                <FinanceSmartCalendar
-                  value={filterStartDate}
-                  onChange={setFilterStartDate}
-                  module="EDIT_DELETE_LOGS"
-                  placeholder="START DATE"
-                  allowClear
-                />
+          <div className="flex flex-col gap-3 pt-3 border-t border-slate-100">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 shrink-0">
+                <Calendar className="h-4 w-4 text-slate-500" />
+                <span className="text-xs font-black text-slate-800 uppercase tracking-wider whitespace-nowrap">DATE RANGE FILTER:</span>
               </div>
-              <span className="text-slate-400 text-xs font-bold uppercase">TO</span>
-              <div className="w-[140px]">
-                <FinanceSmartCalendar
-                  value={filterEndDate}
-                  onChange={setFilterEndDate}
-                  module="EDIT_DELETE_LOGS"
-                  placeholder="END DATE"
-                  allowClear
-                />
-              </div>
-            </div>
 
-            {(searchQuery || filterTableType !== 'all' || filterOperator !== 'all' || filterStartDate || filterEndDate) && (
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setFilterTableType('all');
-                  setFilterOperator('all');
-                  setFilterStartDate('');
-                  setFilterEndDate('');
-                }}
-                className="text-xs font-bold text-rose-600 hover:text-rose-800 transition-colors sm:ml-auto uppercase tracking-wider"
-              >
-                CLEAR FILTERS
-              </button>
-            )}
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Start Date */}
+                <div className="min-w-[160px] w-[160px]">
+                  <FinanceSmartCalendar
+                    value={filterStartDate}
+                    onChange={setFilterStartDate}
+                    module="EDIT_DELETE_LOGS"
+                    placeholder="START DATE"
+                    allowClear
+                  />
+                </div>
+
+                <span className="text-slate-400 text-xs font-bold uppercase shrink-0">→</span>
+
+                {/* End Date */}
+                <div className="min-w-[160px] w-[160px]">
+                  <FinanceSmartCalendar
+                    value={filterEndDate}
+                    onChange={setFilterEndDate}
+                    module="EDIT_DELETE_LOGS"
+                    placeholder="END DATE"
+                    allowClear
+                  />
+                </div>
+
+                {(searchQuery || filterTableType !== 'all' || filterOperator !== 'all' || filterStartDate || filterEndDate) && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setFilterTableType('all');
+                      setFilterOperator('all');
+                      setFilterStartDate('');
+                      setFilterEndDate('');
+                    }}
+                    className="text-xs font-bold text-rose-600 hover:text-rose-800 transition-colors uppercase tracking-wider whitespace-nowrap shrink-0"
+                  >
+                    ✕ CLEAR FILTERS
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
+
         </div>
       )}
 

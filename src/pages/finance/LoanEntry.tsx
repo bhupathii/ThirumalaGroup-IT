@@ -1076,10 +1076,12 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
           mandal: custMandal || null,
           district: custDistrict || null,
           partner_name: partnerName
-        }, staffName, true);
+        }, staffName);
+
 
         // 2. Update loan record
-        await supabaseFinance.updateLoan(editLoanId, loanPayload, staffName, true);
+        await supabaseFinance.updateLoan(editLoanId, loanPayload, staffName);
+
 
         // 3. Update documents
         await supabase.from('finance_loan_documents').delete().eq('loan_id', editLoanId);

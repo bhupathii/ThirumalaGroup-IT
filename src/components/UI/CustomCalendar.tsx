@@ -43,65 +43,79 @@ const CustomCalendar = ({
     }
     return new Date();
   });
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+
   const [loadedEntries, setLoadedEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const entries = providedEntries ?? loadedEntries;
+
+  // Listen for dashboard refresh events to update indicators instantly
+  useEffect(() => {
+    const handleRefresh = () => {
+      setRefreshTrigger(prev => prev + 1);
+    };
+    window.addEventListener('dashboard-refresh', handleRefresh);
+    return () => window.removeEventListener('dashboard-refresh', handleRefresh);
+  }, []);
 
   useEffect(() => {
     if (providedEntries !== undefined && providedEntries !== null) return;
 
     let isMounted = true;
 
-    const loadAll = async () => {
+    const loadMonthEntries = async () => {
       setLoading(true);
       try {
-        let all: any[];
+        let dateStrings: string[] = [];
         if (tableMode === 'finance') {
-          all = await supabaseFinance.getAllFinanceEntryDates();
+          const raw = await supabaseFinance.getAllFinanceEntryDates();
+          dateStrings = (raw || []).map((r: any) => typeof r === 'string' ? r : r.c_date || r.entry_date).filter(Boolean);
         } else {
-          all = await supabaseDB.getAllCashBookEntries();
+          dateStrings = await supabaseDB.getCashBookEntryDatesForMonth(year, month + 1);
         }
-        if (isMounted) setLoadedEntries(all || []);
+        if (isMounted) {
+          setLoadedEntries(dateStrings.map(d => ({ c_date: d })));
+        }
       } catch (e) {
-        console.error('Error loading entries for calendar:', e);
+        console.error('Error loading month entries for calendar:', e);
         if (isMounted) setLoadedEntries([]);
       } finally {
         if (isMounted) setLoading(false);
       }
     };
 
-    loadAll();
+    loadMonthEntries();
 
     return () => {
       isMounted = false;
     };
-  }, [providedEntries, tableMode]);
+  }, [providedEntries, tableMode, year, month, refreshTrigger]);
 
   const dateCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     if (!entries || entries.length === 0) return counts;
 
     entries.forEach((entry: any) => {
-      if (!entry || !entry.c_date) return;
+      if (!entry) return;
       
       let dateStr = '';
+      const rawDate = typeof entry === 'string' ? entry : entry.c_date || entry.entry_date;
       
-      // Handle string dates - extract YYYY-MM-DD format
-      if (typeof entry.c_date === 'string') {
-        // Try to extract YYYY-MM-DD from string first (most common format)
-        const dateMatch = entry.c_date.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (typeof rawDate === 'string') {
+        const dateMatch = rawDate.match(/^(\d{4}-\d{2}-\d{2})/);
         if (dateMatch) {
           dateStr = dateMatch[1];
         } else {
-          // Try parsing as Date object
-          const d = new Date(entry.c_date);
+          const d = new Date(rawDate);
           if (!isNaN(d.getTime())) {
             dateStr = format(d, 'yyyy-MM-dd');
           }
         }
-      } else if (entry.c_date instanceof Date) {
-        dateStr = format(entry.c_date, 'yyyy-MM-dd');
+      } else if (rawDate instanceof Date) {
+        dateStr = format(rawDate, 'yyyy-MM-dd');
       }
       
       if (dateStr) {
@@ -117,8 +131,6 @@ const CustomCalendar = ({
   }, [dateCounts]);
 
   const today = new Date();
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth();
 
   const firstDay = startOfMonth(currentMonth);
   const startDate = startOfWeek(firstDay);

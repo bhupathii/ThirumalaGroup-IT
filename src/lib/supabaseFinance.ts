@@ -71,6 +71,40 @@ export interface FinanceCustomer {
   phone_2?: string | null;
 }
 
+/**
+ * Helper to fetch ALL pages from a Supabase query builder, bypassing the 1000-row default limit.
+ */
+export const fetchAllPages = async <T = any>(
+  queryFactory: (from: number, to: number) => any,
+  pageSize = 1000
+): Promise<T[]> => {
+  let allRows: T[] = [];
+  let page = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await queryFactory(from, to);
+    if (error) {
+      console.error('Error in fetchAllPages:', error);
+      break;
+    }
+    if (data && data.length > 0) {
+      allRows.push(...data);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allRows;
+};
+
 export interface FinanceGuarantor {
   id: string;
   guarantor_id?: number;
@@ -1582,15 +1616,15 @@ class SupabaseFinance {
     }
   }
 
-  // --- Customers ---
   async getCustomers(): Promise<FinanceCustomer[]> {
     try {
-      const { data, error } = await supabase
-        .from('finance_customers')
-        .select('*')
-        .order('name');
-      if (error) throw error;
-      return data || [];
+      return await fetchAllPages<FinanceCustomer>((from, to) =>
+        supabase
+          .from('finance_customers')
+          .select('*')
+          .order('name')
+          .range(from, to)
+      );
     } catch (error) {
       console.error('Error fetching finance customers:', error);
       return [];
@@ -1754,12 +1788,13 @@ class SupabaseFinance {
   // --- Loans ---
   async getLoans(): Promise<(FinanceLoan & { customer: FinanceCustomer })[]> {
     try {
-      const { data, error } = await supabase
-        .from('finance_loans')
-        .select('id, loan_id, amount, date, status, loan_category, interest_rate, duration_months, customer_id, customer:finance_customers!customer_id(id, name, phone, partner_name)')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data as any) || [];
+      return await fetchAllPages<any>((from, to) =>
+        supabase
+          .from('finance_loans')
+          .select('id, loan_id, amount, date, status, loan_category, interest_rate, duration_months, customer_id, customer:finance_customers!customer_id(id, name, phone, partner_name)')
+          .order('created_at', { ascending: false })
+          .range(from, to)
+      );
     } catch (error) {
       console.error('Error fetching finance loans:', error);
       return [];
@@ -1783,21 +1818,26 @@ class SupabaseFinance {
 
   async getCDLoansList(): Promise<any[]> {
     try {
-      const { data, error } = await supabase
-        .from('finance_loans')
-        .select(`
-          id, loan_id, amount, date, status, npa_closed, loan_category, interest_rate, penalty_percent, duration_months,
-          customer_id, guarantor_1_id, guarantor_2_id,
-          customer:finance_customers!customer_id(id, name, phone, partner_name)
-        `)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllPages<any>((from, to) =>
+        supabase
+          .from('finance_loans')
+          .select(`
+            id, loan_id, amount, date, status, npa_closed, loan_category, interest_rate, penalty_percent, duration_months,
+            customer_id, guarantor_1_id, guarantor_2_id,
+            customer:finance_customers!customer_id(id, name, phone, partner_name)
+          `)
+          .order('created_at', { ascending: false })
+          .range(from, to)
+      );
       if (!data || data.length === 0) return [];
 
       // Fetch customers to resolve guarantors in-memory to bypass missing DB foreign keys
-      const { data: customers } = await supabase
-        .from('finance_customers')
-        .select('id, name, phone');
+      const customers = await fetchAllPages<any>((from, to) =>
+        supabase
+          .from('finance_customers')
+          .select('id, name, phone')
+          .range(from, to)
+      );
 
       const customerMap = new Map();
       if (customers) {
@@ -2952,21 +2992,9 @@ class SupabaseFinance {
       const isCreate = !oldValues || Object.keys(oldValues || {}).length === 0;
 
       if (isCreate) {
-        // Record Creation (Insert Operation) - Log as RECORD CREATED
-        const payloadNewValues = {
-          ...(typeof newValues === 'object' && newValues !== null ? newValues : { value: newValues }),
-          source: 'RECORD CREATED'
-        };
-
-        await supabase
-          .from('finance_edited_logs')
-          .insert([{
-            table_name: tableName,
-            record_id: recordId,
-            old_values: {},
-            new_values: payloadNewValues,
-            edited_by: editedBy
-          }]);
+        // Record Creation (Insert Operation) - We no longer log this to Edited Logs
+        // Per requirements: CREATE -> Activity Log (or separate Created Logs)
+        // UPDATE -> Edited Logs ONLY. A CREATE operation must NEVER appear inside Edited Logs.
         return;
       }
 
@@ -3275,21 +3303,22 @@ class SupabaseFinance {
   // --- Cashbook Entries ---
   async getCashbookEntries(bookId?: string | null, startDate?: string, endDate?: string): Promise<FinanceCashbookEntry[]> {
     try {
-      let query = supabase.from('finance_cashbook_entries').select('*');
-      if (bookId) {
-        query = query.eq('book_id', bookId);
-      }
-      if (startDate) {
-        query = query.gte('entry_date', startDate);
-      }
-      if (endDate) {
-        query = query.lte('entry_date', endDate);
-      }
-      const { data, error } = await query
-        .order('entry_date', { ascending: false })
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data || [];
+      return await fetchAllPages<FinanceCashbookEntry>((from, to) => {
+        let query = supabase.from('finance_cashbook_entries').select('*');
+        if (bookId) {
+          query = query.eq('book_id', bookId);
+        }
+        if (startDate) {
+          query = query.gte('entry_date', startDate);
+        }
+        if (endDate) {
+          query = query.lte('entry_date', endDate);
+        }
+        return query
+          .order('entry_date', { ascending: false })
+          .order('created_at', { ascending: false })
+          .range(from, to);
+      });
     } catch (error) {
       console.error('Error fetching cashbook entries:', error);
       return [];

@@ -130,48 +130,82 @@ export const dailyFinancialTransactionService = {
       return 'PROFIT_AND_LOSS';
     };
 
-    // 2. Fetch CD Ledger Entries
-    const { data: cdEntries, error: cdError } = await supabase
-      .from('finance_cd_ledger_entries')
-      .select('*, loan:finance_loans(loan_id), customer:finance_customers(name)')
-      .neq('account_name', 'CD Amount Paid')
-      .gte('entry_date', fromDate)
-      .lte('entry_date', toDate);
+    // Helper for fetching all pages to avoid Supabase default 1000-row limit truncation
+    const fetchAllPages = async (queryFactory: (from: number, to: number) => any): Promise<any[]> => {
+      let allRows: any[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-    if (cdError) console.error('Error fetching CD ledger entries for Daily Report:', cdError);
-    console.log(`[DAILY REPORT DEBUG] CD raw rows fetched: ${cdEntries?.length || 0}`);
+      while (hasMore) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        const { data, error } = await queryFactory(from, to);
+        if (error) {
+          console.error('Error in fetchAllPages:', error);
+          break;
+        }
+        if (data && data.length > 0) {
+          allRows.push(...data);
+          if (data.length < pageSize) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+      return allRows;
+    };
 
-    // 3. Fetch Capital Entries
-    const { data: capEntries, error: capError } = await supabase
-      .from('finance_capital_entries')
-      .select('*, partner:finance_partners(*)')
-      .gte('entry_date', fromDate)
-      .lte('entry_date', toDate);
+    // 2. Fetch CD Ledger Entries (Paginated)
+    const cdEntries = await fetchAllPages((from, to) =>
+      supabase
+        .from('finance_cd_ledger_entries')
+        .select('*, loan:finance_loans(loan_id), customer:finance_customers(name)')
+        .neq('account_name', 'CD Amount Paid')
+        .gte('entry_date', fromDate)
+        .lte('entry_date', toDate)
+        .range(from, to)
+    );
 
-    if (capError) console.error('Error fetching capital entries for Daily Report:', capError);
-    console.log(`[DAILY REPORT DEBUG] Capital raw rows fetched: ${capEntries?.length || 0}`);
+    console.log(`[DAILY REPORT DEBUG] CD raw rows fetched: ${cdEntries.length}`);
 
-    // 4. Fetch Day Book Entries (cashbook entries)
+    // 3. Fetch Capital Entries (Paginated)
+    const capEntries = await fetchAllPages((from, to) =>
+      supabase
+        .from('finance_capital_entries')
+        .select('*, partner:finance_partners(*)')
+        .gte('entry_date', fromDate)
+        .lte('entry_date', toDate)
+        .range(from, to)
+    );
+
+    console.log(`[DAILY REPORT DEBUG] Capital raw rows fetched: ${capEntries.length}`);
+
+    // 4. Fetch Day Book Entries (cashbook entries - Paginated)
     const { data: bookData } = await supabase
       .from('finance_books')
       .select('id')
       .eq('book_code', financeMode === 'ITR' ? 'ITR-LEGACY' : 'REG-LEGACY')
       .maybeSingle();
 
-    let cbQuery = supabase
-      .from('finance_cashbook_entries')
-      .select('*')
-      .gte('entry_date', fromDate)
-      .lte('entry_date', toDate);
+    const cbEntries = await fetchAllPages((from, to) => {
+      let cbQuery = supabase
+        .from('finance_cashbook_entries')
+        .select('*')
+        .gte('entry_date', fromDate)
+        .lte('entry_date', toDate);
 
-    if (bookData?.id) {
-      cbQuery = cbQuery.or(`book_id.eq.${bookData.id},book_id.is.null`);
-    }
+      if (bookData?.id) {
+        cbQuery = cbQuery.or(`book_id.eq.${bookData.id},book_id.is.null`);
+      }
 
-    const { data: cbEntries, error: cbError } = await cbQuery;
+      return cbQuery.range(from, to);
+    });
 
-    if (cbError) console.error('Error fetching cashbook entries for Daily Report:', cbError);
-    console.log(`[DAILY REPORT DEBUG] Cashbook raw rows fetched: ${cbEntries?.length || 0}`);
+    console.log(`[DAILY REPORT DEBUG] Cashbook raw rows fetched: ${cbEntries.length}`);
 
     const normalizedList: DailyFinancialTransaction[] = [];
 

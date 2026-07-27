@@ -1672,6 +1672,43 @@ class SupabaseDatabase {
     }
   }
 
+  // Optimized method for calendar: fetch only c_date values within a given month/year
+  async getCashBookEntryDatesForMonth(year: number, month: number): Promise<string[]> {
+    try {
+      const monthStr = String(month).padStart(2, '0');
+      const startDate = `${year}-${monthStr}-01`;
+      const lastDayNum = new Date(year, month, 0).getDate();
+      const endDate = `${year}-${monthStr}-${String(lastDayNum).padStart(2, '0')}`;
+
+      console.log(`📅 [getCashBookEntryDatesForMonth] Fetching dates between ${startDate} and ${endDate}`);
+
+      const { data, error } = await supabase
+        .from(getTableName('cash_book'))
+        .select('c_date')
+        .gte('c_date', startDate)
+        .lte('c_date', endDate);
+
+      if (error) {
+        console.error('❌ Error fetching month dates from cash_book:', error);
+        return [];
+      }
+
+      const dates = (data || [])
+        .map((row: any) => {
+          if (!row || !row.c_date) return '';
+          const str = String(row.c_date).trim();
+          const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+          return match ? match[1] : '';
+        })
+        .filter(Boolean);
+
+      return dates;
+    } catch (error) {
+      console.error('❌ Error in getCashBookEntryDatesForMonth:', error);
+      return [];
+    }
+  }
+
   // Get filtered cash book entries with pagination for better performance
   async getFilteredCashBookEntries(filters: {
     companyName?: string;
@@ -4142,496 +4179,34 @@ class SupabaseDatabase {
 
   async getEditAuditLog(): Promise<any[]> {
     try {
-      console.log('🔄 Fetching edit audit log...');
-      
-      // First, let's see what tables exist and what data is available
-      console.log('📋 Checking what data is available in cash_book...');
-      const { data: cashBookData, error: cashBookError } = await supabase
-        .from(getTableName('cash_book'))
-        .select('id, sno, company_name, acc_name, updated_at, created_at, edited')
-        .limit(10);
-
-      if (!cashBookError && cashBookData) {
-        console.log('📋 Cash book data found:', cashBookData.length, 'records');
-        console.log('📋 Sample cash book record:', cashBookData[0]);
-        
-        // Check if any records have been edited
-        const editedRecords = cashBookData.filter((record: any) => record.edited === true);
-        console.log('📋 Edited records found:', editedRecords.length);
-        
-        // Check if any records have different updated_at and created_at
-        const updatedRecords = cashBookData.filter((record: any) => 
-          record.updated_at && record.created_at && 
-          record.updated_at !== record.created_at
-        );
-        console.log('📋 Updated records found:', updatedRecords.length);
-      } else {
-        console.error('❌ Cash book error:', cashBookError);
-      }
-
-      // Step 1: Try to fetch from edit_cash_book table
-      console.log('📋 Step 1: Trying edit_cash_book table...');
+      // STRICT: Only read from the dedicated edit_cash_book audit table.
+      // Do NOT fall back to raw cash_book rows — that causes non-edit records
+      // (brand-new inserts) to appear as "RECORD CREATED" in the Edited Logs,
+      // which is mathematically wrong per audit requirements.
       const { data, error } = await supabase
         .from(getTableName('edit_cash_book'))
         .select('*')
         .order('edited_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        console.log('✅ Successfully fetched from edit_cash_book:', data.length);
-        return data;
-      }
-
-      console.log('📋 edit_cash_book table not available or empty, trying alternative approach...');
       if (error) {
-        console.error('❌ edit_cash_book error:', error);
-      } else {
-        console.log('📋 edit_cash_book table is empty');
+        // Table may not exist yet — acceptable, return empty
+        console.warn('getEditAuditLog: edit_cash_book unavailable:', error.message);
+        return [];
       }
 
-      // Step 2: Try to fetch from cash_book with edited flag
-      console.log('📋 Step 2: Trying cash_book with edited flag...');
-      const { data: editedData, error: editedError } = await supabase
-        .from(getTableName('cash_book'))
-        .select('*')
-        .eq('edited', true)
-        .order('updated_at', { ascending: false });
+      // Secondary safety: filter out any row where old_values is empty
+      // (those are create events that slipped into the audit table)
+      const auditRows = (data || []).filter((row: any) => {
+        if (row.action === 'CREATE') return false;
+        const old = typeof row.old_values === 'string'
+          ? JSON.parse(row.old_values || '{}')
+          : (row.old_values || {});
+        return Object.keys(old).length > 0;
+      });
 
-      if (!editedError && editedData && editedData.length > 0) {
-        console.log('✅ Successfully fetched edited records from cash_book:', editedData.length);
-        
-        // Transform the data to match audit log format
-        const auditLogData = editedData.map((record: any) => ({
-          id: record.id,
-          cash_book_id: record.id,
-          old_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          new_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          edited_by: record.users || 'unknown',
-          edited_at: record.updated_at || record.created_at,
-          action: 'UPDATE'
-        }));
-
-        console.log('✅ Returning transformed edited records');
-        return auditLogData;
-      }
-
-      console.log('📋 No edited records found with edited flag, trying updated_at approach...');
-      if (editedError) {
-        console.error('❌ edited flag error:', editedError);
-      } else {
-        console.log('📋 No records with edited=true found');
-      }
-
-      console.log('📋 edited flag approach failed, trying without ordering...');
-      console.error('❌ edited flag error:', editedError);
-
-      // Step 3: Try without ordering
-      const { data: noOrderData, error: noOrderError } = await supabase
-        .from(getTableName('cash_book'))
-        .select('*')
-        .eq('edited', true);
-
-      if (!noOrderError && noOrderData) {
-        console.log('✅ Successfully fetched edited records (no ordering):', noOrderData.length);
-        
-        // Transform the data to match audit log format
-        const auditLogData = noOrderData.map((record: any) => ({
-          id: record.id,
-          cash_book_id: record.id,
-          old_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          new_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          edited_by: record.users || 'unknown',
-          edited_at: record.updated_at || record.created_at,
-          action: 'UPDATE'
-        }));
-
-        return auditLogData;
-      }
-
-      console.log('📋 edited flag column might not exist, trying updated_at approach...');
-      console.error('❌ edited flag column error:', editedError);
-
-      // Step 4: Try with updated_at different from created_at
-      const { data: updatedData, error: updatedError } = await supabase
-        .from(getTableName('cash_book'))
-        .select('*')
-        .not('updated_at', 'eq', 'created_at')
-        .order('updated_at', { ascending: false });
-
-      if (!updatedError && updatedData && updatedData.length > 0) {
-        console.log('✅ Successfully fetched updated records from cash_book:', updatedData.length);
-        
-        // Transform the data to match audit log format
-        const auditLogData = updatedData.map((record: any) => ({
-          id: record.id,
-          cash_book_id: record.id,
-          old_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          new_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          edited_by: record.users || 'unknown',
-          edited_at: record.updated_at || record.created_at,
-          action: 'UPDATE'
-        }));
-
-        console.log('✅ Returning transformed updated records');
-        return auditLogData;
-      }
-
-      console.log('📋 No updated records found, trying to get recent records...');
-      if (updatedError) {
-        console.error('❌ updated_at error:', updatedError);
-      } else {
-        console.log('📋 No records with updated_at != created_at found');
-      }
-
-      console.log('📋 updated_at approach failed, trying without ordering...');
-      console.error('❌ updated_at error:', updatedError);
-
-      // Step 5: Try without ordering
-      const { data: noOrderUpdatedData, error: noOrderUpdatedError } = await supabase
-        .from(getTableName('cash_book'))
-        .select('*')
-        .not('updated_at', 'eq', 'created_at');
-
-      if (!noOrderUpdatedError && noOrderUpdatedData) {
-        console.log('✅ Successfully fetched updated records (no ordering):', noOrderUpdatedData.length);
-        
-        // Transform the data to match audit log format
-        const auditLogData = noOrderUpdatedData.map((record: any) => ({
-          id: record.id,
-          cash_book_id: record.id,
-          old_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          new_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          edited_by: record.users || 'unknown',
-          edited_at: record.updated_at || record.created_at,
-          action: 'UPDATE'
-        }));
-
-        return auditLogData;
-      }
-
-      console.log('📋 All approaches failed, trying final fallback...');
-      console.error('❌ All edit audit log approaches failed');
-
-      // Final fallback: Try to get recent records from cash_book
-      console.log('📋 Final fallback: Getting recent records from cash_book...');
-      const { data: anyData, error: anyError } = await supabase
-        .from(getTableName('cash_book'))
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(10);
-
-      if (!anyError && anyData && anyData.length > 0) {
-        console.log('✅ Successfully fetched recent records from cash_book:', anyData.length);
-        
-        // Transform the data to match audit log format
-        const auditLogData = anyData.map((record: any) => ({
-          id: record.id,
-          cash_book_id: record.id,
-          old_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          new_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          edited_by: record.users || 'unknown',
-          edited_at: record.updated_at || record.created_at,
-          action: 'RECENT'
-        }));
-
-        console.log('✅ Returning recent records as edit history');
-        return auditLogData;
-      }
-
-      console.log('📋 Final fallback also failed, trying minimal fallback...');
-      console.error('❌ Final fallback error:', anyError);
-
-      // Ultra minimal fallback: Try to get any records from cash_book and show them as edit history
-      console.log('📋 Ultra minimal fallback: Getting any records from cash_book...');
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from(getTableName('cash_book'))
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(5);
-
-      if (!fallbackError && fallbackData && fallbackData.length > 0) {
-        console.log('✅ Found records in cash_book, showing as edit history:', fallbackData.length);
-        
-        // Transform the data to match audit log format
-        const auditLogData = fallbackData.map((record: any) => ({
-          id: record.id,
-          cash_book_id: record.id,
-          old_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          new_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          edited_by: record.users || 'admin',
-          edited_at: record.updated_at || record.created_at,
-          action: 'SHOWING_RECORDS'
-        }));
-
-        console.log('✅ Returning cash_book records as edit history');
-        return auditLogData;
-      }
-
-      // If even that fails, show recent records from cash_book as "recent entries"
-      console.log('📋 No edit audit log found, showing recent cash_book entries...');
-      const { data: recentData, error: recentError } = await supabase
-        .from(getTableName('cash_book'))
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      if (!recentError && recentData && recentData.length > 0) {
-        console.log('✅ Found recent cash_book entries:', recentData.length);
-        
-        // Transform recent records to show as "recent entries" (not edits)
-        const recentEntries = recentData.map((record: any) => ({
-          id: `recent-${record.id}`,
-          cash_book_id: record.id,
-          old_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          new_values: JSON.stringify({
-            c_date: record.c_date,
-            company_name: record.company_name,
-            acc_name: record.acc_name,
-            sub_acc_name: record.sub_acc_name,
-            particulars: record.particulars,
-            sale_qty: record.sale_qty || 0,
-            purchase_qty: record.purchase_qty || 0,
-            credit: record.credit,
-            debit: record.debit,
-            staff: record.staff,
-            users: record.users,
-            entry_time: record.entry_time,
-          }),
-          edited_by: record.users || 'admin',
-          edited_at: record.created_at,
-          action: 'SHOWING_RECENT_ENTRIES'
-        }));
-
-        console.log('✅ Returning recent entries as edit history');
-        return recentEntries;
-      }
-
-      // If no recent data either, return empty array
-      console.log('📋 No data found in cash_book either');
-      return [];
-
+      return auditRows;
     } catch (err) {
-      console.error('❌ Exception in getEditAuditLog:', err);
-      
-      // Even if there's an exception, try to get recent data
-      console.log('📋 Exception fallback: Trying to get recent cash_book entries...');
-      try {
-        const { data: recentData, error: recentError } = await supabase
-          .from(getTableName('cash_book'))
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        if (!recentError && recentData && recentData.length > 0) {
-          console.log('✅ Exception fallback: Found recent entries:', recentData.length);
-          
-          const recentEntries = recentData.map((record: any) => ({
-            id: `recent-exception-${record.id}`,
-            cash_book_id: record.id,
-            old_values: JSON.stringify({
-              c_date: record.c_date,
-              company_name: record.company_name,
-              acc_name: record.acc_name,
-              sub_acc_name: record.sub_acc_name,
-              particulars: record.particulars,
-              credit: record.credit,
-              debit: record.debit,
-              staff: record.staff,
-              users: record.users,
-              entry_time: record.entry_time,
-            }),
-            new_values: JSON.stringify({
-              c_date: record.c_date,
-              company_name: record.company_name,
-              acc_name: record.acc_name,
-              sub_acc_name: record.sub_acc_name,
-              particulars: record.particulars,
-              credit: record.credit,
-              debit: record.debit,
-              staff: record.staff,
-              users: record.users,
-              entry_time: record.entry_time,
-            }),
-            edited_by: record.users || 'admin',
-            edited_at: record.created_at,
-            action: 'SHOWING_RECENT_ENTRIES'
-          }));
-
-          return recentEntries;
-        }
-      } catch (fallbackError) {
-        console.error('❌ Exception fallback also failed:', fallbackError);
-      }
-
-      console.log('✅ Exception fallback: Returning empty array');
+      console.error('getEditAuditLog exception:', err);
       return [];
     }
   }
