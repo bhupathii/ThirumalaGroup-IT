@@ -3,6 +3,7 @@ import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Input from '../../components/UI/Input';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { supabaseFinance, FinanceCustomer, FinancePartner } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { 
@@ -1266,17 +1267,14 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
           <h3 className="text-slate-900 border-b border-slate-100 pb-1.5 uppercase font-bold text-[15px]">BASICS</h3>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div>
-              <label className="uppercase block mb-1 text-[13px] font-bold text-slate-700">
-                DATE <span className="text-red-500 ml-1">*</span>
-              </label>
-              <input
-                type="date"
-                ref={dateRef}
+              <FinanceSmartCalendar
+                label="DATE"
                 value={date}
+                onChange={(val) => { setDate(val); setErrors(p => ({...p, date: false})); }}
                 disabled={isLookupMode || (!!editLoanId && hasLedgerActivity)}
-                onChange={(e) => { setDate(e.target.value); setErrors(p => ({...p, date: false})) }}
-                className={`w-full bg-white border rounded-lg p-2 text-slate-800 focus:outline-none peek-caption-12 ${errors.date ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
+                module="CD_LEDGER"
                 required
+                error={errors.date}
               />
             </div>
 

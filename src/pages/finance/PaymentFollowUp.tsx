@@ -2,6 +2,7 @@ import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import { financeCalculationService } from '../../services/financeCalculationService';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { supabaseFinance, FinanceLoanPaymentFollowup } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { 
@@ -654,13 +655,13 @@ const PaymentFollowUp: React.FC = () => {
               </div>
 
               {/* Follow-up Date */}
-              <div className="flex flex-col min-w-[130px]">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Follow-up Date</label>
-                <input
-                  type="date"
+              <div className="min-w-[140px]">
+                <FinanceSmartCalendar
+                  label="Follow-up Date"
                   value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px]"
+                  onChange={setDateFilter}
+                  module="PAYMENT_FOLLOWUP"
+                  allowClear
                 />
               </div>
             </>
@@ -1151,56 +1152,60 @@ const PaymentFollowUp: React.FC = () => {
                         Callback History
                         <span className="text-[13px] text-slate-400 font-bold normal-case">({modalFollowUpHistory.length} records)</span>
                       </div>
-                      <div className="flex-1 overflow-y-auto space-y-1.5 min-h-0 mt-1.5 pr-0.5">
+                      <div className="flex-1 overflow-auto min-h-0 mt-1.5 border border-slate-200 rounded-lg bg-white shadow-2xs">
                         {modalFollowUpHistory.length === 0 ? (
-                          <div className="text-slate-400 italic text-center py-6 text-[15px]">No callback logs recorded for this account.</div>
+                          <div className="text-slate-400 italic text-center py-6 text-xs">No callback logs recorded for this account.</div>
                         ) : (
-                          <ul role="list" className="-mb-8 pl-1">
-                            {modalFollowUpHistory.map((h: any, idx: number) => (
-                              <li key={h.id}>
-                                <div className="relative pb-8">
-                                  {idx !== modalFollowUpHistory.length - 1 && (
-                                    <span className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-slate-200" aria-hidden="true"></span>
-                                  )}
-                                  <div className="relative flex space-x-3">
-                                    <div>
-                                      <span className={`h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white ${
-                                        h.result === 'PROMISED TO PAY' ? 'bg-green-500 text-white' :
-                                        h.result === 'ANSWERED' ? 'bg-blue-500 text-white' :
-                                        h.result === 'CALL BACK' ? 'bg-amber-500 text-white' :
-                                        'bg-rose-500 text-white'
-                                      }`}>
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                                      </span>
-                                    </div>
-                                    <div className="flex-1 min-w-0 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-                                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-xs font-black text-slate-800 uppercase">{h.result}</span>
-                                          {h.next_follow_up_date && (
-                                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded uppercase border border-amber-200">
-                                              Scheduled: {h.next_follow_up_date.split('-').reverse().join('/')}
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div className="text-[10px] text-slate-500 font-bold font-mono text-right flex gap-2">
-                                          <span>{h.follow_up_date.split('-').reverse().join('/')}</span>
-                                          <span className="uppercase">{h.followed_up_by}</span>
-                                        </div>
-                                      </div>
-                                      <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap">{h.narration}</p>
-                                      <div className="mt-2 flex items-center gap-2">
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Contacted:</span>
-                                        <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded uppercase">
-                                          {h.contacted_person === 'CUSTOMER' ? 'Borrower' : h.contacted_person === 'GUARANTOR_1' ? 'Guarantor 1' : h.contacted_person === 'GUARANTOR_2' ? 'Guarantor 2' : 'Other'}
+                          <table className="w-full text-left border-collapse text-[11px]">
+                            <thead className="bg-slate-100 border-b border-slate-250 sticky top-0 font-black uppercase text-slate-600 select-none text-[10px]">
+                              <tr>
+                                <th className="px-2 py-1.5 border-r border-slate-200 w-20">Date</th>
+                                <th className="px-2 py-1.5 border-r border-slate-200 text-center w-24">Status</th>
+                                <th className="px-2 py-1.5 border-r border-slate-200 w-20">Contacted</th>
+                                <th className="px-2.5 py-1.5 border-r border-slate-200">Remarks &amp; Notes</th>
+                                <th className="px-2 py-1.5 border-r border-slate-200 w-20 text-center">Next Date</th>
+                                <th className="px-2 py-1.5 w-16">Staff</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-150 font-sans">
+                              {modalFollowUpHistory.map((h: any) => (
+                                <tr key={h.id} className="hover:bg-slate-50/80 transition-colors h-[36px]">
+                                  <td className="px-2 py-1 border-r border-slate-200 font-mono font-bold text-slate-800 whitespace-nowrap">
+                                    {h.follow_up_date ? h.follow_up_date.split('-').reverse().join('/') : '—'}
+                                  </td>
+                                  <td className="px-2 py-1 border-r border-slate-200 text-center whitespace-nowrap">
+                                    <span className={`inline-block px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${
+                                      h.result === 'PROMISED TO PAY' ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                                      h.result === 'ANSWERED' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                                      h.result === 'CALL BACK' ? 'bg-purple-100 text-purple-800 border-purple-300' :
+                                      'bg-rose-100 text-rose-800 border-rose-300'
+                                    }`}>
+                                      {h.result}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-1 border-r border-slate-200 font-bold text-slate-700 uppercase whitespace-nowrap text-[10px]">
+                                    {h.contacted_person === 'CUSTOMER' ? 'Borrower' : h.contacted_person === 'GUARANTOR_1' ? 'G1' : h.contacted_person === 'GUARANTOR_2' ? 'G2' : 'Other'}
+                                  </td>
+                                  <td className="px-2.5 py-1 border-r border-slate-200 text-slate-800 font-medium" title={h.narration || ''}>
+                                    <div className="line-clamp-2 leading-tight">
+                                      {h.promised_amount ? (
+                                        <span className="font-bold text-emerald-700 mr-1 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200 font-mono text-[10px]">
+                                          ₹{Number(h.promised_amount).toLocaleString('en-IN')}
                                         </span>
-                                      </div>
+                                      ) : null}
+                                      {h.narration || '—'}
                                     </div>
-                                  </div>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
+                                  </td>
+                                  <td className="px-2 py-1 border-r border-slate-200 text-center font-mono font-bold text-amber-800 whitespace-nowrap">
+                                    {h.next_follow_up_date ? h.next_follow_up_date.split('-').reverse().join('/') : '—'}
+                                  </td>
+                                  <td className="px-2 py-1 font-semibold text-slate-600 uppercase whitespace-nowrap text-[10px]">
+                                    {h.followed_up_by || '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         )}
                       </div>
                     </div>
@@ -1275,13 +1280,11 @@ const PaymentFollowUp: React.FC = () => {
                           <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 shrink-0">
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="text-[12px] font-black uppercase text-amber-800 block mb-1">Next Call Date</label>
-                                <input
-                                  type="date"
+                                <FinanceSmartCalendar
+                                  label="Next Call Date"
                                   value={nextFollowUpDate}
-                                  min={getLocalBusinessDateISO()}
-                                  onChange={(e) => setNextFollowUpDate(e.target.value)}
-                                  className="w-full border border-amber-300 rounded-lg px-2.5 py-1.5 text-[14px] font-bold bg-white text-slate-900"
+                                  onChange={setNextFollowUpDate}
+                                  module="PAYMENT_FOLLOWUP"
                                 />
                               </div>
                               <div>
@@ -1301,13 +1304,11 @@ const PaymentFollowUp: React.FC = () => {
                           <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 shrink-0">
                             <div className="grid grid-cols-3 gap-2">
                               <div>
-                                <label className="text-[12px] font-black uppercase text-blue-800 block mb-1">Promise Date</label>
-                                <input
-                                  type="date"
+                                <FinanceSmartCalendar
+                                  label="Promise Date"
                                   value={nextFollowUpDate}
-                                  min={getLocalBusinessDateISO()}
-                                  onChange={(e) => setNextFollowUpDate(e.target.value)}
-                                  className="w-full border border-blue-300 rounded-lg px-2.5 py-1.5 text-[14px] font-bold bg-white text-slate-900"
+                                  onChange={setNextFollowUpDate}
+                                  module="PAYMENT_FOLLOWUP"
                                   required
                                 />
                               </div>

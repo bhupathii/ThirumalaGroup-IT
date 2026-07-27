@@ -2,6 +2,7 @@ import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../components/UI/Card';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { 
   ArrowLeft, 
   Printer 
@@ -204,12 +205,11 @@ const GeneralCalculator: React.FC = () => {
               </div>
 
               <div>
-                <label className="finance-caption uppercase">DATE</label>
-                <input
-                  type="date"
+                <FinanceSmartCalendar
+                  label="DATE"
                   value={loanDate}
-                  onChange={(e) => setLoanDate(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-9 shadow-sm finance-header-time"
+                  onChange={setLoanDate}
+                  module="CD_LEDGER"
                 />
               </div>
             </div>

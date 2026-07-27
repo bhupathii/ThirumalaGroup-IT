@@ -24,6 +24,7 @@ import {
   Check,
   Edit3,
   Filter,
+  X,
 } from 'lucide-react';
 
 interface ApprovalFilters {
@@ -2106,16 +2107,28 @@ const ApproveRecords: React.FC = () => {
                                 Cancel
                               </button>
                             ) : isDeletedRecord ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeletedApprove(entry.id);
-                                }}
-                                title="Approve Deletion"
-                                className="w-6 h-6 rounded bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-2xs transition-colors"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeletedApprove(entry.id);
+                                  }}
+                                  title="Approve Deletion"
+                                  className="w-6 h-6 rounded bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-2xs transition-colors"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeletedReject(entry.id);
+                                  }}
+                                  title="Reject Deletion"
+                                  className="w-6 h-6 rounded bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-2xs transition-colors"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             ) : (
                               <button
                                 onClick={(e) => {

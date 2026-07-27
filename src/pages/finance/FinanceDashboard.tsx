@@ -65,18 +65,16 @@ const FinanceDashboard: React.FC = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [loans, txs, pendingCount] = await Promise.all([
+      // Get today's local date string formatted as YYYY-MM-DD
+      const todayStr = getLocalBusinessDateISO();
+
+      const [loans, txs, pendingCount, duesSummary] = await Promise.all([
         supabaseFinance.getLoans(),
         supabaseFinance.getTransactions(),
-        user?.is_admin ? supabaseFinance.getPendingApprovalsCount() : Promise.resolve(0)
+        user?.is_admin ? supabaseFinance.getPendingApprovalsCount() : Promise.resolve(0),
+        supabaseFinance.getDuesLedgerSummary(todayStr)
       ]);
       setPendingApprovalsCount(pendingCount);
-
-      // Get today's local date string formatted as YYYY-MM-DD
-      const today = new Date();
-      const offset = today.getTimezoneOffset();
-      const localToday = new Date(today.getTime() - (offset * 60 * 1000));
-      const todayStr = getLocalBusinessDateISO(localToday);
 
       // 1. Disbursed (All-time)
       const totalDisbursed = loans.reduce((sum, loan) => sum + Number(loan.amount), 0);
@@ -86,25 +84,11 @@ const FinanceDashboard: React.FC = () => {
       let totalOutstanding = 0;
       let overdueCount = 0;
 
-      loans.forEach(loan => {
-        const principal = Number(loan.amount);
-        const duration = Number(loan.duration_months);
-        const interestAmount = (principal * (Number(loan.interest_rate) / 100) * duration);
-        const repayable = principal + interestAmount;
-
-        const loanCols = txs.filter(t => t.loan_id === loan.id && t.type === 'Collection');
-        const loanCollected = loanCols.reduce((sum, c) => sum + Number(c.amount), 0);
-        const outstanding = Math.max(0, repayable - loanCollected);
-
-        if (loan.status === 'Active') {
-          totalOutstanding += outstanding;
-
-          // Check if expired & has outstanding balance
-          const loanDate = new Date(loan.date);
-          const expiryDate = new Date(loanDate);
-          expiryDate.setMonth(loanDate.getMonth() + duration);
-
-          if (today >= expiryDate && outstanding > 0) {
+      const dues = duesSummary?.dues || [];
+      dues.forEach((due: any) => {
+        if (due.status === 'Active' || due.status === 'NPA_CLOSED') {
+          totalOutstanding += Number(due.currentPrincipal || due.current_principal || due.principal || 0);
+          if (due.status === 'Active' && (due.dueDays > 0 || due.due_days > 0)) {
             overdueCount++;
           }
         }

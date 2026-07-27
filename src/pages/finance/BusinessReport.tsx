@@ -4,12 +4,13 @@ import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import { sortNumerically } from '../../lib/financialCalculations';
 import Button from '../../components/UI/Button';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { supabase } from '../../lib/supabase';
 import { Printer, ArrowLeft, FileText, ChevronRight, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
 import { exportToExcel } from '../../utils/excel';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
+import { FinanceCalculationEngine } from '../../services/FinanceCalculationEngine';
 
 interface BusinessLoanRow {
   loanId: string;
@@ -147,53 +148,34 @@ const BusinessReport: React.FC = () => {
 
 
       const processedLoans: BusinessLoanRow[] = [];
-      let cap = 0,
-        tot = 0,
-        pOut = 0,
-        iRec = 0,
-        pRec = 0,
-        pInt = 0,
-        pPen = 0,
-        tDue = 0,
-        act = 0,
-        clo = 0;
+      let cap = 0, tot = 0, pOut = 0, iRec = 0, pRec = 0, pInt = 0, pPen = 0, tDue = 0, act = 0, clo = 0;
 
       filteredLoans.forEach(l => {
         tot++;
-        if (l.status === 'Active') act++;
-        if (l.status === 'Closed') clo++;
+        
+        const metrics = FinanceCalculationEngine.computeLoanMetrics(l, dues);
+        
+        if (metrics.status === 'Active') act++;
+        if (metrics.status === 'Closed') clo++;
 
-        const p = Number(l.amount) || 0;
-        cap += p;
-
-        const due = dues.find(d => d.loan_id === l.loan_id || d.loanId === l.id);
-        const loanIRec = due ? Number(due.interest_paid || 0) : 0;
-        const loanPRec = due ? Number(due.penalty_paid || 0) : 0;
-
-        iRec += loanIRec;
-        pRec += loanPRec;
-
-        const outstandingPrincipal = l.status === 'Closed' ? 0 : (due ? Number(due.current_principal || due.principal || 0) : p);
-        pOut += outstandingPrincipal;
-
-        const loanPInt = due ? Number(due.pending_interest || due.interestPending || 0) : 0;
-        const loanPPen = due ? Number(due.penalty || due.penaltyPending || 0) : 0;
-        const loanTDue = due ? Number(due.present_due || due.totalPending || 0) : 0;
-
-        pInt += loanPInt;
-        pPen += loanPPen;
-        tDue += loanTDue;
+        cap += metrics.principalFinanced;
+        iRec += metrics.interestEarned;
+        pRec += metrics.penaltyEarned;
+        pOut += metrics.outstanding;
+        pInt += metrics.pendingInterest;
+        pPen += metrics.pendingPenalty;
+        tDue += metrics.presentDue;
 
         processedLoans.push({
           loanId: l.id,
           cdNumber: l.loan_id,
           borrower: l.customer?.name || 'Unknown',
-          principal: p,
-          interestReceived: loanIRec,
-          penaltyReceived: loanPRec,
-          pendingInterest: loanPInt,
-          pendingPenalty: loanPPen,
-          presentDue: outstandingPrincipal + loanTDue,
+          principal: metrics.principalFinanced,
+          interestReceived: metrics.interestEarned,
+          penaltyReceived: metrics.penaltyEarned,
+          pendingInterest: metrics.pendingInterest,
+          pendingPenalty: metrics.pendingPenalty,
+          presentDue: metrics.presentDue,
           status: l.status,
        });
      });
@@ -269,26 +251,22 @@ const BusinessReport: React.FC = () => {
       <div
         className={`grid grid-cols-2 md:grid-cols-4 gap-4`}
       >
-        <div className='bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center'>
-          <label className='text-slate-400 mb-1 finance-small-label uppercase'>
-            From Date
-          </label>
-          <input
-            type='date'
+        <div className='flex flex-col justify-end w-full'>
+          <FinanceSmartCalendar
+            label="From Date"
             value={startDate}
-            onChange={e => setStartDate(e.target.value)}
-            className='w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase'
+            onChange={setStartDate}
+            module="BUSINESS_DETAILS"
+            compact={true}
           />
         </div>
-        <div className='bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center'>
-          <label className='text-slate-400 mb-1 finance-small-label uppercase'>
-            To Date
-          </label>
-          <input
-            type='date'
+        <div className='flex flex-col justify-end w-full'>
+          <FinanceSmartCalendar
+            label="To Date"
             value={endDate}
-            onChange={e => setEndDate(e.target.value)}
-            className='w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase'
+            onChange={setEndDate}
+            module="BUSINESS_DETAILS"
+            compact={true}
           />
         </div>
         <div className='bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-col justify-center'>

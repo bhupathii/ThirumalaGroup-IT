@@ -1,36 +1,13 @@
-import { sortNumerically } from '../../lib/financialCalculations';
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabaseFinance } from '../../lib/supabaseFinance';
+import { FinanceCalculationEngine, OverdueDueItem } from '../../services/FinanceCalculationEngine';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { Printer, ArrowLeft, Search, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
-
-interface OverdueDueItem {
-  id: string;
-  loanId: string;
-  customerName: string;
-  loanCategory: string;
-  loanType: 'CD' | 'HP' | 'STBD' | 'TBD';
-  loanAmount: number;
-  currentPrincipal: number;
-  loanDate: string;
-  currentDueDate: string;
-  interestPaid: number;
-  pendingInterest: number;
-  penalty: number;
-  presentDue: number;
-  dueDays: number;
-  isNPA: boolean;
-  penaltyPaid: number;
-  phone: string;
-  g1Name: string;
-  g1Phone: string;
-  g2Name: string;
-  g2Phone: string;
-  partnerName: string;
-}
 
 type ReportType = 'OUTSTANDING' | 'TOTAL DUE LIST' | 'CD DUE LIST' | 'A -> B DUE LIST' | 'NPA LIST';
 
@@ -95,7 +72,9 @@ const OutstandingLedger: React.FC = () => {
         g1Phone: row.g1_phone || '',
         g2Name: row.g2_name || '',
         g2Phone: row.g2_phone || '',
-        partnerName: row.partner_name || 'Unassigned'
+        partnerName: row.partner_name || 'Unassigned',
+        status: row.status || 'Active',
+        pendingPenalty: Number(row.pending_penalty || 0)
       }));
 
       setDues(formatted);
@@ -110,61 +89,19 @@ const OutstandingLedger: React.FC = () => {
 
 
   const filteredDues = useMemo(() => {
-    return dues.filter(due => {
-      // Enforce: CD loans must have dueDays >= 0 to appear in Dues List reports (Outstanding, Total, CD, A->B)
-      if (due.loanType === 'CD') {
-        if (due.dueDays < 0) return false;
-      }
-
-      // 1. Report Type Filter
-      if (activeReport === 'OUTSTANDING') {
-        if (due.presentDue <= 0 && due.dueDays <= 0) return false;
-      } else if (activeReport === 'NPA LIST') {
-        if (!due.isNPA) return false;
-      } else if (activeReport === 'CD DUE LIST') {
-        if (due.loanType !== 'CD') return false;
-      } else if (activeReport === 'A -> B DUE LIST') {
-        if (startDate && due.currentDueDate < startDate) return false;
-        if (endDate && due.currentDueDate > endDate) return false;
-      }
-
-      // 2. Partner Filter
-      if (selectedPartner !== 'ALL PARTNERS' && due.partnerName !== selectedPartner) return false;
-
-      // 3. Loan Type Filter
-      if (loanTypeFilter !== 'ALL' && due.loanType !== loanTypeFilter) return false;
-
-      // 4. Search Filter
-      if (searchName && !due.customerName.toLowerCase().includes(searchName.toLowerCase()) && !due.loanId.toLowerCase().includes(searchName.toLowerCase())) return false;
-
-      return true;
-    }).sort((a, b) => {
-      const numA = Number(a.loanId.replace(/\\D/g, '')) || 0;
-      const numB = Number(b.loanId.replace(/\\D/g, '')) || 0;
-      return numA - numB;
-    });
+    return FinanceCalculationEngine.filterDueList(
+      dues,
+      activeReport,
+      selectedPartner,
+      loanTypeFilter,
+      searchName,
+      startDate,
+      endDate
+    );
   }, [dues, activeReport, selectedPartner, loanTypeFilter, searchName, startDate, endDate]);
 
   const totals = useMemo(() => {
-    let principal = 0;
-    let interestPaid = 0;
-    let interest = 0;
-    let penaltyPaid = 0;
-    let penalty = 0;
-    let presentDue = 0;
-    let amountToClose = 0;
-
-    filteredDues.forEach(d => {
-      principal += d.currentPrincipal;
-      interestPaid += d.interestPaid;
-      interest += d.pendingInterest;
-      penaltyPaid += d.penaltyPaid;
-      penalty += d.penalty;
-      presentDue += d.presentDue;
-      amountToClose += d.currentPrincipal + d.pendingInterest + d.penalty;
-    });
-
-    return { principal, interestPaid, interest, penaltyPaid, penalty, presentDue, amountToClose };
+    return FinanceCalculationEngine.computeDueListTotals(filteredDues);
   }, [filteredDues]);
 
   const options: ReportType[] = ['OUTSTANDING', 'NPA LIST'];
@@ -245,15 +182,21 @@ const OutstandingLedger: React.FC = () => {
           </div>
 
           {/* Date filters — always shown */}
-          <div className="flex flex-col min-w-[130px]">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">From Date</label>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px]" />
+          <div className="min-w-[140px]">
+            <FinanceSmartCalendar
+              label="From Date"
+              value={startDate}
+              onChange={setStartDate}
+              module="DUES_LIST"
+            />
           </div>
-          <div className="flex flex-col min-w-[130px]">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">To Date</label>
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px]" />
+          <div className="min-w-[140px]">
+            <FinanceSmartCalendar
+              label="To Date"
+              value={endDate}
+              onChange={setEndDate}
+              module="DUES_LIST"
+            />
           </div>
 
           {/* ── Summary Metrics (right side) ───────────────────────────────── */}
@@ -424,7 +367,7 @@ const OutstandingLedger: React.FC = () => {
                 <p className="text-slate-500" style={{ margin: 0 }}>Collection Dues Ledger</p>
               </div>
               <div className="text-right text-slate-900">
-                <p style={{ margin: 0 }}><span className="font-bold">DATE:</span> {new Date().toLocaleDateString('en-IN')}</p>
+                <p style={{ margin: 0 }}><span className="font-bold">DATE:</span> {getLocalBusinessDateISO()}</p>
                 <p style={{ margin: 0 }}><span className="font-bold">PARTNER:</span> {selectedPartner}</p>
               </div>
             </div>

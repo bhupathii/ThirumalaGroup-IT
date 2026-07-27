@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseFinance, FinanceTransactionReview } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import Card from '../../components/UI/Card';
-import CustomCalendar from '../../components/UI/CustomCalendar';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { 
   Check, 
   Search, 
@@ -522,14 +522,13 @@ const TransactionApproval: React.FC = () => {
                 <div
                   ref={calendarRef}
                   style={popoverStyle}
-                  className="animate-in fade-in zoom-in-95 duration-150 drop-shadow-2xl"
+                  className="animate-in fade-in zoom-in-95 duration-150 drop-shadow-2xl z-50 bg-white rounded-xl p-2 border border-slate-200"
                 >
-                  <CustomCalendar
-                    className="relative z-50 shadow-2xl rounded-xl"
-                    selectedDate={selectedTxDate}
-                    onDateSelect={handleSelectCalendarDate}
-                    onClose={() => setShowHeaderCalendar(false)}
-                    entries={activityDates}
+                  <FinanceSmartCalendar
+                    mode="inline"
+                    value={selectedTxDate}
+                    onChange={(d) => { handleSelectCalendarDate(d); setShowHeaderCalendar(false); }}
+                    module="TRANSACTION_APPROVAL"
                   />
                 </div>
               )}
@@ -652,22 +651,20 @@ const TransactionApproval: React.FC = () => {
         <form onSubmit={handleApplyFilters} className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
           
           <div>
-            <label className="finance-caption uppercase">From Date</label>
-            <input
-              type="date"
+            <FinanceSmartCalendar
+              label="From Date"
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
+              onChange={setFromDate}
+              module="TRANSACTION_APPROVAL"
             />
           </div>
 
           <div>
-            <label className="finance-caption uppercase">To Date</label>
-            <input
-              type="date"
+            <FinanceSmartCalendar
+              label="To Date"
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
+              onChange={setToDate}
+              module="TRANSACTION_APPROVAL"
             />
           </div>
 

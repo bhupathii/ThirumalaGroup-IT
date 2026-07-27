@@ -9,6 +9,7 @@ export interface FinancePartner {
   partner_id?: number;
   name: string;
   is_md?: boolean;
+  share_percent?: number;
   phone: string | null;
   home_phone?: string | null;
   village?: string | null;
@@ -134,6 +135,8 @@ export interface FinanceLoan {
   surety_fingerprint_added?: boolean;
   father_husband_name?: string | null;
   loan_category?: string;
+  partner_id?: string | null;
+  partner_name?: string | null;
   npa_closed?: boolean;
   document_charges?: number;
   penalty_percent?: number;
@@ -2552,7 +2555,7 @@ class SupabaseFinance {
         .single();
       if (error) throw error;
 
-      // Recalculate dues paid amounts for this loan to keep payment schedule correctly allocated
+      // Recalculate dues schedule correctly allocated
       if (transaction.type === 'Collection') {
         await this.recalculateDuesForLoan(transaction.loan_id);
       }
@@ -3268,11 +3271,17 @@ class SupabaseFinance {
   }
 
   // --- Cashbook Entries ---
-  async getCashbookEntries(bookId?: string | null): Promise<FinanceCashbookEntry[]> {
+  async getCashbookEntries(bookId?: string | null, startDate?: string, endDate?: string): Promise<FinanceCashbookEntry[]> {
     try {
       let query = supabase.from('finance_cashbook_entries').select('*');
       if (bookId) {
         query = query.eq('book_id', bookId);
+      }
+      if (startDate) {
+        query = query.gte('entry_date', startDate);
+      }
+      if (endDate) {
+        query = query.lte('entry_date', endDate);
       }
       const { data, error } = await query
         .order('entry_date', { ascending: false })
@@ -4515,82 +4524,41 @@ class SupabaseFinance {
         }
 
         nonCdResults = nonCdLoans.map(loan => {
-          const borrower = borrowerMap.get(loan.customer_id) || {};
-          const g1 = borrowerMap.get(loan.guarantor_1_id) || {};
-          const g2 = borrowerMap.get(loan.guarantor_2_id) || {};
-
-          const loanType = loan.loan_id.startsWith('HP') ? 'HP' : (loan.loan_id.startsWith('STBD') ? 'STBD' : 'TBD');
-          const phone = borrower.phone || borrower.phone_1 || borrower.phone_2 || '';
-          const g1_name = g1.name || '';
-          const g1_phone = g1.phone || g1.phone_1 || g1.phone_2 || '';
-          const g2_name = g2.name || '';
-          const g2_phone = g2.phone || g2.phone_1 || g2.phone_2 || '';
-
-          const loanDues = dueEntries.filter(d => d.loan_id === loan.id);
-          const totalRepayable = loanDues.reduce((sum, d) => sum + Number(d.amount), 0);
-          const totalPaid = loanDues.reduce((sum, d) => sum + Number(d.paid_amount || 0), 0);
-
-          let currentPrincipal = Number(loan.amount);
-          if (totalRepayable > 0) {
-            currentPrincipal = Number(loan.amount) - (totalPaid * (1.0 - ((totalRepayable - Number(loan.amount)) / totalRepayable)));
-          }
-
-          let interestPaid = 0;
-          if (totalRepayable > 0) {
-            interestPaid = totalPaid * ((totalRepayable - Number(loan.amount)) / totalRepayable);
-          }
-
-          const overdueDues = loanDues.filter(d => d.due_date <= targetDate && d.status !== 'Paid');
-          const presentDuePrincipalAndInterest = overdueDues.reduce((sum, d) => sum + Number(d.amount - (d.paid_amount || 0)), 0);
-
-          let pendingInterest = 0;
-          if (totalRepayable > 0) {
-            pendingInterest = presentDuePrincipalAndInterest * ((totalRepayable - Number(loan.amount)) / totalRepayable);
-          }
-
-          const unpaidDues = loanDues.filter(d => d.status !== 'Paid');
-          const oldestDueDateStr = unpaidDues.reduce((min, d) => !min || d.due_date < min ? d.due_date : min, null as string | null);
-          const dueDaysRaw = oldestDueDateStr ? financeCalculationService.differenceInCalendarDays(targetDate, oldestDueDateStr) : 0;
-          const dueDays = Math.max(0, dueDaysRaw);
-          const isNpa = dueDaysRaw > 90;
-
-          const categorySetting = (ledgerSettings || []).find(s => s.code === loan.loan_category) || 
-                                  (ledgerSettings || []).find(s => s.code === loanType) || 
-                                  { overdue: 24, days_per_year: 365 };
-
-          let penalty = 0;
-          if (dueDays > 5) {
-            const daysPerMonth = categorySetting.days_per_year / 12.0;
-            penalty = Math.round(presentDuePrincipalAndInterest * (categorySetting.overdue / 100.0) * (dueDays / daysPerMonth));
-          }
+          const dueItem = FinanceCalculationEngine.buildNonCdDueItem(
+            loan,
+            borrowerMap,
+            dueEntries,
+            ledgerSettings,
+            targetDate
+          );
 
           return {
-            id: loan.id,
-            loan_id: loan.loan_id,
-            customer_name: borrower.name || '',
-            loan_category: loan.loan_category || loanType,
-            loan_type: loanType,
-            loan_amount: Number(loan.amount),
-            current_principal: currentPrincipal,
-            loan_date: loan.date.split('T')[0],
-            current_due_date: oldestDueDateStr || loan.date.split('T')[0],
-            interest_paid: interestPaid,
-            pending_interest: pendingInterest,
-            penalty: penalty,
-            penalty_paid: 0,
-            present_due: presentDuePrincipalAndInterest + penalty,
-            due_days: dueDays,
-            is_npa: isNpa,
-            phone,
-            g1_name,
-            g1_phone,
-            g2_name,
-            g2_phone,
-            partner_name: borrower.partner_name || 'Unassigned',
-            status: loan.status,
-            customer_id: loan.customer_id,
-            guarantor_1_id: loan.guarantor_1_id,
-            guarantor_2_id: loan.guarantor_2_id
+            id: dueItem.id,
+            loan_id: dueItem.loanId,
+            customer_name: dueItem.customerName,
+            loan_category: dueItem.loanCategory,
+            loan_type: dueItem.loanType,
+            loan_amount: dueItem.loanAmount,
+            current_principal: dueItem.currentPrincipal,
+            loan_date: dueItem.loanDate,
+            current_due_date: dueItem.currentDueDate,
+            interest_paid: dueItem.interestPaid,
+            pending_interest: dueItem.pendingInterest,
+            penalty: dueItem.penalty,
+            penalty_paid: dueItem.penaltyPaid,
+            present_due: dueItem.presentDue,
+            due_days: dueItem.dueDays,
+            is_npa: dueItem.isNPA,
+            phone: dueItem.phone,
+            g1_name: dueItem.g1Name,
+            g1_phone: dueItem.g1Phone,
+            g2_name: dueItem.g2Name,
+            g2_phone: dueItem.g2Phone,
+            partner_name: dueItem.partnerName,
+            status: dueItem.status,
+            customer_id: dueItem.customer_id,
+            guarantor_1_id: dueItem.guarantor_1_id,
+            guarantor_2_id: dueItem.guarantor_2_id
           };
         });
       }

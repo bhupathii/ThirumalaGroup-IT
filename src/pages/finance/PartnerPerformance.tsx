@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
+import { FinanceSmartCalendar, isoToDisplayFormatted } from '../../components/finance/FinanceSmartCalendar';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { Printer, RefreshCw, Download } from 'lucide-react';
@@ -11,28 +12,9 @@ import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
 import { exportToExcel } from '../../utils/excel';
+import { FinanceCalculationEngine, PartnerMetrics } from '../../services/FinanceCalculationEngine';
 
-interface PartnerPerfRow {
-  id: string;
-  name: string;
-  role: string;
-  netCapital: number;
-  loansIntroduced: number;
-  principalFinanced: number;
-  principalCollected: number;
-  interestEarned: number;
-  penaltyEarned: number;
-  outstanding: number;
-  presentDue: number;
-  pendingInterest: number;
-  pendingPenalty: number;
-  recoveryPct: number;
-  collectionPct: number;
-  yieldPct: number;
-  npaCount: number;
-  activeLoans: number;
-  closedLoans: number;
-}
+interface PartnerPerfRow extends PartnerMetrics {}
 
 const PartnerPerformance: React.FC = () => {
   const navigate = useNavigate();
@@ -120,163 +102,33 @@ const PartnerPerformance: React.FC = () => {
     try {
       const partners = await supabaseFinance.getPartners();
       
-      const { data: fetchedCapEntries } = await supabase
-        .from('finance_capital_entries')
-        .select('*');
-      
-      const capEntries = fetchedCapEntries || [];
-      const { dues } = await supabaseFinance.getDuesLedgerSummary(endDate);
-      const allLoans = await supabaseFinance.getLoans();
+      const metrics = await FinanceCalculationEngine.computeAllPartnersMetrics(
+        partners,
+        startDate,
+        endDate
+      );
 
-      const { data: fetchedCdEntries } = await supabase
-        .from('finance_cd_ledger_entries')
-        .select('*');
-      const cdEntries = fetchedCdEntries || [];
+      const perfRows: PartnerPerfRow[] = metrics.map(m => ({
+        ...m,
+        id: m.partnerId,
+        name: m.partnerName,
+        principalFinanced: m.periodPrincipalFinanced,
+        principalCollected: m.periodPrincipalCollected,
+        interestEarned: m.periodInterestEarned,
+        penaltyEarned: m.periodPenaltyEarned
+      }));
 
-      const perfRows: PartnerPerfRow[] = partners.map(partner => {
-        const isMd = partner.is_md;
+      // Filter out MD if no loans/capital
+      const activePerfRows = perfRows.filter(r => 
+        r.role === 'Partner' || r.loansIntroduced > 0 || r.netCapital !== 0 || r.outstanding > 0
+      );
 
-        // A. Capital Introduced in Date Range
-        const pCaps = capEntries.filter(c => {
-          const cDate = c.entry_date ? c.entry_date.split('T')[0] : '';
-          const inDateRange = (!startDate || cDate >= startDate) && (!endDate || cDate <= endDate);
-          const isPartnerMatch = c.partner_id === partner.id || 
-            (c.partner_name && c.partner_name.trim().toUpperCase() === partner.name.trim().toUpperCase()) ||
-            (isMd && (!c.partner_id && !c.partner_name));
-          return inDateRange && isPartnerMatch;
-        });
-
-        let netCapital = 0;
-        pCaps.forEach(c => { 
-          netCapital += (Number(c.credit) || 0) - (Number(c.debit) || 0); 
-        });
-
-        // B. Loans Belonging to Partner
-        const pLoans = allLoans.filter(l => {
-          const rawPartner = ((l as any).partner_name || l.customer?.partner_name || '').trim();
-          if (rawPartner) {
-            return rawPartner.toUpperCase() === partner.name.trim().toUpperCase();
-          }
-          // Unassigned loans are managed by MD partner
-          return isMd;
-        });
-        
-        // Loans Introduced & Disbursed in Date Range
-        const pLoansInRange = pLoans.filter(l => {
-          const lDate = l.date ? l.date.split('T')[0] : '';
-          return (!startDate || lDate >= startDate) && (!endDate || lDate <= endDate);
-        });
-
-        const loansIntroduced = pLoansInRange.length;
-        let principalFinanced = 0;
-        pLoansInRange.forEach(l => {
-          principalFinanced += Number(l.amount) || 0;
-        });
-
-        // Active, Closed, and NPA counts directly from database loan records in date range
-        let activeLoans = 0;
-        let closedLoans = 0;
-        let npaCount = 0;
-
-        pLoansInRange.forEach(l => {
-          const statusLower = (l.status || '').trim().toLowerCase();
-          if (statusLower === 'closed') {
-            closedLoans++;
-          } else {
-            // Default active if not closed
-            activeLoans++;
-          }
-
-          // Count ONLY loans explicitly classified as NPA in database flags/status
-          if ((l as any).is_npa === true || l.npa_closed === true || statusLower === 'npa') {
-            npaCount++;
-          }
-        });
-
-        // C. Actual Collections from Ledger Entries within date range
-        let principalCollected = 0;
-        let interestEarned = 0;
-        let penaltyEarned = 0;
-
-        const pLoanIds = new Set(pLoans.map(l => l.id).concat(pLoans.map(l => l.loan_id).filter(Boolean)));
-
-        cdEntries.forEach(entry => {
-          const eDate = entry.entry_date || entry.date || '';
-          if (startDate && eDate < startDate) return;
-          if (endDate && eDate > endDate) return;
-
-          if (pLoanIds.has(entry.loan_id)) {
-            const cr = Number(entry.credit) || 0;
-            const dr = Number(entry.debit) || 0;
-            const net = cr - dr;
-            const acc = (entry.account_name || '').trim();
-
-            if (acc === 'CD A/C' || acc === 'CD PRINCIPAL' || acc === 'CD Amount Paid') {
-              principalCollected += net;
-            } else if (acc === 'CD COMMISSION A/C' || acc === 'CD INTEREST') {
-              interestEarned += net;
-            } else if (acc === 'PENALTY A/C' || acc === 'CD PENALTY') {
-              penaltyEarned += net;
-            }
-          }
-        });
-
-        // D. Dues Positions as of endDate
-        let outstanding = 0;
-        let presentDue = 0;
-        let pendingInterest = 0;
-        let pendingPenalty = 0;
-
-        pLoans.forEach(l => {
-          const due = dues.find(d => d.loan_id === l.loan_id || d.loanId === l.id || d.id === l.id);
-          if (due) {
-            if (l.status === 'Active') {
-              outstanding += Number(due.current_principal || due.currentPrincipal || due.principal || 0);
-              presentDue += Number(due.present_due || due.presentDue || due.totalPending || 0);
-              pendingInterest += Number(due.pending_interest || due.pendingInterest || 0);
-              pendingPenalty += Number(due.penalty || due.penaltyPending || 0);
-            }
-          } else if (l.status === 'Active') {
-            outstanding += Number(l.amount) || 0;
-          }
-        });
-
-        // E. Financial Ratios
-        const recoveryPct = principalFinanced > 0 ? (principalCollected / principalFinanced) * 100 : 0;
-        const totalCollected = principalCollected + interestEarned + penaltyEarned;
-        const totalDue = totalCollected + presentDue;
-        const collectionPct = totalDue > 0 ? (totalCollected / totalDue) * 100 : 0;
-        const yieldPct = principalFinanced > 0 ? (interestEarned / principalFinanced) * 100 : 0;
-
-        return {
-          id: partner.id,
-          name: partner.name,
-          role: partner.is_md ? 'MD' : 'Partner',
-          netCapital,
-          loansIntroduced,
-          principalFinanced,
-          principalCollected,
-          interestEarned,
-          penaltyEarned,
-          outstanding,
-          presentDue,
-          pendingInterest,
-          pendingPenalty,
-          recoveryPct,
-          collectionPct,
-          yieldPct,
-          npaCount,
-          activeLoans,
-          closedLoans
-        };
-      });
-
-      perfRows.sort((a, b) => b.principalFinanced - a.principalFinanced);
-      setRows(perfRows);
+      activePerfRows.sort((a, b) => b.principalFinanced - a.principalFinanced);
+      setRows(activePerfRows);
 
     } catch (err) {
       console.error(err);
-      toast.error('Failed to analyze partner performance');
+      toast.error('Failed to load performance data');
     } finally {
       setLoading(false);
     }
@@ -364,39 +216,41 @@ const PartnerPerformance: React.FC = () => {
 
       {/* Date Filters + Partner Performance Split KPI Card */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-        {/* Date Filter Box (Left - 4 Columns) */}
-        <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 shadow-sm p-3.5 flex flex-col justify-between gap-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <span className="finance-small-label uppercase font-black text-slate-500">Date Filter Range</span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Selected Period</span>
+        {/* Date Filter Box (Left - 5 Columns) */}
+        <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between gap-3">
+          <div className="border-b border-slate-100 pb-2">
+            <span className="text-xs font-black text-slate-500 uppercase tracking-wider block">DATE FILTER RANGE</span>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-50 rounded-lg border border-slate-200 p-2.5 flex flex-col justify-center">
-              <label className="text-slate-400 mb-0.5 finance-small-label uppercase">From Date</label>
-              <input
-                type="date"
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+            <div>
+              <FinanceSmartCalendar
+                label="FROM DATE"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase text-xs font-bold"
+                onChange={setStartDate}
+                module="PARTNER_PERFORMANCE"
               />
             </div>
-            <div className="bg-slate-50 rounded-lg border border-slate-200 p-2.5 flex flex-col justify-center">
-              <label className="text-slate-400 mb-0.5 finance-small-label uppercase">To Date</label>
-              <input
-                type="date"
+            <div>
+              <FinanceSmartCalendar
+                label="TO DATE"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase text-xs font-bold"
+                onChange={setEndDate}
+                module="PARTNER_PERFORMANCE"
               />
             </div>
           </div>
-          <div className="text-[10px] font-semibold text-slate-400 uppercase text-right">
-            Showing business from {startDate || 'Beginning'} to {endDate}
+
+          <div className="pt-1 text-center">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Business Period</span>
+            <span className="text-xs font-extrabold font-mono text-slate-700">
+              {isoToDisplayFormatted(startDate) || 'Beginning'} → {isoToDisplayFormatted(endDate) || 'Today'}
+            </span>
           </div>
         </div>
 
-        {/* Partner Performance Split Summary Card (Right - 8 Columns) */}
-        <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200 shadow-sm p-3.5 flex flex-col justify-between">
+        {/* Partner Performance Split Summary Card (Right - 7 Columns) */}
+        <div className="lg:col-span-7 bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>

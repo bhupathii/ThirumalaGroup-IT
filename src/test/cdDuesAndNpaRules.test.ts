@@ -125,4 +125,31 @@ describe('CD Dues List and NPA List Safety Regression Tests', () => {
     expect(integrityErrorsList).toHaveLength(1);
     expect(integrityErrorsList[0].code).toBe('CD_DATA_INTEGRITY_ERROR');
   });
+
+  it('verifies filterDueList NPA List filtering excludes normal closed loans and non-overdue active loans', async () => {
+    const { FinanceCalculationEngine } = await import('../services/FinanceCalculationEngine');
+
+    const mockDues: any[] = [
+      { id: '1', loanId: 'CD001', customerName: 'Active NPA', status: 'Active', isNPA: true, dueDays: 95, currentPrincipal: 10000, interestPaid: 0, pendingInterest: 1000, penalty: 200, penaltyPaid: 0, presentDue: 1200 },
+      { id: '2', loanId: 'CD002', customerName: 'Active Non-NPA', status: 'Active', isNPA: false, dueDays: 30, currentPrincipal: 10000, interestPaid: 0, pendingInterest: 300, penalty: 0, penaltyPaid: 0, presentDue: 300 },
+      { id: '3', loanId: 'CD003', customerName: 'Normal Closed', status: 'Closed', isNPA: true, dueDays: 120, currentPrincipal: 0, interestPaid: 5000, pendingInterest: 0, penalty: 0, penaltyPaid: 0, presentDue: 0 },
+      { id: '4', loanId: 'CD004', customerName: 'NPA Closed', status: 'NPA_CLOSED', isNPA: true, dueDays: 150, currentPrincipal: 5000, interestPaid: 1000, pendingInterest: 500, penalty: 100, penaltyPaid: 0, presentDue: 600 }
+    ];
+
+    const npaFiltered = FinanceCalculationEngine.filterDueList(
+      mockDues,
+      'NPA LIST',
+      'ALL PARTNERS',
+      'ALL',
+      '',
+      '',
+      ''
+    );
+
+    const loanIds = npaFiltered.map(d => d.loanId);
+    expect(loanIds).toContain('CD004'); // NPA_CLOSED account included
+    expect(loanIds).not.toContain('CD001'); // Active loan (even if > 90 days) is in Outstanding/Due List, not NPA List
+    expect(loanIds).not.toContain('CD002'); // Active non-NPA (<= 90 days) excluded
+    expect(loanIds).not.toContain('CD003'); // Normal Closed loan excluded
+  });
 });

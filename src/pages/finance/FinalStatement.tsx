@@ -1,6 +1,7 @@
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState } from 'react';
 import Button from '../../components/UI/Button';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../../services/dailyFinancialTransactionService';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { Printer, ArrowLeft, RefreshCw, Download } from 'lucide-react';
@@ -29,8 +30,9 @@ const FinalStatement: React.FC = () => {
   const [partnerCount, setPartnerCount] = useState(1);
   const [openingCash, setOpeningCash] = useState(0);
   const [closingCash, setClosingCash] = useState(0);
-  const [creditTotal, setCreditTotal] = useState(0);
-  const [debitTotal, setDebitTotal] = useState(0);
+  const [creditTotal, setCreditTotal] = useState(0); // This is Total Inflows
+  const [debitTotal, setDebitTotal] = useState(0);   // This is Total Outflows
+  const [netProfit, setNetProfit] = useState(0);
   const [accountBalances, setAccountBalances] = useState<BSAccountBalanceItem[]>([]);
 
   const [financeMode] = useState<'REGULAR' | 'ITR'>(() => {
@@ -101,13 +103,21 @@ const FinalStatement: React.FC = () => {
 
       let currCredit = 0;
       let currDebit = 0;
+      let profitCredits = 0;
+      let profitDebits = 0;
+
       rangeTxs.forEach(t => {
         currCredit += t.credit;
         currDebit += t.debit;
+        if (t.reportClassification === 'PROFIT_AND_LOSS') {
+          profitCredits += t.credit;
+          profitDebits += t.debit;
+        }
      });
       setCreditTotal(currCredit);
       setDebitTotal(currDebit);
       setClosingCash(prevCash + currCredit - currDebit);
+      setNetProfit(profitCredits - profitDebits);
 
       // 3. Compute balance sheet account balances
       const bsHeads = new Set<string>();
@@ -157,7 +167,7 @@ const FinalStatement: React.FC = () => {
 
   const handleExportExcel = () => {
     const data = [
-      { 'Opening Cash': openingCash, 'Closing Cash': closingCash, 'Credit Total': creditTotal, 'Debit Total': debitTotal, 'Net Growth': grandTotal, 'Share Value': shareValue },
+      { 'Opening Cash': openingCash, 'Closing Cash': closingCash, 'Total System Inflow': creditTotal, 'Total System Outflow': debitTotal, 'Net Profit': netProfit, 'Share Value': shareValue },
       ...accountBalances.map(item => ({
         'Account Name': item.accountName,
         'Opening Balance': item.opening,
@@ -170,8 +180,8 @@ const FinalStatement: React.FC = () => {
     toast.success('Excel Statement Exported!');
   };
 
-  const grandTotal = creditTotal - debitTotal;
-  const shareValue = grandTotal / partnerCount;
+  const shareValue = partnerCount > 0 ? netProfit / partnerCount : 0;
+  const grandTotal = accountBalances.reduce((sum, item) => sum + item.closing, 0) + closingCash;
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto p-6 print:p-0">
@@ -200,25 +210,23 @@ const FinalStatement: React.FC = () => {
       </div>
 
       {/* Top Filter & Share Row */}
-      <div className={`bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row overflow-hidden`}>
+      <div className={`bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row relative z-20`}>
         {/* Date Filters */}
-        <div className="flex-1 grid grid-cols-3 divide-x divide-slate-100 border-b md:border-b-0 md:border-r border-slate-100">
-          <div className="px-6 py-4 flex flex-col justify-center">
-            <label className="text-slate-400 mb-1 finance-small-label uppercase">From</label>
-            <input
-              type="date"
+        <div className="flex-1 grid grid-cols-3 gap-2 p-2.5 border-b md:border-b-0 md:border-r border-slate-100 items-center">
+          <div>
+            <FinanceSmartCalendar
+              label="From"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase"
+              onChange={setStartDate}
+              module="FINAL_STATEMENT"
             />
           </div>
-          <div className="px-6 py-4 flex flex-col justify-center">
-            <label className="text-slate-400 mb-1 finance-small-label uppercase">To</label>
-            <input
-              type="date"
+          <div>
+            <FinanceSmartCalendar
+              label="To"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase"
+              onChange={setEndDate}
+              module="FINAL_STATEMENT"
             />
           </div>
           <div className="px-6 py-4 flex flex-col justify-center bg-slate-50">

@@ -1,9 +1,9 @@
-import { sortNumerically } from '../../lib/financialCalculations';
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { supabaseFinance, FinanceLoan, FinanceCustomer, FinanceTransaction, FinanceDue, FinancePhoto } from '../../lib/supabaseFinance';
 import { Search as SearchIcon, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -243,11 +243,11 @@ const SearchPage: React.FC = () => {
             {/* Collection Entry Form */}
             <Card title="Quick Collection Entry" subtitle="Add collection payments to account" className="border-green-200">
               <form onSubmit={handleQuickCollection} className="space-y-4">
-                <Input
+                <FinanceSmartCalendar
                   label="Collection Date"
-                  type="date"
                   value={collectDate}
                   onChange={setCollectDate}
+                  module="CD_LEDGER"
                   required
                 />
                 

@@ -1,8 +1,8 @@
-import { sortNumerically } from '../../lib/financialCalculations';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { supabase } from '../../lib/supabase';
 import { Printer, User, Phone, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -193,9 +193,9 @@ const NewCustomers: React.FC = () => {
       </div>
 
       {/* Date Filters */}
-      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100`}>
-        <Input label="Registered From" type="date" value={startDate} onChange={setStartDate} />
-        <Input label="Registered To" type="date" value={endDate} onChange={setEndDate} />
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 items-end`}>
+        <FinanceSmartCalendar label="Registered From" value={startDate} onChange={setStartDate} module="CD_LEDGER" />
+        <FinanceSmartCalendar label="Registered To" value={endDate} onChange={setEndDate} module="CD_LEDGER" />
         <Input label="Quick Filter Results" value={searchQuery} onChange={setSearchQuery} placeholder="Search by name, phone..." />
       </div>
 

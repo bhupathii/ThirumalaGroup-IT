@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { supabaseFinance, FinanceCashbookAccount, FinanceCashbookEntry } from '../../lib/supabaseFinance';
 import { 
   ArrowLeft, 
@@ -14,14 +14,20 @@ import {
   Search, 
   Info,
   Check,
-  X
+  X,
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  Scale,
+  Calendar,
+  Clock,
+  BookOpen
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { validateFinanceForm, ValidationField } from '../../utils/financeValidation';
 import { useAuth } from '../../contexts/AuthContext';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
-
 
 const CashBook: React.FC = () => {
   const { user } = useAuth();
@@ -45,16 +51,20 @@ const CashBook: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const entryDateRef = React.useRef<HTMLInputElement>(null);
   const headOfAccountRef = React.useRef<HTMLSelectElement>(null);
-  const particularsRef = React.useRef<HTMLTextAreaElement>(null);
+  const particularsRef = React.useRef<HTMLInputElement>(null);
   const creditRef = React.useRef<HTMLInputElement>(null);
   const debitRef = React.useRef<HTMLInputElement>(null);
   const newAccountNameRef = React.useRef<HTMLInputElement>(null);
 
-
-  // Search & Sorting States
+  // Search & Filtering States
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED'>('ALL');
+  const [headFilter, setHeadFilter] = useState<string>('ALL');
+  const [dateFilter, setDateFilter] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [filterYear, setFilterYear] = useState(() => new Date().getFullYear());
+  const [filterMonth, setFilterMonth] = useState(() => new Date().getMonth() + 1);
+  const [refreshCounter, setRefreshCounter] = useState(0);
 
   // Modal / Dialog Popups States
   const [showAccountModal, setShowAccountModal] = useState(false);
@@ -71,57 +81,77 @@ const CashBook: React.FC = () => {
   const [financeMode] = useState<'REGULAR' | 'ITR'>(() => {
     const prev = sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode');
     return prev === 'itr' ? 'ITR' : 'REGULAR';
- });
+  });
 
   useEffect(() => {
     fetchData();
- }, [financeMode]);
+  }, [financeMode, filterYear, filterMonth, refreshCounter]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const bookId = await supabaseFinance.getLegacyBookId(financeMode);
       const fetchedAccounts = await supabaseFinance.getCashbookAccounts();
-      const fetchedEntries = await supabaseFinance.getCashbookEntries(bookId);
+      
+      const startDate = `${filterYear}-${String(filterMonth).padStart(2, '0')}-01`;
+      const lastDayNum = new Date(filterYear, filterMonth, 0).getDate();
+      const endDate = `${filterYear}-${String(filterMonth).padStart(2, '0')}-${String(lastDayNum).padStart(2, '0')}`;
+      
+      const fetchedEntries = await supabaseFinance.getCashbookEntries(bookId, startDate, endDate);
       setAccounts(fetchedAccounts);
       setEntries(fetchedEntries);
-   } catch (err) {
+    } catch (err) {
       console.error('Error fetching data:', err);
       toast.error('Failed to load Day Book data');
-   } finally {
+    } finally {
       setLoading(false);
-   }
- };
+    }
+  };
+
+  const customEventProvider = async (year: number, month: number) => {
+    const bookId = await supabaseFinance.getLegacyBookId(financeMode);
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDayNum = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDayNum).padStart(2, '0')}`;
+
+    const monthEntries = await supabaseFinance.getCashbookEntries(bookId, startDate, endDate);
+    
+    const dots = new Set<string>();
+    monthEntries.forEach(e => {
+      dots.add(e.entry_date.split('T')[0]);
+    });
+    return dots;
+  };
 
   // Mutually Exclusive Credit / Debit behavior:
-  // Typing in Credit sets Debit to empty and vice versa
   const handleCreditChange = (val: string) => {
     setCredit(val);
     if (val !== '') {
       setDebit('');
-   }
- };
+    }
+  };
 
   const handleDebitChange = (val: string) => {
     setDebit(val);
     if (val !== '') {
       setCredit('');
-   }
- };
+    }
+  };
 
   const handleAccountChange = (accId: string) => {
     setHeadOfAccount(accId);
     const selectedAcc = accounts.find(a => a.id === accId);
     if (selectedAcc && selectedAcc.account_number) {
       setAccountNumber(selectedAcc.account_number);
-   } else {
+    } else {
       setAccountNumber('');
-   }
- };
+    }
+  };
 
   // Form Reset / Clear
   const handleReset = (confirm = true) => {
-    if (confirm && !window.confirm('Clear all form fields?')) return;
+    if (confirm && editId && !window.confirm('Cancel editing current entry?')) return;
+    if (confirm && !editId && (particulars || credit || debit || headOfAccount) && !window.confirm('Clear all form fields?')) return;
     setEntryDate(getLocalBusinessDateISO());
     setHeadOfAccount('');
     setAccountNumber('');
@@ -129,12 +159,12 @@ const CashBook: React.FC = () => {
     setCredit('');
     setDebit('');
     setEditId(null);
- };
+    setErrors({});
+  };
 
   // Save Entry (Create / Update)
   const handleSaveEntry = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-
 
     const creditVal = Number(credit) || 0;
     const debitVal = Number(debit) || 0;
@@ -153,7 +183,7 @@ const CashBook: React.FC = () => {
           : (creditVal > 0 || debitVal > 0) 
             ? null 
             : 'Please enter either Credit or Debit amount greater than 0'
-     }
+      }
     ];
 
     const { isValid, errors: newErrors } = validateFinanceForm(fields);
@@ -179,31 +209,35 @@ const CashBook: React.FC = () => {
         created_by: staffName,
         status: 'PENDING',
         book_id: bookId
-     };
+      };
 
       let result;
       if (editId) {
         result = await supabaseFinance.updateCashbookEntry(editId, payload, staffName);
-     } else {
+      } else {
         result = await supabaseFinance.createCashbookEntry(payload, true);
-     }
+      }
 
       if (result) {
         toast.success(editId ? 'Entry updated successfully' : 'Entry saved successfully');
         handleReset(false);
-        // Refresh data
-        const fetchedEntries = await supabaseFinance.getCashbookEntries(bookId);
-        setEntries(fetchedEntries);
-     } else {
+        // Refresh data immediately without page reload
+        setRefreshCounter(prev => prev + 1);
+
+        // Keep operator ready for next entry in under 10s
+        if (particularsRef.current) {
+          particularsRef.current.focus();
+        }
+      } else {
         toast.error('Failed to save Day Book entry');
-     }
-   } catch (err) {
+      }
+    } catch (err) {
       console.error(err);
       toast.error('Error occurred while saving entry');
-   } finally {
+    } finally {
       setSaving(false);
-   }
- };
+    }
+  };
 
   // Edit action
   const handleEditClick = (entry: FinanceCashbookEntry) => {
@@ -219,15 +253,12 @@ const CashBook: React.FC = () => {
     const match = accounts.find(a => a.account_name === entry.head_of_account);
     if (match) {
       setHeadOfAccount(match.id);
-   } else {
+    } else {
       setHeadOfAccount(entry.head_of_account);
-   }
+    }
 
     if (particularsRef.current) particularsRef.current.focus();
-    
-    // Smooth scroll to form on mobile
-    window.scrollTo({ top: 0, behavior: 'smooth' });
- };
+  };
 
   // Delete Action
   const handleDeleteClick = async (id: string) => {
@@ -237,12 +268,12 @@ const CashBook: React.FC = () => {
       const staffName = user?.username || 'Staff';
       await supabaseFinance.deleteCashbookEntry(id, staffName);
       toast.success('Entry deleted successfully');
-      await fetchData();
-   } catch (err) {
+      setRefreshCounter(prev => prev + 1);
+    } catch (err) {
       console.error(err);
       toast.error('Failed to delete entry');
-   }
- };
+    }
+  };
 
   // Approve Action
   const handleApproveClick = async (id: string) => {
@@ -253,16 +284,15 @@ const CashBook: React.FC = () => {
       const result = await supabaseFinance.approveCashbookEntry(id, staffName);
       if (result) {
         toast.success('Day Book Entry approved successfully');
-        await fetchData();
-     } else {
+        setRefreshCounter(prev => prev + 1);
+      } else {
         toast.error('Failed to approve entry');
-     }
-   } catch (err) {
+      }
+    } catch (err) {
       console.error(err);
       toast.error('Error approving entry');
-   }
- };
-
+    }
+  };
 
   // Add New Account Modal Submit
   const handleCreateAccountSubmit = async (e: React.FormEvent) => {
@@ -276,18 +306,17 @@ const CashBook: React.FC = () => {
     setErrors(newErrors);
     if (!isValid) return;
 
-    // Case-insensitive, collapsed spaces, trimmed duplicate detection
     const normalizedNewName = newAccountName.trim().toUpperCase().replace(/\s+/g, ' ');
     const isDuplicate = accounts.some(acc => acc.account_name.trim().toUpperCase().replace(/\s+/g, ' ') === normalizedNewName);
     if (isDuplicate) {
       toast.error('An account with this name already exists.');
       return;
-   }
+    }
 
     if (!newAccountCategory) {
       toast.error('Please select a Category.');
       return;
-   }
+    }
 
     setSavingAccount(true);
     try {
@@ -297,7 +326,7 @@ const CashBook: React.FC = () => {
         report_classification: newAccountCategory as 'BALANCE_SHEET' | 'PROFIT_AND_LOSS',
         report_section: newAccountCategory as 'BALANCE_SHEET' | 'PROFIT_AND_LOSS',
         category: newAccountCategory
-     };
+      };
 
       const result = await supabaseFinance.createCashbookAccount(payload);
       if (result) {
@@ -306,23 +335,21 @@ const CashBook: React.FC = () => {
         setNewAccountCategory('');
         setShowAccountModal(false);
 
-        // Fetch updated accounts list
         const fetchedAccounts = await supabaseFinance.getCashbookAccounts();
         setAccounts(fetchedAccounts);
 
-        // Pre-select the newly created account
         setHeadOfAccount(result.id);
         setAccountNumber('');
-     } else {
+      } else {
         toast.error('Failed to create account. Name might already exist.');
-     }
-   } catch (err) {
+      }
+    } catch (err) {
       console.error(err);
       toast.error('Error occurred while creating account');
-   } finally {
+    } finally {
       setSavingAccount(false);
-   }
- };
+    }
+  };
 
   // Edit/Classify existing account submit
   const handleEditAccountSubmit = async (e: React.FormEvent) => {
@@ -332,7 +359,7 @@ const CashBook: React.FC = () => {
     if (!editAccountCategory) {
       toast.error('Please select a Category.');
       return;
-   }
+    }
 
     setSavingAccount(true);
     try {
@@ -342,7 +369,7 @@ const CashBook: React.FC = () => {
         report_classification: editAccountCategory as 'BALANCE_SHEET' | 'PROFIT_AND_LOSS',
         report_section: editAccountCategory as 'BALANCE_SHEET' | 'PROFIT_AND_LOSS',
         category: editAccountCategory
-     };
+      };
 
       const result = await supabaseFinance.updateCashbookAccount(editingAccId, payload);
       if (result.success) {
@@ -350,45 +377,42 @@ const CashBook: React.FC = () => {
         setEditingAccId(null);
         setEditAccountName('');
         setEditAccountCategory('');
-        // Refresh accounts
         const fetchedAccounts = await supabaseFinance.getCashbookAccounts();
         setAccounts(fetchedAccounts);
-     } else {
+      } else {
         toast.error(result.error || 'Failed to update account details');
-     }
-   } catch (err) {
+      }
+    } catch (err) {
       console.error(err);
       toast.error('Error occurred while updating account');
-   } finally {
+    } finally {
       setSavingAccount(false);
-   }
- };
+    }
+  };
 
   const handleDeleteAccount = async (account: FinanceCashbookAccount) => {
     if (!window.confirm(`Are you sure you want to delete the Head of Account: "${account.account_name}"?`)) {
       return;
-   }
+    }
 
     try {
-      // Perform delete
       const result = await supabaseFinance.deleteCashbookAccount(account.id);
       if (result.success) {
         toast.success(`Head of Account "${account.account_name}" deleted successfully.`);
-        // Refresh accounts
         const fetchedAccounts = await supabaseFinance.getCashbookAccounts();
         setAccounts(fetchedAccounts);
         if (headOfAccount === account.id) {
           setHeadOfAccount('');
           setAccountNumber('');
-       }
-     } else {
+        }
+      } else {
         toast.error(result.error || 'Failed to delete account');
-     }
-   } catch (err) {
+      }
+    } catch (err) {
       console.error(err);
       toast.error('Error occurred while deleting Head of Account');
-   }
- };
+    }
+  };
 
   // Sorting and Filtering logic
   const filteredEntries = useMemo(() => {
@@ -401,7 +425,6 @@ const CashBook: React.FC = () => {
         const headStr = (e.head_of_account || '').toLowerCase();
         const partStr = (e.particulars || '').toLowerCase();
         const dateStr = (e.entry_date || '');
-        // format dd/MM/yyyy date string for search
         const formattedDate = dateStr.split('-').reverse().join('/');
         const accNumStr = (e.account_number || '').toLowerCase();
         const creditStr = String(e.credit || '');
@@ -416,13 +439,23 @@ const CashBook: React.FC = () => {
           creditStr.includes(query) ||
           debitStr.includes(query)
         );
-     });
-   }
+      });
+    }
 
     // Filter status
     if (statusFilter !== 'ALL') {
       result = result.filter(e => (e.status || 'PENDING') === statusFilter);
-   }
+    }
+
+    // Filter Head of Account
+    if (headFilter !== 'ALL') {
+      result = result.filter(e => e.head_of_account === headFilter || e.head_of_account === accounts.find(a => a.id === headFilter)?.account_name);
+    }
+
+    // Filter Date
+    if (dateFilter) {
+      result = result.filter(e => e.entry_date.split('T')[0] === dateFilter);
+    }
 
     // Sort order
     result.sort((a, b) => {
@@ -430,14 +463,27 @@ const CashBook: React.FC = () => {
       const timeB = new Date(b.entry_date).getTime();
       if (sortOrder === 'asc') {
         return timeA - timeB;
-     }
+      }
       return timeB - timeA;
-   });
+    });
 
     return result;
- }, [entries, searchQuery, statusFilter, sortOrder]);
+  }, [entries, searchQuery, statusFilter, headFilter, dateFilter, sortOrder, accounts]);
 
-  // Summaries calculation (based on filtered list)
+  // Compute running balance for displayed entries
+  const runningBalancesMap = useMemo(() => {
+    const map = new Map<string, number>();
+    // Sort entries chronologically (oldest first) to accumulate running balance
+    const sortedAsc = [...filteredEntries].sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime());
+    let cumulative = 0;
+    sortedAsc.forEach(e => {
+      cumulative += (Number(e.credit) || 0) - (Number(e.debit) || 0);
+      map.set(e.id, cumulative);
+    });
+    return map;
+  }, [filteredEntries]);
+
+  // Summaries calculation
   const summaries = useMemo(() => {
     let totalCredits = 0;
     let totalDebits = 0;
@@ -445,363 +491,517 @@ const CashBook: React.FC = () => {
     filteredEntries.forEach(e => {
       totalCredits += Number(e.credit) || 0;
       totalDebits += Number(e.debit) || 0;
-   });
+    });
+
+    const todayIso = getLocalBusinessDateISO();
+    const todayEntriesCount = entries.filter(e => e.entry_date.split('T')[0] === todayIso).length;
+
+    // Latest entry timestamp
+    let lastEntryFormatted = '—';
+    if (entries.length > 0) {
+      const sortedByTime = [...entries].sort((a, b) => {
+        const tA = new Date(a.created_at || a.entry_date).getTime();
+        const tB = new Date(b.created_at || b.entry_date).getTime();
+        return tB - tA;
+      });
+      const latest = sortedByTime[0];
+      if (latest && latest.created_at) {
+        const d = new Date(latest.created_at);
+        lastEntryFormatted = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
+      } else if (latest) {
+        lastEntryFormatted = latest.entry_date.split('T')[0];
+      }
+    }
 
     return {
       totalCredits,
       totalDebits,
-      net: totalCredits - totalDebits
-   };
- }, [filteredEntries]);
-
+      net: totalCredits - totalDebits,
+      todayEntriesCount,
+      lastEntryTime: lastEntryFormatted
+    };
+  }, [filteredEntries, entries]);
 
   return (
     <>
-    <div className={`space-y-6 p-6 w-full max-w-[100%] mx-auto select-none`}>
-      
-      {/* Top Header Actions Bar */}
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-100 pb-5">
-        <div>
-          <div className="text-slate-400 flex items-center gap-1.5 finance-small-label uppercase">
-            <span>DASHBOARD</span>
-            <span>/</span>
-            <span className="text-slate-600">DAY BOOK ENTRY</span>
-          </div>
-          <h1 className="mt-1 text-[22px] font-black text-[#0b1329] tracking-tight uppercase">DAY BOOK ENTRY</h1>
-          <p className="mt-1.5 finance-small-label uppercase">
-            DAY-BOOK ENTRIES · CREDIT / DEBIT POSTED TO GENERAL LEDGER
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate('/finance')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            BACK
-          </button>
-          <button
-            onClick={() => setShowPrintModal(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm finance-button uppercase"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            PRINT
-          </button>
-        </div>
-      </div>
-
-      {/* Main Grid: Form on Left (5 cols) & Content on Right (7 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+      <div className="w-full p-4 space-y-3 select-none bg-slate-50/50 min-h-screen">
         
-        {/* Left Column: Form */}
-        <div className="lg:col-span-5 space-y-6">
-          <Card
-            title={
-              <span className="text-slate-900 text-[18px] font-black uppercase">
-                {editId ? 'EDIT ENTRY' : 'NEW ENTRY'}
+        {/* Top Header Actions Bar */}
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
+          <div className="flex flex-col justify-center">
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-1">
+              <span>DASHBOARD</span>
+              <span className="text-slate-300">/</span>
+              <span className="text-slate-500 font-bold">DAY BOOK ENTRY</span>
+            </div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase flex items-center gap-2 leading-none">
+              <BookOpen className="w-6 h-6 text-slate-700" />
+              DAY BOOK ENTRY
+            </h1>
+          </div>
+          
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={() => navigate('/finance')}
+              className="inline-flex items-center justify-center h-9 px-4 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors text-xs font-bold uppercase shadow-sm cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4 mr-1.5" />
+              BACK
+            </button>
+            <button
+              onClick={() => setShowPrintModal(true)}
+              className="inline-flex items-center justify-center h-9 px-4 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-xs font-bold uppercase shadow-sm cursor-pointer"
+            >
+              <Printer className="w-4 h-4 mr-1.5" />
+              PRINT
+            </button>
+          </div>
+        </div>
+
+        {/* 1. ENTRY FORM CARD (Single Horizontal Card) */}
+        <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs">
+          <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-100">
+            <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${editId ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+              {editId ? 'EDIT DAY BOOK ENTRY' : 'NEW DAY BOOK ENTRY'}
+            </span>
+            {editId && (
+              <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded uppercase">
+                Editing Mode Active
               </span>
-           }
-            subtitle={
-              <span className="text-slate-400 text-[11px] font-bold uppercase">
-                Every field except account number is required
-              </span>
-           }
-            className="shadow-sm border-slate-150 rounded-xl"
-          >
-            <form onSubmit={handleSaveEntry} className="space-y-5">
-              {/* Date Input */}
+            )}
+          </div>
+
+          <form onSubmit={handleSaveEntry} className="flex flex-col gap-4">
+            
+            {/* ROW 1: 4-Column Grid for Primary Fields */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+              
+              {/* Date */}
               <div className="w-full">
-                <Input
+                <FinanceSmartCalendar
+                  value={entryDate}
+                  onChange={(val) => { setEntryDate(val); setErrors(p => ({...p, entryDate: false})); }}
+                  eventProvider={customEventProvider}
+                  refreshTrigger={refreshCounter}
                   label="DATE"
-                  type="date"
-                  ref={entryDateRef} error={errors.entryDate} value={entryDate} onChange={(val) => { setEntryDate(val); setErrors(p => ({...p, entryDate: false})) }}
                   required
+                  error={errors.entryDate}
+                  compact={true}
                 />
               </div>
 
-              {/* Head of Account Select Dropdown */}
-              <div>
-                <label className="peek-label uppercase font-bold text-[15px] block mb-1.5">
-                  HEAD OF A/C <span className="text-red-500 ml-0.5">*</span>
+              {/* Head of A/C + Inline Action Buttons */}
+              <div className="w-full">
+                <label className="block text-[11px] font-medium text-slate-500 uppercase mb-1">
+                  HEAD OF A/C <span className="text-red-500">*</span>
                 </label>
-                <select
-                  value={headOfAccount}
-                  onChange={(e) => { handleAccountChange(e.target.value); setErrors(p => ({...p, headOfAccount: false})) }}
-                  ref={headOfAccountRef}
-                  className={`w-full bg-white border rounded-lg px-3 text-slate-850 focus:outline-none h-[44px] shadow-sm font-bold text-[16px] uppercase ${errors.headOfAccount ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-950'}`}
-                  required
-                >
-                  <option value="">SELECT...</option>
-                  {accounts.map(acc => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.account_name.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
-                
-                {/* Account Triggers */}
-                <div className="grid grid-cols-2 gap-3 mt-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="relative flex-1">
+                    <select
+                      value={headOfAccount}
+                      onChange={(e) => { handleAccountChange(e.target.value); setErrors(p => ({...p, headOfAccount: false})); }}
+                      ref={headOfAccountRef}
+                      required
+                      className={`w-full bg-white border rounded-lg pl-3 pr-8 h-[42px] text-xs font-bold text-slate-900 uppercase focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-sm truncate appearance-none cursor-pointer ${
+                        errors.headOfAccount ? 'border-red-500 bg-red-50' : 'border-slate-200'
+                      }`}
+                    >
+                      <option value="">SELECT HEAD...</option>
+                      {accounts.map(acc => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.account_name.toUpperCase()}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                      <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => setShowAccountModal(true)}
-                    className="flex items-center justify-center gap-1.5 px-3 h-[40px] bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg border border-blue-200 text-xs font-bold uppercase transition-colors"
+                    title="Create New Account Head"
+                    className="h-[42px] px-3 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg border border-blue-200 text-[11px] font-bold uppercase transition-colors shrink-0 flex items-center justify-center gap-1 cursor-pointer shadow-sm"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    + New Account
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowDirectoryModal(true)}
-                    className="flex items-center justify-center gap-1.5 px-3 h-[40px] bg-slate-50 text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold uppercase transition-colors"
-                  >
-                    Manage Heads
+                    <Plus className="w-4 h-4" />
+                    <span>NEW</span>
                   </button>
                 </div>
               </div>
 
+              {/* Credit */}
+              <div className="w-full">
+                <label className="block text-[11px] font-medium text-slate-500 uppercase mb-1">
+                  CREDIT (IN CR)
+                </label>
+                <input
+                  type="number"
+                  ref={creditRef}
+                  value={credit}
+                  onChange={(e) => { handleCreditChange(e.target.value); setErrors(p => ({...p, credit: false})); }}
+                  placeholder="0.00"
+                  disabled={debit !== ''}
+                  className={`w-full bg-white border rounded-lg px-3 h-[42px] text-sm font-mono font-bold text-emerald-700 text-right focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-sm placeholder:text-slate-300 placeholder:font-medium ${
+                    debit !== '' ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'border-slate-200'
+                  }`}
+                />
+              </div>
+
+              {/* Debit */}
+              <div className="w-full">
+                <label className="block text-[11px] font-medium text-slate-500 uppercase mb-1">
+                  DEBIT (IN DR)
+                </label>
+                <input
+                  type="number"
+                  ref={debitRef}
+                  value={debit}
+                  onChange={(e) => { handleDebitChange(e.target.value); setErrors(p => ({...p, debit: false})); }}
+                  placeholder="0.00"
+                  disabled={credit !== ''}
+                  className={`w-full bg-white border rounded-lg px-3 h-[42px] text-sm font-mono font-bold text-rose-700 text-right focus:outline-none focus:ring-2 focus:ring-rose-600 shadow-sm placeholder:text-slate-300 placeholder:font-medium ${
+                    credit !== '' ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'border-slate-200'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* ROW 2: Particulars & Buttons */}
+            <div className="flex flex-col md:flex-row items-end gap-4 w-full">
+              
               {/* Particulars */}
-              <div>
-                <label className="peek-label uppercase font-bold text-[15px] block mb-1.5">
-                  PARTICULARS <span className="text-red-500 ml-0.5">*</span>
+              <div className="flex-1 w-full">
+                <label className="block text-[11px] font-medium text-slate-500 uppercase mb-1">
+                  PARTICULARS <span className="text-red-500">*</span>
                 </label>
                 <textarea
-                  value={particulars}
-                  onChange={(e) => { setParticulars(e.target.value); setErrors(p => ({...p, particulars: false})) }}
                   ref={particularsRef as any}
-                  className={`w-full bg-white border rounded-lg p-3 text-slate-850 focus:outline-none h-[88px] shadow-sm font-bold text-[16px] uppercase placeholder-slate-400 ${errors.particulars ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-950'}`}
-                  placeholder="ENTER TRANSACTION DETAILS..."
+                  value={particulars}
+                  onChange={(e) => { setParticulars(e.target.value); setErrors(p => ({...p, particulars: false})); }}
+                  placeholder="ENTER TRANSACTION PARTICULARS OR REMARKS..."
                   required
+                  className={`w-full bg-white border rounded-lg px-3 py-3 h-[48px] text-xs font-bold text-slate-900 uppercase placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-sm resize-none ${
+                    errors.particulars ? 'border-red-500 bg-red-50' : 'border-slate-200'
+                  }`}
                 />
               </div>
 
-              {/* Credit & Debit Mutual Exclusion */}
-              <div className="grid grid-cols-2 gap-3">
-                <Input
-                  label="CREDIT"
-                  type="number"
-                  ref={creditRef} error={errors.credit} value={credit} onChange={(val) => { handleCreditChange(val); setErrors(p => ({...p, credit: false})) }}
-                  placeholder="0"
-                  disabled={debit !== ''}
-                />
-                <Input
-                  label="DEBIT"
-                  type="number"
-                  ref={debitRef} error={errors.debit} value={debit} onChange={(val) => { handleDebitChange(val); setErrors(p => ({...p, debit: false})) }}
-                  placeholder="0"
-                  disabled={credit !== ''}
-                />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              {/* Actions */}
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => handleReset(true)}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 h-11 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm font-bold text-xs uppercase"
+                  className="h-[48px] px-5 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors text-xs font-bold uppercase shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  {editId ? 'CANCEL' : 'RESET'}
+                  <RotateCcw className="w-4 h-4" />
+                  {editId ? 'CANCEL' : 'CLEAR'}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="inline-flex items-center justify-center gap-1.5 px-5 h-11 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 font-bold text-xs uppercase"
+                  className="h-[48px] px-6 bg-slate-900 text-white border border-slate-900 rounded-lg hover:bg-slate-800 transition-colors text-xs font-bold uppercase shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
-                  <Save className="w-3.5 h-3.5" />
-                  {saving ? 'SAVING...' : editId ? 'UPDATE ENTRY' : 'SAVE ENTRY'}
+                  <Save className="w-4 h-4" />
+                  {saving ? 'SAVING...' : editId ? 'UPDATE' : 'SAVE ENTRY'}
                 </button>
               </div>
 
-            </form>
-          </Card>
+            </div>
+          </form>
         </div>
-        {/* Right Column: Summaries + Recent Entries list */}
-        <div className="lg:col-span-7 space-y-6 flex flex-col">
+
+        {/* 2. SUMMARY CARDS (5 Equal Cards) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           
-          {/* Summaries Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Card 1: Total Credits */}
+          <div className="bg-white rounded-xl p-4 border border-emerald-200 shadow-sm flex flex-col justify-between h-[80px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-emerald-600 tracking-wider">Total Credits</span>
+              <TrendingUp className="w-4 h-4 text-emerald-500" />
+            </div>
+            <div className="text-xl font-black font-mono text-emerald-700 tracking-tight leading-tight">
+              ₹ {summaries.totalCredits.toLocaleString('en-IN')}
+            </div>
+          </div>
+
+          {/* Card 2: Total Debits */}
+          <div className="bg-white rounded-xl p-4 border border-rose-200 shadow-sm flex flex-col justify-between h-[80px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-rose-600 tracking-wider">Total Debits</span>
+              <TrendingDown className="w-4 h-4 text-rose-500" />
+            </div>
+            <div className="text-xl font-black font-mono text-rose-700 tracking-tight leading-tight">
+              ₹ {summaries.totalDebits.toLocaleString('en-IN')}
+            </div>
+          </div>
+
+          {/* Card 3: Net Balance */}
+          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between h-[80px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Net Balance</span>
+              <Scale className="w-4 h-4 text-slate-400" />
+            </div>
+            <div className={`text-xl font-black font-mono tracking-tight leading-tight ${summaries.net >= 0 ? 'text-slate-900' : 'text-rose-700'}`}>
+              ₹ {summaries.net.toLocaleString('en-IN')}
+            </div>
+          </div>
+
+          {/* Card 4: Today's Entries */}
+          <div className="bg-white rounded-xl p-4 border border-indigo-200 shadow-sm flex flex-col justify-between h-[80px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-indigo-600 tracking-wider">Today's Entries</span>
+              <Calendar className="w-4 h-4 text-indigo-500" />
+            </div>
+            <div className="text-xl font-black font-mono text-indigo-900 tracking-tight leading-tight">
+              {summaries.todayEntriesCount} <span className="text-xs font-bold text-indigo-600">ENTRIES</span>
+            </div>
+          </div>
+
+          {/* Card 5: Last Entry Time */}
+          <div className="bg-white rounded-xl p-4 border border-amber-200 shadow-sm flex flex-col justify-between h-[80px] col-span-2 sm:col-span-1 lg:col-span-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-amber-700 tracking-wider">Last Entry Time</span>
+              <Clock className="w-4 h-4 text-amber-500" />
+            </div>
+            <div className="text-base font-black font-mono text-amber-900 tracking-tight leading-tight truncate">
+              {summaries.lastEntryTime}
+            </div>
+          </div>
+
+        </div>
+
+        {/* 3. FILTER BAR (Single Compact Row Above Table) */}
+        <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+          
+          {/* Left Filter Controls */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 flex-1 w-full">
             
-            {/* Total Credits */}
-            <div className="bg-white rounded-xl py-2.5 px-4 shadow-sm border border-emerald-150 flex flex-col justify-center">
-              <span className="text-emerald-600 text-[10px] font-black uppercase tracking-wider">Total Credits</span>
-              <span className="text-emerald-700 text-[28px] font-black font-mono mt-0.5 tracking-tight leading-none">
-                {summaries.totalCredits.toLocaleString('en-IN')}
-              </span>
+            {/* Search */}
+            <div className="relative flex-1 w-full min-w-[200px]">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="SEARCH PARTICULARS, HEAD, VOUCHER..."
+                className="w-full h-[36px] pl-9 pr-3 border border-slate-200 rounded-lg text-xs font-bold uppercase text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-sm"
+              />
             </div>
 
-            {/* Total Debits */}
-            <div className="bg-white rounded-xl py-2.5 px-4 shadow-sm border border-rose-150 flex flex-col justify-center">
-              <span className="text-rose-600 text-[10px] font-black uppercase tracking-wider">Total Debits</span>
-              <span className="text-rose-700 text-[28px] font-black font-mono mt-0.5 tracking-tight leading-none">
-                {summaries.totalDebits.toLocaleString('en-IN')}
-              </span>
-            </div>
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="h-[36px] w-full sm:w-[140px] shrink-0 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold uppercase text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-sm cursor-pointer"
+            >
+              <option value="ALL">ALL STATUSES</option>
+              <option value="PENDING">PENDING</option>
+              <option value="APPROVED">APPROVED</option>
+            </select>
 
-            {/* Net Balance */}
-            <div className="bg-white rounded-xl py-2.5 px-4 shadow-sm border border-slate-250 flex flex-col justify-center">
-              <span className="text-slate-500 text-[10px] font-black uppercase tracking-wider">Net Balance</span>
-              <span className={`text-[28px] font-black font-mono mt-0.5 tracking-tight leading-none ${summaries.net >= 0 ? 'text-slate-900' : 'text-rose-700'}`}>
-                {summaries.net.toLocaleString('en-IN')}
-              </span>
+            {/* Head Filter */}
+            <select
+              value={headFilter}
+              onChange={(e) => setHeadFilter(e.target.value)}
+              className="h-[36px] w-full sm:w-[160px] shrink-0 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold uppercase text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-sm cursor-pointer truncate"
+            >
+              <option value="ALL">ALL HEADS</option>
+              {accounts.map(acc => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.account_name.toUpperCase()}
+                </option>
+              ))}
+            </select>
+
+            {/* Date Filter */}
+            <div className="w-full sm:w-[160px] shrink-0">
+              <FinanceSmartCalendar
+                value={dateFilter}
+                onChange={(val) => setDateFilter(val)}
+                onMonthChange={(y, m) => { setFilterYear(y); setFilterMonth(m); }}
+                eventProvider={customEventProvider}
+                refreshTrigger={refreshCounter}
+                placeholder="FILTER DATE"
+                allowClear
+                compact={true}
+              />
             </div>
 
           </div>
 
-          {/* Recent Entries Card */}
-          <Card
-            title={
-              <div className="flex flex-row items-center justify-between w-full flex-wrap gap-2">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-slate-900 text-sm font-black uppercase">
-                    RECENT ENTRIES
-                  </span>
-                  <span className="text-slate-400 text-[10px] font-bold uppercase whitespace-nowrap">
-                    ({filteredEntries.length} of {entries.length} records)
-                  </span>
-                </div>
-                
-                {/* Sort Toggle */}
-                <select
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value as 'desc' | 'asc')}
-                  className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-700 focus:outline-none shadow-sm cursor-pointer font-bold text-[10px] uppercase"
-                >
-                  <option value="desc">NEWEST FIRST</option>
-                  <option value="asc">OLDEST FIRST</option>
-                </select>
-              </div>
-           }
-            subtitle={null}
-            className="shadow-sm border-slate-150 rounded-xl flex-1 flex flex-col"
-          >
-            <div className="space-y-4 flex flex-col min-h-[470px]">
-              
-              {/* Search & Status Filter Box */}
-              <div className="flex gap-3 w-full h-[44px] shrink-0">
-                <div className="relative w-[70%] h-full">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-[14px]" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="FILTER BY HEAD, PARTICULARS, DATE, ACCOUNT..."
-                    className="w-full h-full pl-9 pr-4 border border-slate-200 rounded-lg text-slate-855 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900 shadow-sm font-bold text-xs uppercase"
-                  />
-                </div>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as any)}
-                  className="w-[30%] h-full bg-white border border-slate-200 rounded-lg px-3 text-slate-755 focus:outline-none focus:ring-1 focus:ring-slate-900 shadow-sm font-bold text-xs uppercase cursor-pointer"
-                >
-                  <option value="ALL">ALL STATUSES</option>
-                  <option value="PENDING">PENDING APPROVAL</option>
-                  <option value="APPROVED">APPROVED</option>
-                </select>
-              </div>
+          {/* Right Controls (Sort & Refresh) */}
+          <div className="flex items-center gap-3 shrink-0 w-full md:w-auto">
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as 'desc' | 'asc')}
+              className="h-[36px] flex-1 md:flex-none bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold uppercase text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-sm cursor-pointer"
+            >
+              <option value="desc">NEWEST FIRST</option>
+              <option value="asc">OLDEST FIRST</option>
+            </select>
 
-              {/* Entries Table */}
-              {loading ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-16 space-y-3">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-slate-900"></div>
-                  <span className="text-slate-400 font-bold text-xs uppercase">Loading Day Book entries...</span>
-                </div>
-              ) : filteredEntries.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-20 border border-dashed border-slate-200 rounded-xl space-y-4 bg-slate-50/50">
-                  <div className="p-4 bg-white rounded-full border border-slate-100 max-w-fit shadow-md text-slate-400">
-                    <Info className="w-10 h-10" />
-                  </div>
-                  <div className="text-center space-y-1">
-                    <h3 className="text-slate-900 text-sm font-black uppercase tracking-wider">No Transaction Entries</h3>
-                    <p className="text-slate-500 text-[11px] font-bold uppercase tracking-wide">
-                      Post a credit or debit entry from the form on the left to start.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="overflow-x-auto border border-slate-150 rounded-xl">
-                  <table className="min-w-full divide-y divide-slate-150 finance-caption">
-                    <thead>
-                      <tr className="bg-slate-50">
-                        <th className="finance-small-label uppercase">Date</th>
-                        <th className="finance-small-label uppercase">Head of A/C</th>
-                        <th className="finance-small-label uppercase">Acc No</th>
-                        <th className="finance-small-label uppercase">Particulars</th>
-                        <th className="text-right finance-small-label uppercase">Credit</th>
-                        <th className="text-right finance-small-label uppercase">Debit</th>
-                        <th className="finance-small-label uppercase">By</th>
-                        <th className="finance-small-label uppercase text-center">Status</th>
-                        <th className="text-right finance-small-label uppercase">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {filteredEntries.map(e => (
-                        <tr key={e.id} className="hover:bg-slate-50/20">
-                          <td className="px-3 py-3 text-slate-600 whitespace-nowrap finance-input">
-                            {e.entry_date.split('-').reverse().join('/')}
-                          </td>
-                          <td className="px-3 py-3 text-slate-900 finance-input">
-                            {e.head_of_account}
-                          </td>
-                          <td className="px-3 py-3 font-mono text-slate-600">
-                            {e.account_number || '—'}
-                          </td>
-                          <td className="px-3 py-3 text-slate-700 max-w-[200px] break-words">
-                            {e.particulars}
-                          </td>
-                          <td className="px-3 py-3 text-right text-emerald-600 whitespace-nowrap finance-input">
-                            {e.credit > 0 ? `${e.credit.toLocaleString('en-IN')}` : '—'}
-                          </td>
-                          <td className="px-3 py-3 text-right text-rose-600 whitespace-nowrap finance-input">
-                            {e.debit > 0 ? `${e.debit.toLocaleString('en-IN')}` : '—'}
-                          </td>
-                          <td className="px-3 py-3 text-slate-500 finance-input uppercase">
-                            {e.created_by || 'Staff'}
-                          </td>
-                          <td className="px-3 py-3 text-center whitespace-nowrap">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider ${
-                              (e.status || 'PENDING') === 'APPROVED' 
-                                ? 'bg-green-100 text-green-800 border border-green-200' 
-                                : 'bg-amber-100 text-amber-800 border border-amber-200'
-                           }`}>
-                              {e.status || 'PENDING'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3 text-right whitespace-nowrap">
-                            <div className="flex justify-end gap-1">
-                              {user?.is_admin && (e.status || 'PENDING') !== 'APPROVED' && (
-                                <button
-                                  onClick={() => handleApproveClick(e.id)}
-                                  title="Approve Entry"
-                                  className="p-1 text-green-700 bg-green-50 hover:bg-green-100 rounded border border-green-200"
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleEditClick(e)}
-                                title="Edit Entry"
-                                className="p-1 text-slate-600 hover:bg-slate-100 rounded border border-slate-200"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteClick(e.id)}
-                                title="Delete Entry"
-                                className="p-1 text-rose-600 hover:bg-rose-50 rounded border border-slate-200"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+            <button
+              onClick={fetchData}
+              title="Refresh Entries"
+              className="h-[36px] px-4 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-lg text-xs font-bold uppercase shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span>REFRESH</span>
+            </button>
+          </div>
 
+        </div>
+
+        {/* 4. RECENT ENTRIES TABLE (Full Width) */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden w-full">
+          <div className="px-3.5 py-2.5 border-b border-slate-150 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                RECENT TRANSACTION ENTRIES
+              </span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase bg-slate-200/60 px-2 py-0.5 rounded-full">
+                {filteredEntries.length} OF {entries.length} RECORDS
+              </span>
             </div>
-          </Card>
+          </div>
+
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-black text-slate-500 uppercase tracking-widest">
+                  <th className="py-3 px-4 w-[100px]">DATE</th>
+                  <th className="py-3 px-4 w-[100px]">VOUCHER</th>
+                  <th className="py-3 px-4 w-[160px]">HEAD OF A/C</th>
+                  <th className="py-3 px-4 min-w-[220px]">PARTICULARS</th>
+                  <th className="py-3 px-4 text-right w-[120px]">CREDIT</th>
+                  <th className="py-3 px-4 text-right w-[120px]">DEBIT</th>
+                  <th className="py-3 px-4 text-right w-[130px]">BALANCE</th>
+                  <th className="py-3 px-4 w-[110px]">OPERATOR</th>
+                  <th className="py-3 px-4 text-center w-[100px]">STATUS</th>
+                  <th className="py-3 px-4 text-right w-[110px]">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-150 bg-white">
+                {loading ? (
+                  <tr>
+                    <td colSpan={10} className="py-8 text-center text-slate-400">
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-slate-900"></div>
+                        <span className="text-xs font-bold uppercase tracking-wider">Loading Day Book entries...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredEntries.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="py-8 text-center text-slate-400">
+                      <div className="flex flex-col items-center justify-center space-y-1.5">
+                        <Info className="w-8 h-8 text-slate-300" />
+                        <span className="text-xs font-black uppercase text-slate-800 tracking-wider">No Transaction Entries Found</span>
+                        <span className="text-[11px] font-bold text-slate-400 uppercase">
+                          Enter a transaction above or adjust filters to view data.
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredEntries.map((e) => {
+                    const runningBal = runningBalancesMap.get(e.id) || 0;
+                    const voucherNo = `#DB-${(entries.length - entries.findIndex(item => item.id === e.id)).toString().padStart(3, '0')}`;
+                    return (
+                      <tr 
+                        key={e.id} 
+                        className={`hover:bg-slate-50/80 transition-colors ${editId === e.id ? 'bg-amber-50/50' : ''}`}
+                      >
+                        {/* Date */}
+                        <td className="py-2 px-3 text-slate-700 font-medium whitespace-nowrap">
+                          {e.entry_date.split('T')[0].split('-').reverse().join('/')}
+                        </td>
+
+                        {/* Voucher */}
+                        <td className="py-2 px-3 font-mono font-bold text-slate-500 whitespace-nowrap text-[11px]">
+                          {voucherNo}
+                        </td>
+
+                        {/* Head */}
+                        <td className="py-2 px-3 text-slate-900 font-bold uppercase truncate max-w-[150px]">
+                          {e.head_of_account}
+                        </td>
+
+                        {/* Particulars */}
+                        <td className="py-2 px-3 text-slate-800 font-medium break-words max-w-[320px] uppercase">
+                          {e.particulars}
+                        </td>
+
+                        {/* Credit */}
+                        <td className="py-2 px-3 text-right font-mono font-bold text-emerald-600 whitespace-nowrap">
+                          {e.credit > 0 ? `₹ ${e.credit.toLocaleString('en-IN')}` : '—'}
+                        </td>
+
+                        {/* Debit */}
+                        <td className="py-2 px-3 text-right font-mono font-bold text-rose-600 whitespace-nowrap">
+                          {e.debit > 0 ? `₹ ${e.debit.toLocaleString('en-IN')}` : '—'}
+                        </td>
+
+                        {/* Balance */}
+                        <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                          ₹ {runningBal.toLocaleString('en-IN')}
+                        </td>
+
+                        {/* Operator */}
+                        <td className="py-2 px-3 text-slate-600 font-medium uppercase truncate max-w-[90px]">
+                          {e.created_by || 'Staff'}
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-2 px-3 text-center whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black tracking-wider uppercase ${
+                            (e.status || 'PENDING') === 'APPROVED' 
+                              ? 'bg-green-100 text-green-800 border border-green-200' 
+                              : 'bg-amber-100 text-amber-800 border border-amber-200'
+                          }`}>
+                            {e.status || 'PENDING'}
+                          </span>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-2 px-3 text-right whitespace-nowrap">
+                          <div className="flex justify-end gap-1">
+                            {user?.is_admin && (e.status || 'PENDING') !== 'APPROVED' && (
+                              <button
+                                onClick={() => handleApproveClick(e.id)}
+                                title="Approve Entry"
+                                className="p-1 text-green-700 bg-green-50 hover:bg-green-100 rounded border border-green-200 cursor-pointer"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleEditClick(e)}
+                              title="Edit Entry"
+                              className="p-1 text-slate-600 hover:bg-slate-100 rounded border border-slate-200 cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(e.id)}
+                              title="Delete Entry"
+                              className="p-1 text-rose-600 hover:bg-rose-50 rounded border border-slate-200 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
       </div>
@@ -809,32 +1009,34 @@ const CashBook: React.FC = () => {
       {/* MODAL: Add New Account Popup */}
       {showAccountModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-xl shadow-lg border border-slate-150 max-w-md w-full overflow-hidden">
-            
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h3 className="text-slate-900 finance-header-time uppercase">CREATE NEW ACCOUNT</h3>
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200 max-w-md w-full overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <h3 className="text-slate-900 font-black text-xs uppercase tracking-wider">CREATE NEW ACCOUNT</h3>
               <button
                 onClick={() => setShowAccountModal(false)}
-                className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateAccountSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleCreateAccountSubmit} className="p-5 space-y-3">
               <Input
                 label="ACCOUNT NAME"
-                ref={newAccountNameRef} error={errors.newAccountName} value={newAccountName} onChange={(val) => { setNewAccountName(val); setErrors(p => ({...p, newAccountName: false})) }}
+                ref={newAccountNameRef} 
+                error={errors.newAccountName} 
+                value={newAccountName} 
+                onChange={(val) => { setNewAccountName(val); setErrors(p => ({...p, newAccountName: false})); }}
                 placeholder="e.g. RENT, SALARY, OFFICE EXPENSE"
                 required
               />
 
               <div>
-                <label className="finance-caption uppercase block mb-1">CATEGORY *</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">CATEGORY *</label>
                 <select
                   value={newAccountCategory}
                   onChange={(e) => setNewAccountCategory(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-850 focus:outline-none h-10 shadow-sm finance-header-time font-bold"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-2.5 h-9 text-xs font-bold text-slate-900 uppercase focus:outline-none focus:ring-1 focus:ring-slate-900 shadow-xs"
                   required
                 >
                   <option value="">SELECT CATEGORY</option>
@@ -843,25 +1045,24 @@ const CashBook: React.FC = () => {
                 </select>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowAccountModal(false)}
-                  className="px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm finance-button uppercase"
+                  className="px-3 py-1.5 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 text-xs font-bold uppercase shadow-xs cursor-pointer"
                 >
                   CANCEL
                 </button>
                 <button
                   type="submit"
                   disabled={savingAccount}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50 finance-button uppercase"
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#0b1329] text-white border border-slate-800 rounded-lg hover:bg-slate-800 text-xs font-bold uppercase shadow-xs disabled:opacity-50 cursor-pointer"
                 >
                   <Save className="w-3.5 h-3.5" />
                   {savingAccount ? 'SAVING...' : 'CREATE ACCOUNT'}
                 </button>
               </div>
             </form>
-
           </div>
         </div>
       )}
@@ -869,34 +1070,30 @@ const CashBook: React.FC = () => {
       {/* MODAL: Manage Head of Accounts Directory */}
       {showDirectoryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-xl shadow-lg border border-slate-150 max-w-2xl w-full overflow-hidden">
-            
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h3 className="text-slate-900 finance-header-time uppercase font-bold text-sm">HEAD OF ACCOUNTS DIRECTORY</h3>
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200 max-w-2xl w-full overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <h3 className="text-slate-900 font-black text-xs uppercase tracking-wider">HEAD OF ACCOUNTS DIRECTORY</h3>
               <button
                 onClick={() => { setShowDirectoryModal(false); setEditingAccId(null); }}
-                className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              
-              {/* Account Search input */}
+            <div className="p-5 space-y-3">
               <input
                 type="text"
                 value={directorySearchQuery}
                 onChange={(e) => setDirectorySearchQuery(e.target.value)}
                 placeholder="Search accounts by name..."
-                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time"
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 h-9 text-xs font-bold uppercase text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900 shadow-xs"
               />
 
-              {/* Edit Form (renders if editingAccId is set) */}
               {editingAccId && (
-                <form onSubmit={handleEditAccountSubmit} className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-900 uppercase">Edit Account</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <form onSubmit={handleEditAccountSubmit} className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2.5">
+                  <h4 className="text-xs font-black text-slate-900 uppercase">Edit Account</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                     <Input
                       label="ACCOUNT NAME"
                       value={editAccountName}
@@ -905,13 +1102,11 @@ const CashBook: React.FC = () => {
                       uppercase
                     />
                     <div>
-                      <label className="finance-caption uppercase block mb-1">CATEGORY *</label>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">CATEGORY *</label>
                       <select
                         value={editAccountCategory}
-                        onChange={(e) => {
-                          setEditAccountCategory(e.target.value);
-                       }}
-                        className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:outline-none h-10 shadow-sm finance-header-time font-bold"
+                        onChange={(e) => setEditAccountCategory(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 h-9 text-xs font-bold text-slate-900 uppercase focus:outline-none focus:ring-1 focus:ring-slate-900 shadow-xs"
                         required
                       >
                         <option value="">SELECT CATEGORY</option>
@@ -924,14 +1119,14 @@ const CashBook: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setEditingAccId(null)}
-                      className="px-3 py-1 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase"
+                      className="px-3 py-1 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={savingAccount}
-                      className="px-4 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold uppercase"
+                      className="px-4 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold uppercase cursor-pointer"
                     >
                       {savingAccount ? 'Saving...' : 'Save Changes'}
                     </button>
@@ -939,86 +1134,72 @@ const CashBook: React.FC = () => {
                 </form>
               )}
 
-              {/* Accounts Directory Table list */}
               <div className="overflow-y-auto max-h-[40vh] border border-slate-200 rounded-lg">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
-                      <th className="px-4 py-2.5">Account Name</th>
-                      <th className="px-4 py-2.5">Report Category</th>
-                      <th className="px-4 py-2.5 text-right">Actions</th>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider font-black">
+                      <th className="px-3.5 py-2">Account Name</th>
+                      <th className="px-3.5 py-2">Report Category</th>
+                      <th className="px-3.5 py-2 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-750">
+                  <tbody className="divide-y divide-slate-150 font-medium text-slate-800">
                     {accounts
                       .filter(acc => acc.account_name.toLowerCase().includes(directorySearchQuery.toLowerCase()))
                       .map(acc => (
-                        <tr key={acc.id} className="hover:bg-slate-50/50">
-                          <td className="px-4 py-2.5 font-bold uppercase">{acc.account_name}</td>
-                          <td className="px-4 py-2.5">
-                             <div className="flex flex-col gap-1">
-                               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 w-fit">
-                                 {acc.report_classification === 'BALANCE_SHEET' ? 'BALANCE SHEET' : 'PROFIT & LOSS'}
-                               </span>
-                               {acc.category && (
-                                 <span className="text-[10px] font-semibold text-slate-500 italic">
-                                   Category: {acc.category}
-                                 </span>
-                               )}
-                             </div>
-                           </td>
-                           <td className="px-4 py-2.5 text-right flex gap-3 justify-end items-center">
-                             <button
-                               onClick={() => {
-                                 setEditingAccId(acc.id);
-                                 setEditAccountName(acc.account_name);
-                                 setEditAccountCategory(acc.report_classification || 'PROFIT_AND_LOSS');
+                        <tr key={acc.id} className="hover:bg-slate-50">
+                          <td className="px-3.5 py-2 font-bold uppercase">{acc.account_name}</td>
+                          <td className="px-3.5 py-2">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 uppercase">
+                              {acc.report_classification === 'BALANCE_SHEET' ? 'BALANCE SHEET' : 'PROFIT & LOSS'}
+                            </span>
+                          </td>
+                          <td className="px-3.5 py-2 text-right flex gap-3 justify-end items-center">
+                            <button
+                              onClick={() => {
+                                setEditingAccId(acc.id);
+                                setEditAccountName(acc.account_name);
+                                setEditAccountCategory(acc.report_classification || 'PROFIT_AND_LOSS');
                               }}
-                               className="text-blue-600 hover:text-blue-800 font-bold uppercase"
-                             >
-                               Edit
-                             </button>
-                             <button
-                               onClick={() => handleDeleteAccount(acc)}
-                               className="text-red-600 hover:text-red-800 font-bold uppercase"
-                             >
-                               Delete
-                             </button>
-                           </td>
+                              className="text-blue-600 hover:text-blue-800 font-bold uppercase cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAccount(acc)}
+                              className="text-red-600 hover:text-red-800 font-bold uppercase cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          </td>
                         </tr>
                       ))}
                   </tbody>
                 </table>
               </div>
-
             </div>
 
-            <div className="px-6 py-3 bg-slate-50 border-t flex justify-end">
+            <div className="px-5 py-2.5 bg-slate-50 border-t flex justify-end">
               <button
                 onClick={() => { setShowDirectoryModal(false); setEditingAccId(null); }}
-                className="px-4 py-1.5 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors shadow-sm text-xs font-bold uppercase"
+                className="px-3.5 py-1.5 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 text-xs font-bold uppercase cursor-pointer"
               >
                 CLOSE
               </button>
             </div>
-
           </div>
         </div>
       )}
 
       {/* MODAL: Print Preview Panel */}
-    </div>
-
-      {/* Print Preview Modal */}
       <FinancePrintPreview
         isOpen={showPrintModal}
         onClose={() => setShowPrintModal(false)}
         title="Print Preview (Cash Day-Book)"
         documentTitle="CASH DAY-BOOK STATEMENT"
       >
-        <div className="font-sans finance-caption">
-          {/* Period details */}
-          <div className="grid grid-cols-2 gap-4 py-4 finance-header-time uppercase">
+        <div className="font-sans text-xs">
+          <div className="grid grid-cols-2 gap-4 py-3 text-xs uppercase font-bold text-slate-700">
             <div>
               <span className="text-slate-500">FILTER QUERY:</span> {searchQuery.toUpperCase() || 'ALL RECORDS'}
             </div>
@@ -1027,73 +1208,70 @@ const CashBook: React.FC = () => {
             </div>
           </div>
 
-          {/* Table */}
-          <table className="min-w-full divide-y-2 divide-slate-900 border border-slate-900 finance-caption">
+          <table className="min-w-full divide-y-2 divide-slate-900 border border-slate-900 text-xs">
             <thead>
-              <tr className="bg-slate-100 text-slate-800 finance-input uppercase">
-                <th className="border border-slate-900 px-2 py-2 text-left">Date</th>
-                <th className="border border-slate-900 px-2 py-2 text-left">Head of A/C</th>
-                <th className="border border-slate-900 px-2 py-2 text-left">Acc No</th>
-                <th className="border border-slate-900 px-2 py-2 text-left">Particulars</th>
-                <th className="border border-slate-900 px-2 py-2 text-right">Credit (Cr)</th>
-                <th className="border border-slate-900 px-2 py-2 text-right">Debit (Dr)</th>
+              <tr className="bg-slate-100 text-slate-800 uppercase font-black">
+                <th className="border border-slate-900 px-2 py-1.5 text-left">Date</th>
+                <th className="border border-slate-900 px-2 py-1.5 text-left">Head of A/C</th>
+                <th className="border border-slate-900 px-2 py-1.5 text-left">Acc No</th>
+                <th className="border border-slate-900 px-2 py-1.5 text-left">Particulars</th>
+                <th className="border border-slate-900 px-2 py-1.5 text-right">Credit (Cr)</th>
+                <th className="border border-slate-900 px-2 py-1.5 text-right">Debit (Dr)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {filteredEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-2 py-8 text-center text-slate-400 finance-input uppercase">
+                  <td colSpan={6} className="px-2 py-8 text-center text-slate-400 uppercase">
                     No transactions recorded.
                   </td>
                 </tr>
               ) : (
                 filteredEntries.map(e => (
-                  <tr key={e.id} className="text-slate-900 finance-input">
-                    <td className="border border-slate-900 px-2 py-2 whitespace-nowrap">
-                      {e.entry_date.split('-').reverse().join('/')}
+                  <tr key={e.id} className="text-slate-900 font-medium">
+                    <td className="border border-slate-900 px-2 py-1.5 whitespace-nowrap">
+                      {e.entry_date.split('T')[0].split('-').reverse().join('/')}
                     </td>
-                    <td className="border border-slate-900 px-2 py-2 finance-input">
+                    <td className="border border-slate-900 px-2 py-1.5 uppercase font-bold">
                       {e.head_of_account.toUpperCase()}
                     </td>
-                    <td className="border border-slate-900 px-2 py-2 font-mono">
+                    <td className="border border-slate-900 px-2 py-1.5 font-mono">
                       {e.account_number || '—'}
                     </td>
-                    <td className="border border-slate-900 px-2 py-2 max-w-[250px] break-words">
+                    <td className="border border-slate-900 px-2 py-1.5 max-w-[250px] break-words uppercase">
                       {e.particulars.toUpperCase()}
                     </td>
-                    <td className="border border-slate-900 px-2 py-2 text-right finance-input">
-                      {e.credit > 0 ? `${e.credit.toLocaleString('en-IN')}` : '—'}
+                    <td className="border border-slate-900 px-2 py-1.5 text-right font-mono">
+                      {e.credit > 0 ? `₹ ${e.credit.toLocaleString('en-IN')}` : '—'}
                     </td>
-                    <td className="border border-slate-900 px-2 py-2 text-right finance-input">
-                      {e.debit > 0 ? `${e.debit.toLocaleString('en-IN')}` : '—'}
+                    <td className="border border-slate-900 px-2 py-1.5 text-right font-mono">
+                      {e.debit > 0 ? `₹ ${e.debit.toLocaleString('en-IN')}` : '—'}
                     </td>
                   </tr>
                 ))
               )}
-              {/* Totals Summary Row */}
-              <tr className="bg-slate-100 border-t-2 border-slate-900 finance-input">
-                <td colSpan={4} className="border border-slate-900 px-2 py-2 text-right">TOTAL CASH FLOW:</td>
-                <td className="border border-slate-900 px-2 py-2 text-right finance-input">{summaries.totalCredits.toLocaleString('en-IN')}</td>
-                <td className="border border-slate-900 px-2 py-2 text-right finance-input">{summaries.totalDebits.toLocaleString('en-IN')}</td>
+              <tr className="bg-slate-100 border-t-2 border-slate-900 font-bold">
+                <td colSpan={4} className="border border-slate-900 px-2 py-1.5 text-right">TOTAL CASH FLOW:</td>
+                <td className="border border-slate-900 px-2 py-1.5 text-right font-mono">₹ {summaries.totalCredits.toLocaleString('en-IN')}</td>
+                <td className="border border-slate-900 px-2 py-1.5 text-right font-mono">₹ {summaries.totalDebits.toLocaleString('en-IN')}</td>
               </tr>
-              <tr className="bg-slate-200 finance-input">
-                <td colSpan={4} className="border border-slate-900 px-2 py-2 text-right">NET BALANCE:</td>
-                <td colSpan={2} className="border border-slate-900 px-2 py-2 text-center finance-sidebar-link">
-                  {summaries.net.toLocaleString('en-IN')}
+              <tr className="bg-slate-200 font-black">
+                <td colSpan={4} className="border border-slate-900 px-2 py-1.5 text-right">NET BALANCE:</td>
+                <td colSpan={2} className="border border-slate-900 px-2 py-1.5 text-center font-mono text-sm">
+                  ₹ {summaries.net.toLocaleString('en-IN')}
                 </td>
               </tr>
             </tbody>
           </table>
 
-          {/* Signatures */}
-          <div className="flex justify-between items-center mt-20 pt-8 border-t border-slate-300 finance-header-time uppercase">
+          <div className="flex justify-between items-center mt-16 pt-6 border-t border-slate-300 uppercase font-bold text-xs">
             <div>
               <p>CASHIER SIGNATURE</p>
-              <p className="text-slate-400 mt-8 finance-small-label">AUTHORIZED SIGNATORY</p>
+              <p className="text-slate-400 mt-6 text-[10px]">AUTHORIZED SIGNATORY</p>
             </div>
             <div className="text-right">
               <p>VERIFIED BY MANAGER</p>
-              <p className="text-slate-400 mt-8 finance-small-label">PARTNER AUDIT SIGN</p>
+              <p className="text-slate-400 mt-6 text-[10px]">PARTNER AUDIT SIGN</p>
             </div>
           </div>
         </div>

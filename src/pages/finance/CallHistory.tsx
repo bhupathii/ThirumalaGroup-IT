@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { FinanceLoanPaymentFollowup } from '../../lib/supabaseFinance';
 import { 
   History, 
@@ -7,8 +8,7 @@ import {
   Download, 
   Printer, 
   ChevronRight,
-  X,
-  Phone
+  X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
@@ -195,28 +195,18 @@ const CallHistory: React.FC = () => {
     toast.success('Call History exported successfully');
   };
 
-  const getResultColorClass = (result: string) => {
+  const getCompactStatusStyle = (result: string) => {
     const r = (result || '').toUpperCase();
-    if (r === 'ANSWERED') return 'bg-emerald-50 text-emerald-700 border-emerald-250';
-    if (r === 'PROMISED TO PAY') return 'bg-blue-50 text-blue-700 border-blue-250';
-    if (r === 'CALL BACK') return 'bg-purple-50 text-purple-700 border-purple-250';
-    if (r === 'BUSY') return 'bg-amber-50 text-amber-700 border-amber-250';
-    if (r === 'NO RESPONSE' || r === 'NO ANSWER' || r === 'SWITCHED OFF') return 'bg-slate-50 text-slate-700 border-slate-250';
-    if (r === 'WRONG NUMBER') return 'bg-rose-50 text-rose-700 border-rose-250';
-    if (r === 'INVALID NUMBER') return 'bg-red-950/10 text-red-900 border-red-900/20';
-    return 'bg-slate-50 text-slate-750 border-slate-250';
-  };
-
-  const getResultBadgeColorClass = (result: string) => {
-    const r = (result || '').toUpperCase();
-    if (r === 'ANSWERED') return 'bg-emerald-500 text-white ring-emerald-100';
-    if (r === 'PROMISED TO PAY') return 'bg-blue-500 text-white ring-blue-100';
-    if (r === 'CALL BACK') return 'bg-purple-500 text-white ring-purple-100';
-    if (r === 'BUSY') return 'bg-amber-500 text-white ring-amber-100';
-    if (r === 'NO RESPONSE' || r === 'NO ANSWER' || r === 'SWITCHED OFF') return 'bg-slate-400 text-white ring-slate-100';
-    if (r === 'WRONG NUMBER') return 'bg-rose-500 text-white ring-rose-100';
-    if (r === 'INVALID NUMBER') return 'bg-red-800 text-white ring-red-100';
-    return 'bg-slate-550 text-white ring-slate-100';
+    if (r === 'ANSWERED') return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+    if (r === 'PROMISED TO PAY' || r === 'PROMISED') return 'bg-blue-100 text-blue-800 border-blue-300';
+    if (r === 'CALL BACK' || r === 'CALLBACK') return 'bg-purple-100 text-purple-800 border-purple-300';
+    if (r === 'BUSY') return 'bg-amber-100 text-amber-800 border-amber-300';
+    if (r === 'NO RESPONSE' || r === 'NO ANSWER' || r === 'SWITCHED OFF' || r === 'PENDING') return 'bg-slate-100 text-slate-700 border-slate-300';
+    if (r === 'WRONG NUMBER' || r === 'INVALID NUMBER') return 'bg-rose-100 text-rose-800 border-rose-300';
+    if (r === 'PAID' || r === 'PAID_CLOSED' || r === 'LOAN_CLOSED') return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+    if (r === 'CLOSED' || r === 'NPA_CLOSED' || r === 'NPA CLOSED') return 'bg-orange-100 text-orange-800 border-orange-300';
+    if (r === 'CUSTOMER_DECEASED' || r === 'DECEASED') return 'bg-slate-800 text-white border-slate-900';
+    return 'bg-slate-100 text-slate-800 border-slate-300';
   };
 
   const stats = useMemo(() => {
@@ -234,98 +224,85 @@ const CallHistory: React.FC = () => {
     return { total, answered, promises, callbacks, pendingFollowUp, lastContact };
   }, [selectedGroup]);
 
+  const handlePrintSingleLog = (log: FinanceLoanPaymentFollowup) => {
+    toast.success(`Printing log #${log.id.slice(0, 6)}...`);
+    window.print();
+  };
+
   const timelinePrintContent = useMemo(() => {
     if (!selectedGroup) return null;
     return (
-      <div className="p-8 text-slate-900 font-sans leading-normal uppercase font-bold text-[11px]">
-        {/* Header */}
-        <div className="text-center border-b-2 border-slate-900 pb-3 mb-5">
-          <h1 className="text-xl font-black tracking-wide">THIRUMALA FINANCE</h1>
-          <h2 className="text-xs font-black uppercase tracking-wider text-slate-500 mt-0.5">Customer Interaction History</h2>
+      <div className="p-4 text-slate-950 font-sans leading-tight uppercase text-[9px] print-audit-report">
+        {/* Audit Report Header */}
+        <div className="border-b-2 border-slate-900 pb-2 mb-3 flex justify-between items-end">
+          <div>
+            <h1 className="text-sm font-black tracking-wide text-slate-950">THIRUMALA FINANCE</h1>
+            <h2 className="text-[10px] font-black uppercase text-slate-600">CALL HISTORY AUDIT REPORT</h2>
+          </div>
+          <div className="text-right font-mono text-[9px]">
+            <div><span className="font-bold">GENERATED DATE:</span> {new Date().toLocaleString('en-IN')}</div>
+            <div><span className="font-bold">OPERATOR:</span> {user?.username?.toUpperCase() || 'SYSTEM'}</div>
+          </div>
         </div>
 
-        {/* Customer Metadata Table */}
-        <table className="w-full border-collapse border border-slate-350 mb-5 text-[11px] font-bold">
+        {/* Compact Metadata Header Box */}
+        <div className="grid grid-cols-4 gap-2 bg-slate-50 border border-slate-300 p-2 rounded mb-3 font-bold text-[9px]">
+          <div><span className="text-slate-500 block text-[8px]">LOAN NUMBER</span> <span className="font-mono text-[10px] text-slate-950 font-black">{selectedGroup.loan_number}</span></div>
+          <div><span className="text-slate-500 block text-[8px]">BORROWER</span> <span className="text-[10px] text-slate-950 font-black">{selectedGroup.customer_name}</span></div>
+          <div><span className="text-slate-500 block text-[8px]">PHONE</span> <span className="font-mono text-slate-800">{selectedGroup.customer_phone || '—'}</span></div>
+          <div><span className="text-slate-500 block text-[8px]">PARTNER</span> <span className="text-slate-800">{selectedGroup.partner_name || '—'}</span></div>
+        </div>
+
+        {/* Ledger Table */}
+        <table className="w-full border-collapse border border-slate-400 text-[8.5px]">
+          <thead>
+            <tr className="border-b border-slate-400 bg-slate-200 font-bold text-slate-900 text-left">
+              <th className="p-1 border border-slate-400 text-center w-6">SL</th>
+              <th className="p-1 border border-slate-400 w-16">DATE</th>
+              <th className="p-1 border border-slate-400 w-14">TIME</th>
+              <th className="p-1 border border-slate-400 w-18 text-center">STATUS</th>
+              <th className="p-1 border border-slate-400 w-20">CONTACTED</th>
+              <th className="p-1 border border-slate-400 w-16">OPERATOR</th>
+              <th className="p-1 border border-slate-400">REMARKS &amp; PROMISED DETAILS</th>
+              <th className="p-1 border border-slate-400 w-16 text-center">NEXT FOLLOW-UP</th>
+            </tr>
+          </thead>
           <tbody>
-            <tr>
-              <td className="border border-slate-350 p-2.5 bg-slate-50 w-[18%]">CD Number</td>
-              <td className="border border-slate-350 p-2.5 font-mono text-sm font-black w-[32%]">{selectedGroup.loan_number}</td>
-              <td className="border border-slate-350 p-2.5 bg-slate-50 w-[18%]">Borrower</td>
-              <td className="border border-slate-350 p-2.5 text-sm w-[32%]">{selectedGroup.customer_name}</td>
-            </tr>
-            <tr>
-              <td className="border border-slate-350 p-2.5 bg-slate-50">Phone</td>
-              <td className="border border-slate-350 p-2.5 font-mono">{selectedGroup.customer_phone || '—'}</td>
-              <td className="border border-slate-350 p-2.5 bg-slate-50">Guarantor</td>
-              <td className="border border-slate-350 p-2.5 text-[10px]">
-                {[selectedGroup.latest_follow_up?.loan?.guarantor_1?.name, selectedGroup.latest_follow_up?.loan?.guarantor_2?.name].filter(Boolean).join(' / ') || '—'}
-              </td>
-            </tr>
-            <tr>
-              <td className="border border-slate-350 p-2.5 bg-slate-50">Generated On</td>
-              <td className="border border-slate-350 p-2.5 font-mono">{new Date().toLocaleString('en-IN')}</td>
-              <td className="border border-slate-350 p-2.5 bg-slate-50">Generated By</td>
-              <td className="border border-slate-350 p-2.5">{user?.username?.toUpperCase() || 'SYSTEM'}</td>
-            </tr>
+            {selectedGroup.all_follow_ups.map((log, idx) => {
+              const dateObj = new Date(log.followed_up_at || log.follow_up_date);
+              const dateStr = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+              const timeStr = dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+              const contactedText = log.contacted_person === 'CUSTOMER' ? 'Borrower' :
+                log.contacted_person === 'GUARANTOR_1' ? 'Guarantor 1' :
+                log.contacted_person === 'GUARANTOR_2' ? 'Guarantor 2' : (log.contacted_person || '—');
+
+              return (
+                <tr key={log.id} className="border-b border-slate-300" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+                  <td className="p-1 border border-slate-300 text-center font-mono">{idx + 1}</td>
+                  <td className="p-1 border border-slate-300 font-mono font-bold whitespace-nowrap">{dateStr}</td>
+                  <td className="p-1 border border-slate-300 font-mono text-slate-700 whitespace-nowrap">{timeStr}</td>
+                  <td className="p-1 border border-slate-300 text-center font-black whitespace-nowrap">{log.result}</td>
+                  <td className="p-1 border border-slate-300 font-bold whitespace-nowrap">{contactedText}</td>
+                  <td className="p-1 border border-slate-300 font-bold whitespace-nowrap">{log.followed_up_by || '—'}</td>
+                  <td className="p-1 border border-slate-300 leading-tight">
+                    {log.promised_amount ? (
+                      <span className="font-bold text-slate-950 mr-1">[PROMISED: ₹{log.promised_amount.toLocaleString('en-IN')}]</span>
+                    ) : null}
+                    {log.narration || '—'}
+                  </td>
+                  <td className="p-1 border border-slate-300 text-center font-mono font-bold whitespace-nowrap">
+                    {log.next_follow_up_date ? log.next_follow_up_date.split('-').reverse().join('/') : '—'}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
-        {/* Interaction History List */}
-        <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 mb-2 border-b pb-1">Interactions (Chronological)</h3>
-        <div className="space-y-3.5">
-          {[...selectedGroup.all_follow_ups].reverse().map((log, idx) => {
-            const dateObj = new Date(log.followed_up_at);
-            const timeStr = dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-            const dateStr = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            return (
-              <div key={log.id} className="border border-slate-300 rounded-xl p-3 bg-white text-[11px] space-y-2">
-                <div className="flex justify-between items-center border-b pb-1.5 font-bold uppercase">
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-slate-900">#{idx + 1} {log.result}</span>
-                    {log.next_follow_up_date && (
-                      <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[9px]">
-                        NEXT: {log.next_follow_up_date.split('-').reverse().join('/')}
-                      </span>
-                    )}
-                  </div>
-                  <div className="font-mono text-slate-600">{dateStr} {timeStr}</div>
-                </div>
-                <div className="grid grid-cols-3 gap-2 uppercase text-[10px] font-bold">
-                  <div><span className="text-slate-400">Contacted:</span> <span className="text-slate-700">{log.contacted_person}</span></div>
-                  <div><span className="text-slate-400">Operator:</span> <span className="text-slate-700">{log.followed_up_by}</span></div>
-                  <div>
-                    {log.promised_amount ? (
-                      <span><span className="text-slate-400">Amount:</span> <span className="text-emerald-700">₹{log.promised_amount.toLocaleString('en-IN')}</span></span>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="bg-slate-50 p-2.5 rounded border border-slate-200 font-medium leading-relaxed">
-                  <span className="text-[9px] text-slate-400 font-bold uppercase block mb-1">Remarks:</span>
-                  {log.narration || 'No remarks recorded.'}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Footer Metrics */}
-        <div className="mt-6 pt-3 border-t-2 border-slate-900 grid grid-cols-3 gap-3.5 text-center uppercase font-bold text-xs">
-          <div className="bg-slate-50 p-2 rounded border border-slate-300">
-            <span className="text-[9px] text-slate-400 block mb-0.5">Total Calls</span>
-            <span className="text-sm font-black text-slate-900">{stats.total}</span>
-          </div>
-          <div className="bg-slate-50 p-2 rounded border border-slate-300">
-            <span className="text-[9px] text-slate-400 block mb-0.5">Last Contact</span>
-            <span className="text-sm font-black text-slate-900 font-mono">{stats.lastContact}</span>
-          </div>
-          <div className="bg-slate-50 p-2 rounded border border-slate-300">
-            <span className="text-[9px] text-slate-400 block mb-0.5">Next Follow-up</span>
-            <span className="text-sm font-black text-amber-700 font-mono">
-              {selectedGroup.latest_follow_up?.next_follow_up_date 
-                ? selectedGroup.latest_follow_up.next_follow_up_date.split('-').reverse().join('/')
-                : '—'}
-            </span>
-          </div>
+        {/* Footer Summary */}
+        <div className="mt-3 pt-1.5 border-t border-slate-400 flex justify-between items-center text-[8px] font-bold uppercase">
+          <div>TOTAL CALL LOGS: {stats.total} | ANSWERED: {stats.answered} | PROMISES: {stats.promises} | CALLBACKS: {stats.callbacks}</div>
+          <div>PAGE 1 OF 1</div>
         </div>
       </div>
     );
@@ -339,28 +316,28 @@ const CallHistory: React.FC = () => {
           <div>DATE: {new Date().toLocaleDateString('en-IN')}</div>
           <div>TOTAL RECORD GROUPS: {filteredGroups.length}</div>
         </div>
-        <table className="w-full border-collapse border border-slate-400">
+        <table className="w-full border-collapse border border-slate-400 text-[11px]">
           <thead>
             <tr className="bg-slate-100">
-              <th className="border border-slate-400 p-2 text-left">LOAN NO</th>
-              <th className="border border-slate-400 p-2 text-left">CUSTOMER</th>
-              <th className="border border-slate-400 p-2 text-left">PARTNER</th>
-              <th className="border border-slate-400 p-2 text-left">DATE</th>
-              <th className="border border-slate-400 p-2 text-left">RESULT</th>
-              <th className="border border-slate-400 p-2 text-left">STAFF</th>
-              <th className="border border-slate-400 p-2 text-left">REMARKS</th>
+              <th className="border border-slate-400 p-1.5 text-left">LOAN NO</th>
+              <th className="border border-slate-400 p-1.5 text-left">CUSTOMER</th>
+              <th className="border border-slate-400 p-1.5 text-left">PARTNER</th>
+              <th className="border border-slate-400 p-1.5 text-left">DATE</th>
+              <th className="border border-slate-400 p-1.5 text-left">RESULT</th>
+              <th className="border border-slate-400 p-1.5 text-left">STAFF</th>
+              <th className="border border-slate-400 p-1.5 text-left">REMARKS</th>
             </tr>
           </thead>
           <tbody>
             {filteredGroups.map(g => (
-              <tr key={g.loan_id}>
-                <td className="border border-slate-400 p-2 font-mono">{g.loan_number}</td>
-                <td className="border border-slate-400 p-2">{g.customer_name}</td>
-                <td className="border border-slate-400 p-2">{g.partner_name}</td>
-                <td className="border border-slate-400 p-2">{g.latest_follow_up.follow_up_date}</td>
-                <td className="border border-slate-400 p-2">{g.latest_follow_up.result}</td>
-                <td className="border border-slate-400 p-2">{g.latest_follow_up.followed_up_by}</td>
-                <td className="border border-slate-400 p-2 font-normal">{g.latest_follow_up.narration}</td>
+              <tr key={g.loan_id} className="h-[36px]">
+                <td className="border border-slate-400 p-1.5 font-mono">{g.loan_number}</td>
+                <td className="border border-slate-400 p-1.5">{g.customer_name}</td>
+                <td className="border border-slate-400 p-1.5">{g.partner_name}</td>
+                <td className="border border-slate-400 p-1.5">{g.latest_follow_up.follow_up_date}</td>
+                <td className="border border-slate-400 p-1.5">{g.latest_follow_up.result}</td>
+                <td className="border border-slate-400 p-1.5">{g.latest_follow_up.followed_up_by}</td>
+                <td className="border border-slate-400 p-1.5 font-normal">{g.latest_follow_up.narration}</td>
               </tr>
             ))}
           </tbody>
@@ -387,14 +364,14 @@ const CallHistory: React.FC = () => {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setIsPrinting(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold uppercase transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold uppercase transition-colors shadow-sm cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             Print
           </button>
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase transition-colors shadow-sm cursor-pointer"
           >
             <Download className="w-4 h-4" />
             Export CSV
@@ -424,7 +401,7 @@ const CallHistory: React.FC = () => {
           <select
             value={loanTypeFilter}
             onChange={(e) => setLoanTypeFilter(e.target.value as any)}
-            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold uppercase text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold uppercase text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900 cursor-pointer"
           >
             <option value="ALL">ALL LEDGERS</option>
             <option value="CD">CD LEDGER</option>
@@ -437,7 +414,7 @@ const CallHistory: React.FC = () => {
           <select
             value={resultFilter}
             onChange={(e) => setResultFilter(e.target.value)}
-            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold uppercase text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold uppercase text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900 cursor-pointer"
           >
             <option value="ALL">ALL RESULTS</option>
             <option value="ANSWERED">ANSWERED</option>
@@ -447,13 +424,14 @@ const CallHistory: React.FC = () => {
             <option value="BUSY">BUSY</option>
             <option value="SWITCHED OFF">SWITCHED OFF</option>
             <option value="WRONG NUMBER">WRONG NUMBER</option>
+            <option value="WRONG NUMBER">WRONG NUMBER</option>
           </select>
 
           {/* Staff Filter */}
           <select
             value={staffFilter}
             onChange={(e) => setStaffFilter(e.target.value)}
-            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold uppercase text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold uppercase text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900 cursor-pointer"
           >
             <option value="ALL">ALL STAFF</option>
             {staffList.map(staff => (
@@ -462,12 +440,13 @@ const CallHistory: React.FC = () => {
           </select>
 
           {/* Call Date */}
-          <div className="relative">
-            <input
-              type="date"
+          <div className="min-w-[150px]">
+            <FinanceSmartCalendar
               value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold uppercase text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+              onChange={setDateFilter}
+              module="CALL_HISTORY"
+              placeholder="FILTER CALL DATE"
+              allowClear
             />
           </div>
 
@@ -489,15 +468,15 @@ const CallHistory: React.FC = () => {
             <table className="min-w-full divide-y divide-slate-155 text-xs">
               <thead className="bg-slate-50 uppercase font-bold text-[11px] text-slate-700">
                 <tr>
-                  <th className="px-4 py-3 text-left">Loan ID</th>
-                  <th className="px-4 py-3 text-left">Borrower Name</th>
-                  <th className="px-4 py-3 text-left">Partner</th>
-                  <th className="px-4 py-3 text-center">Last Call Date</th>
-                  <th className="px-4 py-3 text-center">Result</th>
-                  <th className="px-4 py-3 text-left">Staff Name</th>
-                  <th className="px-4 py-3 text-left">Last Log Remarks</th>
-                  <th className="px-4 py-3 text-center w-24">Logs count</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="px-3 py-2.5 text-left">Loan ID</th>
+                  <th className="px-3 py-2.5 text-left">Borrower Name</th>
+                  <th className="px-3 py-2.5 text-left">Partner</th>
+                  <th className="px-3 py-2.5 text-center">Last Call Date</th>
+                  <th className="px-3 py-2.5 text-center">Result</th>
+                  <th className="px-3 py-2.5 text-left">Staff Name</th>
+                  <th className="px-3 py-2.5 text-left">Last Log Remarks</th>
+                  <th className="px-3 py-2.5 text-center w-24">Logs count</th>
+                  <th className="px-3 py-2.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -505,42 +484,37 @@ const CallHistory: React.FC = () => {
                   <tr 
                     key={g.loan_id} 
                     onDoubleClick={() => handleOpenModal(g)}
-                    className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+                    className="hover:bg-slate-50/50 cursor-pointer transition-colors h-[38px]"
                   >
-                    <td className="px-4 py-2.5 font-mono font-bold text-slate-900">{g.loan_number}</td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-3 py-1.5 font-mono font-bold text-slate-900">{g.loan_number}</td>
+                    <td className="px-3 py-1.5">
                       <div className="font-bold text-slate-900">{g.customer_name}</div>
-                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">{g.customer_phone}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">{g.customer_phone}</div>
                     </td>
-                    <td className="px-4 py-2.5 font-bold text-slate-800">{g.partner_name}</td>
-                    <td className="px-4 py-2.5 text-center font-mono font-bold text-slate-700">
+                    <td className="px-3 py-1.5 font-bold text-slate-800">{g.partner_name}</td>
+                    <td className="px-3 py-1.5 text-center font-mono font-bold text-slate-700">
                       {g.latest_follow_up.follow_up_date}
                     </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                        g.latest_follow_up.result === 'PROMISED TO PAY' ? 'bg-green-50 text-green-700 border border-green-200' :
-                        g.latest_follow_up.result === 'ANSWERED' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                        g.latest_follow_up.result === 'CALL BACK' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                        'bg-rose-50 text-rose-700 border border-rose-200'
-                      }`}>
+                    <td className="px-3 py-1.5 text-center whitespace-nowrap">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${getCompactStatusStyle(g.latest_follow_up.result)}`}>
                         {g.latest_follow_up.result}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 font-bold text-slate-700 uppercase">
+                    <td className="px-3 py-1.5 font-bold text-slate-700 uppercase">
                       {g.latest_follow_up.followed_up_by}
                     </td>
-                    <td className="px-4 py-2.5 text-slate-600 max-w-xs truncate" title={g.latest_follow_up.narration}>
+                    <td className="px-3 py-1.5 text-slate-600 max-w-xs truncate" title={g.latest_follow_up.narration}>
                       {g.latest_follow_up.narration}
                     </td>
-                    <td className="px-4 py-2.5 text-center font-bold font-mono text-indigo-700 bg-indigo-50/30">
+                    <td className="px-3 py-1.5 text-center font-bold font-mono text-indigo-700 bg-indigo-50/30">
                       {g.all_follow_ups.length}
                     </td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td className="px-3 py-1.5 text-right">
                       <button
                         onClick={() => handleOpenModal(g)}
-                        className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-900 font-bold uppercase"
+                        className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-900 font-bold uppercase cursor-pointer"
                       >
-                        Timeline
+                        Ledger
                         <ChevronRight className="w-4 h-4" />
                       </button>
                     </td>
@@ -552,139 +526,162 @@ const CallHistory: React.FC = () => {
         )}
       </div>
 
-      {/* Centered Large Details Modal (Requirement 6 - Replacing the Drawer) */}
+      {/* Centered High-Density Audit Ledger Details Modal */}
       {showModal && selectedGroup && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-gray-150 max-w-[90vw] w-11/12 md:w-[85vw] lg:w-[80vw] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3">
+          <div className="bg-white rounded-xl border border-slate-200 max-w-[95vw] w-11/12 md:w-[90vw] lg:w-[85vw] shadow-2xl overflow-hidden flex flex-col max-h-[94vh]">
             
-            {/* Modal Header */}
-            <div className="bg-[#0b1329] text-white p-4 flex justify-between items-center shrink-0">
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-wider">Loan Call Logs &amp; Metrics Timeline</h3>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">
-                  Account: {selectedGroup.loan_number} — Borrower: {selectedGroup.customer_name}
-                </p>
+            {/* Modal Header — Single Compact 1-Line Row */}
+            <div className="bg-[#0b1329] text-white px-4 py-2.5 flex justify-between items-center shrink-0">
+              <div className="flex flex-wrap items-center gap-2.5 text-xs font-black uppercase tracking-wide">
+                <span>ACCOUNT: <span className="text-blue-400 font-mono">{selectedGroup.loan_number}</span></span>
+                <span className="text-slate-500">•</span>
+                <span>BORROWER: <span className="text-slate-100">{selectedGroup.customer_name}</span></span>
+                <span className="text-slate-500">•</span>
+                <span>PHONE: <span className="text-slate-300 font-mono">{selectedGroup.customer_phone || '—'}</span></span>
+                <span className="text-slate-500">•</span>
+                <span>PARTNER: <span className="text-slate-300">{selectedGroup.partner_name || '—'}</span></span>
               </div>
               <button 
                 onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-white transition-colors"
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-hidden p-6 flex flex-col bg-slate-50/40">
-                  {/* Full Width: Statistics & Timeline */}
-                  <div className="w-full flex flex-col overflow-hidden max-h-full">
-                    {/* Quick Metrics Cards */}
-                    <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4 shrink-0 uppercase font-bold text-center text-[10px]">
-                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                        <span className="text-slate-400 block mb-0.5">Total Calls</span>
-                        <span className="text-base font-black text-slate-900 leading-none">{stats.total}</span>
-                      </div>
-                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                        <span className="text-slate-400 block mb-0.5">Answered</span>
-                        <span className="text-base font-black text-emerald-600 leading-none">{stats.answered}</span>
-                      </div>
-                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                        <span className="text-slate-400 block mb-0.5">Promises</span>
-                        <span className="text-base font-black text-blue-600 leading-none">{stats.promises}</span>
-                      </div>
-                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                        <span className="text-slate-400 block mb-0.5">Callbacks</span>
-                        <span className="text-base font-black text-purple-600 leading-none">{stats.callbacks}</span>
-                      </div>
-                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center col-span-1">
-                        <span className="text-slate-400 block mb-0.5">Pending</span>
-                        <span className="text-base font-black text-amber-700 leading-none">{stats.pendingFollowUp}</span>
-                      </div>
-                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center col-span-1">
-                        <span className="text-slate-400 block mb-0.5">Last Call</span>
-                        <span className="text-[11px] font-black text-slate-950 leading-none font-mono">{stats.lastContact}</span>
-                      </div>
-                    </div>
-
-                    {/* Timeline List Scrollable Container */}
-                    <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin space-y-4 pl-1">
-                      <div className="flow-root pl-1">
-                        <ul role="list" className="-mb-8">
-                          {selectedGroup.all_follow_ups.map((log, idx) => (
-                            <li key={log.id}>
-                              <div className="relative pb-8">
-                                {idx !== selectedGroup.all_follow_ups.length - 1 && (
-                                  <span className="absolute top-5 left-5 -ml-px h-full w-[3px] bg-slate-200" aria-hidden="true"></span>
-                                )}
-                                <div className="relative flex space-x-3.5">
-                                  <div>
-                                    <span className={`h-10 w-10 rounded-full flex items-center justify-center ring-4 ring-white shadow-sm shrink-0 ${getResultBadgeColorClass(log.result)}`}>
-                                      <Phone className="w-4 h-4" />
-                                    </span>
-                                  </div>
-                                  <div className="flex-1 min-w-0 bg-white p-4.5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
-                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                                      <div className="flex items-center gap-2">
-                                        <span className={`inline-block px-3 py-1.5 rounded-full text-xs font-black uppercase border ${getResultColorClass(log.result)}`}>
-                                          {log.result}
-                                        </span>
-                                        {log.next_follow_up_date && (
-                                          <span className="text-[10px] font-black bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded uppercase">
-                                            Scheduled: {log.next_follow_up_date.split('-').reverse().join('/')}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="text-xs text-slate-500 font-bold font-mono">
-                                        {new Date(log.followed_up_at).toLocaleString('en-IN', {
-                                          day: '2-digit', month: 'short', year: 'numeric',
-                                          hour: '2-digit', minute: '2-digit', hour12: true
-                                        })}
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-4 text-xs font-bold uppercase">
-                                      <div>
-                                        <span className="text-slate-400 text-[10px] block">Contacted Person</span>
-                                        <span className="text-slate-805">{log.contacted_person || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-slate-400 text-[10px] block">Operator / Staff</span>
-                                        <span className="text-slate-805 uppercase">{log.followed_up_by || '—'}</span>
-                                      </div>
-                                    </div>
-
-                                    {/* Remarks as Read-only Card */}
-                                    <div className="text-xs text-slate-700 bg-slate-50/70 p-3.5 rounded-xl border border-slate-150 font-semibold leading-relaxed">
-                                      <span className="text-[9px] text-slate-400 font-black uppercase block mb-1.5">Remarks &amp; Notes</span>
-                                      {log.narration || 'No remarks recorded.'}
-                                    </div>
-
-                                    {log.promised_amount ? (
-                                      <div className="text-xs text-emerald-700 font-bold bg-emerald-50/80 px-3 py-2 rounded-lg border border-emerald-200 inline-block font-mono">
-                                        PROMISED AMOUNT: ₹{log.promised_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
+            <div className="flex-1 overflow-hidden p-3.5 flex flex-col bg-slate-50/40 min-h-0">
+              <div className="w-full flex flex-col overflow-hidden max-h-full">
+                
+                {/* Top Summary Bar - 40% Height Reduction Single Row */}
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-3 shrink-0 uppercase font-bold text-center text-[10px]">
+                  <div className="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-center">
+                    <span className="text-slate-400 text-[9px] leading-none mb-0.5">Total Calls</span>
+                    <span className="text-sm font-black text-slate-900 leading-none">{stats.total}</span>
                   </div>
+                  <div className="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-center">
+                    <span className="text-slate-400 text-[9px] leading-none mb-0.5">Answered</span>
+                    <span className="text-sm font-black text-emerald-600 leading-none">{stats.answered}</span>
+                  </div>
+                  <div className="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-center">
+                    <span className="text-slate-400 text-[9px] leading-none mb-0.5">Promises</span>
+                    <span className="text-sm font-black text-blue-600 leading-none">{stats.promises}</span>
+                  </div>
+                  <div className="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-center">
+                    <span className="text-slate-400 text-[9px] leading-none mb-0.5">Callbacks</span>
+                    <span className="text-sm font-black text-purple-600 leading-none">{stats.callbacks}</span>
+                  </div>
+                  <div className="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-center">
+                    <span className="text-slate-400 text-[9px] leading-none mb-0.5">Pending</span>
+                    <span className="text-sm font-black text-amber-700 leading-none">{stats.pendingFollowUp}</span>
+                  </div>
+                  <div className="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-center">
+                    <span className="text-slate-400 text-[9px] leading-none mb-0.5">Last Call</span>
+                    <span className="text-[11px] font-black text-slate-950 leading-none font-mono">{stats.lastContact}</span>
+                  </div>
+                </div>
+
+                {/* Call History Ledger Table (Replacing Old Timeline Cards Completely) */}
+                <div className="flex-1 overflow-auto border border-slate-200 rounded-lg bg-white shadow-2xs min-h-0">
+                  <table className="w-full text-left border-collapse text-[11px]">
+                    <thead className="bg-slate-100 border-b border-slate-250 sticky top-0 font-black uppercase text-slate-600 select-none text-[10px]">
+                      <tr>
+                        <th className="px-2 py-1.5 border-r border-slate-200 text-center w-8">SL</th>
+                        <th className="px-2 py-1.5 border-r border-slate-200 w-24">Date</th>
+                        <th className="px-2 py-1.5 border-r border-slate-200 w-20">Time</th>
+                        <th className="px-2.5 py-1.5 border-r border-slate-200 w-28 text-center">Status</th>
+                        <th className="px-2.5 py-1.5 border-r border-slate-200 w-32">Contacted Person</th>
+                        <th className="px-2 py-1.5 border-r border-slate-200 w-28">Operator</th>
+                        <th className="px-2.5 py-1.5 border-r border-slate-200">Remarks &amp; Notes</th>
+                        <th className="px-2 py-1.5 border-r border-slate-200 w-28 text-center">Next Follow-Up</th>
+                        <th className="px-2 py-1.5 border-r border-slate-200 w-12 text-center">Attach</th>
+                        <th className="px-2 py-1.5 border-r border-slate-200 w-12 text-center">Audio</th>
+                        <th className="px-2 py-1.5 text-center w-16">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-150 font-sans">
+                      {selectedGroup.all_follow_ups.map((log, idx) => {
+                        const dateObj = new Date(log.followed_up_at || log.follow_up_date);
+                        const dateStr = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                        const timeStr = dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                        const contactedText = log.contacted_person === 'CUSTOMER' ? 'Borrower' :
+                          log.contacted_person === 'GUARANTOR_1' ? 'Guarantor 1' :
+                          log.contacted_person === 'GUARANTOR_2' ? 'Guarantor 2' : (log.contacted_person || '—');
+
+                        return (
+                          <tr key={log.id} className="hover:bg-slate-50/80 transition-colors h-[38px]">
+                            <td className="px-2 py-1.5 border-r border-slate-200 text-center font-bold text-slate-400 font-mono">{idx + 1}</td>
+                            <td className="px-2 py-1.5 border-r border-slate-200 font-mono font-bold text-slate-800 whitespace-nowrap">{dateStr}</td>
+                            <td className="px-2 py-1.5 border-r border-slate-200 font-mono text-slate-600 whitespace-nowrap">{timeStr}</td>
+                            <td className="px-2.5 py-1.5 border-r border-slate-200 text-center whitespace-nowrap">
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${getCompactStatusStyle(log.result)}`}>
+                                {log.result}
+                              </span>
+                            </td>
+                            <td className="px-2.5 py-1.5 border-r border-slate-200 font-semibold text-slate-800 uppercase whitespace-nowrap">{contactedText}</td>
+                            <td className="px-2 py-1.5 border-r border-slate-200 font-semibold text-slate-700 uppercase whitespace-nowrap">{log.followed_up_by || '—'}</td>
+                            <td className="px-2.5 py-1.5 border-r border-slate-200 text-slate-800 font-medium max-w-xs" title={log.narration || ''}>
+                              <div className="line-clamp-2 leading-tight">
+                                {log.promised_amount ? (
+                                  <span className="font-bold text-emerald-700 mr-1.5 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200 font-mono text-[10px]">
+                                    PROMISED: ₹{log.promised_amount.toLocaleString('en-IN')}
+                                  </span>
+                                ) : null}
+                                {log.narration || 'No remarks recorded.'}
+                              </div>
+                            </td>
+                            <td className="px-2 py-1.5 border-r border-slate-200 text-center font-mono font-bold text-slate-700 whitespace-nowrap">
+                              {log.next_follow_up_date ? (
+                                <span className="text-amber-800 font-black">{log.next_follow_up_date.split('-').reverse().join('/')}</span>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-1.5 border-r border-slate-200 text-center font-bold">
+                              {(log as any).attachment_url ? (
+                                <a href={(log as any).attachment_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 cursor-pointer" title="View Attachment">📎</a>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-1.5 border-r border-slate-200 text-center font-bold">
+                              {(log as any).audio_url ? (
+                                <a href={(log as any).audio_url} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-purple-800 cursor-pointer" title="Listen Audio">🎤</a>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-1.5 text-center">
+                              <button
+                                onClick={() => handlePrintSingleLog(log)}
+                                className="text-[10px] font-bold uppercase text-slate-600 hover:text-slate-900 border border-slate-200 rounded px-1.5 py-0.5 hover:bg-slate-100 transition-colors cursor-pointer"
+                                title="Print Log"
+                              >
+                                PRINT
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+              </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 px-4 py-3 sm:px-6 border-t border-slate-150 flex justify-between items-center shrink-0">
+            <div className="bg-slate-50 px-4 py-2.5 sm:px-6 border-t border-slate-200 flex justify-between items-center shrink-0">
               <button
                 onClick={() => setIsTimelinePrinting(true)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-[#0b1329] text-white hover:bg-slate-800 rounded-lg text-xs font-bold uppercase transition-colors shadow-sm"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0b1329] text-white hover:bg-slate-800 rounded-lg text-xs font-bold uppercase transition-colors shadow-2xs cursor-pointer"
               >
-                <Printer className="w-4 h-4" /> Print Timeline
+                <Printer className="w-3.5 h-3.5" /> Print Audit Report
               </button>
               <button
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold uppercase transition-colors"
+                className="px-4 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold uppercase transition-colors cursor-pointer"
               >
                 Close
               </button>

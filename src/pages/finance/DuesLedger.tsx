@@ -1,45 +1,16 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { Printer, ArrowLeft, Search, AlertTriangle, Download } from 'lucide-react';
+import { FinanceCalculationEngine, OverdueDueItem } from '../../services/FinanceCalculationEngine';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
+import { Printer, Search, AlertTriangle, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
-import { useNavigate } from 'react-router-dom';
-import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
-import { exportToExcel } from '../../utils/excel';
-
-
-interface OverdueDueItem {
-  id: string;
-  loanId: string;
-  customerName: string;
-  loanCategory: string;
-  loanType: 'CD' | 'HP' | 'STBD' | 'TBD';
-  loanAmount: number;
-  currentPrincipal: number;
-  loanDate: string;
-  currentDueDate: string;
-  interestPaid: number;
-  pendingInterest: number;
-  penalty: number;
-  presentDue: number;
-  dueDays: number;
-  isNPA: boolean;
-  penaltyPaid: number;
-  phone: string;
-  g1Name: string;
-  g1Phone: string;
-  g2Name: string;
-  g2Phone: string;
-  partnerName: string;
-  status: string;
-}
+import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 
 type ReportType = 'OUTSTANDING' | 'TOTAL DUE LIST' | 'CD DUE LIST' | 'A -> B DUE LIST' | 'NPA LIST';
 
 const DuesLedger: React.FC = () => {
-  const navigate = useNavigate();
-  
   const [dues, setDues] = useState<OverdueDueItem[]>([]);
   const [integrityErrors, setIntegrityErrors] = useState<any[]>([]);
   const [partners, setPartners] = useState<{ id: string; name: string }[]>([]);
@@ -50,30 +21,12 @@ const DuesLedger: React.FC = () => {
   
   const [searchName, setSearchName] = useState('');
   const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState(() => {
-    const today = new Date();
-    today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
-    return today.toISOString().split('T')[0];
-  });
+  const [endDate, setEndDate] = useState('');
   
   const [loading, setLoading] = useState(true);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   useEffect(() => {
-    const loadDefaultStartDate = async () => {
-      try {
-        const oldest = await dailyFinancialTransactionService.getOldestTransactionDate();
-        if (oldest) {
-          setStartDate(oldest);
-        } else {
-          setStartDate('2024-01-01');
-        }
-      } catch (err) {
-        console.error(err);
-        setStartDate('2024-01-01');
-      }
-    };
-    loadDefaultStartDate();
     fetchData();
   }, []);
 
@@ -112,8 +65,38 @@ const DuesLedger: React.FC = () => {
         g2Name: row.g2_name || '',
         g2Phone: row.g2_phone || '',
         partnerName: row.partner_name || 'Unassigned',
-        status: row.status || 'Active'
+        status: row.status || 'Active',
+        pendingPenalty: Number(row.pending_penalty || 0)
       }));
+
+      // --- VALIDATION: Compare CD Ledger vs Due List ---
+      try {
+        const { supabase } = await import('../../lib/supabase');
+        const { data: cdLoans } = await supabase
+          .from('finance_loans')
+          .select('id, loan_id, status')
+          .like('loan_id', 'CD%')
+          .eq('status', 'Active');
+          
+        if (cdLoans) {
+          const expectedCount = cdLoans.length;
+          const actualCdList = formatted.filter(d => d.loanType === 'CD' && d.status === 'Active');
+          const actualCount = actualCdList.length;
+          
+          if (expectedCount !== actualCount) {
+            console.error(`WARNING\nCD Ledger Count = ${expectedCount}\nDue List Count = ${actualCount}\nMissing Accounts = ${expectedCount - actualCount}`);
+            
+            const foundIds = new Set(actualCdList.map(d => d.loanId));
+            const missing = cdLoans.filter(l => !foundIds.has(l.loan_id)).map(l => l.loan_id);
+            if (missing.length > 0) {
+              console.error('Missing loan numbers:', missing.join(', '));
+            }
+          }
+        }
+      } catch (valErr) {
+        console.error('Validation check failed:', valErr);
+      }
+      // --------------------------------------------------
 
       setDues(formatted);
       setIntegrityErrors(errorsData);
@@ -127,190 +110,83 @@ const DuesLedger: React.FC = () => {
 
 
   const filteredDues = useMemo(() => {
-    return dues.filter(due => {
-      // Enforce: CD loans must have dueDays >= 0 to appear in Dues List reports (Outstanding, Total, CD, A->B)
-      if (due.loanType === 'CD') {
-        if (due.dueDays < 0) return false;
-      }
-
-      // 1. Report Type Filter
-      if (activeReport === 'OUTSTANDING') {
-        // Active and has present due
-        const isActive = due.status === 'Active';
-        const isDue = due.presentDue > 0;
-        if (!isActive || !isDue) return false;
-      } else if (activeReport === 'TOTAL DUE LIST') {
-        // Show all accounts in ledgers (Active, Closed, NPA_CLOSED)
-        // No status filter
-      } else if (activeReport === 'CD DUE LIST') {
-        // Display only Loan Type = CD, active
-        const isActive = due.status === 'Active';
-        if (due.loanType !== 'CD' || !isActive) return false;
-      } else if (activeReport === 'A -> B DUE LIST') {
-        // Alphabetical customer list of active loans
-        const isActive = due.status === 'Active';
-        if (!isActive) return false;
-      } else if (activeReport === 'NPA LIST') {
-        // Display ONLY NPA CLOSED loans
-        if (due.status !== 'NPA_CLOSED') return false;
-      }
-
-      // 2. Date Filters for all reports
-      if (startDate && due.currentDueDate < startDate) return false;
-      if (endDate && due.currentDueDate > endDate) return false;
-
-      // 3. Partner Filter
-      if (selectedPartner !== 'ALL PARTNERS' && due.partnerName !== selectedPartner) return false;
-
-      // 4. Loan Type Filter
-      if (loanTypeFilter !== 'ALL' && due.loanType !== loanTypeFilter) return false;
-
-      // 5. Search Filter
-      if (searchName && !due.customerName.toLowerCase().includes(searchName.toLowerCase()) && !due.loanId.toLowerCase().includes(searchName.toLowerCase())) return false;
-
-      return true;
-    }).sort((a, b) => {
-      if (activeReport === 'OUTSTANDING') {
-        // Default sorting: Due Date ASC (oldest overdue first). If Due Date is same: CD Number ASC (numeric).
-        if (a.currentDueDate !== b.currentDueDate) {
-          return a.currentDueDate.localeCompare(b.currentDueDate);
-        }
-        const numA = Number(a.loanId.replace(/\D/g, '')) || 0;
-        const numB = Number(b.loanId.replace(/\D/g, '')) || 0;
-        if (numA !== numB) return numA - numB;
-        return a.loanId.localeCompare(b.loanId);
-      } else if (activeReport === 'A -> B DUE LIST') {
-        // Borrower Name A -> Z
-        return a.customerName.localeCompare(b.customerName);
-      } else {
-        // Default sorting: CD Number ASC (numeric)
-        const numA = Number(a.loanId.replace(/\D/g, '')) || 0;
-        const numB = Number(b.loanId.replace(/\D/g, '')) || 0;
-        if (numA !== numB) return numA - numB;
-        return a.loanId.localeCompare(b.loanId);
-      }
-    });
+    return FinanceCalculationEngine.filterDueList(
+      dues,
+      activeReport,
+      selectedPartner,
+      loanTypeFilter,
+      searchName,
+      startDate,
+      endDate
+    );
   }, [dues, activeReport, selectedPartner, loanTypeFilter, searchName, startDate, endDate]);
 
   const totals = useMemo(() => {
-    let principal = 0;
-    let interestPaid = 0;
-    let interest = 0;
-    let penaltyPaid = 0;
-    let penalty = 0;
-    let presentDue = 0;
-    let amountToClose = 0;
-
-    filteredDues.forEach(d => {
-      principal += d.currentPrincipal;
-      interestPaid += d.interestPaid;
-      interest += d.pendingInterest;
-      penaltyPaid += d.penaltyPaid;
-      penalty += d.penalty;
-      presentDue += d.presentDue;
-      amountToClose += d.currentPrincipal + d.pendingInterest + d.penalty;
-    });
-
-    return { principal, interestPaid, interest, penaltyPaid, penalty, presentDue, amountToClose };
+    return FinanceCalculationEngine.computeDueListTotals(filteredDues);
   }, [filteredDues]);
 
-  const options: ReportType[] = ['OUTSTANDING', 'TOTAL DUE LIST', 'CD DUE LIST', 'A -> B DUE LIST', 'NPA LIST'];
+  const options: { id: ReportType; label: string }[] = [
+    { id: 'OUTSTANDING', label: 'Outstanding' },
+    { id: 'TOTAL DUE LIST', label: 'Due List' },
+    { id: 'CD DUE LIST', label: 'CD Due List' },
+    { id: 'A -> B DUE LIST', label: 'A→B Due List' },
+    { id: 'NPA LIST', label: 'NPA List' }
+  ];
 
-  const handleExportExcel = () => {
-    try {
-      const exportData = filteredDues.map((due, idx) => ({
-        'S.No': idx + 1,
-        'Loan ID': due.loanId,
-        'Customer Name': due.customerName,
-        'Paid Int': Math.round(due.interestPaid),
-        'Paid Penalty': Math.round(due.penaltyPaid),
-        'Pend. Int': Math.round(due.pendingInterest),
-        'Pend. Penalty': Math.round(due.penalty),
-        'Present Due': Math.round(due.presentDue),
-        'Prn Amt': Math.round(due.currentPrincipal),
-        'Close Amt': Math.round(due.currentPrincipal + due.pendingInterest + due.penalty),
-        'Due Date': due.currentDueDate ? due.currentDueDate.split('-').reverse().join('/') : '',
-        'Loan Date': due.loanDate ? due.loanDate.split('-').reverse().join('/') : '',
-        'Due Days': due.dueDays,
-        'Phone (B)': due.phone || '',
-        'G1 Name': due.g1Name || '',
-        'G1 Phone': due.g1Phone || '',
-        'G2 Name': due.g2Name || '',
-        'G2 Phone': due.g2Phone || ''
-      }));
-
-      // Add Grand Total row
-      exportData.push({
-        'S.No': '',
-        'Loan ID': '',
-        'Customer Name': 'Grand Total:',
-        'Paid Int': Math.round(totals.interestPaid),
-        'Paid Penalty': Math.round(totals.penaltyPaid),
-        'Pend. Int': Math.round(totals.interest),
-        'Pend. Penalty': Math.round(totals.penalty),
-        'Present Due': Math.round(totals.presentDue),
-        'Prn Amt': Math.round(totals.principal),
-        'Close Amt': Math.round(totals.amountToClose),
-        'Due Date': '',
-        'Loan Date': '',
-        'Due Days': '',
-        'Phone (B)': '',
-        'G1 Name': '',
-        'G1 Phone': '',
-        'G2 Name': '',
-        'G2 Phone': ''
-      } as any);
-
-      exportToExcel(exportData, `Dues_List_${activeReport.replace(/ /g, '_')}_${startDate}_to_${endDate}`, activeReport);
-      toast.success('Excel exported successfully');
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to export Excel');
-    }
+  const handleResetFilters = () => {
+    setSelectedPartner('ALL PARTNERS');
+    setLoanTypeFilter('ALL');
+    setSearchName('');
+    setStartDate('');
+    setEndDate('');
   };
 
   return (
-    <div className="flex flex-col gap-2 w-full max-w-[100%] mx-auto px-4 pt-3 pb-4 print:p-0">
+    <div className="flex flex-col gap-2.5 w-full mx-auto px-4 pt-2.5 pb-4 print:p-0">
 
-      {/* ── ROW 1: Header ───────────────────────────────────────────────────── */}
-      <div className="flex justify-between items-center">
+      {/* ── ROW 1: Compact Header (DUE LIST • Date Pickers • PRINT) ───────────── */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 bg-white border border-slate-200 px-4 py-2.5 rounded-xl shadow-2xs w-full">
+        {/* Title Section */}
         <div>
-          <h1 className="text-[15px] font-black uppercase text-slate-900 tracking-wide leading-none">{activeReport}</h1>
-          <p className="text-[11px] text-slate-500 uppercase font-semibold mt-0.5">Active Loans · NPA · Partner Collection</p>
+          <h1 className="text-lg font-black uppercase text-slate-900 tracking-wide leading-none">DUE LIST</h1>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 text-[12px] font-bold uppercase shadow-sm"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Back
-          </button>
-          <button
-            onClick={handleExportExcel}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-700 text-white rounded-lg hover:bg-green-800 text-[12px] font-bold uppercase shadow-sm"
-          >
-            <Download className="w-3.5 h-3.5" /> Excel
-          </button>
+
+        {/* Date Pickers (190px each) & Print Button (120px, 46px high) */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="w-[190px]">
+            <FinanceSmartCalendar
+              value={startDate}
+              onChange={setStartDate}
+              module="DUES_LIST"
+              placeholder="FROM DATE"
+            />
+          </div>
+          <div className="w-[190px]">
+            <FinanceSmartCalendar
+              value={endDate}
+              onChange={setEndDate}
+              module="DUES_LIST"
+              placeholder="TO DATE"
+            />
+          </div>
           <button
             onClick={() => setShowPrintPreview(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0b1329] text-white rounded-lg hover:bg-slate-800 text-[12px] font-bold uppercase shadow-sm"
+            className="inline-flex items-center justify-center gap-1.5 w-[120px] h-[46px] bg-[#0b1329] text-white rounded-[14px] hover:bg-slate-800 text-xs font-bold uppercase transition-colors shrink-0 shadow-2xs cursor-pointer"
           >
-            <Printer className="w-3.5 h-3.5" /> Print Landscape
+            <Printer className="w-4 h-4" /> PRINT
           </button>
         </div>
       </div>
 
-      {/* ── ROW 2: Filters + Summary (single horizontal bar) ────────────────── */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm px-3 py-2.5">
-        <div className="flex flex-wrap items-end gap-3">
-
-          {/* Partner */}
-          <div className="flex flex-col min-w-[160px]">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Partner</label>
+      {/* ── ROW 2: Filter Bar (Partner, Loan Type, Search, SEARCH, RESET, Accounts KPI) ── */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-2xs p-2.5 px-4 w-full">
+        <div className="flex flex-wrap items-center gap-2.5 w-full">
+          {/* Partner (170px) */}
+          <div className="w-full sm:w-[170px] shrink-0">
             <select
               value={selectedPartner}
               onChange={(e) => setSelectedPartner(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 uppercase bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer h-[34px]"
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 text-slate-800 focus:ring-2 focus:ring-slate-900 focus:outline-none h-[38px] font-bold text-xs uppercase cursor-pointer shadow-2xs"
             >
               <option value="ALL PARTNERS">ALL PARTNERS</option>
               {partners.map(p => (
@@ -319,13 +195,12 @@ const DuesLedger: React.FC = () => {
             </select>
           </div>
 
-          {/* Loan Type */}
-          <div className="flex flex-col min-w-[130px]">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Loan Type</label>
+          {/* Loan Type (140px) */}
+          <div className="w-full sm:w-[140px] shrink-0">
             <select
               value={loanTypeFilter}
               onChange={(e) => setLoanTypeFilter(e.target.value as any)}
-              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 uppercase bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer h-[34px]"
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 text-slate-800 focus:ring-2 focus:ring-slate-900 focus:outline-none h-[38px] font-bold text-xs uppercase cursor-pointer shadow-2xs"
             >
               <option value="ALL">ALL TYPES</option>
               <option value="CD">CD LOANS</option>
@@ -335,67 +210,74 @@ const DuesLedger: React.FC = () => {
             </select>
           </div>
 
-          {/* Search */}
-          <div className="flex flex-col flex-1 min-w-[180px]">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Search Account / Name</label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          {/* Search Bar (360px) */}
+          <div className="w-full sm:w-[360px] shrink-0">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
               <input
                 type="text"
-                placeholder="e.g. CD100, NARSIMULU"
+                placeholder="Search account / borrower..."
                 value={searchName}
                 onChange={(e) => setSearchName(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-[13px] text-slate-800 font-semibold bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px]"
+                className="w-full border border-slate-200 rounded-xl pl-9 pr-3 text-xs text-slate-800 font-bold bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 h-[38px] shadow-2xs"
               />
             </div>
           </div>
 
-          {/* Date filters — always shown */}
-          <div className="flex flex-col min-w-[130px]">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">From Date</label>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px]" />
-          </div>
-          <div className="flex flex-col min-w-[130px]">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">To Date</label>
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px]" />
-          </div>
+          {/* SEARCH Button (≈130px) */}
+          <button
+            type="button"
+            onClick={() => fetchData()}
+            className="inline-flex items-center justify-center gap-1.5 w-[130px] h-[38px] bg-slate-900 text-white rounded-xl hover:bg-slate-800 text-xs font-black uppercase transition-colors shadow-2xs cursor-pointer shrink-0"
+          >
+            <Search className="w-3.5 h-3.5" />
+            SEARCH
+          </button>
 
-          {/* ── Summary Metrics (right side) ───────────────────────────────── */}
-          <div className="flex items-stretch gap-2 ml-auto flex-wrap">
-            <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-1.5 flex flex-col justify-center min-w-[140px]">
-              <span className="text-[10px] font-black text-red-500 uppercase tracking-wider leading-none">Total Present Dues</span>
-              <span className="text-red-655 text-[17px] font-black font-mono tracking-tight leading-tight mt-0.5 whitespace-nowrap">
-                {totals.presentDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex flex-col justify-center min-w-[100px]">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider leading-none">Accounts</span>
-              <span className="text-slate-900 text-[22px] font-black font-mono tracking-tight leading-tight mt-0.5">
-                {filteredDues.length}
-              </span>
-            </div>
-          </div>
+          {/* RESET Button (≈110px) */}
+          <button
+            type="button"
+            onClick={handleResetFilters}
+            className="inline-flex items-center justify-center gap-1.5 w-[110px] h-[38px] bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 border border-slate-250 text-xs font-black uppercase transition-colors shadow-2xs cursor-pointer shrink-0"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            RESET
+          </button>
 
+          {/* Accounts Compact KPI Card (Height matches buttons, beside Reset) */}
+          <div className="inline-flex flex-col justify-center px-3.5 h-[38px] bg-slate-50 border border-slate-200 rounded-xl shrink-0 w-[130px] sm:ml-auto select-none">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider leading-none mb-0.5">ACCOUNTS</span>
+            <span className="text-slate-900 text-[20px] font-black font-mono leading-none">{filteredDues.length}</span>
+          </div>
         </div>
       </div>
 
-      {/* ── ROW 3: Tabs Selection ────────────────────────────────────────────── */}
-      <div className="flex border-b border-slate-200 mt-1 flex-wrap">
-        {options.map(opt => (
-          <button
-            key={opt}
-            onClick={() => setActiveReport(opt)}
-            className={`px-4 py-2 border-b-2 text-xs font-black uppercase tracking-wider transition-colors ${
-              activeReport === opt 
-                ? 'border-slate-900 text-slate-900 bg-slate-50/50' 
-                : 'border-transparent text-slate-450 hover:text-slate-700 hover:border-slate-300'
-            }`}
-          >
-            {opt}
-          </button>
-        ))}
+      {/* ── ROW 3: Tabs Selection + Present Dues KPI (Right Aligned) ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-1.5 gap-2 w-full">
+        {/* Tabs (Left) */}
+        <div className="flex items-center gap-1 flex-wrap">
+          {options.map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => setActiveReport(opt.id)}
+              className={`px-3.5 py-1.5 border-b-2 text-xs font-black uppercase tracking-wider transition-colors cursor-pointer ${
+                activeReport === opt.id 
+                  ? 'border-slate-900 text-slate-900 bg-slate-100/60 rounded-t-lg' 
+                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Present Dues KPI (Right Aligned in Tab Bar) */}
+        <div className="flex items-center gap-2.5 shrink-0 px-2 py-0.5 sm:ml-auto">
+          <span className="text-xs font-black text-red-600 uppercase tracking-wider">Present Dues</span>
+          <span className="text-red-700 text-xl font-black font-mono tracking-tight">
+            ₹{totals.presentDue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
       </div>
 
       {/* ── ROW 4: Integrity Warnings Box ────────────────────────────────────── */}
@@ -438,19 +320,19 @@ const DuesLedger: React.FC = () => {
               <thead>
                 <tr className="border-b border-slate-200 text-[11px] font-black uppercase text-slate-500 select-none">
                   <th className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-10 bg-slate-50 finance-small-label">SL</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-20 bg-slate-50 finance-small-label">CD Number</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-44 bg-slate-50 finance-small-label">Borrower</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-24 bg-slate-50 finance-small-label">CD Number</th>
+                  <th className="px-2.5 py-1.5 border-r border-slate-200 text-slate-800 w-60 min-w-[200px] bg-slate-50 finance-small-label">Borrower</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Paid Interest</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Paid Penalty</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Pending Interest</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Pending Penalty</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-32 bg-slate-50 finance-small-label font-black">Present Due</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-36 min-w-[130px] bg-slate-50 finance-small-label">Pending Interest</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-36 min-w-[130px] bg-slate-50 finance-small-label">Pending Penalty</th>
+                  <th className="px-2.5 py-1.5 border-r border-slate-200 text-right text-slate-800 w-36 min-w-[140px] bg-slate-50 finance-small-label font-black">Present Due</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Principal</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-32 bg-slate-50 finance-small-label font-black text-blue-900">Closing Amount</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-28 bg-slate-50 finance-small-label">Due Date</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-28 bg-slate-50 finance-small-label">Date</th>
+                  <th className="px-2.5 py-1.5 border-r border-slate-200 text-right text-slate-800 w-36 min-w-[140px] bg-slate-50 finance-small-label font-black text-blue-900">Closing Amount</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-32 min-w-[110px] bg-slate-50 finance-small-label">Due Date</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-32 min-w-[110px] bg-slate-50 finance-small-label">Date</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-16 bg-slate-50 finance-small-label">Days</th>
-                  <th className="px-2 py-1.5 text-slate-800 text-left bg-slate-50 finance-small-label">Contact</th>
+                  <th className="px-2.5 py-1.5 text-slate-800 text-left min-w-[160px] bg-slate-50 finance-small-label">Contact</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-100 font-mono text-[14px]">
@@ -530,7 +412,7 @@ const DuesLedger: React.FC = () => {
                 <p className="text-slate-500" style={{ margin: 0 }}>Collection Dues Ledger</p>
               </div>
               <div className="text-right text-slate-900">
-                <p style={{ margin: 0 }}><span className="font-bold">DATE:</span> {new Date().toLocaleDateString('en-IN')}</p>
+                <p style={{ margin: 0 }}><span className="font-bold">DATE:</span> {getLocalBusinessDateISO()}</p>
                 <p style={{ margin: 0 }}><span className="font-bold">PARTNER:</span> {selectedPartner}</p>
               </div>
             </div>

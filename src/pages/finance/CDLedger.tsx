@@ -5,7 +5,8 @@ import { allocateCDPayment } from '../../services/cdLedgerEngine';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
-import { supabaseFinance, FinanceLoan, FinanceCustomer, FinanceTransaction, FinanceDue, FinanceDocument } from '../../lib/supabaseFinance';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
+import { supabaseFinance, FinanceLoan, FinanceCustomer, FinanceTransaction, FinanceDue, FinanceDocument, FinancePartner } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { cdLedgerRebuildService } from '../../services/cdLedgerRebuildService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -125,15 +126,108 @@ const CDLedger: React.FC = () => {
   }, [loansList, statusFilter]);
 
   // Custom Autocomplete Search State
-  const [searchNameQuery, setSearchNameQuery] = useState('');
-  const [searchAcQuery, setSearchAcQuery] = useState('');
-  const [showNameDropdown, setShowNameDropdown] = useState(false);
-  const [showAcDropdown, setShowAcDropdown] = useState(false);
-  const [listSearchQuery, setListSearchQuery] = useState('');
+  const [universalSearchQuery, setUniversalSearchQuery] = useState('');
+  const [showUniversalDropdown, setShowUniversalDropdown] = useState(false);
 
   const [selectedLoan, setSelectedLoan] = useState<(FinanceLoan & { customer: FinanceCustomer; transactions: FinanceTransaction[]; photos: any[]; dues: FinanceDue[]; documents: FinanceDocument[] }) | null>(null);
 
   const [paymentDate, setPaymentDate] = useState(() => getLocalBusinessDateISO());
+  const [partnersData, setPartnersData] = useState<FinancePartner[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchPartners = async () => {
+      try {
+        const data = await supabaseFinance.getPartners();
+        if (isMounted && data) setPartnersData(data);
+      } catch (err) {
+        console.error('Error fetching partners:', err);
+      }
+    };
+    fetchPartners();
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleTodayPaymentDate = () => {
+    setPaymentDate(getLocalBusinessDateISO());
+  };
+
+  // Partner Allocations calculation for selected loan
+  const partnerAllocations = useMemo(() => {
+    if (!selectedLoan) return [];
+    const loanPrincipal = Number(selectedLoan.amount) || 0;
+
+    const partnerList = (partnersData.length > 0) ? partnersData : [
+      { id: 'p1', name: 'BUKKA RAMESH', share_percent: 48.30, is_md: true },
+      { id: 'p2', name: 'SAI VINITH BUKKA', share_percent: 20.40, is_md: false },
+      { id: 'p3', name: 'BUKKA SAI VIVEK', share_percent: 20.00, is_md: false },
+      { id: 'p4', name: 'VIRAJA BUKKA', share_percent: 11.30, is_md: false },
+    ];
+
+    const PARTNER_COLORS: Record<string, string> = {
+      'BUKKA RAMESH': '#2563eb',
+      'RAMESH': '#2563eb',
+      'SAI VINITH BUKKA': '#16a34a',
+      'SAI VINITH': '#16a34a',
+      'BUKKA SAI VIVEK': '#0284c7',
+      'SAI VIVEK': '#0284c7',
+      'SAI': '#0284c7',
+      'VIRAJA BUKKA': '#9333ea',
+      'VIRAJA': '#9333ea',
+    };
+
+    const assignedName = (selectedLoan.partner_name || selectedLoan.customer?.partner_name || '').trim().toUpperCase();
+
+    if (assignedName) {
+      const matchedPartner = partnerList.find(p => p.name.trim().toUpperCase() === assignedName || p.name.trim().toUpperCase().includes(assignedName));
+      if (matchedPartner) {
+        return [{
+          id: matchedPartner.id,
+          name: matchedPartner.name,
+          is_md: matchedPartner.is_md || false,
+          sharePercent: 100.00,
+          principalShare: loanPrincipal,
+          color: PARTNER_COLORS[matchedPartner.name.trim().toUpperCase()] || '#2563eb'
+        }];
+      }
+    }
+
+    let cumulativePrincipal = 0;
+    const rows = partnerList.map((p, idx) => {
+      const pct = Number(p.share_percent) || 0;
+      let pShare = (idx === partnerList.length - 1)
+        ? (loanPrincipal - cumulativePrincipal)
+        : Math.round((pct / 100) * loanPrincipal);
+
+      cumulativePrincipal += pShare;
+
+      return {
+        id: p.id,
+        name: p.name,
+        is_md: p.is_md || false,
+        sharePercent: pct,
+        principalShare: pShare,
+        color: PARTNER_COLORS[p.name.trim().toUpperCase()] || '#2563eb'
+      };
+    });
+
+    return rows;
+  }, [selectedLoan, partnersData]);
+
+  const totalPartnerPrincipal = useMemo(() => partnerAllocations.reduce((sum, p) => sum + p.principalShare, 0), [partnerAllocations]);
+  const totalPartnerPercent = useMemo(() => partnerAllocations.reduce((sum, p) => sum + p.sharePercent, 0), [partnerAllocations]);
+
+  useEffect(() => {
+    if (!selectedLoan || partnerAllocations.length === 0) return;
+    const loanPrincipal = Number(selectedLoan.amount) || 0;
+    
+    if (Math.abs(totalPartnerPrincipal - loanPrincipal) > 1) {
+      console.warn(`[PARTNER RECONCILIATION WARNING] Total Partner Principal Share (₹${totalPartnerPrincipal}) does not match Loan Principal (₹${loanPrincipal}).`);
+    }
+    if (Math.abs(totalPartnerPercent - 100) > 0.1) {
+      console.warn(`[PARTNER PERCENTAGE WARNING] Total Partner Share Percent (${totalPartnerPercent}%) does not equal 100%.`);
+    }
+  }, [selectedLoan, partnerAllocations, totalPartnerPrincipal, totalPartnerPercent]);
 
 
 
@@ -190,24 +284,7 @@ const CDLedger: React.FC = () => {
   const [guarantor1, setGuarantor1] = useState<any | null>(null);
   const [guarantor2, setGuarantor2] = useState<any | null>(null);
   const [documentReturned, setDocumentReturned] = useState<any | null>(null);
-  // Real-time ticking Clock State
-  const [timeStr, setTimeStr] = useState('');
-
-  useEffect(() => {
-    const updateTime = () => {
-      const d = new Date();
-      const pad = (n: number) => String(n).padStart(2, '0');
-      let hours = d.getHours();
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12;
-      hours = hours ? hours : 12;
-      const formatted = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(hours)}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${ampm}`;
-      setTimeStr(formatted);
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // Real-time ticking Clock State removed (unused)
 
   useEffect(() => {
     if (hasAccess) {
@@ -577,8 +654,8 @@ const CDLedger: React.FC = () => {
 
 
   // Autocomplete Suggestions logic
-  const nameSuggestions = useMemo(() => {
-    const q = searchNameQuery.toLowerCase().trim();
+  const universalSuggestions = useMemo(() => {
+    const q = universalSearchQuery.toLowerCase().trim();
     if (!q) return [];
     return filteredLoansList.filter(loan => {
       const cust = loan.customer;
@@ -609,14 +686,8 @@ const CDLedger: React.FC = () => {
         (cust?.present_mandal && cust.present_mandal.toLowerCase().includes(q)) ||
         (cust?.present_district && cust.present_district.toLowerCase().includes(q))
       );
-    });
-  }, [filteredLoansList, searchNameQuery]);
-
-  const acSuggestions = useMemo(() => {
-    const q = searchAcQuery.toLowerCase().trim();
-    if (!q) return [];
-    return filteredLoansList.filter(loan => loan.loan_id.toLowerCase().includes(q));
-  }, [filteredLoansList, searchAcQuery]);
+    }).slice(0, 50); // limit to 50 results to prevent massive dropdown
+  }, [filteredLoansList, universalSearchQuery]);
 
   // Record Index Navigator Memo
   const currentIndex = useMemo(() => {
@@ -1701,31 +1772,42 @@ const CDLedger: React.FC = () => {
     <>
       <div className={`space-y-3.5 p-3.5 pt-2 max-w-7xl mx-auto ${showPrintPreview ? 'print:hidden' : 'print:p-0'}`}>
 
-        {/* Top row: unified search and metadata header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm print:hidden">
-
-          {/* Top Left: Today's date and navigation */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div>
-              <label className="finance-caption uppercase block mb-1">Today's Date / Payment Date</label>
-              <input
-                type="date"
-                value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
-                disabled={selectedLoan?.status === 'Closed' || selectedLoan?.status === 'NPA_CLOSED'}
-                className={`bg-white border rounded-xl p-2 text-gray-800 focus:ring-2 focus:outline-none finance-input h-[42px] ${(renewCalculations?.isDateInvalid || renewCalculations?.error) ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-green-500'} disabled:opacity-50 disabled:cursor-not-allowed`}
-              />
+        {/* Top row: unified single-row toolbar */}
+        <div className="flex flex-wrap lg:flex-nowrap items-end gap-3 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm print:hidden w-full">
+          
+          {/* Left Group: Date & Status (Stay together on wrap) */}
+          <div className="flex items-end gap-3 shrink-0">
+            {/* Payment Date Group */}
+            <div className="flex items-end gap-1.5 shrink-0">
+              <div className="w-[210px]">
+                <FinanceSmartCalendar
+                  value={paymentDate}
+                  onChange={setPaymentDate}
+                  module="CD_LEDGER"
+                  label="PAYMENT DATE"
+                  disabled={selectedLoan?.status === 'Closed' || selectedLoan?.status === 'NPA_CLOSED'}
+                  compact={true}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleTodayPaymentDate}
+                className="px-2.5 h-[42px] bg-blue-50 text-blue-700 hover:bg-blue-100 text-[11px] font-black uppercase rounded-[12px] border border-blue-200 transition-colors cursor-pointer shadow-2xs"
+              >
+                TODAY
+              </button>
             </div>
 
-            <div>
-              <label className="finance-caption uppercase block mb-1">Status Filter</label>
+            {/* Status Filter */}
+            <div className="w-[120px] shrink-0">
+              <label className="text-[12px] font-black text-slate-500 uppercase tracking-wider block mb-1">Status</label>
               <select
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value as any);
                   setSelectedLoan(null);
                 }}
-                className="bg-white border border-gray-200 rounded-xl p-2 text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none finance-input h-[42px] font-bold text-xs uppercase"
+                className="w-full bg-white border border-slate-200 rounded-[14px] px-2 text-slate-800 focus:ring-2 focus:ring-slate-900 focus:outline-none h-[42px] font-bold text-[12px] uppercase cursor-pointer shadow-2xs"
               >
                 <option value="ACTIVE">ACTIVE</option>
                 <option value="ALL">ALL</option>
@@ -1733,95 +1815,45 @@ const CDLedger: React.FC = () => {
                 <option value="NPA CLOSED">NPA CLOSED</option>
               </select>
             </div>
-          </div>
 
-          {/* Top Middle: Dynamic user name & real-time clock */}
-          <div className="flex flex-col text-center border-l border-r border-gray-150 px-6 py-1">
-            <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">
-              User: <span className="text-green-700 font-bold">{(user as any)?.name || user?.username || 'RAMESH'}</span>
-            </span>
-            <span className="text-xs text-gray-400 font-mono mt-0.5">{timeStr}</span>
-          </div>
-
-          {/* Top Right: Autocomplete Name Search and Account Dropdowns */}
-          <div className="flex flex-1 max-w-lg gap-3">
-            {/* Name autocomplete */}
-            <div className="relative flex-1">
-              <label className="finance-caption uppercase block mb-1">Name Search</label>
+            {/* Universal Search */}
+            <div className="relative flex-1 min-w-[300px]">
+              <label className="text-[12px] font-black text-slate-500 uppercase tracking-wider block mb-1">Search</label>
               <div className="relative">
                 <input
                   type="text"
-                  value={searchNameQuery !== '' ? searchNameQuery : (selectedLoan?.customer?.name || '')}
+                  value={universalSearchQuery !== '' ? universalSearchQuery : (selectedLoan ? `${selectedLoan.loan_id} - ${selectedLoan.customer?.name}` : '')}
                   onChange={(e) => {
-                    setSearchNameQuery(e.target.value);
-                    setShowNameDropdown(true);
+                    setUniversalSearchQuery(e.target.value);
+                    setShowUniversalDropdown(true);
                   }}
-                  onFocus={() => setShowNameDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowNameDropdown(false), 250)}
-                  placeholder="Search name..."
-                  className="w-full bg-white border border-gray-200 rounded-xl py-2 pl-9 pr-4 text-sm text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none h-[42px]"
+                  onFocus={() => setShowUniversalDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowUniversalDropdown(false), 250)}
+                  placeholder="Search borrower, CD no., phone, guarantor..."
+                  className="w-full bg-white border border-slate-200 rounded-[14px] py-2 pl-9 pr-4 text-[14px] font-semibold text-slate-800 focus:ring-2 focus:ring-slate-900 focus:outline-none h-[42px] shadow-2xs"
                 />
-                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
               </div>
 
-              {showNameDropdown && nameSuggestions.length > 0 && (
-                <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
-                  {nameSuggestions.sort((a,b) => sortNumerically(a.loan_id, b.loan_id)).map(loan => (
+              {showUniversalDropdown && universalSuggestions.length > 0 && (
+                <div className="absolute z-50 w-full bg-white border border-slate-200 rounded-[14px] shadow-lg mt-1 max-h-80 overflow-y-auto">
+                  {universalSuggestions.sort((a,b) => sortNumerically(a.loan_id, b.loan_id)).map(loan => (
                     <button
                       key={loan.id}
                       onMouseDown={() => {
                         loadLedgerDetails(loan.id);
-                        setSearchNameQuery('');
-                        setShowNameDropdown(false);
+                        setUniversalSearchQuery('');
+                        setShowUniversalDropdown(false);
                       }}
-                      className="w-full text-left px-4 py-2 hover:bg-green-50 text-sm text-gray-750 font-medium border-b border-gray-50 last:border-0"
+                      className="w-full text-left px-4 py-2 hover:bg-slate-50 text-[14px] text-slate-700 font-medium border-b border-slate-100 last:border-0"
                     >
-                      <div className="font-semibold text-gray-900">{loan.customer?.name}</div>
-                      <div className="text-[10px] text-gray-500 flex justify-between">
-                        <span>A/C: {loan.loan_id}</span>
-                        <span>Phone: {loan.customer?.phone}</span>
+                      <div className="font-semibold text-slate-900 flex justify-between">
+                        <span>{loan.customer?.name}</span>
+                        <span className="text-green-700">{loan.loan_id}</span>
                       </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* A/C selector */}
-            <div className="relative w-40">
-              <label className="finance-caption uppercase block mb-1">A/C Number</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchAcQuery !== '' ? searchAcQuery : (selectedLoan?.loan_id || '')}
-                  onChange={(e) => {
-                    setSearchAcQuery(e.target.value);
-                    setShowAcDropdown(true);
-                  }}
-                  onFocus={() => setShowAcDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowAcDropdown(false), 250)}
-                  placeholder="Search A/C..."
-                  className="w-full bg-white border border-gray-200 rounded-xl py-2 pl-9 pr-4 text-sm text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none h-[42px]"
-                />
-                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
-              </div>
-
-              {showAcDropdown && acSuggestions.length > 0 && (
-                <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
-                  {acSuggestions.sort((a,b) => sortNumerically(a.loan_id, b.loan_id)).map(loan => (
-                    <button
-                      key={loan.id}
-                      onMouseDown={() => {
-                        loadLedgerDetails(loan.id);
-                        setSearchAcQuery('');
-                        setShowAcDropdown(false);
-                      }}
-                      className="w-full text-left px-4 py-2 hover:bg-green-50 text-sm text-gray-750 font-medium border-b border-gray-50 last:border-0"
-                    >
-                      <div className="font-semibold text-gray-900">A/C: {loan.loan_id}</div>
-                      <div className="text-[10px] text-gray-500 flex justify-between">
-                        <span>Name: {loan.customer?.name}</span>
-                        <span>Phone: {loan.customer?.phone}</span>
+                      <div className="text-[11px] text-slate-500 flex gap-4 mt-1">
+                        <span>Phone: {loan.customer?.phone || '-'}</span>
+                        {loan.guarantor_1?.name && <span>G1: {loan.guarantor_1.name}</span>}
                       </div>
                     </button>
                   ))}
@@ -1848,21 +1880,11 @@ const CDLedger: React.FC = () => {
                 </h2>
                 <p className="text-xs text-gray-400 mt-0.5">{filteredLoansList.length} loan(s) in the system</p>
               </div>
-              <div className="relative w-full sm:w-80">
-                <input
-                  type="text"
-                  value={listSearchQuery}
-                  onChange={(e) => setListSearchQuery(e.target.value)}
-                  placeholder="Search by name, A/C number, or phone..."
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-sm text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none focus:bg-white transition-colors"
-                />
-                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
-              </div>
             </div>
 
             {/* Loan Table */}
             {(() => {
-              const q = listSearchQuery.toLowerCase().trim();
+              const q = universalSearchQuery.toLowerCase().trim();
               const filtered = q
                 ? filteredLoansList.filter(loan =>
                   loan.loan_id.toLowerCase().includes(q) ||
@@ -1878,7 +1900,7 @@ const CDLedger: React.FC = () => {
                     <p className="text-gray-400 text-sm">
                       {filteredLoansList.length === 0
                         ? 'No CD loans found in the system.'
-                        : `No loans match "${listSearchQuery}"`}
+                        : `No loans match "${universalSearchQuery}"`}
                     </p>
                   </div>
                 );
@@ -1905,7 +1927,7 @@ const CDLedger: React.FC = () => {
                           className="hover:bg-green-50/50 cursor-pointer transition-colors group"
                           onClick={() => {
                             loadLedgerDetails(loan.id);
-                            setListSearchQuery('');
+                            setUniversalSearchQuery('');
                           }}
                         >
                           <td className="px-4 py-3.5 text-gray-400 font-mono text-xs">{idx + 1}</td>
@@ -1939,7 +1961,7 @@ const CDLedger: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm print:hidden">
               <div className="flex flex-wrap items-center gap-3">
                 <button
-                  onClick={() => { setSelectedLoan(null); setListSearchQuery(''); }}
+                  onClick={() => { setSelectedLoan(null); setUniversalSearchQuery(''); }}
                   className="inline-flex items-center gap-2 text-xs font-bold text-gray-655 hover:text-slate-900 bg-gray-50 hover:bg-gray-100 border border-gray-200/60 px-3 py-2 rounded-xl transition-all shadow-sm font-sans"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
@@ -2764,9 +2786,6 @@ const CDLedger: React.FC = () => {
                 </div>
               )}
             </Card>
-            
-
-
             {/* Totals Summary Footer Card & Buttons */}
             <div className="bg-white px-5 py-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col gap-3">
 
@@ -2869,6 +2888,20 @@ const CDLedger: React.FC = () => {
                       </span>
                     )}
                   </div>
+                </div>
+
+                {/* Divider */}
+                <div className="self-stretch w-px bg-slate-100 hidden sm:block" />
+
+                {/* Partner */}
+                <div className="flex flex-col min-w-[90px]">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Partner</span>
+                  <span 
+                    className="text-sm font-black font-sans text-slate-800 truncate max-w-[150px]" 
+                    title={selectedLoan?.partner_name || selectedLoan?.customer?.partner_name || '—'}
+                  >
+                    {selectedLoan?.partner_name || selectedLoan?.customer?.partner_name || '—'}
+                  </span>
                 </div>
 
               </div>
@@ -3189,12 +3222,11 @@ const CDLedger: React.FC = () => {
             </h2>
             <div className="space-y-4">
               <div>
-                <label className="finance-caption uppercase mb-2 block">Return Date</label>
-                <input
-                  type="date"
+                <FinanceSmartCalendar
                   value={returnDate}
-                  onChange={(e) => setReturnDate(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                  onChange={setReturnDate}
+                  module="CD_LEDGER"
+                  label="Return Date"
                 />
               </div>
               <div>
@@ -3276,12 +3308,11 @@ const CDLedger: React.FC = () => {
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="finance-caption uppercase mb-2 block font-sans">New Payment Date</label>
-                  <input 
-                    type="date"
+                  <FinanceSmartCalendar
                     value={editTxDate}
-                    onChange={(e) => setEditTxDate(e.target.value)}
-                    className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-gray-800 focus:ring-2 focus:ring-green-500 focus:outline-none"
+                    onChange={setEditTxDate}
+                    module="CD_LEDGER"
+                    label="New Payment Date"
                     required
                   />
                 </div>

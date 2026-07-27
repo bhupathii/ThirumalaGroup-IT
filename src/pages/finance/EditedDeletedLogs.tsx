@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { supabaseFinance, FinanceEditedLog, FinanceDeletedLog } from '../../lib/supabaseFinance';
 import { Trash2, Edit2, Search, Calendar, Database, X, Printer, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -760,19 +761,25 @@ const EditedDeletedLogs: React.FC = () => {
               <span className="text-xs font-black text-slate-800 uppercase tracking-wider">DATE RANGE FILTER:</span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <input
-                type="date"
-                value={filterStartDate}
-                onChange={(e) => setFilterStartDate(e.target.value)}
-                className="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-green-500 bg-slate-50"
-              />
+              <div className="w-[140px]">
+                <FinanceSmartCalendar
+                  value={filterStartDate}
+                  onChange={setFilterStartDate}
+                  module="EDIT_DELETE_LOGS"
+                  placeholder="START DATE"
+                  allowClear
+                />
+              </div>
               <span className="text-slate-400 text-xs font-bold uppercase">TO</span>
-              <input
-                type="date"
-                value={filterEndDate}
-                onChange={(e) => setFilterEndDate(e.target.value)}
-                className="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-green-500 bg-slate-50"
-              />
+              <div className="w-[140px]">
+                <FinanceSmartCalendar
+                  value={filterEndDate}
+                  onChange={setFilterEndDate}
+                  module="EDIT_DELETE_LOGS"
+                  placeholder="END DATE"
+                  allowClear
+                />
+              </div>
             </div>
 
             {(searchQuery || filterTableType !== 'all' || filterOperator !== 'all' || filterStartDate || filterEndDate) && (

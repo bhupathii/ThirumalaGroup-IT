@@ -2,6 +2,7 @@ import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../components/UI/Card';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { supabaseFinance, FinancePartner, FinanceCapitalEntry } from '../../lib/supabaseFinance';
 import { 
   ArrowLeft, 
@@ -349,17 +350,14 @@ const CapitalEntry: React.FC = () => {
           >
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[15px] font-bold text-slate-700 uppercase block">
-                    DATE <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
+                <div>
+                  <FinanceSmartCalendar
+                    label="DATE"
                     value={date}
-                    onChange={(e) => { setDate(e.target.value); setErrors(p => ({...p, date: false})) }}
-                    ref={dateRef}
-                    className={`w-full bg-white border rounded px-3 text-[16px] focus:outline-none h-[48px] shadow-sm font-bold ${errors.date ? "border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500" : "border-slate-250 focus:ring-1 focus:ring-slate-900"}`}
+                    onChange={(val) => { setDate(val); setErrors(p => ({...p, date: false})); }}
+                    module="PARTNER_PERFORMANCE"
                     required
+                    error={errors.date}
                   />
                 </div>
 

@@ -1,12 +1,42 @@
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo } from 'react';
 import Card from '../../components/UI/Card';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../../services/dailyFinancialTransactionService';
 import { Printer, ArrowLeft, Search, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '../../lib/supabaseDatabase';
+export function formatParticularsText(rawText?: string | null): string {
+  if (!rawText) return '—';
+  let text = rawText.trim();
+  if (!text) return '—';
+
+  if (text.includes('\n')) {
+    return text;
+  }
+
+  const keywords = [
+    'PRINCIPAL OUTSTANDING',
+    'INTEREST OUTSTANDING',
+    'PENALTY OUTSTANDING',
+    'TOTAL OUTSTANDING',
+    'CLOSED BY',
+    'COLLECTED BY',
+    'REMARKS',
+    'VOUCHER NO',
+    'RECEIPT NO',
+    'PARTIAL PAYMENT',
+    'FULL SETTLEMENT'
+  ];
+
+  keywords.forEach(kw => {
+    const regex = new RegExp(`(?<=\\S)\\s+(${kw}\\s*[:\\-])`, 'gi');
+    text = text.replace(regex, '\n$1');
+  });
+
+  return text;
+}
 
 const DetailedLedgerFinance: React.FC = () => {
   const navigate = useNavigate();
@@ -55,13 +85,15 @@ const DetailedLedgerFinance: React.FC = () => {
       prevDateLimit.setDate(prevDateLimit.getDate() - 1);
       const prevDateLimitStr = prevDateLimit.toISOString().split('T')[0];
 
+      let historyTxs: DailyFinancialTransaction[] = [];
       if (fromDate > '1970-01-01') {
-        await dailyFinancialTransactionService.getDailyFinancialTransactions({
+        historyTxs = await dailyFinancialTransactionService.getDailyFinancialTransactions({
           fromDate: '1970-01-01',
           toDate: prevDateLimitStr,
           financeMode
        });
      }
+      setAllHistoryEntries(historyTxs);
 
       // 2. Fetch date range entries
       const rangeTxs = await dailyFinancialTransactionService.getDailyFinancialTransactions({
@@ -121,16 +153,42 @@ const DetailedLedgerFinance: React.FC = () => {
       return (a.createdAt || '').localeCompare(b.createdAt || '');
    });
 
-    // Compute running balance
-    let currentBalance = 0; // Starts from 0
-    return sorted.map(t => {
+    // 1. Calculate Opening Balance from history entries
+    let openingBalance = 0;
+    let historyList = [...allHistoryEntries];
+    
+    if (categoryFilter !== 'ALL') {
+      historyList = historyList.filter(t => t.category === categoryFilter);
+    }
+    if (selectedHead !== 'ALL') {
+      historyList = historyList.filter(t => t.headOfAccount === selectedHead);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      historyList = historyList.filter(t => 
+        (t.particulars && t.particulars.toLowerCase().includes(q)) ||
+        (t.headOfAccount && t.headOfAccount.toLowerCase().includes(q)) ||
+        (t.accountOrLoanNo && t.accountOrLoanNo.toLowerCase().includes(q)) ||
+        (t.customerName && t.customerName.toLowerCase().includes(q))
+      );
+    }
+
+    historyList.forEach(t => {
+      openingBalance = openingBalance + (t.credit || 0) - (t.debit || 0);
+    });
+
+    // 2. Compute running balance for range entries
+    let currentBalance = openingBalance;
+    const mapped = sorted.map(t => {
       currentBalance = currentBalance + (t.credit || 0) - (t.debit || 0);
       return {
         ...t,
         runningBalance: currentBalance
      };
-   }).reverse(); // Show newest first in table
- }, [allRangeEntries, categoryFilter, selectedHead, searchQuery]);
+   });
+   
+   return mapped.reverse(); // Show newest first in table
+ }, [allRangeEntries, allHistoryEntries, categoryFilter, selectedHead, searchQuery]);
 
   // Sum total credits & debits for matching filters
   const totals = useMemo(() => {
@@ -163,7 +221,7 @@ const DetailedLedgerFinance: React.FC = () => {
       entry.credit,
       entry.debit,
       entry.runningBalance,
-      entry.particulars || '',
+      formatParticularsText(entry.particulars),
       entry.userName || 'Staff'
     ]);
 
@@ -227,22 +285,20 @@ const DetailedLedgerFinance: React.FC = () => {
 
       {/* Date & Category Filters in One Row */}
       <div className={`grid grid-cols-1 md:grid-cols-5 gap-3 p-3 bg-white border border-slate-200 rounded-lg shadow-sm items-end`}>
-        <div className="space-y-1">
-          <label className="text-[15px] font-bold text-slate-500 uppercase block">FROM DATE</label>
-          <input
-            type="date"
+        <div>
+          <FinanceSmartCalendar
+            label="FROM DATE"
             value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] focus:outline-none h-[48px] font-bold"
+            onChange={setFromDate}
+            module="DETAILED_LEDGER"
           />
         </div>
-        <div className="space-y-1">
-          <label className="text-[15px] font-bold text-slate-500 uppercase block">TO DATE</label>
-          <input
-            type="date"
+        <div>
+          <FinanceSmartCalendar
+            label="TO DATE"
             value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] focus:outline-none h-[48px] font-bold"
+            onChange={setToDate}
+            module="DETAILED_LEDGER"
           />
         </div>
         <div className="space-y-1">
@@ -303,16 +359,16 @@ const DetailedLedgerFinance: React.FC = () => {
                 <table className="min-w-full text-[13px] divide-y divide-slate-200">
                   <thead className="bg-slate-100 sticky top-0 z-10 text-slate-700">
                     <tr className="divide-x divide-slate-200">
-                      <th className="w-10 px-2 py-2 text-center font-bold text-[12px] uppercase whitespace-nowrap">Sl</th>
-                      <th className="w-24 px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">Date</th>
-                      <th className="w-20 px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">ACC NO</th>
-                      <th className="w-36 px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">Head of Account</th>
-                      <th className="w-40 px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">Borrower/Partner</th>
-                      <th className="w-28 px-2 py-2 text-right font-bold text-[12px] uppercase whitespace-nowrap">Credit (Cr)</th>
-                      <th className="w-28 px-2 py-2 text-right font-bold text-[12px] uppercase whitespace-nowrap">Debit (Dr)</th>
-                      <th className="w-32 px-2 py-2 text-right font-bold text-[12px] uppercase whitespace-nowrap">Running Bal</th>
-                      <th className="min-w-[140px] px-2 py-2 text-left font-bold text-[12px] uppercase">Particulars</th>
-                      <th className="w-20 px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">User</th>
+                      <th className="w-[4%] px-2 py-2 text-center font-bold text-[12px] uppercase whitespace-nowrap">Sl</th>
+                      <th className="w-[11%] px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">Date</th>
+                      <th className="w-[9%] px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">ACC NO</th>
+                      <th className="w-[13%] px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">Head of Account</th>
+                      <th className="w-[12%] px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">Borrower/Partner</th>
+                      <th className="w-[10%] px-2 py-2 text-right font-bold text-[12px] uppercase whitespace-nowrap">Credit (Cr)</th>
+                      <th className="w-[10%] px-2 py-2 text-right font-bold text-[12px] uppercase whitespace-nowrap">Debit (Dr)</th>
+                      <th className="w-[11%] px-2 py-2 text-right font-bold text-[12px] uppercase whitespace-nowrap">Running Bal</th>
+                      <th className="w-[23%] min-w-[200px] px-2 py-2 text-left font-bold text-[12px] uppercase">Particulars</th>
+                      <th className="w-[7%] px-2 py-2 text-left font-bold text-[12px] uppercase whitespace-nowrap">User</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white divide-x divide-slate-50 font-semibold text-slate-855">
@@ -324,25 +380,27 @@ const DetailedLedgerFinance: React.FC = () => {
                       </tr>
                     ) : (
                       filteredEntries.map((entry, idx) => (
-                        <tr key={entry.id} className="hover:bg-slate-50/50 divide-x divide-slate-100" style={{ height: '34px' }}>
-                          <td className="px-2 py-1 text-center text-slate-400 font-mono text-[12px]">{idx + 1}</td>
-                          <td className="px-2 py-1 text-slate-700 whitespace-nowrap font-mono text-[12px]">
+                        <tr key={entry.id} className="hover:bg-slate-50/50 divide-x divide-slate-100 align-top">
+                          <td className="px-2 py-2 text-center text-slate-400 font-mono text-[12px] align-top">{idx + 1}</td>
+                          <td className="px-2 py-2 text-slate-700 whitespace-nowrap font-mono text-[12px] align-top">
                             {entry.transactionDate.split('-').reverse().join('/')}
                           </td>
-                          <td className="px-2 py-1 font-mono text-slate-900 font-bold truncate text-[12px] max-w-[128px]">{entry.accountOrLoanNo || '—'}</td>
-                          <td className="px-2 py-1 text-slate-800 uppercase truncate text-[12px] max-w-[144px]">{entry.headOfAccount}</td>
-                          <td className="px-2 py-1 text-slate-700 uppercase text-[12px] break-words">{entry.customerName || entry.accountOrLoanNo || '—'}</td>
-                          <td className="px-2 py-1 text-right text-emerald-700 font-bold whitespace-nowrap font-mono text-[12px]">
+                          <td className="px-2 py-2 font-mono text-slate-900 font-bold truncate text-[12px] max-w-[128px] align-top">{entry.accountOrLoanNo || '—'}</td>
+                          <td className="px-2 py-2 text-slate-800 uppercase truncate text-[12px] max-w-[144px] align-top">{entry.headOfAccount}</td>
+                          <td className="px-2 py-2 text-slate-700 uppercase text-[12px] break-words align-top">{entry.customerName || entry.accountOrLoanNo || '—'}</td>
+                          <td className="px-2 py-2 text-right text-emerald-700 font-bold whitespace-nowrap font-mono text-[12px] align-top">
                             {entry.credit > 0 ? `${entry.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
-                          <td className="px-2 py-1 text-right text-red-700 font-bold whitespace-nowrap font-mono text-[12px]">
+                          <td className="px-2 py-2 text-right text-red-700 font-bold whitespace-nowrap font-mono text-[12px] align-top">
                             {entry.debit > 0 ? `${entry.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
-                          <td className={`px-2 py-1 text-right font-bold whitespace-nowrap font-mono text-[12px] ${entry.runningBalance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                          <td className={`px-2 py-2 text-right font-bold whitespace-nowrap font-mono text-[12px] align-top ${entry.runningBalance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
                             {Math.abs(entry.runningBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {entry.runningBalance >= 0 ? 'Cr' : 'Dr'}
                           </td>
-                          <td className="px-2 py-1 text-slate-600 truncate uppercase text-[12px]" title={entry.particulars}>{entry.particulars}</td>
-                          <td className="px-2 py-1 text-slate-500 uppercase truncate text-[12px]">{entry.userName || 'Staff'}</td>
+                          <td className="px-2.5 py-2 text-slate-800 font-medium uppercase text-[12px] whitespace-pre-wrap break-words align-top leading-relaxed min-w-[200px]" title={entry.particulars}>
+                            {formatParticularsText(entry.particulars)}
+                          </td>
+                          <td className="px-2 py-2 text-slate-500 uppercase text-[12px] align-top">{entry.userName || 'Staff'}</td>
                         </tr>
                       ))
                     )}
@@ -394,29 +452,29 @@ const DetailedLedgerFinance: React.FC = () => {
             <table className="min-w-full divide-y divide-slate-300 finance-caption">
               <thead>
                 <tr className="bg-slate-50">
-                  <th className="py-2 px-1 text-center font-bold text-slate-700 uppercase">Sl</th>
-                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase">Date</th>
-                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase">ACC NO</th>
-                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase">Head of Account</th>
-                  <th className="py-2 px-2 text-right font-bold text-slate-700 uppercase">Cr</th>
-                  <th className="py-2 px-2 text-right font-bold text-slate-700 uppercase">Dr</th>
-                  <th className="py-2 px-2 text-right font-bold text-slate-700 uppercase">Bal</th>
-                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase">Particulars</th>
-                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase">User</th>
+                  <th className="py-2 px-1 text-center font-bold text-slate-700 uppercase w-[4%]">Sl</th>
+                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase w-[11%]">Date</th>
+                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase w-[9%]">ACC NO</th>
+                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase w-[13%]">Head of Account</th>
+                  <th className="py-2 px-2 text-right font-bold text-slate-700 uppercase w-[10%]">Cr</th>
+                  <th className="py-2 px-2 text-right font-bold text-slate-700 uppercase w-[10%]">Dr</th>
+                  <th className="py-2 px-2 text-right font-bold text-slate-700 uppercase w-[11%]">Bal</th>
+                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase w-[25%]">Particulars</th>
+                  <th className="py-2 px-2 text-left font-bold text-slate-700 uppercase w-[7%]">User</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {filteredEntries.map((entry, idx) => (
-                  <tr key={entry.id} className="text-[12px]">
-                    <td className="py-1 px-1 text-center font-mono">{idx + 1}</td>
-                    <td className="py-1 px-2 font-mono">{entry.transactionDate.split('-').reverse().join('/')}</td>
-                    <td className="py-1 px-2 font-mono font-bold uppercase">{entry.accountOrLoanNo || '—'}</td>
-                    <td className="py-1 px-2 uppercase font-medium">{entry.headOfAccount}</td>
-                    <td className="py-1 px-2 text-right font-mono text-emerald-600">{entry.credit > 0 ? `${entry.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
-                    <td className="py-1 px-2 text-right font-mono text-red-600">{entry.debit > 0 ? `${entry.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
-                    <td className="py-1 px-2 text-right font-mono font-bold">{Math.abs(entry.runningBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {entry.runningBalance >= 0 ? 'Cr' : 'Dr'}</td>
-                    <td className="py-1 px-2 uppercase truncate max-w-xs">{entry.particulars || '—'}</td>
-                    <td className="py-1 px-2 uppercase text-slate-500">{entry.userName || 'Staff'}</td>
+                  <tr key={entry.id} className="text-[12px] align-top">
+                    <td className="py-2 px-1 text-center font-mono align-top">{idx + 1}</td>
+                    <td className="py-2 px-2 font-mono align-top whitespace-nowrap">{entry.transactionDate.split('-').reverse().join('/')}</td>
+                    <td className="py-2 px-2 font-mono font-bold uppercase align-top">{entry.accountOrLoanNo || '—'}</td>
+                    <td className="py-2 px-2 uppercase font-medium align-top">{entry.headOfAccount}</td>
+                    <td className="py-2 px-2 text-right font-mono text-emerald-700 align-top">{entry.credit > 0 ? `${entry.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
+                    <td className="py-2 px-2 text-right font-mono text-red-700 align-top">{entry.debit > 0 ? `${entry.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
+                    <td className="py-2 px-2 text-right font-mono font-bold align-top">{Math.abs(entry.runningBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {entry.runningBalance >= 0 ? 'Cr' : 'Dr'}</td>
+                    <td className="py-2 px-2 uppercase text-slate-900 whitespace-pre-wrap break-words align-top leading-relaxed font-sans font-medium">{formatParticularsText(entry.particulars)}</td>
+                    <td className="py-2 px-2 uppercase text-slate-500 align-top">{entry.userName || 'Staff'}</td>
                   </tr>
                 ))}
               </tbody>

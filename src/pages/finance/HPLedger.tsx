@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import Button from '../../components/UI/Button';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabase';
 import { Printer, X, Eye, ShieldAlert } from 'lucide-react';
@@ -411,19 +412,19 @@ const HPLedger: React.FC = () => {
           />
         </div>
         <div>
-          <Input
+          <FinanceSmartCalendar
             label="From Date"
-            type="date"
             value={startDate}
             onChange={setStartDate}
+            module="HP_LEDGER"
           />
         </div>
         <div>
-          <Input
+          <FinanceSmartCalendar
             label="To Date"
-            type="date"
             value={endDate}
             onChange={setEndDate}
+            module="HP_LEDGER"
           />
         </div>
       </div>
@@ -646,11 +647,11 @@ const HPLedger: React.FC = () => {
                       </div>
                     )}
 
-                    <Input
+                    <FinanceSmartCalendar
                       label="Payment Date"
-                      type="date"
                       value={paymentDate}
                       onChange={setPaymentDate}
+                      module="HP_LEDGER"
                     />
 
                     {/* Calculations Display */}

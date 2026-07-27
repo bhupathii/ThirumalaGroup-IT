@@ -1,9 +1,9 @@
-import { sortNumerically } from '../../lib/financialCalculations';
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { supabaseFinance, FinanceCustomer, FinancePartner } from '../../lib/supabaseFinance';
 import { supabase } from '../../lib/supabaseDatabase';
 import { 
@@ -779,17 +779,20 @@ const OldDataEntry: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Input
+                <FinanceSmartCalendar
                   label="LOAN DATE"
-                  type="date"
-                  ref={loanDateRef} error={errors.loanDate} value={loanDate} onChange={(val) => { setLoanDate(val); setErrors(p => ({...p, loanDate: false})) }}
+                  value={loanDate}
+                  onChange={(val) => { setLoanDate(val); setErrors(p => ({...p, loanDate: false})); }}
+                  module="CD_LEDGER"
                   required
+                  error={errors.loanDate}
                 />
-                <Input
+                <FinanceSmartCalendar
                   label="DUE DATE (OPTIONAL)"
-                  type="date"
                   value={dueDate}
                   onChange={setDueDate}
+                  module="CD_LEDGER"
+                  allowClear
                 />
                 <Input
                   label="BILLING PERIOD (DAYS)"
@@ -876,11 +879,10 @@ const OldDataEntry: React.FC = () => {
                     {renewals.map((r, index) => (
                       <tr key={r.id} className="hover:bg-slate-50/20">
                         <td className="px-3 py-2">
-                          <input
-                            type="date"
+                          <FinanceSmartCalendar
                             value={r.date}
-                            onChange={(e) => handleRenewalChange(r.id, 'date', e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-slate-850 focus:outline-none focus:ring-1 focus:ring-slate-950 finance-header-time"
+                            onChange={(val) => handleRenewalChange(r.id, 'date', val)}
+                            module="CD_LEDGER"
                           />
                         </td>
                         <td className="px-3 py-2 font-mono text-slate-600 shrink-0 finance-header-time">

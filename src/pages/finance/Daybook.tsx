@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabaseFinance } from '../../lib/supabaseFinance';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
@@ -142,22 +143,20 @@ const Daybook: React.FC = () => {
       {/* ── ROW 2: Filters + Selected Period Summary (single horizontal bar) ── */}
       <div className={`bg-white border border-slate-200 rounded-xl shadow-sm px-3 py-2.5 print:hidden ${showPrintPreview ? 'hidden' : ''}`}>
         <div className="flex flex-wrap items-end gap-3 w-full">
-          <div className="flex flex-col min-w-[130px]">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">From Date</label>
-            <input
-              type="date"
+          <div className="min-w-[140px]">
+            <FinanceSmartCalendar
+              label="From Date"
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px] cursor-pointer"
+              onChange={setFromDate}
+              module="DAY_BOOK"
             />
           </div>
-          <div className="flex flex-col min-w-[130px]">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">To Date</label>
-            <input
-              type="date"
+          <div className="min-w-[140px]">
+            <FinanceSmartCalendar
+              label="To Date"
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[13px] font-bold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 h-[34px] cursor-pointer"
+              onChange={setToDate}
+              module="DAY_BOOK"
             />
           </div>
           <div className="flex flex-col ml-auto text-right">

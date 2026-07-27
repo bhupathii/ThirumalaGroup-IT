@@ -2,6 +2,7 @@ import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo } from 'react';
 import Button from '../../components/UI/Button';
 import Card from '../../components/UI/Card';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../../services/dailyFinancialTransactionService';
 import { Printer, RefreshCw, ArrowLeft, ChevronRight, X, Search, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -17,6 +18,7 @@ const GeneralLedger: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [allEntries, setAllEntries] = useState<DailyFinancialTransaction[]>([]);
+  const [allHistoryEntries, setAllHistoryEntries] = useState<DailyFinancialTransaction[]>([]);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [selectedHead, setSelectedHead] = useState<string | null>(null);
   const [drillSearchQuery, setDrillSearchQuery] = useState('');
@@ -66,12 +68,29 @@ const GeneralLedger: React.FC = () => {
   const fetchLedgerData = async () => {
     setLoading(true);
     try {
-      const data = await dailyFinancialTransactionService.getDailyFinancialTransactions({
-        fromDate: startDate,
-        toDate: endDate,
-        financeMode
-      });
-      setAllEntries(data);
+      const prevDateLimit = new Date(startDate);
+      prevDateLimit.setDate(prevDateLimit.getDate() - 1);
+      const prevDateLimitStr = prevDateLimit.toISOString().split('T')[0];
+
+      const [historyTxs, rangeTxs] = await Promise.all([
+        startDate > '1970-01-01' 
+          ? dailyFinancialTransactionService.getDailyFinancialTransactions({
+              fromDate: '1970-01-01',
+              toDate: prevDateLimitStr,
+              financeMode
+            })
+          : Promise.resolve([]),
+        dailyFinancialTransactionService.getDailyFinancialTransactions({
+          fromDate: startDate,
+          toDate: endDate,
+          financeMode
+        })
+      ]);
+
+      setAllEntries(rangeTxs);
+      // We will need to store history to compute opening balances
+      // I'll add a state for it
+      setAllHistoryEntries(historyTxs);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load general ledger data');
@@ -116,40 +135,77 @@ const GeneralLedger: React.FC = () => {
 
   // Group and summarize filtered entries by normalized Head of Account
   const summaryData = useMemo(() => {
-    const map: Record<string, { debit: number; credit: number; count: number; classification: string }> = {};
+    const map: Record<string, { opening: number; debit: number; credit: number; count: number; classification: string }> = {};
+
+    // First process history for opening balances
+    let historyList = [...allHistoryEntries];
+    if (categoryFilter !== 'ALL') {
+      historyList = historyList.filter(t => t.category === categoryFilter);
+    }
+    if (headFilter !== 'ALL') {
+      historyList = historyList.filter(t => t.headOfAccount === headFilter);
+    }
+    // We ignore searchQuery for opening balance, because opening balance should be absolute for the head.
+    // Wait, if they search for a specific customer, the opening balance should reflect that customer!
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      historyList = historyList.filter(t =>
+        (t.headOfAccount && t.headOfAccount.toLowerCase().includes(q)) ||
+        (t.particulars && t.particulars.toLowerCase().includes(q)) ||
+        (t.accountOrLoanNo && t.accountOrLoanNo.toLowerCase().includes(q)) ||
+        (t.customerName && t.customerName.toLowerCase().includes(q))
+      );
+    }
+
+    historyList.forEach(entry => {
+      const head = entry.headOfAccount || 'UNCLASSIFIED';
+      if (!map[head]) {
+        map[head] = { opening: 0, debit: 0, credit: 0, count: 0, classification: entry.reportClassification };
+      }
+      map[head].opening += (entry.credit || 0) - (entry.debit || 0);
+    });
 
     filteredEntries.forEach(entry => {
       const head = entry.headOfAccount || 'UNCLASSIFIED';
       if (!map[head]) {
-        map[head] = { debit: 0, credit: 0, count: 0, classification: entry.reportClassification };
+        map[head] = { opening: 0, debit: 0, credit: 0, count: 0, classification: entry.reportClassification };
       }
       map[head].debit += entry.debit || 0;
       map[head].credit += entry.credit || 0;
       map[head].count += 1;
     });
 
-    return Object.entries(map).map(([head, data]) => {
-      const balance = data.credit - data.debit;
-      return {
-        head,
-        debit: data.debit,
-        credit: data.credit,
-        balance,
-        count: data.count,
-        classification: data.classification
-      };
-    }).sort((a, b) => a.head.localeCompare(b.head));
-  }, [filteredEntries]);
+    return Object.entries(map)
+      .filter(([_, data]) => data.opening !== 0 || data.debit !== 0 || data.credit !== 0)
+      .map(([head, data]) => {
+        const netMovement = data.credit - data.debit;
+        const closing = data.opening + netMovement;
+        return {
+          head,
+          opening: data.opening,
+          debit: data.debit,
+          credit: data.credit,
+          balance: netMovement,
+          closing,
+          count: data.count,
+          classification: data.classification
+        };
+      }).sort((a, b) => a.head.localeCompare(b.head));
+  }, [filteredEntries, allHistoryEntries, categoryFilter, headFilter, searchQuery]);
 
   // Totals for the entire general ledger summary
   const overallTotals = useMemo(() => {
+    let opening = 0;
     let debit = 0;
     let credit = 0;
+    let closing = 0;
     summaryData.forEach(s => {
+      opening += s.opening;
       debit += s.debit;
       credit += s.credit;
+      closing += s.closing;
     });
-    return { debit, credit, balance: credit - debit };
+    return { opening, debit, credit, balance: credit - debit, closing };
   }, [summaryData]);
 
   // Filter entries for drill-down view modal
@@ -190,19 +246,23 @@ const GeneralLedger: React.FC = () => {
       toast.error('No summary data to export');
       return;
     }
-    const headers = ['Head of Account', 'Credit (Cr)', 'Debit (Dr)', 'Net Balance'];
+    const headers = ['Head of Account', 'Opening Balance', 'Credit (Cr)', 'Debit (Dr)', 'Net Movement', 'Closing Balance'];
     const rows = summaryData.map(s => [
       `"${s.head}"`,
+      `"${Math.abs(s.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${s.opening >= 0 ? 'Cr' : 'Dr'}"`,
       s.credit,
       s.debit,
-      `"${Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${s.balance >= 0 ? 'Cr' : 'Dr'}"`
+      `"${Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${s.balance >= 0 ? 'Cr' : 'Dr'}"`,
+      `"${Math.abs(s.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${s.closing >= 0 ? 'Cr' : 'Dr'}"`
     ]);
 
     rows.push([
       '"Grand Total"',
+      `"${Math.abs(overallTotals.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${overallTotals.opening >= 0 ? 'Cr' : 'Dr'}"`,
       overallTotals.credit,
       overallTotals.debit,
-      `"${Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${overallTotals.balance >= 0 ? 'Cr' : 'Dr'}"`
+      `"${Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${overallTotals.balance >= 0 ? 'Cr' : 'Dr'}"`,
+      `"${Math.abs(overallTotals.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${overallTotals.closing >= 0 ? 'Cr' : 'Dr'}"`
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -247,22 +307,20 @@ const GeneralLedger: React.FC = () => {
 
       {/* Date & Category & Search Filters in One Row */}
       <div className={`grid grid-cols-1 md:grid-cols-5 gap-3 p-3 bg-white border border-slate-200 rounded-lg shadow-sm items-end`}>
-        <div className="space-y-1">
-          <label className="text-[15px] font-bold text-slate-500 uppercase block">FROM DATE</label>
-          <input
-            type="date"
+        <div>
+          <FinanceSmartCalendar
+            label="FROM DATE"
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] focus:outline-none h-[48px] font-bold"
+            onChange={setStartDate}
+            module="GENERAL_LEDGER"
           />
         </div>
-        <div className="space-y-1">
-          <label className="text-[15px] font-bold text-slate-500 uppercase block">TO DATE</label>
-          <input
-            type="date"
+        <div>
+          <FinanceSmartCalendar
+            label="TO DATE"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] focus:outline-none h-[48px] font-bold"
+            onChange={setEndDate}
+            module="GENERAL_LEDGER"
           />
         </div>
         <div className="space-y-1">
@@ -330,16 +388,18 @@ const GeneralLedger: React.FC = () => {
                   <thead className="bg-slate-100 sticky top-0 z-10 text-slate-700">
                     <tr className="divide-x divide-slate-200">
                       <th className="px-3 py-2 text-left font-bold text-[15px] uppercase">Head of Account</th>
-                      <th className="w-40 px-3 py-2 text-right font-bold text-[15px] uppercase">Credit (Cr)</th>
-                      <th className="w-40 px-3 py-2 text-right font-bold text-[15px] uppercase">Debit (Dr)</th>
-                      <th className="w-48 px-3 py-2 text-right font-bold text-[15px] uppercase">Net Balance</th>
+                      <th className="w-40 px-3 py-2 text-right font-bold text-[15px] uppercase">Opening Bal</th>
+                      <th className="w-36 px-3 py-2 text-right font-bold text-[15px] uppercase">Credit (Cr)</th>
+                      <th className="w-36 px-3 py-2 text-right font-bold text-[15px] uppercase">Debit (Dr)</th>
+                      <th className="w-40 px-3 py-2 text-right font-bold text-[15px] uppercase">Net Movement</th>
+                      <th className="w-40 px-3 py-2 text-right font-bold text-[15px] uppercase">Closing Bal</th>
                       <th className="w-16 px-2 py-2 text-center font-bold text-[15px] uppercase">Drill</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-100 divide-x divide-slate-55 font-semibold text-slate-800">
                     {summaryData.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-12 text-center text-slate-400 font-bold uppercase">
+                        <td colSpan={7} className="px-4 py-12 text-center text-slate-400 font-bold uppercase">
                           No account heads found matching selected filters.
                         </td>
                       </tr>
@@ -352,6 +412,9 @@ const GeneralLedger: React.FC = () => {
                           style={{ height: '38px' }}
                         >
                           <td className="px-3 py-1.5 text-slate-900 font-bold uppercase truncate">{s.head}</td>
+                          <td className={`px-3 py-1.5 text-right font-black font-mono whitespace-nowrap ${s.opening >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                            {Math.abs(s.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.opening >= 0 ? 'Cr' : 'Dr'}
+                          </td>
                           <td className="px-3 py-1.5 text-right text-emerald-700 font-bold font-mono whitespace-nowrap">
                             {s.credit > 0 ? `${s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
@@ -360,6 +423,9 @@ const GeneralLedger: React.FC = () => {
                           </td>
                           <td className={`px-3 py-1.5 text-right font-black font-mono whitespace-nowrap ${s.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
                             {Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}
+                          </td>
+                          <td className={`px-3 py-1.5 text-right font-black font-mono whitespace-nowrap ${s.closing >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                            {Math.abs(s.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.closing >= 0 ? 'Cr' : 'Dr'}
                           </td>
                           <td className="px-2 py-1.5 text-center text-slate-400">
                             <ChevronRight className="w-4 h-4 mx-auto" />
@@ -371,6 +437,9 @@ const GeneralLedger: React.FC = () => {
                     {summaryData.length > 0 && (
                       <tr className="bg-slate-50 font-black divide-x divide-slate-150 border-t-2 border-slate-200" style={{ height: '42px' }}>
                         <td className="px-3 py-2 text-slate-800 uppercase text-[15px]">Grand Total:</td>
+                        <td className={`px-3 py-2 text-right font-black font-mono whitespace-nowrap ${overallTotals.opening >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                          {Math.abs(overallTotals.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.opening >= 0 ? 'Cr' : 'Dr'}
+                        </td>
                         <td className="px-3 py-2 text-right text-emerald-700 font-black font-mono whitespace-nowrap">
                           {overallTotals.credit > 0 ? `${overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                         </td>
@@ -379,6 +448,9 @@ const GeneralLedger: React.FC = () => {
                         </td>
                         <td className={`px-3 py-2 text-right font-black font-mono whitespace-nowrap ${overallTotals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
                           {Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}
+                        </td>
+                        <td className={`px-3 py-2 text-right font-black font-mono whitespace-nowrap ${overallTotals.closing >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                          {Math.abs(overallTotals.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.closing >= 0 ? 'Cr' : 'Dr'}
                         </td>
                         <td className="px-3 py-2 text-slate-400"></td>
                       </tr>

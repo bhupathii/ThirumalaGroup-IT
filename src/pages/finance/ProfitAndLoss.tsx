@@ -1,6 +1,7 @@
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 import React, { useEffect, useState, useMemo } from 'react';
 import Button from '../../components/UI/Button';
+import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { dailyFinancialTransactionService } from '../../services/dailyFinancialTransactionService';
 import { supabaseFinance } from '../../lib/supabaseFinance';
 import { ArrowLeft, RefreshCw, Printer, Download } from 'lucide-react';
@@ -251,26 +252,24 @@ const ProfitAndLoss: React.FC = () => {
       {/* Top Filter & Summary Row */}
       <div className={`grid grid-cols-1 sm:grid-cols-4 gap-4`}>
         {/* Date Filters Card */}
-        <div className="sm:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-center">
-          <div className="grid grid-cols-2 divide-x divide-slate-100 h-full">
-            <div className="px-4 py-3 flex flex-col justify-center">
-              <label className="text-slate-400 block mb-1 finance-small-label uppercase">From</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase font-bold"
-              />
-            </div>
-            <div className="px-4 py-3 flex flex-col justify-center">
-              <label className="text-slate-400 block mb-1 finance-small-label uppercase">To</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full text-slate-900 bg-transparent border-none p-0 focus:ring-0 cursor-pointer finance-sidebar-link uppercase font-bold"
-              />
-            </div>
+        <div className="sm:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-2 grid grid-cols-1 lg:grid-cols-2 gap-3 items-center">
+          <div>
+            <FinanceSmartCalendar
+              label="FROM"
+              value={startDate}
+              onChange={setStartDate}
+              module="PROFIT_LOSS"
+              compact={true}
+            />
+          </div>
+          <div>
+            <FinanceSmartCalendar
+              label="TO"
+              value={endDate}
+              onChange={setEndDate}
+              module="PROFIT_LOSS"
+              compact={true}
+            />
           </div>
         </div>
 
