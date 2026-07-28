@@ -110,9 +110,10 @@ export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-      // Probe current domain favicon (fast, same-origin, no CORS)
-      await fetch(`${window.location.origin}/favicon.ico?_cb=${Date.now()}`, {
-        method: 'HEAD',
+      // Probe current domain (fast, same-origin, no-cors avoids HEAD/CORS issues)
+      await fetch(`${window.location.origin}/index.html?_cb=${Date.now()}`, {
+        method: 'GET',
+        mode: 'no-cors',
         signal: controller.signal,
         cache: 'no-store',
       });
@@ -127,33 +128,52 @@ export const OfflineProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (err: any) {
       console.warn('[Network] Primary connectivity probe failed:', err);
 
-      // Fallback check to Google to distinguish between local origin down vs. no internet
+      // Fallback check to Supabase backend URL
       try {
-        const googleController = new AbortController();
-        const googleTimeoutId = setTimeout(() => googleController.abort(), 3500);
+        const fallbackController = new AbortController();
+        const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 4000);
 
-        await fetch('https://clients3.google.com/generate_204', {
-          mode: 'no-cors',
-          signal: googleController.signal,
-          cache: 'no-store',
-        });
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        if (supabaseUrl) {
+          await fetch(`${supabaseUrl}/rest/v1/`, {
+            method: 'GET',
+            headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || '' },
+            signal: fallbackController.signal,
+            cache: 'no-store',
+          });
+        } else {
+          await fetch('https://clients3.google.com/generate_204', {
+            mode: 'no-cors',
+            signal: fallbackController.signal,
+            cache: 'no-store',
+          });
+        }
 
-        clearTimeout(googleTimeoutId);
+        clearTimeout(fallbackTimeoutId);
 
-        // Google probe succeeded - we are online! Local origin/backend is down or DNS issue
         setIsOnline(true);
         supabaseDB.isOnline = true;
-        setConnectionStatus('BACKEND_ERROR');
+        setConnectionStatus('ONLINE');
+        localStorage.removeItem('offline_since');
+        setOfflineSince(null);
       } catch (gErr) {
-        console.warn('[Network] Fallback Google probe also failed:', gErr);
-        // Both probes failed, genuinely offline
-        setIsOnline(false);
-        supabaseDB.isOnline = false;
-        setConnectionStatus('OFFLINE');
-        const now = new Date().toISOString();
-        if (!localStorage.getItem('offline_since')) {
-          localStorage.setItem('offline_since', now);
-          setOfflineSince(now);
+        console.warn('[Network] Fallback connectivity probe also failed:', gErr);
+        if (navigator.onLine) {
+          // Browser is online - don't lock out user due to blocked telemetry pings
+          setIsOnline(true);
+          supabaseDB.isOnline = true;
+          setConnectionStatus('ONLINE');
+          localStorage.removeItem('offline_since');
+          setOfflineSince(null);
+        } else {
+          setIsOnline(false);
+          supabaseDB.isOnline = false;
+          setConnectionStatus('OFFLINE');
+          const now = new Date().toISOString();
+          if (!localStorage.getItem('offline_since')) {
+            localStorage.setItem('offline_since', now);
+            setOfflineSince(now);
+          }
         }
       }
     }
