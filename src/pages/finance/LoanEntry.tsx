@@ -1449,8 +1449,8 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
           </div>
 
           <div className="space-y-4">
-            {!editLoanId && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded border border-slate-100 print:hidden">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded border border-slate-100 print:hidden">
+              {!editLoanId ? (
                 <div ref={dropdownRef} className="space-y-1">
                   <label className="peek-label uppercase block text-[11px] font-bold text-slate-700">
                     SEARCH CUSTOMER
@@ -1518,25 +1518,36 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
                     )}
                   </div>
                 </div>
-
+              ) : (
                 <div className="space-y-1">
                   <label className="peek-label uppercase block text-[11px] font-bold text-slate-700">
-                    SELECT PARTNER
+                    LOAN CUSTOMER
                   </label>
-                  <select
-                    value={selectedPartnerId}
-                    onChange={(e) => setSelectedPartnerId(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12 font-bold h-[38px]"
-                    style={{ fontFamily: 'Times New Roman', fontSize: '15px' }}
-                  >
-                    <option value="">-- SELECT PARTNER --</option>
-                    {partners.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+                  <div className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2 text-slate-900 font-bold text-xs uppercase h-[38px] flex items-center">
+                    {custName} {loanId ? `(#${loanId})` : ''}
+                  </div>
                 </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="peek-label uppercase block text-[11px] font-bold text-slate-700">
+                  ASSIGNED PARTNER
+                </label>
+                <select
+                  value={selectedPartnerId}
+                  onChange={(e) => setSelectedPartnerId(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-900 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12 font-bold h-[38px]"
+                  style={{ fontFamily: 'Times New Roman', fontSize: '15px' }}
+                >
+                  <option value="">-- SELECT PARTNER --</option>
+                  {[...partners].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.is_md ? '(MD)' : '(Partner)'}
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
+            </div>
 
             {/* Customer Inputs Panel */}
             <div className="bg-slate-50 p-3 rounded border border-slate-150 space-y-3">
