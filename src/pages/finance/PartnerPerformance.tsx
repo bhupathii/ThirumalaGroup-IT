@@ -190,7 +190,7 @@ const PartnerPerformance: React.FC = () => {
       <div className={`flex justify-between items-center border-b border-green-100 pb-4`}>
         <div>
           <h1 className="finance-h1">Partner Performance</h1>
-          <p className="finance-small-label uppercase font-black text-slate-500">Audited Financial Report · Reconciled Ledger & Portfolio Metrics</p>
+          <p className="finance-small-label uppercase font-black text-slate-500">Portfolio &amp; Collection Performance</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={fetchPerformanceData} variant="secondary" size="sm" icon={RefreshCw}>

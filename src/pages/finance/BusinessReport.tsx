@@ -329,19 +329,6 @@ const BusinessReport: React.FC = () => {
                 Partner Summary
               </h2>
             </div>
-            {/* 100% Reconciled Loan Status Audit Banner */}
-            <div className='mx-4 mt-4 p-3 bg-slate-900 text-white rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs font-mono font-bold shadow-xs'>
-              <div className='flex items-center gap-2'>
-                <span className='w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse'></span>
-                <span className='uppercase text-slate-300'>Loan Reconciliation Audit:</span>
-                <span className='text-white font-extrabold'>
-                  Total ({summary.totalLoans}) = Active ({summary.activeLoans}) + Closed ({summary.closedLoans}) + NPA Closed ({summary.npaClosedLoans}) {summary.writtenOffLoans > 0 ? `+ Written Off (${summary.writtenOffLoans})` : ''}
-                </span>
-              </div>
-              <div className='px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-black uppercase tracking-wider'>
-                ✓ Difference: 0 (100% Accounted)
-              </div>
-            </div>
 
             <div className='grid grid-cols-2 md:grid-cols-6 gap-3 p-4 bg-slate-50/50'>
               <div className='bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center'>

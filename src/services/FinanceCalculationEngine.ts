@@ -1,6 +1,8 @@
 import { supabaseFinance, fetchAllPages } from '../lib/supabaseFinance';
 import { supabase } from '../lib/supabase';
 import { financeCalculationService } from './financeCalculationService';
+import { dailyFinancialTransactionService, normalizeHeadOfAccount } from './dailyFinancialTransactionService';
+import { getLocalBusinessDateISO } from '../utils/dateUtils';
 
 /**
  * Finance Calculation Engine
@@ -8,6 +10,34 @@ import { financeCalculationService } from './financeCalculationService';
  * Single source of truth for all financial math in the system.
  * Replaces duplicated local map/reduce logic across reports.
  */
+
+export interface DashboardMetrics {
+  totalDisbursed: number;
+  activeLoansCount: number;
+  totalLoansCount: number;
+  avgLoanAmount: number;
+  largestLoanAmount: number;
+
+  totalOutstanding: number;
+  outstandingPrincipal: number;
+  pendingInterest: number;
+  pendingPenalty: number;
+  pendingCharges: number;
+
+  collectedTodayTotal: number;
+  collectedTodayPrincipal: number;
+  collectedTodayInterest: number;
+  collectedTodayPenalty: number;
+  collectedTodayCharges: number;
+
+  overdueLoansCount: number;
+  totalOverdueAmount: number;
+  highestOverdueAmount: number;
+  criticalOverdueCount: number;
+
+  recentLoans: any[];
+  pendingApprovalsCount: number;
+}
 
 export interface LoanMetrics {
   loanId: string;
@@ -81,6 +111,45 @@ export interface PartnerMetrics {
 
   // Ratios (Approved Business Formula: Recovery % = (Principal Collected / Principal Financed) * 100)
   recoveryPct: number;
+}
+
+export interface FinalStatementBSAccount {
+  accountName: string;
+  category: 'ASSET' | 'LIABILITY' | 'CAPITAL';
+  opening: number;
+  credit: number;
+  debit: number;
+  netMovement: number;
+  closing: number;
+  ledgerCount: number;
+  entries: any[];
+}
+
+export interface PartnerEquityShare {
+  partnerId: string;
+  name: string;
+  isMd: boolean;
+  sharePercent: number;
+  capitalContributed: number;
+  periodProfitShare: number;
+  totalNetWorthShare: number;
+}
+
+export interface FinalStatementMetrics {
+  openingCash: number;
+  closingCash: number;
+  totalInflows: number;
+  totalOutflows: number;
+  totalAssets: number;
+  totalLiabilities: number;
+  totalCapital: number;
+  totalCapitalContributed: number;
+  netProfit: number;
+  netWorth: number;
+  reconciliationDifference: number;
+  isBalanced: boolean;
+  accounts: FinalStatementBSAccount[];
+  partnerShares: PartnerEquityShare[];
 }
 
 export class FinanceCalculationEngine {
@@ -459,4 +528,345 @@ export class FinanceCalculationEngine {
     });
   }
 
+  /**
+   * Centralized method to compute reconciled metrics for the Finance Dashboard.
+   */
+  static async getDashboardMetrics(asOfDate?: string): Promise<DashboardMetrics> {
+    const todayStr = asOfDate || getLocalBusinessDateISO();
+
+    const [loans, duesSummary, todayTxs, pendingApprovalsCount] = await Promise.all([
+      supabaseFinance.getLoans(),
+      supabaseFinance.getDuesLedgerSummary(todayStr),
+      dailyFinancialTransactionService.getDailyFinancialTransactions({
+        fromDate: todayStr,
+        toDate: todayStr,
+        financeMode: 'REGULAR',
+      }).catch(err => {
+        console.error('Error fetching today transactions for dashboard:', err);
+        return [];
+      }),
+      supabaseFinance.getPendingApprovalsCount().catch(() => 0),
+    ]);
+
+    // 1. Disbursed (All Time)
+    const validLoans = (loans || []).filter(l => {
+      const status = (l.status || '').trim().toUpperCase();
+      return status !== 'DELETED' && status !== 'CANCELLED' && status !== 'DRAFT' && status !== 'FAILED' && status !== 'REJECTED' && !(l as any).deleted_at;
+    });
+
+    const totalDisbursed = validLoans.reduce((sum, l) => sum + Number(l.amount || 0), 0);
+    const activeLoansCount = validLoans.filter(l => (l.status || '').trim().toUpperCase() === 'ACTIVE').length;
+    const totalLoansCount = validLoans.length;
+    const avgLoanAmount = totalLoansCount > 0 ? Math.round(totalDisbursed / totalLoansCount) : 0;
+    const largestLoanAmount = validLoans.reduce((max, l) => Math.max(max, Number(l.amount || 0)), 0);
+
+    // 2. Outstanding & Overdue Calculations
+    let outstandingPrincipal = 0;
+    let pendingInterest = 0;
+    let pendingPenalty = 0;
+    let pendingCharges = 0;
+
+    let overdueLoansCount = 0;
+    let totalOverdueAmount = 0;
+    let highestOverdueAmount = 0;
+    let criticalOverdueCount = 0;
+
+    const dues = duesSummary?.dues || [];
+    dues.forEach((due: any) => {
+      const status = (due.status || '').trim().toUpperCase();
+      const isActive = status === 'ACTIVE' || status === 'NPA_CLOSED' || status === 'NPA CLOSED' || status === 'NPA';
+      
+      if (isActive) {
+        const p = Number(due.currentPrincipal || due.current_principal || due.principal || 0);
+        const i = Number(due.pendingInterest || due.pending_interest || due.interestPending || 0);
+        const pen = Number(due.penalty || due.penaltyPending || 0);
+        const chg = Number(due.doc_charges || due.charges || 0);
+
+        outstandingPrincipal += p;
+        pendingInterest += i;
+        pendingPenalty += pen;
+        pendingCharges += chg;
+
+        const dueDays = Number(due.dueDays || due.due_days || 0);
+        const presentDue = Number(due.presentDue || due.present_due || 0);
+        const isOverdue = status === 'ACTIVE' && (dueDays > 0 || presentDue > 0);
+
+        if (isOverdue) {
+          overdueLoansCount++;
+          const accountOverdueTotal = presentDue > 0 ? presentDue : (p + i + pen);
+          totalOverdueAmount += accountOverdueTotal;
+          highestOverdueAmount = Math.max(highestOverdueAmount, accountOverdueTotal);
+          if (dueDays > 90 || due.isNPA || due.is_npa) {
+            criticalOverdueCount++;
+          }
+        }
+      }
+    });
+
+    const totalOutstanding = outstandingPrincipal + pendingInterest + pendingPenalty + pendingCharges;
+
+    // 3. Collected Today Breakdown
+    let collectedTodayTotal = 0;
+    let collectedTodayPrincipal = 0;
+    let collectedTodayInterest = 0;
+    let collectedTodayPenalty = 0;
+    let collectedTodayCharges = 0;
+
+    (todayTxs || []).forEach(tx => {
+      const credit = Number(tx.credit) || 0;
+      if (credit > 0) {
+        collectedTodayTotal += credit;
+        const normHead = normalizeHeadOfAccount(tx.headOfAccount || tx.particulars || '');
+        if (normHead.includes('PRINCIPAL')) {
+          collectedTodayPrincipal += credit;
+        } else if (normHead.includes('INTEREST')) {
+          collectedTodayInterest += credit;
+        } else if (normHead.includes('PENALTY')) {
+          collectedTodayPenalty += credit;
+        } else if (normHead.includes('CHARGES')) {
+          collectedTodayCharges += credit;
+        } else {
+          const part = (tx.particulars || '').toUpperCase();
+          if (part.includes('INTEREST') || part.includes('COMMISSION')) {
+            collectedTodayInterest += credit;
+          } else if (part.includes('PENALTY')) {
+            collectedTodayPenalty += credit;
+          } else if (part.includes('CHARGES')) {
+            collectedTodayCharges += credit;
+          } else {
+            collectedTodayPrincipal += credit;
+          }
+        }
+      }
+    });
+
+    return {
+      totalDisbursed,
+      activeLoansCount,
+      totalLoansCount,
+      avgLoanAmount,
+      largestLoanAmount,
+      totalOutstanding,
+      outstandingPrincipal,
+      pendingInterest,
+      pendingPenalty,
+      pendingCharges,
+      collectedTodayTotal,
+      collectedTodayPrincipal,
+      collectedTodayInterest,
+      collectedTodayPenalty,
+      collectedTodayCharges,
+      overdueLoansCount,
+      totalOverdueAmount,
+      highestOverdueAmount,
+      criticalOverdueCount,
+      recentLoans: validLoans.slice(0, 8),
+      pendingApprovalsCount,
+    };
+  }
+
+  /**
+   * Compiles reconciled Final Statement & Balance Sheet metrics
+   */
+  static async getFinalStatementMetrics(
+    fromDate: string,
+    toDate: string,
+    financeMode: 'REGULAR' | 'ITR' = 'REGULAR'
+  ): Promise<FinalStatementMetrics> {
+    // 1. Fetch prior transactions for opening cash & opening balances
+    const prevDateLimit = new Date(fromDate);
+    prevDateLimit.setDate(prevDateLimit.getDate() - 1);
+    const prevDateLimitStr = prevDateLimit.toISOString().split('T')[0];
+
+    let prevTxs: any[] = [];
+    if (fromDate > '1970-01-01') {
+      prevTxs = await dailyFinancialTransactionService.getDailyFinancialTransactions({
+        fromDate: '1970-01-01',
+        toDate: prevDateLimitStr,
+        financeMode
+      });
+    }
+
+    // 2. Fetch date range transactions & partner details
+    const [rangeTxs, partners, capitalEntries] = await Promise.all([
+      dailyFinancialTransactionService.getDailyFinancialTransactions({
+        fromDate,
+        toDate,
+        financeMode
+      }),
+      supabaseFinance.getPartners(),
+      supabase.from('finance_capital_entries').select('*')
+    ]);
+
+    const capData = capitalEntries.data || [];
+
+    // Calculate cash balances
+    let prevCash = 0;
+    prevTxs.forEach(t => {
+      prevCash += (Number(t.credit || 0) - Number(t.debit || 0));
+    });
+    const openingCash = prevCash;
+
+    let totalInflows = 0;
+    let totalOutflows = 0;
+    let profitCredits = 0;
+    let profitDebits = 0;
+
+    rangeTxs.forEach(t => {
+      const cr = Number(t.credit || 0);
+      const dr = Number(t.debit || 0);
+      totalInflows += cr;
+      totalOutflows += dr;
+      if (t.reportClassification === 'PROFIT_AND_LOSS') {
+        profitCredits += cr;
+        profitDebits += dr;
+      }
+    });
+
+    const closingCash = openingCash + totalInflows - totalOutflows;
+    const netProfit = profitCredits - profitDebits;
+
+    // Calculate partner capital & equity distribution
+    const partnerCount = partners.length || 1;
+    
+    // First calculate capital contributed for each partner
+    const partnerCapitals = partners.map(p => {
+      const pEntries = capData.filter((c: any) => 
+        c.partner_id === p.id || 
+        c.partner_id === String(p.partner_id) || 
+        c.partner_name === p.name
+      );
+      let capContributed = 0;
+      pEntries.forEach((c: any) => {
+        const cr = Number(c.credit) || 0;
+        const dr = Number(c.debit) || 0;
+        capContributed += (cr - dr);
+      });
+      return capContributed;
+    });
+
+    const totalSystemCapital = partnerCapitals.reduce((sum, c) => sum + c, 0);
+    const totalExplicitPercent = partners.reduce((sum, p) => sum + (Number(p.share_percent) || 0), 0);
+
+    const partnerShares: PartnerEquityShare[] = partners.map((p, idx) => {
+      const capContributed = partnerCapitals[idx];
+
+      let sharePct = 0;
+      if (totalExplicitPercent > 0 && Number(p.share_percent) > 0) {
+        // Business Rule 1: Use registered explicit share_percent
+        sharePct = Number(p.share_percent);
+      } else if (totalSystemCapital > 0) {
+        // Business Rule 2: Capital-weighted share
+        sharePct = (capContributed / totalSystemCapital) * 100;
+      } else {
+        // Business Rule 3: Equal split
+        sharePct = 100 / partnerCount;
+      }
+
+      const pProfitShare = netProfit * (sharePct / 100);
+      const pNetWorth = capContributed + pProfitShare;
+
+      return {
+        partnerId: p.id,
+        name: p.name,
+        isMd: Boolean(p.is_md),
+        sharePercent: parseFloat(sharePct.toFixed(2)),
+        capitalContributed: parseFloat(capContributed.toFixed(2)),
+        periodProfitShare: parseFloat(pProfitShare.toFixed(2)),
+        totalNetWorthShare: parseFloat(pNetWorth.toFixed(2))
+      };
+    });
+
+    const totalCapitalContributed = partnerShares.reduce((sum, p) => sum + p.capitalContributed, 0);
+    const totalCapital = totalCapitalContributed + netProfit;
+
+    // Collect all Balance Sheet Account Heads
+    const bsHeads = new Set<string>();
+    prevTxs.forEach(t => {
+      if (t.reportClassification === 'BALANCE_SHEET') bsHeads.add(t.headOfAccount || 'UNCLASSIFIED');
+    });
+    rangeTxs.forEach(t => {
+      if (t.reportClassification === 'BALANCE_SHEET') bsHeads.add(t.headOfAccount || 'UNCLASSIFIED');
+    });
+
+    const accounts: FinalStatementBSAccount[] = Array.from(bsHeads).map(head => {
+      let op = 0;
+      prevTxs.filter(t => (t.headOfAccount || 'UNCLASSIFIED') === head).forEach(t => {
+        op += (Number(t.credit || 0) - Number(t.debit || 0));
+      });
+
+      let cr = 0;
+      let dr = 0;
+      const entries = rangeTxs.filter(t => (t.headOfAccount || 'UNCLASSIFIED') === head);
+      entries.forEach(t => {
+        cr += Number(t.credit || 0);
+        dr += Number(t.debit || 0);
+      });
+
+      const netMovement = cr - dr;
+      const closing = op + netMovement;
+
+      // Account Classification Logic
+      const headUpper = head.toUpperCase();
+      let category: 'ASSET' | 'LIABILITY' | 'CAPITAL' = 'ASSET';
+      if (headUpper.includes('CAPITAL') || headUpper.includes('EQUITY') || headUpper.includes('PARTNER')) {
+        category = 'CAPITAL';
+      } else if (headUpper.includes('SUSPENSE') || headUpper.includes('BORROWING') || headUpper.includes('PAYABLE') || headUpper.includes('ADVANCE RECEIVED') || headUpper.includes('LIABILITY')) {
+        category = 'LIABILITY';
+      } else if (headUpper.includes('CASH') || headUpper.includes('BANK') || headUpper.includes('LOAN') || headUpper.includes('RECEIVABLE') || headUpper.includes('ADVANCE') || headUpper.includes('ASSET')) {
+        category = 'ASSET';
+      } else {
+        category = closing >= 0 ? 'ASSET' : 'LIABILITY';
+      }
+
+      return {
+        accountName: head,
+        category,
+        opening: parseFloat(op.toFixed(2)),
+        credit: parseFloat(cr.toFixed(2)),
+        debit: parseFloat(dr.toFixed(2)),
+        netMovement: parseFloat(netMovement.toFixed(2)),
+        closing: parseFloat(closing.toFixed(2)),
+        ledgerCount: entries.length,
+        entries
+      };
+    });
+
+    accounts.sort((a, b) => a.accountName.localeCompare(b.accountName));
+
+    // Calculate Assets, Liabilities & Accounting Identity
+    let totalAssets = closingCash;
+    let totalLiabilities = 0;
+
+    accounts.forEach(acc => {
+      if (acc.category === 'ASSET') {
+        totalAssets += Math.max(0, acc.closing);
+      } else if (acc.category === 'LIABILITY') {
+        totalLiabilities += Math.abs(acc.closing);
+      }
+    });
+
+    const netWorth = totalAssets - totalLiabilities;
+    const reconciliationDifference = parseFloat(Math.abs(totalAssets - (totalLiabilities + totalCapital)).toFixed(2));
+    const isBalanced = reconciliationDifference < 0.01;
+
+    return {
+      openingCash: parseFloat(openingCash.toFixed(2)),
+      closingCash: parseFloat(closingCash.toFixed(2)),
+      totalInflows: parseFloat(totalInflows.toFixed(2)),
+      totalOutflows: parseFloat(totalOutflows.toFixed(2)),
+      totalAssets: parseFloat(totalAssets.toFixed(2)),
+      totalLiabilities: parseFloat(totalLiabilities.toFixed(2)),
+      totalCapital: parseFloat(totalCapital.toFixed(2)),
+      totalCapitalContributed: parseFloat(totalCapitalContributed.toFixed(2)),
+      netProfit: parseFloat(netProfit.toFixed(2)),
+      netWorth: parseFloat(netWorth.toFixed(2)),
+      reconciliationDifference,
+      isBalanced,
+      accounts,
+      partnerShares
+    };
+  }
+
 }
+
