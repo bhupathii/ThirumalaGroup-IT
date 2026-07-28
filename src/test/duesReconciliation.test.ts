@@ -49,7 +49,7 @@ describe('Dues Reconciliation Verification', () => {
     const cdLoans = summary.filter(row => row.loan_id.startsWith('CD'));
     console.log(`\nVerified ${cdLoans.length} active CD loan items in Dues List:`);
     cdLoans.slice(0, 5).forEach(row => {
-      console.log(`Loan: ${row.loan_id} | Paid Interest: ₹${row.interest_paid} | Paid Penalty: ₹${row.penalty_paid}`);
+      console.log(`Loan: ${row.loan_id} | Paid Interest: ${row.interest_paid} | Paid Penalty: ${row.penalty_paid}`);
     });
   }, 30000);
 

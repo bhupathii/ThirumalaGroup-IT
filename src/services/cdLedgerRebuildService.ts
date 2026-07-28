@@ -140,7 +140,7 @@ export const cdLedgerRebuildService = {
       // Therefore: InitialDueDate = LoanDate + (periodDays - 1)
       const baseDueDateStr = financeCalculationService.addCalendarDays(originalLoanDateStr, periodDays - 1);
 
-      console.log(`[Rebuild] Original Principal: ₹${originalPrincipal}, Date: ${originalLoanDateStr}, Period Days: ${periodDays}`);
+      console.log(`[Rebuild] Original Principal: ${originalPrincipal}, Date: ${originalLoanDateStr}, Period Days: ${periodDays}`);
 
       // Fetch existing interest details to preserve historical manual renewed_days overrides
       const { data: existingInterestDetails, error: fetchInterestError } = await supabase
@@ -282,7 +282,7 @@ export const cdLedgerRebuildService = {
           }
           const totalSplits = penaltyPaid + interestPaid + principalPaid;
           if (Math.abs(paymentAmount - totalSplits) > 0.05) {
-            throw new Error(`Invariant Violation: Split sum mismatch in receipt ${receiptNo} (Paid: ₹${paymentAmount}, Splits Sum: ₹${totalSplits})`);
+            throw new Error(`Invariant Violation: Split sum mismatch in receipt ${receiptNo} (Paid: ${paymentAmount}, Splits Sum: ${totalSplits})`);
           }
 
           // Calculate exact renewed days: exactRenewedDays = interestPaid / dailyInterest
@@ -341,7 +341,7 @@ export const cdLedgerRebuildService = {
         const finalDisplayRenewedDays = financeCalculationService.calculateDisplayDays(newTotalRenewedDays);
         const nextDueDate = financeCalculationService.addCalendarDays(baseDueDateStr, finalDisplayRenewedDays);
 
-        console.log(`[Rebuild-Tx ${receiptNo}] Amt: ₹${paymentAmount}, Split: Pen=₹${penaltyPaid}, Int=₹${interestPaid}, Prin=₹${principalPaid}, RenewDays=${renewedDays}`);
+        console.log(`[Rebuild-Tx ${receiptNo}] Amt: ${paymentAmount}, Split: Pen=${penaltyPaid}, Int=${interestPaid}, Prin=${principalPaid}, RenewDays=${renewedDays}`);
 
         // Post CD Amount Paid (Audit Row)
         await supabaseFinance.addCDLedgerEntry({
@@ -482,8 +482,8 @@ export const cdLedgerRebuildService = {
         // Post Note row to Interest Details (Credit = 0, contains full split description)
         if (mainEntryId && isInterestOrPenaltyPaid) {
           const noteParticulars = actionType === 'Renew'
-            ? `Renewal Completed Note: Total Paid ₹${paymentAmount} (Penalty: ₹${penaltyPaid}, Interest: ₹${interestPaid}, Principal: ₹${principalPaid})`
-            : `${actionType} Note: Total Paid ₹${paymentAmount} (Penalty: ₹${penaltyPaid}, Interest: ₹${interestPaid}, Principal: ₹${principalPaid})`;
+            ? `Renewal Completed Note: Total Paid ${paymentAmount} (Penalty: ${penaltyPaid}, Interest: ${interestPaid}, Principal: ${principalPaid})`
+            : `${actionType} Note: Total Paid ${paymentAmount} (Penalty: ${penaltyPaid}, Interest: ${interestPaid}, Principal: ${principalPaid})`;
 
           await supabaseFinance.addCDInterestDetail({
             loan_id: loanId,

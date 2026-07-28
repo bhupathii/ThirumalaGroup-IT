@@ -105,7 +105,7 @@ describe('CD Dues List and NPA List Safety Regression Tests', () => {
     expect(res.status).toBe('ERROR');
     expect(res.error?.code).toBe('CD_DATA_INTEGRITY_ERROR');
 
-    // Prove it doesn't contaminate or create fake ₹0 dues or Close balance
+    // Prove it doesn't contaminate or create fake 0 dues or Close balance
     let duesTotal = 0;
     let accountsProcessed = 0;
     let integrityErrorsList: any[] = [];

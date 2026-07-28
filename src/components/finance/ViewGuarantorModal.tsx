@@ -197,7 +197,7 @@ const ViewGuarantorModal: React.FC<ViewGuarantorModalProps> = ({ guarantor, onCl
                           <tr key={loan.id} className="hover:bg-slate-50/50">
                             <td className="py-2.5 font-mono finance-input text-slate-800">#{loan.loan_id}</td>
                             <td className="py-2.5 finance-input text-slate-800">{loan.finance_customers?.name || 'Unknown'}</td>
-                            <td className="py-2.5 finance-input text-slate-800 text-right">₹{Number(loan.amount).toLocaleString('en-IN')}</td>
+                            <td className="py-2.5 finance-input text-slate-800 text-right">{Number(loan.amount).toLocaleString('en-IN')}</td>
                             <td className="py-2.5 text-center">
                               <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                                 loan.status === 'Closed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-orange-50 text-orange-700 border border-orange-200'

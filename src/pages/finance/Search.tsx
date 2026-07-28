@@ -101,7 +101,7 @@ const SearchPage: React.FC = () => {
       }, staffName);
 
       if (tx) {
-        toast.success(`Received collection ₹${numAmt.toLocaleString('en-IN')}! Dues updated.`);
+        toast.success(`Received collection ${numAmt.toLocaleString('en-IN')}! Dues updated.`);
         setCollectRemarks('');
         // Refresh details & list
         loadLoanDetails(selectedLoanDetails.id);
@@ -199,7 +199,7 @@ const SearchPage: React.FC = () => {
                   )}
                 </div>
                 <div className="text-right">
-                  <div className="text-green-700 finance-sidebar-link">₹{Number(loan.amount).toLocaleString('en-IN')}</div>
+                  <div className="text-green-700 finance-sidebar-link">{Number(loan.amount).toLocaleString('en-IN')}</div>
                   <span className="text-gray-400 finance-small-label">{loan.due_type}</span>
                 </div>
               </li>
@@ -252,7 +252,7 @@ const SearchPage: React.FC = () => {
                 />
                 
                 <Input
-                  label="Amount Collected (₹)"
+                  label="Amount Collected ()"
                   type="number"
                   value={collectAmount}
                   onChange={setCollectAmount}
@@ -266,14 +266,14 @@ const SearchPage: React.FC = () => {
                     onClick={() => setCollectAmount(String(selectedLoanDetails.due_amount))}
                     className="bg-gray-100 text-gray-700 hover:bg-gray-200 px-2 py-1.5 rounded finance-header-time"
                   >
-                    Instalment (₹{selectedLoanDetails.due_amount})
+                    Instalment ({selectedLoanDetails.due_amount})
                   </button>
                   <button
                     type="button"
                     onClick={() => setCollectAmount(String(summary.outstanding))}
                     className="bg-gray-100 text-gray-700 hover:bg-gray-200 px-2 py-1.5 rounded finance-header-time"
                   >
-                    Outstanding (₹{summary.outstanding})
+                    Outstanding ({summary.outstanding})
                   </button>
                 </div>
 
@@ -314,15 +314,15 @@ const SearchPage: React.FC = () => {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <span className="text-gray-500 block finance-small-label uppercase">Total Repayable</span>
-                  <span className="text-gray-900 finance-brand">₹{summary.totalPayable.toLocaleString('en-IN')}</span>
+                  <span className="text-gray-900 finance-brand">{summary.totalPayable.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="p-3 bg-green-50 rounded-lg border border-green-100">
                   <span className="text-green-700 block finance-small-label uppercase">Total Collected</span>
-                  <span className="text-green-800 finance-brand">₹{summary.totalPaid.toLocaleString('en-IN')}</span>
+                  <span className="text-green-800 finance-brand">{summary.totalPaid.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="p-3 bg-orange-50 rounded-lg border border-orange-100">
                   <span className="text-orange-700 block finance-small-label uppercase">Outstanding Bal</span>
-                  <span className="text-orange-800 finance-brand">₹{summary.outstanding.toLocaleString('en-IN')}</span>
+                  <span className="text-orange-800 finance-brand">{summary.outstanding.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <span className="text-gray-500 block finance-small-label uppercase">Instalment Status</span>
@@ -349,10 +349,10 @@ const SearchPage: React.FC = () => {
                     <span className="text-[9px] my-1 font-mono finance-input">
                       {new Date(due.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit' })}
                     </span>
-                    <span className="block finance-small-label">₹{Number(due.amount).toFixed(0)}</span>
+                    <span className="block finance-small-label">{Number(due.amount).toFixed(0)}</span>
                     
                     {due.paid_amount > 0 && due.status !== 'Paid' && (
-                      <span className="text-[8px] text-gray-500 block mt-0.5 finance-input">Rec: ₹{Number(due.paid_amount).toFixed(0)}</span>
+                      <span className="text-[8px] text-gray-500 block mt-0.5 finance-input">Rec: {Number(due.paid_amount).toFixed(0)}</span>
                     )}
                   </div>
                 ))}
@@ -391,7 +391,7 @@ const SearchPage: React.FC = () => {
                           {tx.remarks || '-'}
                         </td>
                         <td className={`px-3 py-2.5 text-right ${ tx.type === 'Collection' ? 'text-green-600' : 'text-blue-600' } finance-input`}>
-                          ₹{Number(tx.amount).toLocaleString('en-IN')}
+                          {Number(tx.amount).toLocaleString('en-IN')}
                         </td>
                         <td className="px-3 py-2.5 text-right whitespace-nowrap">
                           <Button

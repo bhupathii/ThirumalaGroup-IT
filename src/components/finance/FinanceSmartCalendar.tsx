@@ -380,7 +380,7 @@ export const FinanceSmartCalendar: React.FC<FinanceSmartCalendarProps> = ({
           <select
             value={currentMonth.getMonth()}
             onChange={(e) => handleMonthSelectChange(parseInt(e.target.value))}
-            className="text-sm font-bold bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-slate-900 text-slate-800 cursor-pointer"
+            className="text-sm font-extrabold text-slate-900 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer shadow-2xs"
           >
             {MONTH_NAMES.map((name, idx) => (
               <option key={name} value={idx}>{name}</option>
@@ -390,7 +390,7 @@ export const FinanceSmartCalendar: React.FC<FinanceSmartCalendarProps> = ({
           <select
             value={currentMonth.getFullYear()}
             onChange={(e) => handleYearSelectChange(parseInt(e.target.value))}
-            className="text-sm font-bold bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-slate-900 text-slate-800 cursor-pointer"
+            className="text-sm font-extrabold text-slate-900 bg-white border border-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer shadow-2xs min-w-[88px]"
           >
             {yearsList.map(y => (
               <option key={y} value={y}>{y}</option>
@@ -495,7 +495,7 @@ export const FinanceSmartCalendar: React.FC<FinanceSmartCalendarProps> = ({
       )}
 
       {/* Reusable Input Container with dedicated right action button group */}
-      <div className={`relative w-full ${compact ? 'min-w-[170px] h-[42px]' : 'min-w-[190px] h-[46px]'} flex items-center justify-between bg-white border rounded-[14px] shadow-2xs transition-all overflow-hidden focus-within:ring-2 focus-within:ring-slate-900 focus-within:border-slate-900 ${
+      <div className={`relative w-full ${compact ? 'h-[38px]' : 'h-[42px]'} flex items-center justify-between bg-white border rounded-xl shadow-2xs transition-all overflow-hidden focus-within:ring-2 focus-within:ring-slate-900 focus-within:border-slate-900 ${
         error ? 'border-red-500 bg-red-50' : 'border-slate-200 hover:border-slate-300'
       } ${disabled ? 'bg-slate-100 cursor-not-allowed opacity-60' : ''}`}>
         
@@ -510,11 +510,11 @@ export const FinanceSmartCalendar: React.FC<FinanceSmartCalendarProps> = ({
           onFocus={() => !disabled && setIsOpen(true)}
           maxLength={10}
           placeholder={placeholder || 'DD/MM/YYYY'}
-          className={`flex-1 min-w-[100px] h-full bg-transparent pl-3 pr-2 ${compact ? 'text-[15px]' : 'text-[17px]'} font-semibold text-slate-900 font-mono tracking-tight focus:outline-none`}
+          className={`flex-1 min-w-0 h-full bg-transparent pl-2.5 pr-1 ${compact ? 'text-xs' : 'text-sm'} font-bold text-slate-900 font-mono tracking-tight focus:outline-none`}
         />
-        {/* Dedicated Actions Container: 6px gap, 10px right padding */}
-        <div className="flex items-center gap-[6px] pr-[10px] shrink-0 pointer-events-auto select-none bg-transparent">
-          {/* Clear (X) Button (26x26px clickable area, 18px icon) */}
+        {/* Dedicated Actions Container */}
+        <div className="flex items-center gap-1 pr-2 shrink-0 pointer-events-auto select-none bg-transparent">
+          {/* Clear (X) Button */}
           {allowClear !== false && value && !disabled && (
             <button
               type="button"
@@ -523,22 +523,22 @@ export const FinanceSmartCalendar: React.FC<FinanceSmartCalendarProps> = ({
                 setInputValue('');
                 if (onChange) onChange('');
               }}
-              className="w-[26px] h-[26px] flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded-[6px] cursor-pointer transition-colors"
+              className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded cursor-pointer transition-colors"
               title="Clear date"
             >
-              <X className="w-[18px] h-[18px]" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
 
-          {/* Calendar Icon Button (26x26px clickable area, 20px icon) */}
+          {/* Calendar Icon Button */}
           <button
             type="button"
             disabled={disabled}
             onClick={() => !disabled && setIsOpen(!isOpen)}
-            className="w-[26px] h-[26px] flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-[6px] cursor-pointer transition-colors"
+            className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded cursor-pointer transition-colors"
             title="Open Calendar"
           >
-            <CalendarIcon className="w-[20px] h-[20px]" />
+            <CalendarIcon className="w-4 h-4" />
           </button>
         </div>
       </div>

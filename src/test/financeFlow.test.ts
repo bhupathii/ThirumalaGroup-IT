@@ -407,7 +407,7 @@ describe('Daily Report + Capital Entry + Calendar Dot indicator Flow Regression 
       expect(orphaned[0].partner_name).toBe('Orphan Partner');
     });
 
-    it('verifies cross-report ₹0.01 parity', () => {
+    it('verifies cross-report 0.01 parity', () => {
       const canonicalTotalCredit = 155000.00;
       const canonicalTotalDebit = 10000.00;
 

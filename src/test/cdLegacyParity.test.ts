@@ -58,7 +58,7 @@ const legacyLedger = [
   { date: '04-Jun-2026', payment: 20000, interest: 20000, penalty: 0 }
 ];
 
-describe('CD ₹25L legacy 80/20 penalty and sequential renewal parity', () => {
+describe('CD 25L legacy 80/20 penalty and sequential renewal parity', () => {
   it.skip('replays every payment sequentially, asserts parameters, and prints a detailed mismatch report', () => {
     const originalLoanDateStr = parseDateStr('14-Nov-2023');
     const principal = 2500000;
@@ -162,11 +162,11 @@ describe('CD ₹25L legacy 80/20 penalty and sequential renewal parity', () => {
     // Print Mismatch Report if there are any divergences
     if (hasMismatch) {
       console.log('\n======================================================================');
-      console.log('CD ₹25L LEGACY PARITY REGRESSION TEST - MISMATCH REPORT');
+      console.log('CD 25L LEGACY PARITY REGRESSION TEST - MISMATCH REPORT');
       console.log('======================================================================');
       console.log(`First divergence detected at transaction index ${firstDivergenceIndex! + 1} (${legacyLedger[firstDivergenceIndex!].date}):`);
-      console.log(`  Expected: Interest = ₹${legacyLedger[firstDivergenceIndex!].interest.toLocaleString()}, Penalty = ₹${legacyLedger[firstDivergenceIndex!].penalty.toLocaleString()}`);
-      console.log(`  Got:      Interest = ₹${simulationResults[firstDivergenceIndex!].interestPaid.toLocaleString()}, Penalty = ₹${simulationResults[firstDivergenceIndex!].penaltyPaid.toLocaleString()}`);
+      console.log(`  Expected: Interest = ${legacyLedger[firstDivergenceIndex!].interest.toLocaleString()}, Penalty = ${legacyLedger[firstDivergenceIndex!].penalty.toLocaleString()}`);
+      console.log(`  Got:      Interest = ${simulationResults[firstDivergenceIndex!].interestPaid.toLocaleString()}, Penalty = ${simulationResults[firstDivergenceIndex!].penaltyPaid.toLocaleString()}`);
       console.log('\nDetailed Transaction History:');
       console.log('-------------------------------------------------------------------------------------------------------------------');
       console.log('Row | Date        | Payment   | Expected (Int / Pen)     | Actual (Int / Pen)       | DueDays | NextDueDate | Status');

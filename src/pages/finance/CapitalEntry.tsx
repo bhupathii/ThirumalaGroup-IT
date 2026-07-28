@@ -202,7 +202,7 @@ const CapitalEntry: React.FC = () => {
       return;
    }
 
-    if (!window.confirm(`Distribute ₹${numAmt.toLocaleString('en-IN')} equally as ${type} across ${partners.length} partners? (₹${(numAmt / partners.length).toLocaleString('en-IN', { maximumFractionDigits: 2 })} each)`)) {
+    if (!window.confirm(`Distribute ${numAmt.toLocaleString('en-IN')} equally as ${type} across ${partners.length} partners? (${(numAmt / partners.length).toLocaleString('en-IN', { maximumFractionDigits: 2 })} each)`)) {
       return;
    }
 
@@ -224,7 +224,7 @@ const CapitalEntry: React.FC = () => {
      });
 
       await Promise.all(promises);
-      toast.success(`Distributed ₹${numAmt.toLocaleString('en-IN')} successfully`);
+      toast.success(`Distributed ${numAmt.toLocaleString('en-IN')} successfully`);
       
       // Reset inputs
       if (type === 'Credit') setBulkCreditAmount('');
@@ -396,7 +396,7 @@ const CapitalEntry: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-[15px] font-bold text-slate-700 uppercase block">
-                    CREDIT (₹)
+                    CREDIT ()
                   </label>
                   <input
                     type="number"
@@ -412,7 +412,7 @@ const CapitalEntry: React.FC = () => {
 
                 <div className="space-y-1">
                   <label className="text-[15px] font-bold text-slate-700 uppercase block">
-                    DEBIT (₹)
+                    DEBIT ()
                   </label>
                   <input
                     type="number"
@@ -499,11 +499,11 @@ const CapitalEntry: React.FC = () => {
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-white border border-slate-200 rounded p-3 shadow-sm text-center">
               <span className="text-[12px] font-bold text-slate-500 uppercase block">Total Capital In</span>
-              <span className="font-mono text-emerald-700 text-[18px] font-black">₹{summaries.totalCapitalIn.toLocaleString('en-IN')}</span>
+              <span className="font-mono text-emerald-700 text-[18px] font-black">{summaries.totalCapitalIn.toLocaleString('en-IN')}</span>
             </div>
             <div className="bg-white border border-slate-200 rounded p-3 shadow-sm text-center">
               <span className="text-[12px] font-bold text-slate-500 uppercase block">Total Drawings</span>
-              <span className="font-mono text-rose-700 text-[18px] font-black">₹{summaries.totalDrawings.toLocaleString('en-IN')}</span>
+              <span className="font-mono text-rose-700 text-[18px] font-black">{summaries.totalDrawings.toLocaleString('en-IN')}</span>
             </div>
           </div>
 
@@ -520,7 +520,7 @@ const CapitalEntry: React.FC = () => {
            }
             subtitle={
               <span className="text-slate-400 text-[14px] font-bold uppercase">
-                {partnerBalances.length} PARTNERS · NET ₹{summaries.netValue.toLocaleString('en-IN')}
+                {partnerBalances.length} PARTNERS · NET {summaries.netValue.toLocaleString('en-IN')}
               </span>
            }
             className="flex-1 bg-white border border-slate-200 shadow-sm rounded overflow-hidden"
@@ -553,10 +553,10 @@ const CapitalEntry: React.FC = () => {
                           {pb.partnerName}
                         </td>
                         <td className="py-2.5 px-2.5 text-right font-mono text-emerald-600 font-bold text-[13px] whitespace-nowrap">
-                          ₹{pb.capitalIn.toLocaleString('en-IN')}
+                          {pb.capitalIn.toLocaleString('en-IN')}
                         </td>
                         <td className="py-2.5 px-2.5 text-right font-mono text-slate-900 font-bold text-[13px] whitespace-nowrap">
-                          ₹{pb.netBalance.toLocaleString('en-IN')}
+                          {pb.netBalance.toLocaleString('en-IN')}
                         </td>
                       </tr>
                     ))}
@@ -625,13 +625,13 @@ const CapitalEntry: React.FC = () => {
                         {e.particulars || '—'}
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono text-emerald-700 font-bold whitespace-nowrap">
-                        {e.credit > 0 ? `₹${e.credit.toLocaleString('en-IN')}` : '—'}
+                        {e.credit > 0 ? `${e.credit.toLocaleString('en-IN')}` : '—'}
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono text-red-700 font-bold whitespace-nowrap">
-                        {e.debit > 0 ? `₹${e.debit.toLocaleString('en-IN')}` : '—'}
+                        {e.debit > 0 ? `${e.debit.toLocaleString('en-IN')}` : '—'}
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono text-slate-900 font-bold whitespace-nowrap">
-                        ₹{(e.running_balance || 0).toLocaleString('en-IN')}
+                        {(e.running_balance || 0).toLocaleString('en-IN')}
                       </td>
                       <td className="px-3 py-1.5 text-slate-500 uppercase truncate">
                         {e.created_by || 'STAFF'}
@@ -684,15 +684,15 @@ const CapitalEntry: React.FC = () => {
         <div className="grid grid-cols-3 gap-4 py-6 border-b border-slate-300 font-sans finance-caption">
           <div>
             <p className="text-slate-500 finance-input uppercase">TOTAL CAPITAL IN:</p>
-            <p className="text-emerald-600 mt-1 finance-brand">₹{summaries.totalCapitalIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+            <p className="text-emerald-600 mt-1 finance-brand">{summaries.totalCapitalIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
           </div>
           <div>
             <p className="text-slate-500 finance-input uppercase">TOTAL DRAWINGS:</p>
-            <p className="text-red-650 mt-1 finance-brand">₹{summaries.totalDrawings.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+            <p className="text-red-650 mt-1 finance-brand">{summaries.totalDrawings.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
           </div>
           <div>
             <p className="text-slate-500 finance-input uppercase">NET BALANCE:</p>
-            <p className="text-slate-900 mt-1 finance-brand">₹{summaries.netValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+            <p className="text-slate-900 mt-1 finance-brand">{summaries.netValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
           </div>
         </div>
 
@@ -712,9 +712,9 @@ const CapitalEntry: React.FC = () => {
               {partnerBalances.map(pb => (
                 <tr key={pb.partnerId}>
                   <td className="py-2 px-3 text-slate-800 uppercase font-medium">{pb.partnerName}</td>
-                  <td className="py-2 px-3 text-right font-mono text-emerald-600">₹{pb.capitalIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td className="py-2 px-3 text-right font-mono text-red-600">₹{pb.drawings.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">₹{pb.netBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2 px-3 text-right font-mono text-emerald-600">{pb.capitalIn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2 px-3 text-right font-mono text-red-600">{pb.drawings.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">{pb.netBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 </tr>
               ))}
             </tbody>
@@ -741,9 +741,9 @@ const CapitalEntry: React.FC = () => {
                   <td className="py-2 px-2 font-mono text-[13px]">{e.entry_date.split('-').reverse().join('/')}</td>
                   <td className="py-2 px-2 text-slate-800 uppercase text-[13px]">{e.partner_name}</td>
                   <td className="py-2 px-2 text-slate-600 uppercase text-[13px] truncate max-w-xs">{e.particulars || '—'}</td>
-                  <td className="py-2 px-2 text-right font-mono text-emerald-600 text-[13px]">{e.credit > 0 ? `₹${e.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
-                  <td className="py-2 px-2 text-right font-mono text-red-600 text-[13px]">{e.debit > 0 ? `₹${e.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
-                  <td className="py-2 px-2 text-right font-mono font-bold text-slate-900 text-[13px]">₹{(e.running_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2 px-2 text-right font-mono text-emerald-600 text-[13px]">{e.credit > 0 ? `${e.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
+                  <td className="py-2 px-2 text-right font-mono text-red-600 text-[13px]">{e.debit > 0 ? `${e.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
+                  <td className="py-2 px-2 text-right font-mono font-bold text-slate-900 text-[13px]">{(e.running_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 </tr>
               ))}
             </tbody>

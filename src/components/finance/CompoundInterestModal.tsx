@@ -69,18 +69,18 @@ const CompoundInterestModal: React.FC<CompoundInterestModalProps> = ({
         <div className="grid grid-cols-3 gap-4 bg-slate-100 p-4 rounded-b-lg border border-slate-200 text-center items-center">
           <div>
             <p className="text-[10px] font-black text-slate-500 uppercase">Principal</p>
-            <p className="text-lg font-mono font-bold text-slate-700">₹{summary.initialPrincipal.toLocaleString('en-IN')}</p>
+            <p className="text-lg font-mono font-bold text-slate-700">{summary.initialPrincipal.toLocaleString('en-IN')}</p>
           </div>
           <div>
             <p className="text-[10px] font-black text-slate-500 uppercase">Compound Interest Earned</p>
             <p className="text-lg font-mono font-bold text-red-600">
-              + ₹{Math.round(summary.compoundInterestEarned || 0).toLocaleString('en-IN')}
+              + {Math.round(summary.compoundInterestEarned || 0).toLocaleString('en-IN')}
             </p>
           </div>
           <div>
             <p className="text-[10px] font-black text-slate-500 uppercase">Future Value</p>
             <p className="text-xl font-mono font-black text-slate-900">
-              = ₹{Math.round(summary.finalCompoundBalance || 0).toLocaleString('en-IN')}
+              = {Math.round(summary.finalCompoundBalance || 0).toLocaleString('en-IN')}
             </p>
           </div>
         </div>
@@ -111,14 +111,14 @@ const CompoundInterestModal: React.FC<CompoundInterestModalProps> = ({
               <td className="border border-slate-300 p-2 text-center font-mono font-bold">{row.date ? row.date.split('-').reverse().join('/') : '-'}</td>
               <td className="border border-slate-300 p-2 text-left text-slate-700">{row.particulars}</td>
               <td className="border border-slate-300 p-2 text-center font-mono text-slate-500">{row.daysElapsed ?? row.days ?? 0}</td>
-              <td className="border border-slate-300 p-2 text-right font-mono text-slate-600">₹{Math.round(row.startingBalance || 0).toLocaleString('en-IN')}</td>
+              <td className="border border-slate-300 p-2 text-right font-mono text-slate-600">{Math.round(row.startingBalance || 0).toLocaleString('en-IN')}</td>
               <td className="border border-slate-300 p-2 text-right font-mono text-red-600">
-                {row.interestAdded > 0 ? `+₹${Math.round(row.interestAdded).toLocaleString('en-IN')}` : '-'}
+                {row.interestAdded > 0 ? `+${Math.round(row.interestAdded).toLocaleString('en-IN')}` : '-'}
               </td>
               <td className="border border-slate-300 p-2 text-right font-mono text-green-700">
-                {(row.paymentReceived || row.principalReduction) > 0 ? `-₹${Math.round(row.paymentReceived || row.principalReduction).toLocaleString('en-IN')}` : '-'}
+                {(row.paymentReceived || row.principalReduction) > 0 ? `-${Math.round(row.paymentReceived || row.principalReduction).toLocaleString('en-IN')}` : '-'}
               </td>
-              <td className="border border-slate-300 p-2 text-right font-mono font-black text-slate-900">₹{Math.round(row.endingBalance || 0).toLocaleString('en-IN')}</td>
+              <td className="border border-slate-300 p-2 text-right font-mono font-black text-slate-900">{Math.round(row.endingBalance || 0).toLocaleString('en-IN')}</td>
             </tr>
           ))}
         </tbody>

@@ -455,9 +455,9 @@ const TransactionApproval: React.FC = () => {
   };
 
   const formatCompactCurrency = (val: number | undefined) => {
-    if (val === undefined || val === 0) return '₹0';
+    if (val === undefined || val === 0) return '0';
     const hasDecimals = val % 1 !== 0;
-    return `₹${val.toLocaleString('en-IN', {
+    return `${val.toLocaleString('en-IN', {
       minimumFractionDigits: hasDecimals ? 2 : 0,
       maximumFractionDigits: hasDecimals ? 2 : 0,
     })}`;

@@ -65,7 +65,7 @@ describe('VBA Event-Chain Simulation Parity Checkpoints', () => {
     expect(sim.persistedPenalty).toBe(3562);
   });
 
-  it('₹2 residual penalty cases (e.g. 03-Jun-25 / 03-Feb-26)', () => {
+  it('2 residual penalty cases (e.g. 03-Jun-25 / 03-Feb-26)', () => {
     // 03-Jun-25: exactDueDays = -1.50, checkDueDays = -2, cash = 10000
     const pos = mockPosition(-1.50);
     const sim = simulateAccessRenewEventChain(pos, 10000);

@@ -213,7 +213,7 @@ const Camera: React.FC = () => {
               >
                 <option value="">-- Choose Loan (Customer Name) --</option>
                 {loans.map(l => (
-                  <option key={l.id} value={l.id}>{l.loan_id} - {l.customer?.name} (₹{Number(l.amount).toLocaleString('en-IN')})</option>
+                  <option key={l.id} value={l.id}>{l.loan_id} - {l.customer?.name} ({Number(l.amount).toLocaleString('en-IN')})</option>
                 ))}
               </select>
             </div>

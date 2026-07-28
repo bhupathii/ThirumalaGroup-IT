@@ -2096,11 +2096,11 @@ const NewEntry: React.FC = () => {
           <div className='w-full space-y-2'>
             {/* Totals Ribbon */}
             <div className='flex gap-3 p-3 bg-white border border-gray-250 rounded shadow-sm text-sm font-bold uppercase items-center justify-between'>
-              <div className='flex items-center gap-1'>Total Cr: <span className='text-green-750 font-mono'>₹{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+              <div className='flex items-center gap-1'>Total Cr: <span className='text-green-750 font-mono'>{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
               <div className='w-px h-4 bg-gray-300'></div>
-              <div className='flex items-center gap-1'>Total Dr: <span className='text-red-755 font-mono'>₹{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+              <div className='flex items-center gap-1'>Total Dr: <span className='text-red-755 font-mono'>{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
               <div className='w-px h-4 bg-gray-300'></div>
-              <div className='flex items-center gap-1'>Balance: <span className={`${netBalance >= 0 ? 'text-green-800' : 'text-red-800'} font-mono`}>₹{netBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+              <div className='flex items-center gap-1'>Balance: <span className={`${netBalance >= 0 ? 'text-green-800' : 'text-red-800'} font-mono`}>{netBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
             </div>
 
             <Card

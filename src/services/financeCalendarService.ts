@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabaseDatabase';
+import { dailyFinancialTransactionService } from './dailyFinancialTransactionService';
 
 export type FinanceModuleKey =
   | 'DAY_BOOK'
@@ -56,12 +57,12 @@ export const getFinanceModuleEventDates = async (
     switch (moduleKey) {
       case 'DAY_BOOK':
       case 'CASH_BOOK': {
-        const { data } = await supabase
-          .from('finance_cashbook_entries')
-          .select('entry_date')
-          .gte('entry_date', startDate)
-          .lte('entry_date', endDate);
-        (data || []).forEach(row => extractAndAddDate(row.entry_date));
+        const activeDates = await dailyFinancialTransactionService.getDailyReportActivityDates({
+          month,
+          year,
+          financeMode: 'REGULAR'
+        });
+        activeDates.forEach(r => extractAndAddDate(r.c_date));
         break;
       }
 
@@ -235,3 +236,16 @@ export const getFinanceModuleEventDates = async (
 export const clearFinanceCalendarCache = () => {
   eventCache.clear();
 };
+
+export const getAdjacentTransactionDate = async (
+  currentDate: string,
+  direction: 'prev' | 'next',
+  financeMode: 'REGULAR' | 'ITR' = 'REGULAR'
+): Promise<string | null> => {
+  return dailyFinancialTransactionService.getNearestTransactionDate({
+    currentDate,
+    direction,
+    financeMode
+  });
+};
+

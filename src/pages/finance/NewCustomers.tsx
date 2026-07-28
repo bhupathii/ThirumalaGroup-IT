@@ -170,7 +170,7 @@ const NewCustomers: React.FC = () => {
                 {cust.loanId || '-'}
               </td>
               <td className="px-3 py-3 text-right text-green-700 finance-input">
-                {cust.amount ? `₹${cust.amount.toLocaleString('en-IN')}` : '-'}
+                {cust.amount ? `${cust.amount.toLocaleString('en-IN')}` : '-'}
               </td>
             </tr>
           ))}

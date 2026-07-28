@@ -85,36 +85,63 @@ app.get('/api/status', (req, res) => {
 const upload = multer({ dest: 'uploads/' });
 
 app.post('/api/transcribe', upload.single('file'), async (req, res) => {
+  const traceId = 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  const startTime = Date.now();
+
   try {
+    console.log(`\n=== AUDIO TRANSCRIPTION PIPELINE [TraceID: ${traceId}] ===`);
+
     if (!req.file) {
-      return res.status(400).json({ error: 'No audio file provided' });
-    }
-    
-    if (!process.env.GROQ_API_KEY) {
-      fs.unlinkSync(req.file.path);
-      return res.status(500).json({ error: 'GROQ_API_KEY not configured on server' });
+      console.error(`[TraceID: ${traceId}] ERROR: No file uploaded`);
+      return res.status(400).json({ 
+        error: 'No audio file provided in request payload', 
+        traceId 
+      });
     }
 
-    console.log('\n=== GROQ TRANSCRIPTION DEBUG ===');
-    console.log('[DEBUG] 1. Uploaded filename:', req.file.originalname);
-    console.log('[DEBUG] 2. MIME type:', req.file.mimetype);
-    console.log('[DEBUG] 3. Audio file size (bytes):', req.file.size);
+    if (!req.file.size || req.file.size === 0) {
+      console.error(`[TraceID: ${traceId}] ERROR: Empty audio recording (0 bytes)`);
+      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ 
+        error: 'Audio recording was empty (0 bytes). Check microphone input.', 
+        traceId 
+      });
+    }
+
+    if (!process.env.GROQ_API_KEY) {
+      console.error(`[TraceID: ${traceId}] ERROR: GROQ_API_KEY environment variable is not configured`);
+      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(500).json({ 
+        error: 'GROQ_API_KEY not configured on server', 
+        details: 'Configure GROQ_API_KEY in server environment / .env file',
+        traceId 
+      });
+    }
+
+    // Determine filename & extension for Whisper provider
+    let filename = req.file.originalname || 'recording.webm';
+    if (!filename.includes('.')) {
+      if (req.file.mimetype?.includes('wav')) filename += '.wav';
+      else if (req.file.mimetype?.includes('mp4') || req.file.mimetype?.includes('m4a')) filename += '.m4a';
+      else if (req.file.mimetype?.includes('mp3') || req.file.mimetype?.includes('mpeg')) filename += '.mp3';
+      else if (req.file.mimetype?.includes('ogg')) filename += '.ogg';
+      else filename += '.webm';
+    }
+
+    console.log(`[TraceID: ${traceId}] 1. Uploaded Filename: ${filename}`);
+    console.log(`[TraceID: ${traceId}] 2. MIME Type: ${req.file.mimetype}`);
+    console.log(`[TraceID: ${traceId}] 3. Audio File Size: ${(req.file.size / 1024).toFixed(2)} KB`);
 
     const formData = new FormData();
     formData.append('model', 'whisper-large-v3');
     formData.append('temperature', '0');
     formData.append('response_format', 'verbose_json');
     formData.append('file', fs.createReadStream(req.file.path), {
-      filename: req.file.originalname,
-      contentType: req.file.mimetype,
+      filename,
+      contentType: req.file.mimetype || 'audio/webm',
     });
 
-    console.log('[DEBUG] 4. Groq request payload config:', {
-      model: 'whisper-large-v3',
-      temperature: '0',
-      response_format: 'verbose_json',
-      filename: req.file.originalname,
-    });
+    console.log(`[TraceID: ${traceId}] 4. Sending request to Groq Whisper API...`);
 
     const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
       method: 'POST',
@@ -125,24 +152,55 @@ app.post('/api/transcribe', upload.single('file'), async (req, res) => {
       body: formData,
     });
 
-    // Cleanup temp file immediately
-    fs.unlinkSync(req.file.path);
+    // Clean up temporary local file immediately
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    const elapsedMs = Date.now() - startTime;
 
     if (!response.ok) {
-      const errData = await response.text();
-      console.error('Groq API Error:', errData);
-      return res.status(response.status).json({ error: 'Transcription failed' });
+      const errText = await response.text();
+      console.error(`[TraceID: ${traceId}] Groq API Error (HTTP ${response.status}):`, errText);
+
+      let userMsg = `Transcription service returned HTTP ${response.status}`;
+      if (response.status === 401) {
+        userMsg = 'Invalid API key (HTTP 401 Unauthorized)';
+      } else if (response.status === 413) {
+        userMsg = 'Audio recording exceeds 25MB size limit (HTTP 413)';
+      } else if (response.status === 429) {
+        userMsg = 'API rate limit or daily quota exceeded (HTTP 429)';
+      } else if (response.status >= 500) {
+        userMsg = 'Speech transcription service temporarily unavailable';
+      }
+
+      return res.status(response.status).json({ 
+        error: userMsg, 
+        details: errText,
+        traceId 
+      });
     }
 
     const data = await response.json();
-    console.log('[DEBUG] 5. Raw Groq JSON response:', JSON.stringify(data, null, 2));
-    res.json({ text: data.text });
+    console.log(`[TraceID: ${traceId}] 5. Groq response received in ${elapsedMs}ms. Text length: ${(data.text || '').length} chars`);
+
+    res.json({ 
+      text: data.text || '', 
+      duration: data.duration || 0,
+      traceId,
+      elapsedMs 
+    });
+
   } catch (error) {
-    console.error('Transcription route error:', error);
+    console.error(`[TraceID: ${traceId}] Internal Route Exception:`, error);
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
-    res.status(500).json({ error: 'Internal server error during transcription' });
+    res.status(500).json({ 
+      error: 'Internal server error during transcription processing', 
+      details: error.message,
+      traceId 
+    });
   }
 });
 

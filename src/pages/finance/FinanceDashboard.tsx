@@ -225,7 +225,7 @@ const FinanceDashboard: React.FC = () => {
             </div>
             <div className="flex justify-between items-end">
               <div className="text-[26px] font-black text-slate-900 leading-none">
-                ₹{stats.totalDisbursed.toLocaleString('en-IN')}
+                {stats.totalDisbursed.toLocaleString('en-IN')}
               </div>
               <div className="text-[14px] text-slate-500 font-bold uppercase leading-none">
                 {stats.loansCount} Loans
@@ -243,7 +243,7 @@ const FinanceDashboard: React.FC = () => {
             </div>
             <div className="flex justify-between items-end">
               <div className="text-[26px] font-black text-rose-600 leading-none">
-                ₹{stats.totalOutstanding.toLocaleString('en-IN')}
+                {stats.totalOutstanding.toLocaleString('en-IN')}
               </div>
               <div className="text-[14px] text-slate-500 font-bold uppercase leading-none">
                 PRINCIPAL + INT
@@ -261,7 +261,7 @@ const FinanceDashboard: React.FC = () => {
             </div>
             <div className="flex justify-between items-end">
               <div className="text-[26px] font-black text-emerald-600 leading-none">
-                ₹{stats.collectedToday.toLocaleString('en-IN')}
+                {stats.collectedToday.toLocaleString('en-IN')}
               </div>
               <div className="text-[14px] text-slate-500 font-bold uppercase leading-none">
                 CASHBOOK DEBIT
@@ -380,7 +380,7 @@ const FinanceDashboard: React.FC = () => {
                           })}
                         </td>
                         <td className="px-3 py-1.5 text-right text-slate-900 font-bold font-mono">
-                          ₹{Number(loan.amount).toLocaleString('en-IN')}
+                          {Number(loan.amount).toLocaleString('en-IN')}
                         </td>
                         <td className="px-3 py-1.5 text-center text-slate-600 font-bold uppercase">
                           {loan.loan_category?.trim().toUpperCase() || 'CD'}

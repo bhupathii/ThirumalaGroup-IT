@@ -465,7 +465,7 @@ const Customers: React.FC = () => {
                     <tr>
                       <td style="font-family: monospace; font-weight: bold;">${l.loan_id}</td>
                       <td style="text-transform: uppercase;">${l.loan_category}</td>
-                      <td style="font-weight: bold; font-family: monospace;">₹${l.outstanding_amount ? l.outstanding_amount.toLocaleString('en-IN') : '0.00'}</td>
+                      <td style="font-weight: bold; font-family: monospace;">${l.outstanding_amount ? l.outstanding_amount.toLocaleString('en-IN') : '0.00'}</td>
                       <td style="font-weight: bold; color: green; text-transform: uppercase;">${l.status}</td>
                     </tr>
                   `).join('')}
@@ -491,7 +491,7 @@ const Customers: React.FC = () => {
                     <tr>
                       <td style="font-family: monospace; font-weight: bold;">${l.loan_id}</td>
                       <td style="text-transform: uppercase;">${l.loan_category}</td>
-                      <td style="font-family: monospace;">₹${l.outstanding_amount ? l.outstanding_amount.toLocaleString('en-IN') : '0.00'}</td>
+                      <td style="font-family: monospace;">${l.outstanding_amount ? l.outstanding_amount.toLocaleString('en-IN') : '0.00'}</td>
                       <td style="font-weight: bold; text-transform: uppercase; color: #555;">${l.status}</td>
                     </tr>
                   `).join('')}
@@ -931,7 +931,7 @@ const Customers: React.FC = () => {
                                 <td className="px-2 py-1 font-mono font-bold text-slate-900">{l.loan_id}</td>
                                 <td className="px-2 py-1 font-bold text-slate-650 uppercase">{l.loan_category}</td>
                                 <td className="px-2 py-1 font-mono font-bold text-slate-800 text-right">
-                                  ₹{l.outstanding_amount ? l.outstanding_amount.toLocaleString('en-IN') : '0.00'}
+                                  {l.outstanding_amount ? l.outstanding_amount.toLocaleString('en-IN') : '0.00'}
                                 </td>
                                 <td className="px-2 py-1 text-center">
                                   <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${

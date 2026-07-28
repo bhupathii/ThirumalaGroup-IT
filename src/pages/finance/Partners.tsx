@@ -388,19 +388,19 @@ const Partners: React.FC = () => {
                   <div className="bg-emerald-50 border border-emerald-150 p-4 rounded-xl">
                     <span className="text-emerald-700 block text-[10px] font-black uppercase">Capital Introduced (Credit)</span>
                     <span className="text-emerald-800 text-lg font-black block mt-1 font-mono">
-                      ₹{totalCred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      {totalCred.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div className="bg-red-50 border border-red-150 p-4 rounded-xl">
                     <span className="text-red-700 block text-[10px] font-black uppercase">Capital Withdrawn (Debit)</span>
                     <span className="text-red-800 text-lg font-black block mt-1 font-mono">
-                      ₹{totalDeb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      {totalDeb.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div className="bg-slate-100 border border-slate-250 p-4 rounded-xl">
                     <span className="text-slate-700 block text-[10px] font-black uppercase">Net Capital Balance</span>
                     <span className={`text-lg font-black block mt-1 font-mono ${netBal >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
-                      ₹{netBal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      {netBal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                 </div>
@@ -431,10 +431,10 @@ const Partners: React.FC = () => {
                               <td className="px-4 py-2.5 font-mono">{new Date(tx.entry_date).toLocaleDateString('en-GB')}</td>
                               <td className="px-4 py-2.5">{tx.particulars || 'Capital Entry'}</td>
                               <td className="px-4 py-2.5 text-right font-mono text-red-600">
-                                {tx.debit > 0 ? `₹${tx.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                                {tx.debit > 0 ? `${tx.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                               </td>
                               <td className="px-4 py-2.5 text-right font-mono text-emerald-600">
-                                {tx.credit > 0 ? `₹${tx.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                                {tx.credit > 0 ? `${tx.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                               </td>
                               <td className="px-4 py-2.5">{tx.created_by || 'Staff'}</td>
                               <td className="px-4 py-2.5 text-slate-400 font-mono text-[11px]">

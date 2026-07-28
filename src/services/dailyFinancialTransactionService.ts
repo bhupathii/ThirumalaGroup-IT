@@ -43,7 +43,7 @@ export const normalizeHeadOfAccount = (name: string): string => {
 
 export interface DailyFinancialTransaction {
   id: string;
-  sourceType: 'CD_LEDGER' | 'CAPITAL_ENTRY' | 'DAY_BOOK_ENTRY';
+  sourceType: 'CD_LEDGER' | 'CAPITAL_ENTRY' | 'DAY_BOOK_ENTRY' | 'LOAN_TRANSACTION';
   sourceRecordId: string;
   transactionDate: string;
   headOfAccountId?: string | null;
@@ -61,6 +61,8 @@ export interface DailyFinancialTransaction {
   customerName?: string | null;
   partnerId?: string | null;
   category?: string | null;
+  loanCategory?: string | null;
+  partnerName?: string | null;
 }
 
 export const dailyFinancialTransactionService = {
@@ -163,16 +165,34 @@ export const dailyFinancialTransactionService = {
     const cdEntries = await fetchAllPages((from, to) =>
       supabase
         .from('finance_cd_ledger_entries')
-        .select('*, loan:finance_loans(loan_id), customer:finance_customers(name)')
+        .select('*, loan:finance_loans(loan_id, loan_category, partner_name), customer:finance_customers(name)')
         .neq('account_name', 'CD Amount Paid')
         .gte('entry_date', fromDate)
         .lte('entry_date', toDate)
         .range(from, to)
     );
 
+    // Track CD receipt numbers to deduplicate loan_transactions
+    const cdReceiptSet = new Set<string>();
+    cdEntries.forEach(e => {
+      if (e.receipt_no) cdReceiptSet.add(e.receipt_no);
+    });
+
     console.log(`[DAILY REPORT DEBUG] CD raw rows fetched: ${cdEntries.length}`);
 
-    // 3. Fetch Capital Entries (Paginated)
+    // 3. Fetch Loan Transactions (Paginated - for non-CD or non-overlapping transactions)
+    const ltEntries = await fetchAllPages((from, to) =>
+      supabase
+        .from('finance_transactions')
+        .select('*, loan:finance_loans(loan_id, loan_category, customer:finance_customers(name))')
+        .gte('date', fromDate)
+        .lte('date', toDate)
+        .range(from, to)
+    );
+
+    console.log(`[DAILY REPORT DEBUG] Loan transactions raw rows fetched: ${ltEntries.length}`);
+
+    // 4. Fetch Capital Entries (Paginated)
     const capEntries = await fetchAllPages((from, to) =>
       supabase
         .from('finance_capital_entries')
@@ -184,7 +204,7 @@ export const dailyFinancialTransactionService = {
 
     console.log(`[DAILY REPORT DEBUG] Capital raw rows fetched: ${capEntries.length}`);
 
-    // 4. Fetch Day Book Entries (cashbook entries - Paginated)
+    // 5. Fetch Day Book Entries (cashbook entries - Paginated)
     const { data: bookData } = await supabase
       .from('finance_books')
       .select('id')
@@ -236,7 +256,45 @@ export const dailyFinancialTransactionService = {
           createdAt: entry.created_at,
           reportClassification: getClassification(normHead),
           customerName: entry.customer?.name || null,
-          category: 'CD'
+          partnerName: entry.loan?.partner_name || null,
+          category: 'CD',
+          loanCategory: entry.loan?.loan_category || 'CD'
+        });
+      });
+    }
+
+    // Process Loan transactions (excluding rows already represented in CD ledger entries)
+    if (ltEntries) {
+      ltEntries.forEach((lt: any) => {
+        // Skip if this receipt number was already processed in cdEntries
+        if (lt.receipt_no && cdReceiptSet.has(lt.receipt_no)) {
+          return;
+        }
+
+        const lCat = lt.loan?.loan_category || 'LOAN';
+        const isDisb = lt.type === 'Disbursement';
+        const amt = Number(lt.amount) || 0;
+        const head = isDisb ? `${lCat} DISBURSEMENT` : `${lCat} COLLECTION`;
+        const normHead = normalizeHeadOfAccount(head);
+
+        normalizedList.push({
+          id: `LOAN_TRANSACTION:${lt.id}`,
+          sourceType: 'LOAN_TRANSACTION',
+          sourceRecordId: lt.id,
+          transactionDate: lt.date,
+          headOfAccount: normHead,
+          particulars: lt.remarks || `${isDisb ? 'Loan Disbursed' : 'Loan Collection'} - ${lt.loan?.loan_id || ''}`,
+          receiptOrVoucherNo: lt.receipt_no || null,
+          accountOrLoanNo: lt.loan?.loan_id || 'LOAN',
+          debit: isDisb ? amt : 0,
+          credit: isDisb ? 0 : amt,
+          userName: lt.collected_by || 'Staff',
+          entryTime: lt.created_at,
+          createdAt: lt.created_at,
+          reportClassification: getClassification(normHead),
+          customerName: lt.loan?.customer?.name || null,
+          category: lCat,
+          loanCategory: lCat
         });
       });
     }
@@ -244,6 +302,7 @@ export const dailyFinancialTransactionService = {
     // Process Capital entries
     if (capEntries) {
       capEntries.forEach((cap: any) => {
+        const pName = cap.partner?.name || cap.partner_name || 'Partner';
         normalizedList.push({
           id: `CAPITAL_ENTRY:${cap.id}`,
           sourceType: 'CAPITAL_ENTRY',
@@ -251,7 +310,8 @@ export const dailyFinancialTransactionService = {
           transactionDate: cap.entry_date,
           headOfAccount: 'CAPITAL',
           particulars: cap.particulars || 'Capital Entry',
-          accountOrLoanNo: cap.partner?.name || cap.partner_name || 'Partner',
+          receiptOrVoucherNo: null,
+          accountOrLoanNo: pName,
           debit: Number(cap.debit) || 0,
           credit: Number(cap.credit) || 0,
           userName: cap.created_by || 'Staff',
@@ -259,6 +319,7 @@ export const dailyFinancialTransactionService = {
           createdAt: cap.created_at,
           reportClassification: getClassification('CAPITAL'),
           partnerId: cap.partner_id || null,
+          partnerName: pName,
           category: 'CAPITAL'
         });
       });
@@ -287,6 +348,7 @@ export const dailyFinancialTransactionService = {
           transactionDate: cb.entry_date,
           headOfAccount: normHead,
           particulars: cb.particulars || '',
+          receiptOrVoucherNo: null,
           accountOrLoanNo: cb.account_number || '—',
           debit: Number(cb.debit) || 0,
           credit: Number(cb.credit) || 0,
@@ -332,50 +394,18 @@ export const dailyFinancialTransactionService = {
     const endFormatted = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
     try {
-      const { data: cdData } = await supabase
-        .from('finance_cd_ledger_entries')
-        .select('entry_date')
-        .neq('account_name', 'CD Amount Paid')
-        .gte('entry_date', startStr)
-        .lte('entry_date', endFormatted);
-
-      const { data: capData } = await supabase
-        .from('finance_capital_entries')
-        .select('entry_date')
-        .gte('entry_date', startStr)
-        .lte('entry_date', endFormatted);
-
-      const { data: bookData } = await supabase
-        .from('finance_books')
-        .select('id')
-        .eq('book_code', financeMode === 'ITR' ? 'ITR-LEGACY' : 'REG-LEGACY')
-        .maybeSingle();
-
-      let cbData: any[] = [];
-      if (bookData?.id) {
-        const { data: fetchedCb } = await supabase
-          .from('finance_cashbook_entries')
-          .select('entry_date')
-          .eq('book_id', bookData.id)
-          .gte('entry_date', startStr)
-          .lte('entry_date', endFormatted);
-        cbData = fetchedCb || [];
-      }
+      const monthTransactions = await this.getDailyFinancialTransactions({
+        fromDate: startStr,
+        toDate: endFormatted,
+        financeMode
+      });
 
       const datesSet = new Set<string>();
-      
-      const addDate = (d: any) => {
-        if (typeof d === 'string') {
-          const match = d.match(/^(\d{4}-\d{2}-\d{2})/);
-          if (match) {
-            datesSet.add(match[1]);
-          }
+      monthTransactions.forEach(tx => {
+        if (tx.transactionDate) {
+          datesSet.add(tx.transactionDate);
         }
-      };
-
-      cdData?.forEach(r => addDate(r.entry_date));
-      capData?.forEach(r => addDate(r.entry_date));
-      cbData?.forEach(r => addDate(r.entry_date));
+      });
 
       return Array.from(datesSet).map(d => ({ c_date: d }));
     } catch (error) {

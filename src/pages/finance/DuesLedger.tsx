@@ -275,7 +275,7 @@ const DuesLedger: React.FC = () => {
         <div className="flex items-center gap-2.5 shrink-0 px-2 py-0.5 sm:ml-auto">
           <span className="text-xs font-black text-red-600 uppercase tracking-wider">Present Dues</span>
           <span className="text-red-700 text-xl font-black font-mono tracking-tight">
-            ₹{totals.presentDue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {totals.presentDue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
       </div>

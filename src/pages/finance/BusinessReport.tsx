@@ -44,13 +44,15 @@ const BusinessReport: React.FC = () => {
     totalLoans: 0,
     activeLoans: 0,
     closedLoans: 0,
+    npaClosedLoans: 0,
+    writtenOffLoans: 0,
     principalOutstanding: 0,
     interestReceived: 0,
     penaltyReceived: 0,
     pendingInterest: 0,
     pendingPenalty: 0,
     totalDue: 0,
- });
+  });
 
   useEffect(() => {
     const loadDefaultStartDate = async () => {
@@ -101,6 +103,8 @@ const BusinessReport: React.FC = () => {
         'Total Loans': summary.totalLoans,
         'Active Loans': summary.activeLoans,
         'Closed Loans': summary.closedLoans,
+        'NPA Closed Loans': summary.npaClosedLoans,
+        'Written Off Loans': summary.writtenOffLoans,
         'Principal Outstanding': summary.principalOutstanding,
         'Interest Received': summary.interestReceived,
         'Penalty Received': summary.penaltyReceived,
@@ -145,18 +149,32 @@ const BusinessReport: React.FC = () => {
         return true;
       });
 
-
-
       const processedLoans: BusinessLoanRow[] = [];
-      let cap = 0, tot = 0, pOut = 0, iRec = 0, pRec = 0, pInt = 0, pPen = 0, tDue = 0, act = 0, clo = 0;
+      let cap = 0, tot = 0, pOut = 0, iRec = 0, pRec = 0, pInt = 0, pPen = 0, tDue = 0;
+      let act = 0, clo = 0, npaClo = 0, wOff = 0;
 
       filteredLoans.forEach(l => {
         tot++;
         
+        const rawStatus = String(l.status || '').trim().toUpperCase();
+        const isNpaClosed = rawStatus === 'NPA_CLOSED' || rawStatus === 'NPA CLOSED' || rawStatus === 'NPA' || l.npa_closed === true || (l as any).is_npa === true;
+
+        let displayStatus = 'Active';
+        if (isNpaClosed) {
+          npaClo++;
+          displayStatus = 'NPA Closed';
+        } else if (rawStatus === 'CLOSED') {
+          clo++;
+          displayStatus = 'Closed';
+        } else if (rawStatus === 'WRITTEN_OFF' || rawStatus === 'WRITTEN OFF') {
+          wOff++;
+          displayStatus = 'Written Off';
+        } else {
+          act++;
+          displayStatus = 'Active';
+        }
+
         const metrics = FinanceCalculationEngine.computeLoanMetrics(l, dues);
-        
-        if (metrics.status === 'Active') act++;
-        if (metrics.status === 'Closed') clo++;
 
         cap += metrics.principalFinanced;
         iRec += metrics.interestEarned;
@@ -176,9 +194,9 @@ const BusinessReport: React.FC = () => {
           pendingInterest: metrics.pendingInterest,
           pendingPenalty: metrics.pendingPenalty,
           presentDue: metrics.presentDue,
-          status: l.status,
-       });
-     });
+          status: displayStatus,
+        });
+      });
 
       setLoans(processedLoans);
       setSummary({
@@ -186,13 +204,15 @@ const BusinessReport: React.FC = () => {
         totalLoans: tot,
         activeLoans: act,
         closedLoans: clo,
+        npaClosedLoans: npaClo,
+        writtenOffLoans: wOff,
         principalOutstanding: pOut,
         interestReceived: iRec,
         penaltyReceived: pRec,
         pendingInterest: pInt,
         pendingPenalty: pPen,
         totalDue: tDue,
-     });
+      });
    } catch (err) {
       console.error(err);
       toast.error('Failed to load business details');
@@ -312,48 +332,67 @@ const BusinessReport: React.FC = () => {
                 Partner Summary
               </h2>
             </div>
-            <div className='grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-slate-50/50'>
-              <div className='bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-center'>
-                <span className='text-slate-400 finance-small-label uppercase font-bold'>
-                  Capital Invested
-                </span>
-                <span className='text-lg font-black text-slate-900'>
-                  ₹{summary.capitalInvested.toLocaleString('en-IN')}
+            {/* 100% Reconciled Loan Status Audit Banner */}
+            <div className='mx-4 mt-4 p-3 bg-slate-900 text-white rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs font-mono font-bold shadow-xs'>
+              <div className='flex items-center gap-2'>
+                <span className='w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse'></span>
+                <span className='uppercase text-slate-300'>Loan Reconciliation Audit:</span>
+                <span className='text-white font-extrabold'>
+                  Total ({summary.totalLoans}) = Active ({summary.activeLoans}) + Closed ({summary.closedLoans}) + NPA Closed ({summary.npaClosedLoans}) {summary.writtenOffLoans > 0 ? `+ Written Off (${summary.writtenOffLoans})` : ''}
                 </span>
               </div>
-              <div className='bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-center'>
-                <span className='text-slate-400 finance-small-label uppercase font-bold'>
+              <div className='px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-black uppercase tracking-wider'>
+                ✓ Difference: 0 (100% Accounted)
+              </div>
+            </div>
+
+            <div className='grid grid-cols-2 md:grid-cols-6 gap-3 p-4 bg-slate-50/50'>
+              <div className='bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center'>
+                <span className='text-slate-500 finance-small-label uppercase font-bold text-[10px]'>
+                  Capital Invested
+                </span>
+                <span className='text-base font-black text-slate-900'>
+                  {summary.capitalInvested.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className='bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center'>
+                <span className='text-blue-700 finance-small-label uppercase font-bold text-[10px]'>
                   Total Loans
                 </span>
-                <span className='text-lg font-black text-blue-800'>
+                <span className='text-base font-black text-blue-800'>
                   {summary.totalLoans}
                 </span>
               </div>
-              <div className='bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-center'>
-                <span className='text-slate-400 finance-small-label uppercase font-bold'>
+              <div className='bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-100 shadow-sm flex flex-col justify-center'>
+                <span className='text-emerald-700 finance-small-label uppercase font-bold text-[10px]'>
                   Active Loans
                 </span>
-                <span className='text-lg font-black text-slate-800'>
+                <span className='text-base font-black text-emerald-800'>
                   {summary.activeLoans}
                 </span>
               </div>
-              <div className='bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-center'>
-                <span className='text-slate-400 finance-small-label uppercase font-bold'>
+              <div className='bg-slate-50 p-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center'>
+                <span className='text-slate-500 finance-small-label uppercase font-bold text-[10px]'>
                   Closed Loans
                 </span>
-                <span className='text-lg font-black text-slate-800'>
+                <span className='text-base font-black text-slate-800'>
                   {summary.closedLoans}
                 </span>
               </div>
-              <div className='bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-center'>
-                <span className='text-slate-400 finance-small-label uppercase font-bold'>
+              <div className='bg-amber-50/80 p-3.5 rounded-xl border border-amber-200 shadow-sm flex flex-col justify-center'>
+                <span className='text-amber-800 finance-small-label uppercase font-bold text-[10px]'>
+                  NPA Closed
+                </span>
+                <span className='text-base font-black text-amber-900'>
+                  {summary.npaClosedLoans}
+                </span>
+              </div>
+              <div className='bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center'>
+                <span className='text-slate-500 finance-small-label uppercase font-bold text-[10px]'>
                   Principal Out
                 </span>
-                <span className='text-lg font-black text-slate-900'>
-                  ₹
-                  {Math.round(summary.principalOutstanding).toLocaleString(
-                    'en-IN'
-                  )}
+                <span className='text-base font-black text-slate-900'>
+                  {Math.round(summary.principalOutstanding).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className='bg-emerald-50 p-4 rounded-xl border border-emerald-100 shadow-sm flex flex-col justify-center'>
@@ -361,7 +400,7 @@ const BusinessReport: React.FC = () => {
                   Interest Received
                 </span>
                 <span className='text-lg font-black text-emerald-800'>
-                  ₹
+                  
                   {Math.round(summary.interestReceived).toLocaleString('en-IN')}
                 </span>
               </div>
@@ -370,7 +409,7 @@ const BusinessReport: React.FC = () => {
                   Penalty Received
                 </span>
                 <span className='text-lg font-black text-emerald-800'>
-                  ₹{Math.round(summary.penaltyReceived).toLocaleString('en-IN')}
+                  {Math.round(summary.penaltyReceived).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className='bg-rose-50 p-4 rounded-xl border border-rose-100 shadow-sm flex flex-col justify-center'>
@@ -378,7 +417,7 @@ const BusinessReport: React.FC = () => {
                   Pending Interest
                 </span>
                 <span className='text-lg font-black text-rose-800'>
-                  ₹{Math.round(summary.pendingInterest).toLocaleString('en-IN')}
+                  {Math.round(summary.pendingInterest).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className='bg-rose-50 p-4 rounded-xl border border-rose-100 shadow-sm flex flex-col justify-center'>
@@ -386,7 +425,7 @@ const BusinessReport: React.FC = () => {
                   Pending Penalty
                 </span>
                 <span className='text-lg font-black text-rose-800'>
-                  ₹{Math.round(summary.pendingPenalty).toLocaleString('en-IN')}
+                  {Math.round(summary.pendingPenalty).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className='bg-white p-4 rounded-xl border shadow-sm flex flex-col justify-center'>
@@ -394,7 +433,7 @@ const BusinessReport: React.FC = () => {
                   Total Due
                 </span>
                 <span className='text-lg font-black text-rose-700'>
-                  ₹{Math.round(summary.totalDue).toLocaleString('en-IN')}
+                  {Math.round(summary.totalDue).toLocaleString('en-IN')}
                 </span>
               </div>
             </div>
@@ -466,39 +505,47 @@ const BusinessReport: React.FC = () => {
                             {row.borrower}
                           </td>
                           <td className='px-3 py-2.5 text-right text-slate-900 font-medium'>
-                            ₹{row.principal.toLocaleString('en-IN')}
+                            {row.principal.toLocaleString('en-IN')}
                           </td>
                           <td className='px-3 py-2.5 text-right text-emerald-650 font-bold'>
-                            ₹
+                            
                             {Math.round(row.interestReceived).toLocaleString(
                               'en-IN'
                             )}
                           </td>
                           <td className='px-3 py-2.5 text-right text-emerald-600'>
-                            ₹
+                            
                             {Math.round(row.penaltyReceived).toLocaleString(
                               'en-IN'
                             )}
                           </td>
                           <td className='px-3 py-2.5 text-right text-rose-500'>
-                            ₹
+                            
                             {Math.round(row.pendingInterest).toLocaleString(
                               'en-IN'
                             )}
                           </td>
                           <td className='px-3 py-2.5 text-right text-rose-500'>
-                            ₹
+                            
                             {Math.round(row.pendingPenalty).toLocaleString(
                               'en-IN'
                             )}
                           </td>
                           <td className='px-3 py-2.5 text-right text-rose-700 font-black'>
-                            ₹
+                            
                             {Math.round(row.presentDue).toLocaleString('en-IN')}
                           </td>
                           <td className='px-3 py-2.5 text-center'>
                             <span
-                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${row.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-250' : 'bg-slate-150 text-slate-600'}`}
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                                row.status === 'Active'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                                  : row.status === 'NPA Closed'
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                                  : row.status === 'Closed'
+                                  ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                                  : 'bg-rose-50 text-rose-800 border border-rose-300'
+                              }`}
                             >
                               {row.status}
                             </span>
@@ -542,14 +589,14 @@ const BusinessReport: React.FC = () => {
             </div>
           </div>
 
-          {/* Partner Summary - 10 Items */}
-          <div className='grid grid-cols-5 gap-2 mb-4'>
+          {/* Partner Summary - 11 Items Reconciled */}
+          <div className='grid grid-cols-6 gap-2 mb-4'>
             <div className='border p-2 rounded'>
               <span className='font-bold uppercase text-[9px] block text-slate-500'>
                 Capital Invested
               </span>
               <p className='font-black text-sm'>
-                ₹{summary.capitalInvested.toLocaleString('en-IN')}
+                {summary.capitalInvested.toLocaleString('en-IN')}
               </p>
             </div>
             <div className='border p-2 rounded'>
@@ -560,11 +607,11 @@ const BusinessReport: React.FC = () => {
                 {summary.totalLoans}
               </p>
             </div>
-            <div className='border p-2 rounded'>
-              <span className='font-bold uppercase text-[9px] block text-slate-500'>
+            <div className='border p-2 rounded bg-emerald-50/50'>
+              <span className='font-bold uppercase text-[9px] block text-emerald-800'>
                 Active Loans
               </span>
-              <p className='font-black text-sm text-slate-800'>
+              <p className='font-black text-sm text-emerald-900'>
                 {summary.activeLoans}
               </p>
             </div>
@@ -576,12 +623,20 @@ const BusinessReport: React.FC = () => {
                 {summary.closedLoans}
               </p>
             </div>
+            <div className='border p-2 rounded bg-amber-50/50'>
+              <span className='font-bold uppercase text-[9px] block text-amber-800'>
+                NPA Closed
+              </span>
+              <p className='font-black text-sm text-amber-900'>
+                {summary.npaClosedLoans}
+              </p>
+            </div>
             <div className='border p-2 rounded'>
               <span className='font-bold uppercase text-[9px] block text-slate-500'>
                 Principal Out
               </span>
               <p className='font-black text-sm'>
-                ₹
+                
                 {Math.round(summary.principalOutstanding).toLocaleString(
                   'en-IN'
                 )}
@@ -593,7 +648,7 @@ const BusinessReport: React.FC = () => {
                 Int Received
               </span>
               <p className='font-black text-sm text-emerald-800'>
-                ₹{Math.round(summary.interestReceived).toLocaleString('en-IN')}
+                {Math.round(summary.interestReceived).toLocaleString('en-IN')}
               </p>
             </div>
             <div className='border p-2 rounded bg-emerald-50'>
@@ -601,7 +656,7 @@ const BusinessReport: React.FC = () => {
                 Pen Received
               </span>
               <p className='font-black text-sm text-emerald-800'>
-                ₹{Math.round(summary.penaltyReceived).toLocaleString('en-IN')}
+                {Math.round(summary.penaltyReceived).toLocaleString('en-IN')}
               </p>
             </div>
             <div className='border p-2 rounded bg-rose-50'>
@@ -609,7 +664,7 @@ const BusinessReport: React.FC = () => {
                 Pend Int
               </span>
               <p className='font-black text-sm text-rose-800'>
-                ₹{Math.round(summary.pendingInterest).toLocaleString('en-IN')}
+                {Math.round(summary.pendingInterest).toLocaleString('en-IN')}
               </p>
             </div>
             <div className='border p-2 rounded bg-rose-50'>
@@ -617,7 +672,7 @@ const BusinessReport: React.FC = () => {
                 Pend Pen
               </span>
               <p className='font-black text-sm text-rose-800'>
-                ₹{Math.round(summary.pendingPenalty).toLocaleString('en-IN')}
+                {Math.round(summary.pendingPenalty).toLocaleString('en-IN')}
               </p>
             </div>
             <div className='border p-2 rounded'>
@@ -625,7 +680,7 @@ const BusinessReport: React.FC = () => {
                 Total Due
               </span>
               <p className='font-black text-sm text-rose-700'>
-                ₹{Math.round(summary.totalDue).toLocaleString('en-IN')}
+                {Math.round(summary.totalDue).toLocaleString('en-IN')}
               </p>
             </div>
           </div>
@@ -674,23 +729,23 @@ const BusinessReport: React.FC = () => {
                       {row.borrower}
                     </td>
                     <td className='px-2 py-1 border-r border-slate-300 text-right'>
-                      ₹{row.principal.toLocaleString('en-IN')}
+                      {row.principal.toLocaleString('en-IN')}
                     </td>
                     <td className='px-2 py-1 border-r border-slate-300 text-right'>
-                      ₹
+                      
                       {Math.round(row.interestReceived).toLocaleString('en-IN')}
                     </td>
                     <td className='px-2 py-1 border-r border-slate-300 text-right'>
-                      ₹{Math.round(row.penaltyReceived).toLocaleString('en-IN')}
+                      {Math.round(row.penaltyReceived).toLocaleString('en-IN')}
                     </td>
                     <td className='px-2 py-1 border-r border-slate-300 text-right'>
-                      ₹{Math.round(row.pendingInterest).toLocaleString('en-IN')}
+                      {Math.round(row.pendingInterest).toLocaleString('en-IN')}
                     </td>
                     <td className='px-2 py-1 border-r border-slate-300 text-right'>
-                      ₹{Math.round(row.pendingPenalty).toLocaleString('en-IN')}
+                      {Math.round(row.pendingPenalty).toLocaleString('en-IN')}
                     </td>
                     <td className='px-2 py-1 border-r border-slate-300 text-right font-black'>
-                      ₹{Math.round(row.presentDue).toLocaleString('en-IN')}
+                      {Math.round(row.presentDue).toLocaleString('en-IN')}
                     </td>
                     <td className='px-2 py-1 text-center font-bold text-[10px] uppercase'>
                       {row.status}

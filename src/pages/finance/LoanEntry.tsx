@@ -361,19 +361,20 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
       if (fullLoan.guarantor_1_id) setG1SelectedId(fullLoan.guarantor_1_id);
       if (fullLoan.guarantor_2_id) setG2SelectedId(fullLoan.guarantor_2_id);
 
-      // ── Partner: restore from stored customer.partner_name ────────────────
-      // partners state may not be populated yet at this point; we store the
-      // name so the useEffect below can match it once partners load.
-      const customerPartnerName = (fullLoan as any).customer?.partner_name || null;
-      if (customerPartnerName) {
-        // If partners are already loaded, match immediately
+      // ── Partner: restore from stored loan or customer ────────────────
+      const storedPartnerId = fullLoan.partner_id || (fullLoan as any).customer?.partner_id || null;
+      const storedPartnerName = fullLoan.partner_name || (fullLoan as any).customer?.partner_name || null;
+      
+      if (storedPartnerId) {
+        setSelectedPartnerId(storedPartnerId);
+        _deferredEditPartnerName = null;
+      } else if (storedPartnerName) {
         setPartners(prev => {
-          const match = prev.find(p => p.name === customerPartnerName);
+          const match = prev.find(p => p.name === storedPartnerName);
           if (match && match.id) setSelectedPartnerId(match.id as string);
           return prev;
         });
-        // Store the name for deferred matching (see partners useEffect below)
-        _deferredEditPartnerName = customerPartnerName;
+        _deferredEditPartnerName = storedPartnerName;
       } else {
         _deferredEditPartnerName = null;
       }
@@ -1013,6 +1014,9 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
         `Extra: ${extraDetails || 'N/A'}`
       ].filter(Boolean).join(' | ');
 
+      const selectedPartner = partners.find(p => p.id === selectedPartnerId);
+      const partnerName = selectedPartner ? selectedPartner.name : null;
+
       const loanPayload = {
         loan_id: loanId,
         customer_id: selectedCustomerId,
@@ -1034,6 +1038,8 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
         loan_category: loanCategory,
         guarantor_1_id: g1SelectedId || null,
         guarantor_2_id: g2SelectedId || null,
+        partner_id: selectedPartnerId || null,
+        partner_name: partnerName,
         penalty_percent: Number(penaltyPercent) || 0.75,
         document_charges: Number(docCharges) || 0,
         period_days: loanCategory === 'CD' ? ((durationMonths === '' || durationMonths === null || durationMonths === undefined) ? 30 : Number(durationMonths)) : null
@@ -1054,9 +1060,6 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
           });
         }
       });
-
-      const selectedPartner = partners.find(p => p.id === selectedPartnerId);
-      const partnerName = selectedPartner ? selectedPartner.name : null;
 
       if (editLoanId) {
         // Edit mode save
@@ -1382,15 +1385,15 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
                     Reason: {npaWarning.reason || 'N/A'}.
                   </p>
                   <p className="font-bold flex flex-wrap gap-x-6 gap-y-1 mt-1">
-                    <span>TOTAL LIABILITY: ₹{
+                    <span>TOTAL LIABILITY: {
                       (
                         npaWarning.total_liability !== undefined && npaWarning.total_liability !== null && Number(npaWarning.total_liability) > 0
                           ? Number(npaWarning.total_liability) 
                           : (Number(npaWarning.balance_amount || 0) + Number(npaWarning.interest_due || 0) + Number(npaWarning.penalty_due || 0))
                       ).toLocaleString('en-IN', { minimumFractionDigits: 2 })
                     }</span>
-                    <span>SETTLEMENT AMOUNT: ₹{(npaWarning.settlement_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                    <span>WAIVED AMOUNT: ₹{
+                    <span>SETTLEMENT AMOUNT: {(npaWarning.settlement_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <span>WAIVED AMOUNT: {
                       (
                         npaWarning.waived_amount !== undefined && npaWarning.waived_amount !== null && Number(npaWarning.waived_amount) > 0
                           ? Number(npaWarning.waived_amount)
@@ -1960,7 +1963,7 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-6 gap-4 items-end">
             <div>
-              <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">LOAN AMOUNT (₹) <span className="text-red-500">*</span></label>
+              <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">LOAN AMOUNT () <span className="text-red-500">*</span></label>
               <input
                 type="number"
                 ref={amountRef}
@@ -2007,7 +2010,7 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
               />
             </div>
             <div>
-              <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">DOC CHARGES (₹)</label>
+              <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">DOC CHARGES ()</label>
               <input
                 type="number"
                 value={docCharges}
@@ -2020,7 +2023,7 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 flex flex-col justify-center items-center h-[38px] font-bold shadow-inner">
               <span className="text-[8px] text-slate-400 uppercase block tracking-wider">Net Amount To Borrower</span>
               <span className="text-[14px] text-emerald-800 font-black">
-                ₹{liveCalculations ? formatRupee(liveCalculations.netDisbursed) : '0.00'}
+                {liveCalculations ? formatRupee(liveCalculations.netDisbursed) : '0.00'}
               </span>
             </div>
           </div>
@@ -2377,11 +2380,11 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
           <div>
             <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase font-bold text-sm">Loan Terms</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="text-gray-500 peek-caption-12 font-bold">PRINCIPAL:</span> ₹{formatRupee(Number(amount) || 0)}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">PRINCIPAL:</span> {formatRupee(Number(amount) || 0)}</div>
                <div><span className="text-gray-500 peek-caption-12 font-bold">INTEREST RATE:</span> {interestRate}% / MONTH</div>
                <div><span className="text-gray-500 peek-caption-12 font-bold">DURATION:</span> {durationMonths} MONTHS</div>
                <div><span className="text-gray-500 peek-caption-12 font-bold">DUE TYPE:</span> {dueType}</div>
-               <div><span className="text-gray-500 peek-caption-12 font-bold">DOC CHARGES:</span> ₹{formatRupee(Number(docCharges) || 0)}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">DOC CHARGES:</span> {formatRupee(Number(docCharges) || 0)}</div>
                <div className="col-span-2"><span className="text-gray-500 peek-caption-12 font-bold">PARTICULARS:</span> {particulars}</div>
             </div>
           </div>
@@ -2391,10 +2394,10 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
           <div>
             <h3 className="bg-slate-100 p-2 finance-sidebar-link uppercase font-bold text-sm">Calculations</h3>
             <div className="grid grid-cols-2 gap-4 mt-2 p-2">
-               <div><span className="text-gray-500 peek-caption-12 font-bold">NET DISBURSED:</span> ₹{formatRupee(liveCalculations.netDisbursed)}</div>
-               <div><span className="text-gray-500 peek-caption-12 font-bold">TOTAL REPAYMENT:</span> ₹{formatRupee(liveCalculations.totalRepayment)}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">NET DISBURSED:</span> {formatRupee(liveCalculations.netDisbursed)}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">TOTAL REPAYMENT:</span> {formatRupee(liveCalculations.totalRepayment)}</div>
                <div><span className="text-gray-500 peek-caption-12 font-bold">INSTALMENT COUNT:</span> {liveCalculations.duesCount}</div>
-               <div><span className="text-gray-500 peek-caption-12 font-bold">INSTALMENT AMOUNT:</span> ₹{formatRupee(liveCalculations.dueAmount)}</div>
+               <div><span className="text-gray-500 peek-caption-12 font-bold">INSTALMENT AMOUNT:</span> {formatRupee(liveCalculations.dueAmount)}</div>
             </div>
           </div>
           )}

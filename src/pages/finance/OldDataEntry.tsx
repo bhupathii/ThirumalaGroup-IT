@@ -804,7 +804,7 @@ const OldDataEntry: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Input
-                  label="PRINCIPAL (₹)"
+                  label="PRINCIPAL ()"
                   type="number"
                   ref={principalRef} error={errors.principal} value={principal} onChange={(val) => { setPrincipal(val); setErrors(p => ({...p, principal: false})) }}
                   required
@@ -817,7 +817,7 @@ const OldDataEntry: React.FC = () => {
                   step="0.1"
                 />
                 <Input
-                  label="DOCUMENT CHARGES (₹)"
+                  label="DOCUMENT CHARGES ()"
                   type="number"
                   value={docCharges}
                   onChange={setDocCharges}
@@ -893,7 +893,7 @@ const OldDataEntry: React.FC = () => {
                             type="number"
                             value={r.interest}
                             onChange={(e) => handleRenewalChange(r.id, 'interest', e.target.value)}
-                            placeholder="₹0"
+                            placeholder="0"
                             className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-slate-850 focus:outline-none focus:ring-1 focus:ring-slate-950 finance-header-time"
                           />
                         </td>
@@ -902,7 +902,7 @@ const OldDataEntry: React.FC = () => {
                             type="number"
                             value={r.penalty}
                             onChange={(e) => handleRenewalChange(r.id, 'penalty', e.target.value)}
-                            placeholder="₹0"
+                            placeholder="0"
                             className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-slate-850 focus:outline-none focus:ring-1 focus:ring-slate-955 finance-header-time"
                           />
                         </td>
@@ -911,7 +911,7 @@ const OldDataEntry: React.FC = () => {
                             type="number"
                             value={r.partialPaid}
                             onChange={(e) => handleRenewalChange(r.id, 'partialPaid', e.target.value)}
-                            placeholder="₹0"
+                            placeholder="0"
                             className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-slate-850 focus:outline-none focus:ring-1 focus:ring-slate-955 finance-header-time"
                           />
                         </td>
@@ -968,13 +968,13 @@ const OldDataEntry: React.FC = () => {
                           {row.particulars}
                         </td>
                         <td className="px-3 py-2.5 text-right text-red-650 font-mono finance-input">
-                          {row.debit > 0 ? `₹${row.debit.toLocaleString('en-IN')}` : '-'}
+                          {row.debit > 0 ? `${row.debit.toLocaleString('en-IN')}` : '-'}
                         </td>
                         <td className="px-3 py-2.5 text-right text-green-650 font-mono finance-input">
-                          {row.credit > 0 ? `₹${row.credit.toLocaleString('en-IN')}` : '-'}
+                          {row.credit > 0 ? `${row.credit.toLocaleString('en-IN')}` : '-'}
                         </td>
                         <td className="px-3 py-2.5 text-right font-mono text-slate-900 finance-input">
-                          ₹{row.balance.toLocaleString('en-IN')}
+                          {row.balance.toLocaleString('en-IN')}
                         </td>
                       </tr>
                     ))}
@@ -1000,7 +1000,7 @@ const OldDataEntry: React.FC = () => {
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
                 <span className="text-[9px] text-slate-400 animate-pulse finance-input uppercase">PRINCIPAL</span>
                 <span className="text-slate-850 mt-1 finance-brand">
-                  ₹{parsedPrincipal.toLocaleString('en-IN')}
+                  {parsedPrincipal.toLocaleString('en-IN')}
                 </span>
               </div>
 
@@ -1008,7 +1008,7 @@ const OldDataEntry: React.FC = () => {
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
                 <span className="text-[9px] text-slate-400 finance-input uppercase">HOLD ({holdPercent}%)</span>
                 <span className="text-slate-850 mt-1 finance-brand">
-                  ₹{holdAmount.toLocaleString('en-IN')}
+                  {holdAmount.toLocaleString('en-IN')}
                 </span>
               </div>
 
@@ -1016,7 +1016,7 @@ const OldDataEntry: React.FC = () => {
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
                 <span className="text-[9px] text-slate-400 finance-input uppercase">DOCUMENT CHARGES</span>
                 <span className="text-slate-850 mt-1 finance-brand">
-                  ₹{parsedDocCharges.toLocaleString('en-IN')}
+                  {parsedDocCharges.toLocaleString('en-IN')}
                 </span>
               </div>
 
@@ -1024,7 +1024,7 @@ const OldDataEntry: React.FC = () => {
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
                 <span className="text-[9px] text-slate-400 finance-input uppercase">NET DISBURSEMENT</span>
                 <span className="text-green-650 mt-1 finance-brand">
-                  ₹{netDisbursement.toLocaleString('en-IN')}
+                  {netDisbursement.toLocaleString('en-IN')}
                 </span>
               </div>
 
@@ -1040,7 +1040,7 @@ const OldDataEntry: React.FC = () => {
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
                 <span className="text-[9px] text-slate-400 finance-input uppercase">INTEREST POSTED SO FAR</span>
                 <span className="text-slate-850 mt-1 finance-brand">
-                  ₹{totalInterestPosted.toLocaleString('en-IN')}
+                  {totalInterestPosted.toLocaleString('en-IN')}
                 </span>
               </div>
 
@@ -1048,7 +1048,7 @@ const OldDataEntry: React.FC = () => {
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
                 <span className="text-[9px] text-slate-400 finance-input uppercase">PENALTY POSTED SO FAR</span>
                 <span className="text-slate-850 mt-1 finance-brand">
-                  ₹{totalPenaltyPosted.toLocaleString('en-IN')}
+                  {totalPenaltyPosted.toLocaleString('en-IN')}
                 </span>
               </div>
 
@@ -1056,7 +1056,7 @@ const OldDataEntry: React.FC = () => {
               <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-150 flex flex-col">
                 <span className="text-[9px] text-slate-400 finance-input uppercase">PARTIAL COLLECTED</span>
                 <span className="text-slate-850 mt-1 finance-brand">
-                  ₹{totalPartialCollected.toLocaleString('en-IN')}
+                  {totalPartialCollected.toLocaleString('en-IN')}
                 </span>
               </div>
 
@@ -1076,7 +1076,7 @@ const OldDataEntry: React.FC = () => {
                   </div>
                   <div className="flex justify-between text-slate-700 border-t border-slate-200 pt-1.5 mt-1.5 finance-header-time">
                     <span>Forward Accrued Interest:</span>
-                    <span className="text-[#0b1329] finance-input">₹{accruedForwardInterest.toLocaleString('en-IN')}</span>
+                    <span className="text-[#0b1329] finance-input">{accruedForwardInterest.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
               )}

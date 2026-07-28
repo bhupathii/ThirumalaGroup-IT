@@ -7,12 +7,12 @@
  * WHAT IS KNOWN (from forensic audit 2026-07-06):
  *   - loan_id:       CD099
  *   - loan_date:     2023-10-05
- *   - principal:     ₹4,00,000
+ *   - principal:     4,00,000
  *   - rate:          3%
  *   - penalty:       0.75%
  *   - period_days:   30
  *   - baseDueDate:   2023-11-03  (loanDate + 29 days, inclusive-cycle)
- *   - dailyInterest: ₹400.00/day
+ *   - dailyInterest: 400.00/day
  *
  * WHAT IS BROKEN:
  *   - cd_interest_details: 0 rows (completely empty)
@@ -22,9 +22,9 @@
  * WHAT THE UI CURRENTLY SHOWS (WRONG):
  *   - currentDueDate:  2023-11-03  (baseDue — no renewals applied)
  *   - rawDueDays:      976
- *   - accruedInterest: ₹3,90,400  (correct arithmetic, wrong input)
- *   - accruedPenalty:  ₹97,600
- *   - totalForClose:   ₹8,88,000
+ *   - accruedInterest: 3,90,400  (correct arithmetic, wrong input)
+ *   - accruedPenalty:  97,600
+ *   - totalForClose:   8,88,000
  *
  * HOW TO UNBLOCK:
  *   1. Retrieve CD099's actual payment history from the legacy Access system.

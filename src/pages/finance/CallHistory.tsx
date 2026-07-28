@@ -286,7 +286,7 @@ const CallHistory: React.FC = () => {
                   <td className="p-1 border border-slate-300 font-bold whitespace-nowrap">{log.followed_up_by || '—'}</td>
                   <td className="p-1 border border-slate-300 leading-tight">
                     {log.promised_amount ? (
-                      <span className="font-bold text-slate-950 mr-1">[PROMISED: ₹{log.promised_amount.toLocaleString('en-IN')}]</span>
+                      <span className="font-bold text-slate-950 mr-1">[PROMISED: {log.promised_amount.toLocaleString('en-IN')}]</span>
                     ) : null}
                     {log.narration || '—'}
                   </td>
@@ -625,7 +625,7 @@ const CallHistory: React.FC = () => {
                               <div className="line-clamp-2 leading-tight">
                                 {log.promised_amount ? (
                                   <span className="font-bold text-emerald-700 mr-1.5 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200 font-mono text-[10px]">
-                                    PROMISED: ₹{log.promised_amount.toLocaleString('en-IN')}
+                                    PROMISED: {log.promised_amount.toLocaleString('en-IN')}
                                   </span>
                                 ) : null}
                                 {log.narration || 'No remarks recorded.'}

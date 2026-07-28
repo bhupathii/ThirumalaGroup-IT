@@ -855,7 +855,7 @@ const PaymentFollowUp: React.FC = () => {
                       <td className="px-2 py-1.5 border-r border-slate-100 text-slate-500 font-sans text-center text-sm font-semibold">{idx + 1}</td>
                       <td className="px-2 py-1.5 border-r border-slate-100 text-blue-700 text-[16px] font-black whitespace-nowrap">{due.loanId}</td>
                       <td className="px-2 py-1.5 border-r border-slate-100 text-slate-900 font-sans text-[16px] font-black uppercase">{due.customerName}</td>
-                      <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-sm font-black whitespace-nowrap">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-sm font-black whitespace-nowrap">{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
                       <td className="px-2 py-1.5 border-r border-slate-100 text-center text-red-655 text-sm font-bold whitespace-nowrap">{due.dueDays}</td>
                       <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-sm font-semibold">{due.currentDueDate.split('-').reverse().join('/')}</td>
                       <td className="px-2 py-1.5 border-r border-slate-100 font-sans text-slate-700 space-y-1.5 whitespace-normal">
@@ -882,7 +882,7 @@ const PaymentFollowUp: React.FC = () => {
                                   <span className="text-amber-700 font-black">{due.activePendingAction.result} • Next call {due.activePendingAction.next_follow_up_date.split('-').reverse().join('/')}</span>
                                 ) : (
                                   <span className="text-blue-700 font-black">
-                                    PROMISED TO PAY • {due.activePendingAction.promised_amount ? '₹' + Number(due.activePendingAction.promised_amount).toLocaleString('en-IN') + ' ' : ''}by {due.activePendingAction.next_follow_up_date.split('-').reverse().join('/')}
+                                    PROMISED TO PAY • {due.activePendingAction.promised_amount ? '' + Number(due.activePendingAction.promised_amount).toLocaleString('en-IN') + ' ' : ''}by {due.activePendingAction.next_follow_up_date.split('-').reverse().join('/')}
                                   </span>
                                 )
                               ) : due.lastFollowUp ? (
@@ -1049,35 +1049,35 @@ const PaymentFollowUp: React.FC = () => {
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
                       <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Principal</div>
                       <div className="text-[28px] font-black text-slate-900 font-mono leading-tight mt-0.5">
-                        ₹{Math.round(renewCalculations?.principalBalance ?? selectedLoan.currentPrincipal).toLocaleString('en-IN')}
+                        {Math.round(renewCalculations?.principalBalance ?? selectedLoan.currentPrincipal).toLocaleString('en-IN')}
                       </div>
                     </div>
                     {/* Interest Due */}
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
                       <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Interest Due</div>
                       <div className="text-[28px] font-black text-red-600 font-mono leading-tight mt-0.5">
-                        ₹{Math.round(renewCalculations?.accruedInterest ?? selectedLoan.pendingInterest).toLocaleString('en-IN')}
+                        {Math.round(renewCalculations?.accruedInterest ?? selectedLoan.pendingInterest).toLocaleString('en-IN')}
                       </div>
                     </div>
                     {/* Penalty Due */}
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
                       <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Penalty Due</div>
                       <div className="text-[28px] font-black text-orange-600 font-mono leading-tight mt-0.5">
-                        ₹{Math.round(renewCalculations?.accruedPenalty ?? selectedLoan.penalty).toLocaleString('en-IN')}
+                        {Math.round(renewCalculations?.accruedPenalty ?? selectedLoan.penalty).toLocaleString('en-IN')}
                       </div>
                     </div>
                     {/* Today's Due */}
                     <div className="bg-red-50 rounded-xl border border-red-200 shadow-sm px-3 py-2">
                       <div className="text-[13px] font-bold text-red-600 uppercase tracking-wide leading-none">Today's Due</div>
                       <div className="text-[28px] font-black text-red-700 font-mono leading-tight mt-0.5">
-                        ₹{Math.round(renewCalculations?.todayDue ?? selectedLoan.presentDue).toLocaleString('en-IN')}
+                        {Math.round(renewCalculations?.todayDue ?? selectedLoan.presentDue).toLocaleString('en-IN')}
                       </div>
                     </div>
                     {/* Outstanding */}
                     <div className="bg-[#0b1329] rounded-xl shadow-sm px-3 py-2">
                       <div className="text-[13px] font-bold text-slate-400 uppercase tracking-wide leading-none">Outstanding</div>
                       <div className="text-[28px] font-black text-white font-mono leading-tight mt-0.5">
-                        ₹{Math.round(
+                        {Math.round(
                           (renewCalculations?.principalBalance ?? selectedLoan.currentPrincipal) +
                           (renewCalculations?.accruedInterest ?? selectedLoan.pendingInterest) +
                           (renewCalculations?.accruedPenalty ?? selectedLoan.penalty)
@@ -1088,7 +1088,7 @@ const PaymentFollowUp: React.FC = () => {
                     <div className="bg-emerald-50 rounded-xl border border-emerald-200 shadow-sm px-3 py-2">
                       <div className="text-[13px] font-bold text-emerald-700 uppercase tracking-wide leading-none">Total Paid</div>
                       <div className="text-[28px] font-black text-emerald-700 font-mono leading-tight mt-0.5">
-                        ₹{Math.round(renewCalculations?.totalCollected ?? (cdLedgerEntries.filter((e: any) => e.credit > 0).reduce((s: number, e: any) => s + Number(e.credit), 0))).toLocaleString('en-IN')}
+                        {Math.round(renewCalculations?.totalCollected ?? (cdLedgerEntries.filter((e: any) => e.credit > 0).reduce((s: number, e: any) => s + Number(e.credit), 0))).toLocaleString('en-IN')}
                       </div>
                     </div>
                   </div>
@@ -1101,21 +1101,21 @@ const PaymentFollowUp: React.FC = () => {
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
                       <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Interest Paid</div>
                       <div className="text-[22px] font-black text-emerald-700 font-mono leading-tight mt-0.5">
-                        ₹{Math.round(renewCalculations?.interestPaid ?? 0).toLocaleString('en-IN')}
+                        {Math.round(renewCalculations?.interestPaid ?? 0).toLocaleString('en-IN')}
                       </div>
                     </div>
                     {/* Penalty Paid */}
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
                       <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Penalty Paid</div>
                       <div className="text-[22px] font-black text-emerald-700 font-mono leading-tight mt-0.5">
-                        ₹{Math.round(renewCalculations?.penaltyPaid ?? 0).toLocaleString('en-IN')}
+                        {Math.round(renewCalculations?.penaltyPaid ?? 0).toLocaleString('en-IN')}
                       </div>
                     </div>
                     {/* Renewal Paid */}
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-2">
                       <div className="text-[13px] font-bold text-slate-500 uppercase tracking-wide leading-none">Renewal Paid</div>
                       <div className="text-[22px] font-black text-emerald-700 font-mono leading-tight mt-0.5">
-                        ₹{Math.round(cdInterestDetails.reduce((s: number, d: any) => s + Number(d.interest_amount || 0), 0)).toLocaleString('en-IN')}
+                        {Math.round(cdInterestDetails.reduce((s: number, d: any) => s + Number(d.interest_amount || 0), 0)).toLocaleString('en-IN')}
                       </div>
                     </div>
                     {/* No. of Renewals */}
@@ -1190,7 +1190,7 @@ const PaymentFollowUp: React.FC = () => {
                                     <div className="line-clamp-2 leading-tight">
                                       {h.promised_amount ? (
                                         <span className="font-bold text-emerald-700 mr-1 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200 font-mono text-[10px]">
-                                          ₹{Number(h.promised_amount).toLocaleString('en-IN')}
+                                          {Number(h.promised_amount).toLocaleString('en-IN')}
                                         </span>
                                       ) : null}
                                       {h.narration || '—'}
@@ -1313,7 +1313,7 @@ const PaymentFollowUp: React.FC = () => {
                                 />
                               </div>
                               <div>
-                                <label className="text-[12px] font-black uppercase text-blue-800 block mb-1">Amount (₹)</label>
+                                <label className="text-[12px] font-black uppercase text-blue-800 block mb-1">Amount ()</label>
                                 <input
                                   type="number"
                                   placeholder="e.g. 5000"
@@ -1465,7 +1465,7 @@ const PaymentFollowUp: React.FC = () => {
                       <td className="p-1 border text-center print-nowrap">{idx + 1}</td>
                       <td className="p-1 border font-bold text-blue-855 print-nowrap">{due.loanId}</td>
                       <td className="p-1 border font-bold print-wrap">{due.customerName}</td>
-                      <td className="p-1 border text-right text-red-700 font-bold print-amount">₹{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
+                      <td className="p-1 border text-right text-red-700 font-bold print-amount">{Math.round(due.presentDue).toLocaleString('en-IN')}</td>
                       <td className="p-1 border text-center font-bold print-nowrap">{due.dueDays}</td>
                       <td className="p-1 border print-nowrap">{due.currentDueDate.split('-').reverse().join('/')}</td>
                       <td className="p-1 border font-bold print-nowrap">{due.phone || '—'}</td>

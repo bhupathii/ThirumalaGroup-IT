@@ -46,17 +46,6 @@ const mapAccountName = (name: string): string => {
   if (cleanName === 'CD AMOUNT PAID') return 'CD Amount Paid';
   return name || 'CD Principal';
 };
-
-const isPaymentCollectionEntry = (entry: any): boolean => {
-  const cleanName = (entry.account_name || '').trim().toUpperCase();
-  const cleanType = (entry.entry_type || '').trim().toUpperCase();
-  return (
-    cleanType === 'AMOUNT_PAID' ||
-    cleanName === 'CD AMOUNT PAID' ||
-    cleanName === 'CUSTOMER PAYMENT' ||
-    cleanName === 'AMOUNT RECEIVED'
-  );
-};
 const normalizeCDLedgerEntries = (entries: any[]) => {
   return entries.map((entry: any) => {
     let entryType = entry.entry_type;
@@ -96,11 +85,11 @@ const normalizeCDLedgerEntries = (entries: any[]) => {
 };
 
 const formatCDCurrency = (val: number | undefined): string => {
-  if (val === undefined || isNaN(val)) return '₹0.00';
+  if (val === undefined || isNaN(val)) return '0.00';
   if (val < 0) {
-    return `-₹${Math.abs(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `-${Math.abs(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
-  return `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const CDLedger: React.FC = () => {
@@ -134,6 +123,16 @@ const CDLedger: React.FC = () => {
 
   const [paymentDate, setPaymentDate] = useState(() => getLocalBusinessDateISO());
   const [partnersData, setPartnersData] = useState<FinancePartner[]>([]);
+  const [expandedPivotRowIds, setExpandedPivotRowIds] = useState<Set<string>>(new Set());
+
+  const togglePivotRowExpand = (id: string) => {
+    setExpandedPivotRowIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -223,7 +222,7 @@ const CDLedger: React.FC = () => {
     const loanPrincipal = Number(selectedLoan.amount) || 0;
     
     if (Math.abs(totalPartnerPrincipal - loanPrincipal) > 1) {
-      console.warn(`[PARTNER RECONCILIATION WARNING] Total Partner Principal Share (₹${totalPartnerPrincipal}) does not match Loan Principal (₹${loanPrincipal}).`);
+      console.warn(`[PARTNER RECONCILIATION WARNING] Total Partner Principal Share (${totalPartnerPrincipal}) does not match Loan Principal (${loanPrincipal}).`);
     }
     if (Math.abs(totalPartnerPercent - 100) > 0.1) {
       console.warn(`[PARTNER PERCENTAGE WARNING] Total Partner Share Percent (${totalPartnerPercent}%) does not equal 100%.`);
@@ -579,7 +578,7 @@ const CDLedger: React.FC = () => {
       return;
     }
 
-    const confirmDelete = window.confirm(`Are you sure you want to delete transaction ${tx.receipt_no || ''} of ₹${Number(tx.amount).toLocaleString('en-IN')}? This will completely rebuild the loan lifecycle.`);
+    const confirmDelete = window.confirm(`Are you sure you want to delete transaction ${tx.receipt_no || ''} of ${Number(tx.amount).toLocaleString('en-IN')}? This will completely rebuild the loan lifecycle.`);
     if (!confirmDelete) return;
 
     const reason = window.prompt('Please enter the reason for deleting this transaction (Mandatory):');
@@ -897,6 +896,185 @@ const CDLedger: React.FC = () => {
     );
   }, [selectedLoan, originalLoanDate, displayedStatementEntries, paymentDate]);
 
+  // Statement-Oriented Pivot Ledger Engine (One Business Event = One Row)
+  const groupedPivotStatementEntries = useMemo(() => {
+    if (!selectedLoan || !renewCalculations) return [];
+
+    const rawList = [...displayedStatementEntries];
+    if (rawList.length === 0) return [];
+
+    // 1. Separate Opening / Loan Issue entries (Disbursement, Opening Commission, Doc Charges)
+    const openingEntries = rawList.filter(e =>
+      e.entry_type === 'original_loan' ||
+      e.entry_type === 'Disbursement' ||
+      e.entry_type === 'opening_commission' ||
+      e.entry_type === 'Commission' ||
+      e.entry_type === 'document_charge' ||
+      (e.account_name || '').toLowerCase() === 'cd document charges a/c'
+    );
+
+    const nonOpeningEntries = rawList.filter(e => !openingEntries.includes(e));
+
+    // Initialize Loan Issue Row
+    const disbEntry = openingEntries.find(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
+    const commEntry = openingEntries.find(e => e.entry_type === 'opening_commission' || e.entry_type === 'Commission');
+    const docEntry = openingEntries.find(e => e.entry_type === 'document_charge' || (e.account_name || '').toLowerCase() === 'cd document charges a/c');
+
+    const issueDate = disbEntry ? disbEntry.entry_date : selectedLoan.date;
+    const issuePrincipal = disbEntry ? Number(disbEntry.debit || 0) : Number(selectedLoan.amount || 0);
+    const issueInterest = commEntry ? Number(commEntry.credit || 0) : 0;
+    const issueDoc = docEntry ? Number(docEntry.credit || docEntry.debit || 0) : Number(selectedLoan.document_charges || 0);
+
+    const loanIssueRow = {
+      id: `loan-issue-${selectedLoan.id}`,
+      date: issueDate,
+      receiptNo: '—',
+      eventType: 'Loan Issue',
+      principalPaid: issuePrincipal,
+      interestPaid: issueInterest,
+      penaltyPaid: 0,
+      docCharges: issueDoc,
+      renewalAmount: 0,
+      totalPaid: 0,
+      outstandingPrincipal: issuePrincipal,
+      presentDue: issuePrincipal + issueInterest + issueDoc,
+      operator: disbEntry?.user_name || 'System',
+      remarks: 'Original Loan Disbursement',
+      rawEntries: openingEntries
+    };
+
+    // 2. Group Non-Opening Entries by Receipt No or (Date + Entry Type)
+    const nonOpeningGroups = new Map<string, any[]>();
+    nonOpeningEntries.forEach(entry => {
+      const key = (entry.receipt_no && entry.receipt_no !== '-') 
+        ? `RC-${entry.receipt_no}` 
+        : `EVT-${entry.entry_date}-${entry.entry_type || entry.account_name}`;
+      if (!nonOpeningGroups.has(key)) {
+        nonOpeningGroups.set(key, []);
+      }
+      nonOpeningGroups.get(key)!.push(entry);
+    });
+
+    const eventRows: any[] = [loanIssueRow];
+    let runningPrincipal = issuePrincipal;
+
+    nonOpeningGroups.forEach((entries, groupKey) => {
+      const first = entries[0];
+      const receiptNo = (first.receipt_no && first.receipt_no !== '-') ? first.receipt_no : '—';
+      const date = first.entry_date;
+      const operator = first.user_name || 'Staff';
+
+      let principalPaid = 0;
+      let interestPaid = 0;
+      let penaltyPaid = 0;
+      let docCharges = 0;
+      let totalPaid = 0;
+
+      entries.forEach(e => {
+        const acct = (e.account_name || '').toUpperCase();
+        const type = (e.entry_type || '').toLowerCase();
+        const cred = Number(e.credit || 0);
+
+        if (type === 'amount_paid' || acct === 'CD AMOUNT PAID') {
+          if (cred > 0) totalPaid = Math.max(totalPaid, cred);
+        } else if (type === 'principal_payment' || acct === 'CD A/C' || (e.particulars || '').toLowerCase().includes('principal')) {
+          principalPaid += cred;
+        } else if (type === 'interest_payment' || acct === 'CD COMMISSION A/C') {
+          interestPaid += cred;
+        } else if (type === 'penalty_payment' || acct === 'PENALTY A/C') {
+          penaltyPaid += cred;
+        } else if (type === 'document_charge' || acct === 'CD DOCUMENT CHARGES A/C') {
+          docCharges += cred;
+        }
+      });
+
+      if (totalPaid === 0) {
+        totalPaid = principalPaid + interestPaid + penaltyPaid + docCharges;
+      }
+
+      // Determine Event Type & Remarks
+      let eventType = 'Payment';
+      let remarks = first.particulars || 'Transaction';
+
+      const isRenewal = entries.some(e => 
+        e.entry_type === 'Renewal' || e.entry_type === 'Renew' || 
+        (e.particulars || '').toLowerCase().includes('renewal') ||
+        (e.particulars || '').toLowerCase().includes('renew')
+      );
+      const isClose = entries.some(e => e.entry_type === 'Close' || e.entry_type === 'Settlement' || (e.particulars || '').toLowerCase().includes('close'));
+
+      const matchingInt = cdInterestDetails.find(d => d.receipt_no === receiptNo && (Number(d.renewed_days) > 0 || d.renewed_till_date));
+
+      if (isClose) {
+        eventType = 'Closure';
+        remarks = 'Account Closed & Settled';
+      } else if (isRenewal || matchingInt) {
+        eventType = 'Renewal';
+        const days = matchingInt ? Number(matchingInt.renewed_days) : 0;
+        remarks = days > 0 ? `${days} Days Renewed` : 'Renewal Payment';
+      } else if (principalPaid > 0) {
+        eventType = 'Partial';
+        remarks = 'Partial Principal Paid';
+      } else if (interestPaid > 0) {
+        eventType = 'Payment';
+        remarks = 'Interest Payment';
+      }
+
+      runningPrincipal = Math.max(0, runningPrincipal - principalPaid);
+      const presentDue = runningPrincipal;
+
+      eventRows.push({
+        id: groupKey,
+        date,
+        receiptNo,
+        eventType,
+        principalPaid,
+        interestPaid,
+        penaltyPaid,
+        docCharges,
+        renewalAmount: (isRenewal || matchingInt) ? (interestPaid + penaltyPaid) : 0,
+        totalPaid,
+        outstandingPrincipal: runningPrincipal,
+        presentDue,
+        operator,
+        remarks,
+        rawEntries: entries
+      });
+    });
+
+    return eventRows;
+  }, [displayedStatementEntries, cdInterestDetails, selectedLoan, renewCalculations]);
+
+  const pivotTotals = useMemo(() => {
+    const totals = {
+      principalPaid: 0,
+      interestPaid: 0,
+      penaltyPaid: 0,
+      docCharges: 0,
+      totalPaid: 0,
+      latestOutstanding: 0,
+      latestPresentDue: 0
+    };
+
+    groupedPivotStatementEntries.forEach(row => {
+      if (row.eventType !== 'Loan Issue') {
+        totals.principalPaid += row.principalPaid;
+      }
+      totals.interestPaid += row.interestPaid;
+      totals.penaltyPaid += row.penaltyPaid;
+      totals.docCharges += row.docCharges;
+      totals.totalPaid += row.totalPaid;
+    });
+
+    if (groupedPivotStatementEntries.length > 0) {
+      const lastRow = groupedPivotStatementEntries[groupedPivotStatementEntries.length - 1];
+      totals.latestOutstanding = lastRow.outstandingPrincipal;
+      totals.latestPresentDue = lastRow.presentDue;
+    }
+
+    return totals;
+  }, [groupedPivotStatementEntries]);
+
   // Grouped payment entries for receipt-centric statement reports (Change 6, 8, 9, 10, 11, 12, 13)
   const groupedPayments = useMemo(() => {
     if (!selectedLoan) return [];
@@ -1080,6 +1258,82 @@ const CDLedger: React.FC = () => {
 
     return list.sort((a, b) => new Date(a.entry_date).getTime() - new Date(b.entry_date).getTime());
   }, [displayedStatementEntries, cdInterestDetails, selectedLoan]);
+
+  // Clean Grouped Interest History Entries (Groups repetitive entries by Receipt / Event)
+  const groupedInterestHistoryEntries = useMemo(() => {
+    if (!selectedLoan) return [];
+
+    const rawInterestRows = displayedInterestDetails.filter(
+      d => !(d.particulars || '').toLowerCase().includes('note:')
+    );
+
+    const groups = new Map<string, {
+      id: string;
+      date: string;
+      receiptNo: string;
+      type: string;
+      interestPaid: number;
+      penaltyPaid: number;
+      daysRenewed: number;
+      renewedTill: string | null;
+      remarks: string;
+    }>();
+
+    rawInterestRows.forEach(item => {
+      const key = (item.receipt_no && item.receipt_no !== '-') 
+        ? `RC-${item.receipt_no}` 
+        : `INT-${item.entry_date}-${item.id}`;
+
+      const isPenalty = item.row_type === 'Penalty Paid' || (item.particulars || '').toLowerCase().includes('penalty');
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          id: key,
+          date: item.entry_date,
+          receiptNo: item.receipt_no && item.receipt_no !== '-' ? item.receipt_no : '—',
+          type: item.renewed_days > 0 ? 'Renewal' : 'Interest Paid',
+          interestPaid: isPenalty ? 0 : Number(item.credit || 0),
+          penaltyPaid: isPenalty ? Number(item.credit || 0) : 0,
+          daysRenewed: Number(item.renewed_days || 0),
+          renewedTill: item.renewed_till_date || null,
+          remarks: item.particulars || 'Interest Collection'
+        });
+      } else {
+        const existing = groups.get(key)!;
+        if (isPenalty) {
+          existing.penaltyPaid += Number(item.credit || 0);
+        } else {
+          existing.interestPaid += Number(item.credit || 0);
+        }
+        if (item.renewed_days > 0) {
+          existing.daysRenewed = Math.max(existing.daysRenewed, Number(item.renewed_days));
+          existing.type = 'Renewal';
+        }
+        if (item.renewed_till_date) {
+          existing.renewedTill = item.renewed_till_date;
+        }
+      }
+    });
+
+    return Array.from(groups.values()).sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+  }, [displayedInterestDetails, selectedLoan]);
+
+  const interestTotals = useMemo(() => {
+    const totals = { interestPaid: 0, penaltyPaid: 0 };
+    groupedInterestHistoryEntries.forEach(row => {
+      totals.interestPaid += row.interestPaid;
+      totals.penaltyPaid += row.penaltyPaid;
+    });
+    return totals;
+  }, [groupedInterestHistoryEntries]);
+
+  const paymentTotals = useMemo(() => {
+    return loanTransactions
+      .filter((tx: any) => tx.type === 'Collection')
+      .reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0);
+  }, [loanTransactions]);
 
   // Shared single source of truth calculations
   const ledgerMetrics = useMemo(() => {
@@ -1309,12 +1563,12 @@ const CDLedger: React.FC = () => {
     if (actionType === 'Partial') {
       const totalToRegularize = ledgerMetrics.totalToRegularize || 0;
       if (amount < totalToRegularize) {
-        toast.error(`Partial Payment amount (₹${amount.toFixed(2)}) must be greater than or equal to the total to regularize amount (₹${totalToRegularize.toFixed(2)}).`);
+        toast.error(`Partial Payment amount (${amount.toFixed(2)}) must be greater than or equal to the total to regularize amount (${totalToRegularize.toFixed(2)}).`);
         return;
       }
       const totalClose = ledgerMetrics.totalClose || 0;
       if (amount >= totalClose) {
-        toast.error(`Partial Payment amount (₹${amount.toFixed(2)}) must be strictly less than the total close amount (₹${totalClose.toFixed(2)}). To close the loan, please use Close Account.`);
+        toast.error(`Partial Payment amount (${amount.toFixed(2)}) must be strictly less than the total close amount (${totalClose.toFixed(2)}). To close the loan, please use Close Account.`);
         return;
       }
     }
@@ -1329,9 +1583,9 @@ const CDLedger: React.FC = () => {
 
       let confirmMsg = '';
       if (amount >= totalOutstanding) {
-        confirmMsg = `You are making a Partial Payment of ₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. This will pay off the outstanding dues of ₹${totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Interest: ₹${(renewCalculations.outstandingInterest || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Penalty: ₹${(renewCalculations.outstandingPenalty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}) and reduce the Principal Balance by ₹${split.principalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}.\n\nThe loan's due date will be extended to the payment date (${formatDateOld(paymentDate)}).\n\nDo you want to proceed?`;
+        confirmMsg = `You are making a Partial Payment of ${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. This will pay off the outstanding dues of ${totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Interest: ${(renewCalculations.outstandingInterest || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Penalty: ${(renewCalculations.outstandingPenalty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}) and reduce the Principal Balance by ${split.principalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}.\n\nThe loan's due date will be extended to the payment date (${formatDateOld(paymentDate)}).\n\nDo you want to proceed?`;
       } else {
-        confirmMsg = `WARNING: The payment amount ₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} is less than the total outstanding dues of ₹${totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Interest: ₹${(renewCalculations.outstandingInterest || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Penalty: ₹${(renewCalculations.outstandingPenalty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}).\n\nNo principal reduction will occur. Instead, this payment will renew the loan by ${split.renewedDays} days.\n\nDo you want to proceed?`;
+        confirmMsg = `WARNING: The payment amount ${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} is less than the total outstanding dues of ${totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Interest: ${(renewCalculations.outstandingInterest || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Penalty: ${(renewCalculations.outstandingPenalty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}).\n\nNo principal reduction will occur. Instead, this payment will renew the loan by ${split.renewedDays} days.\n\nDo you want to proceed?`;
       }
       if (!window.confirm(confirmMsg)) {
         return;
@@ -1542,10 +1796,10 @@ const CDLedger: React.FC = () => {
       });
 
       const npaParticulars = `NPA CLOSE\n` +
-        `Principal Outstanding: ₹${principal_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-        `Interest Outstanding: ₹${interest_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-        `Penalty Outstanding: ₹${penalty_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-        `Total Outstanding: ₹${total_outstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+        `Principal Outstanding: ${principal_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+        `Interest Outstanding: ${interest_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+        `Penalty Outstanding: ${penalty_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+        `Total Outstanding: ${total_outstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
         `Closed By: ${closedBy}\n` +
         `Reason: ${cleanNpaReason}`;
 
@@ -1630,19 +1884,20 @@ const CDLedger: React.FC = () => {
       return;
     }
 
-    const exportData = displayedStatementEntries.map((tx: any) => {
-      const isPayment = isPaymentCollectionEntry(tx);
-      return {
-        Date: formatDateOld(tx.entry_date),
-        Account: tx.account_name || 'CD A/C',
-        'CR Amount': isPayment ? tx.credit : 0,
-        Credit: isPayment ? 0 : tx.credit,
-        Debit: isPayment ? 0 : tx.debit,
-        Particulars: tx.particulars || '',
-        User: tx.user_name || '',
-        'Receipt No': tx.receipt_no || '-'
-      };
-    });
+    const exportData = groupedPivotStatementEntries.map((row: any) => ({
+      'Date': formatDateOld(row.date),
+      'Receipt No': row.receiptNo,
+      'Type': row.eventType,
+      'Principal Paid': row.principalPaid > 0 ? row.principalPaid : 0,
+      'Interest Paid': row.interestPaid > 0 ? row.interestPaid : 0,
+      'Penalty Paid': row.penaltyPaid > 0 ? row.penaltyPaid : 0,
+      'Doc Charges': row.docCharges > 0 ? row.docCharges : 0,
+      'Total Paid': row.totalPaid > 0 ? row.totalPaid : 0,
+      'Outstanding Principal': row.outstandingPrincipal,
+      'Present Due': row.presentDue,
+      'Operator': row.operator,
+      'Remarks': row.remarks
+    }));
 
     const filename = `${selectedLoan.loan_id}_CD_Ledger_${getLocalBusinessDateISO()}`;
 
@@ -1835,7 +2090,7 @@ const CDLedger: React.FC = () => {
                           <td className="px-4 py-3.5 font-black text-base text-green-700 font-mono tracking-wide">{loan.loan_id}</td>
                           <td className="px-4 py-3.5 font-black text-base text-gray-900">{loan.customer?.name || 'N/A'}</td>
                           <td className="px-4 py-3.5 text-gray-600 font-mono">{loan.customer?.phone || '-'}</td>
-                          <td className="px-4 py-3.5 font-semibold text-gray-800">₹{Number(loan.amount || 0).toLocaleString('en-IN')}</td>
+                          <td className="px-4 py-3.5 font-semibold text-gray-800">{Number(loan.amount || 0).toLocaleString('en-IN')}</td>
                           <td className="px-4 py-3.5">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${loan.status === 'Active' ? 'bg-green-100 text-green-700'
                               : loan.status === 'Closed' ? 'bg-gray-100 text-gray-500'
@@ -2042,7 +2297,7 @@ const CDLedger: React.FC = () => {
                           value={totalAmountPaying}
                           onChange={setTotalAmountPaying}
                           className="font-bold text-green-700 text-[18px] h-11"
-                          placeholder="Enter ₹"
+                          placeholder="Enter "
                           type="text"
                           inputMode="decimal"
                           disabled={selectedLoan.status === 'Closed' || selectedLoan.status === 'NPA_CLOSED'}
@@ -2072,14 +2327,14 @@ const CDLedger: React.FC = () => {
                               return (
                                 <div className="space-y-1.5">
                                   <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/20">
-                                    {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
-                                    {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
-                                    {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
+                                    {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ${pPaid}`} />}
+                                    {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ${oPaid}`} />}
+                                    {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ${prPaid}`} />}
                                   </div>
                                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-bold text-slate-800">
-                                    {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" />Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
-                                    {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
-                                    {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650" />Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
+                                    {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" />Penalty: {pPaid.toLocaleString('en-IN')}</span>}
+                                    {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Overdue Int: {oPaid.toLocaleString('en-IN')}</span>}
+                                    {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650" />Principal: {prPaid.toLocaleString('en-IN')}</span>}
                                   </div>
                                 </div>
                               );
@@ -2103,16 +2358,16 @@ const CDLedger: React.FC = () => {
                                 return (
                                   <div className="space-y-1">
                                     <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/40">
-                                      {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
-                                      {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
-                                      {pctR > 0 && <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pctR}%` }} title={`Renewal Interest: ₹${rPaid}`} />}
-                                      {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
+                                      {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ${pPaid}`} />}
+                                      {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ${oPaid}`} />}
+                                      {pctR > 0 && <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pctR}%` }} title={`Renewal Interest: ${rPaid}`} />}
+                                      {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ${prPaid}`} />}
                                     </div>
                                     <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[13px] font-bold text-slate-800">
-                                      {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" />Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
-                                      {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
-                                      {rPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />Renewal Int: ₹{rPaid.toLocaleString('en-IN')}</span>}
-                                      {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650" />Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
+                                      {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" />Penalty: {pPaid.toLocaleString('en-IN')}</span>}
+                                      {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Overdue Int: {oPaid.toLocaleString('en-IN')}</span>}
+                                      {rPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />Renewal Int: {rPaid.toLocaleString('en-IN')}</span>}
+                                      {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650" />Principal: {prPaid.toLocaleString('en-IN')}</span>}
                                     </div>
                                   </div>
                                 );
@@ -2135,16 +2390,16 @@ const CDLedger: React.FC = () => {
                                   return (
                                     <div className="space-y-1">
                                       <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-slate-200/40">
-                                        {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ₹${pPaid}`} />}
-                                        {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ₹${oPaid}`} />}
-                                        {pctR > 0 && <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pctR}%` }} title={`Renewal Interest: ₹${rPaid}`} />}
-                                        {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ₹${prPaid}`} />}
+                                        {pctP > 0 && <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${pctP}%` }} title={`Penalty: ${pPaid}`} />}
+                                        {pctO > 0 && <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${pctO}%` }} title={`Overdue Interest: ${oPaid}`} />}
+                                        {pctR > 0 && <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pctR}%` }} title={`Renewal Interest: ${rPaid}`} />}
+                                        {pctPr > 0 && <div className="bg-indigo-650 h-full transition-all duration-300" style={{ width: `${pctPr}%` }} title={`Principal: ${prPaid}`} />}
                                       </div>
                                       <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[13px] font-bold text-slate-800">
-                                        {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" />Penalty: ₹{pPaid.toLocaleString('en-IN')}</span>}
-                                        {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Overdue Int: ₹{oPaid.toLocaleString('en-IN')}</span>}
-                                        {rPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />Renewal Int: ₹{rPaid.toLocaleString('en-IN')}</span>}
-                                        {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650" />Principal: ₹{prPaid.toLocaleString('en-IN')}</span>}
+                                        {pPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" />Penalty: {pPaid.toLocaleString('en-IN')}</span>}
+                                        {oPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Overdue Int: {oPaid.toLocaleString('en-IN')}</span>}
+                                        {rPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />Renewal Int: {rPaid.toLocaleString('en-IN')}</span>}
+                                        {prPaid > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-650" />Principal: {prPaid.toLocaleString('en-IN')}</span>}
                                       </div>
                                     </div>
                                   );
@@ -2160,7 +2415,7 @@ const CDLedger: React.FC = () => {
                     <div className="grid grid-cols-4 gap-2 font-sans">
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
                         <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Loan Amount</span>
-                        <span className="text-[16px] font-bold text-slate-900">₹{originalLoanAmount.toLocaleString('en-IN')}</span>
+                        <span className="text-[16px] font-bold text-slate-900">{originalLoanAmount.toLocaleString('en-IN')}</span>
                       </div>
                       <div className="col-span-2 grid grid-cols-2 border border-slate-200 rounded-lg bg-slate-50/80 shadow-sm overflow-hidden">
                         <div className="px-2.5 py-1.5 border-r border-slate-200">
@@ -2173,7 +2428,7 @@ const CDLedger: React.FC = () => {
                           className="px-2.5 py-1.5 hover:bg-slate-100 group cursor-pointer transition-colors"
                         >
                           <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">CI</span>
-                          <span className="text-[16px] font-bold text-slate-900 group-hover:underline underline-offset-2">₹{Math.round(compoundInterestData.summary?.compoundInterestEarned || 0).toLocaleString('en-IN')}</span>
+                          <span className="text-[16px] font-bold text-slate-900 group-hover:underline underline-offset-2">{Math.round(compoundInterestData.summary?.compoundInterestEarned || 0).toLocaleString('en-IN')}</span>
                         </div>
                       </div>
                       <div className="col-span-2 border border-slate-200 rounded-lg bg-slate-50/80 px-2.5 py-1.5 shadow-sm">
@@ -2300,7 +2555,7 @@ const CDLedger: React.FC = () => {
                       <div className="grid grid-cols-2 gap-2">
                         <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
                           <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Principal Bal.</span>
-                          <span className="text-[20px] font-bold text-slate-955 block leading-snug">₹{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          <span className="text-[20px] font-bold text-slate-955 block leading-snug">{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                         </div>
                         <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
                           <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Today Due</span>
@@ -2316,7 +2571,7 @@ const CDLedger: React.FC = () => {
                         </div>
                         <div className="bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm">
                           <span className="text-[13px] text-slate-500 font-bold uppercase block tracking-wider leading-none mb-0.5">Accrued Penalty</span>
-                          <span className="text-[20px] font-bold text-rose-700 block leading-snug">₹{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          <span className="text-[20px] font-bold text-rose-700 block leading-snug">{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                         </div>
                       </div>
 
@@ -2327,7 +2582,7 @@ const CDLedger: React.FC = () => {
                           <span className="text-[12px] text-emerald-700 font-semibold block mt-0.5">To extend standard cycle</span>
                         </div>
                         <span className="text-[22px] font-extrabold text-emerald-800">
-                          ₹{ledgerMetrics.renewalDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          {ledgerMetrics.renewalDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
 
@@ -2338,7 +2593,7 @@ const CDLedger: React.FC = () => {
                           <span className="text-[12px] text-amber-700 font-semibold block mt-0.5">Overdue int + penalty + renewal</span>
                         </div>
                         <span className="text-[22px] font-extrabold text-amber-800">
-                          ₹{ledgerMetrics.totalToRegularize.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          {ledgerMetrics.totalToRegularize.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
 
@@ -2409,105 +2664,231 @@ const CDLedger: React.FC = () => {
                 </div>
               )}
               {activeLogTab === 'statement' && (
-                <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
-                  <table className="w-full text-[13px] text-left min-w-[1000px]">
+                <div className="overflow-x-auto max-h-[500px] overflow-y-auto pr-1 scrollbar-thin">
+                  <table className="w-full text-xs text-left min-w-[1100px] border-collapse">
                     <thead>
-                      <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
-                        <th className="px-4 py-3.5">Date</th>
-                        <th className="px-4 py-3.5">A/C Name</th>
-                        <th className="px-4 py-3.5 text-left">CR Amount</th>
-                        <th className="px-4 py-3.5 text-right">Credit</th>
-                        <th className="px-4 py-3.5 text-right">Debit</th>
-                        <th className="px-4 py-3.5">User</th>
-                        <th className="px-4 py-3.5">Receipt No</th>
-                        <th className="px-4 py-3.5">Particulars</th>
+                      <tr className="bg-slate-100/90 text-slate-700 uppercase tracking-wider text-[11px] font-sans font-bold border-b border-slate-200">
+                        <th className="w-8 px-3.5 py-3.5 text-center"></th>
+                        <th className="px-3.5 py-3.5 whitespace-nowrap">Date</th>
+                        <th className="px-3.5 py-3.5 whitespace-nowrap">Receipt No</th>
+                        <th className="px-3.5 py-3.5 whitespace-nowrap">Type</th>
+                        <th className="px-3.5 py-3.5 text-right text-blue-800 whitespace-nowrap">Principal Paid</th>
+                        <th className="px-3.5 py-3.5 text-right text-emerald-800 whitespace-nowrap">Interest Paid</th>
+                        <th className="px-3.5 py-3.5 text-right text-amber-800 whitespace-nowrap">Penalty Paid</th>
+                        <th className="px-3.5 py-3.5 text-right text-purple-800 whitespace-nowrap">Doc Charges</th>
+                        <th className="px-3.5 py-3.5 text-right text-indigo-950 whitespace-nowrap">Total Paid</th>
+                        <th className="px-3.5 py-3.5 text-right text-rose-800 whitespace-nowrap">Outstanding</th>
+                        <th className="px-3.5 py-3.5 text-right text-rose-950 whitespace-nowrap">Present Due</th>
+                        <th className="px-3.5 py-3.5 whitespace-nowrap">Operator</th>
+                        <th className="px-3.5 py-3.5 whitespace-nowrap">Remarks</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-150 bg-white">
-                      {displayedStatementEntries.map((entry) => {
-                        const isPending = entry.receipt_no && entry.receipt_no !== '-' && pendingReviews?.some(r => r?.receipt_number === entry.receipt_no && r?.loan_id === selectedLoan?.id);
+                    <tbody className="divide-y divide-slate-200 bg-white">
+                      {groupedPivotStatementEntries.map((row) => {
+                        const isExpanded = expandedPivotRowIds.has(row.id);
+                        const isLoanIssue = row.eventType === 'Loan Issue';
                         return (
-                          <tr key={entry.id} className={`hover:bg-gray-50/60 transition-colors ${isPending ? 'bg-[#fff7ed]' : ''}`}>
-                            <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(entry.entry_date)}</td>
-                            <td className="px-4 py-3.5 font-black text-slate-955">{mapAccountName(entry.account_name)}</td>
-                            <td className="px-4 py-3.5 text-right text-indigo-700 font-black text-sm">
-                              {isPaymentCollectionEntry(entry) && entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
-                            </td>
-                            <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
-                              {!isPaymentCollectionEntry(entry) && entry.credit > 0 ? `₹${entry.credit.toLocaleString('en-IN')}` : '-'}
-                            </td>
-                            <td className="px-4 py-3.5 text-right text-red-650 font-black text-sm">
-                              {!isPaymentCollectionEntry(entry) && entry.debit > 0 ? `₹${entry.debit.toLocaleString('en-IN')}` : '-'}
-                            </td>
-                            <td className="px-4 py-3.5 font-semibold text-slate-700">{entry.user_name || 'Staff'}</td>
-                            <td className="px-4 py-3.5 font-mono text-slate-800 font-bold">{entry.receipt_no || '-'}</td>
-                            <td className="px-4 py-3.5 text-slate-655 font-medium">{entry.particulars || '-'}</td>
-                          </tr>
+                          <React.Fragment key={row.id}>
+                            <tr 
+                              className={`hover:bg-blue-50/40 transition-colors ${isLoanIssue ? 'bg-slate-50/80 font-semibold' : ''}`}
+                            >
+                              <td className="px-2.5 py-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => togglePivotRowExpand(row.id)}
+                                  className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded transition-colors cursor-pointer"
+                                  title={isExpanded ? "Collapse Audit Details" : "Expand Audit Details"}
+                                >
+                                  {isExpanded ? <ChevronDown className="w-4 h-4 text-blue-600" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                                </button>
+                              </td>
+                              <td className="px-3.5 py-3 font-bold text-slate-900 whitespace-nowrap">{formatDateOld(row.date)}</td>
+                              <td className="px-3.5 py-3 font-mono font-black text-slate-900 whitespace-nowrap">{row.receiptNo}</td>
+                              <td className="px-3.5 py-3 font-bold uppercase text-[11px] whitespace-nowrap">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                                  row.eventType === 'Loan Issue' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                                  row.eventType === 'Renewal' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                  row.eventType === 'Partial' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                                  row.eventType === 'Closure' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                                  row.eventType === 'NPA' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                                  'bg-slate-100 text-slate-800 border border-slate-200'
+                                }`}>
+                                  {row.eventType}
+                                </span>
+                              </td>
+                              <td className="px-3.5 py-3 text-right font-mono font-bold text-blue-700 whitespace-nowrap">
+                                {row.principalPaid > 0 ? row.principalPaid.toLocaleString('en-IN') : '—'}
+                              </td>
+                              <td className="px-3.5 py-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
+                                {row.interestPaid > 0 ? row.interestPaid.toLocaleString('en-IN') : '—'}
+                              </td>
+                              <td className="px-3.5 py-3 text-right font-mono font-bold text-amber-700 whitespace-nowrap">
+                                {row.penaltyPaid > 0 ? row.penaltyPaid.toLocaleString('en-IN') : '—'}
+                              </td>
+                              <td className="px-3.5 py-3 text-right font-mono font-bold text-purple-700 whitespace-nowrap">
+                                {row.docCharges > 0 ? row.docCharges.toLocaleString('en-IN') : '—'}
+                              </td>
+                              <td className="px-3.5 py-3 text-right font-mono font-black text-indigo-900 whitespace-nowrap">
+                                {row.totalPaid > 0 ? row.totalPaid.toLocaleString('en-IN') : '—'}
+                              </td>
+                              <td className="px-3.5 py-3 text-right font-mono font-black text-rose-700 whitespace-nowrap">
+                                {row.outstandingPrincipal.toLocaleString('en-IN')}
+                              </td>
+                              <td className="px-3.5 py-3 text-right font-mono font-black text-rose-900 whitespace-nowrap">
+                                {row.presentDue.toLocaleString('en-IN')}
+                              </td>
+                              <td className="px-3.5 py-3 text-slate-700 font-medium whitespace-nowrap">{row.operator}</td>
+                              <td className="px-3.5 py-3 text-slate-800 font-medium text-[11px] truncate max-w-[200px]" title={row.remarks}>{row.remarks}</td>
+                            </tr>
+
+                            {/* Expandable Sub-table for Raw Audit Entries */}
+                            {isExpanded && (
+                              <tr className="bg-slate-50/90">
+                                <td colSpan={13} className="px-6 py-3 border-y border-slate-250">
+                                  <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2 shadow-sm">
+                                    <div className="flex items-center justify-between text-[11px] font-mono font-bold text-slate-700 border-b pb-1.5">
+                                      <span className="flex items-center gap-1.5 text-blue-900">
+                                        <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                                        AUDIT DRILL-DOWN ({row.rawEntries.length} Raw Postings)
+                                      </span>
+                                      <span className="text-slate-500 font-normal">Receipt: <span className="font-bold text-slate-800">{row.receiptNo}</span></span>
+                                    </div>
+                                    <table className="w-full text-[11px] text-left border-collapse">
+                                      <thead>
+                                        <tr className="bg-slate-100/90 text-slate-700 font-bold uppercase border-b border-slate-200">
+                                          <th className="p-1.5">Account Name</th>
+                                          <th className="p-1.5">Entry Type</th>
+                                          <th className="p-1.5 text-right text-emerald-800">Credit</th>
+                                          <th className="p-1.5 text-right text-rose-800">Debit</th>
+                                          <th className="p-1.5">Particulars</th>
+                                          <th className="p-1.5">User</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-150 font-mono">
+                                        {row.rawEntries.map((raw: any) => (
+                                          <tr key={raw.id} className="hover:bg-slate-50">
+                                            <td className="p-1.5 font-bold text-slate-900">{mapAccountName(raw.account_name)}</td>
+                                            <td className="p-1.5 text-slate-600">{raw.entry_type}</td>
+                                            <td className="p-1.5 text-right text-emerald-700 font-bold">{raw.credit > 0 ? raw.credit.toLocaleString('en-IN') : '—'}</td>
+                                            <td className="p-1.5 text-right text-rose-700 font-bold">{raw.debit > 0 ? raw.debit.toLocaleString('en-IN') : '—'}</td>
+                                            <td className="p-1.5 font-sans text-slate-700">{raw.particulars || '—'}</td>
+                                            <td className="p-1.5 font-sans text-slate-600">{raw.user_name || 'Staff'}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
                         );
                       })}
-                      {displayedStatementEntries.length === 0 && (
+                      {groupedPivotStatementEntries.length === 0 && (
                         <tr>
-                          <td colSpan={8} className="text-center py-8 text-gray-400 italic">No entries recorded in statement</td>
+                          <td colSpan={13} className="text-center py-8 text-slate-400 italic">No entries recorded in statement</td>
                         </tr>
                       )}
                     </tbody>
+                    {groupedPivotStatementEntries.length > 0 && (
+                      <tfoot>
+                        <tr className="bg-slate-100/90 text-slate-900 font-mono font-black text-xs border-t-2 border-slate-300">
+                          <td colSpan={4} className="px-3.5 py-3.5 uppercase text-right font-sans font-bold text-slate-700">GRAND TOTALS:</td>
+                          <td className="px-3.5 py-3.5 text-right text-blue-800 font-black">{pivotTotals.principalPaid.toLocaleString('en-IN')}</td>
+                          <td className="px-3.5 py-3.5 text-right text-emerald-800 font-black">{pivotTotals.interestPaid.toLocaleString('en-IN')}</td>
+                          <td className="px-3.5 py-3.5 text-right text-amber-800 font-black">{pivotTotals.penaltyPaid.toLocaleString('en-IN')}</td>
+                          <td className="px-3.5 py-3.5 text-right text-purple-800 font-black">{pivotTotals.docCharges.toLocaleString('en-IN')}</td>
+                          <td className="px-3.5 py-3.5 text-right text-indigo-950 font-black">{pivotTotals.totalPaid.toLocaleString('en-IN')}</td>
+                          <td className="px-3.5 py-3.5 text-right text-rose-800 font-black">{pivotTotals.latestOutstanding.toLocaleString('en-IN')}</td>
+                          <td className="px-3.5 py-3.5 text-right text-rose-950 font-black">{pivotTotals.latestPresentDue.toLocaleString('en-IN')}</td>
+                          <td colSpan={2}></td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               )}
 
               {activeLogTab === 'interest' && (
-                <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
-                  <table className="w-full text-[13px] text-left min-w-[1000px]">
-                    <thead>
-                      <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
-                        <th className="px-4 py-3.5">Date</th>
-                        <th className="px-4 py-3.5 text-right">Credit</th>
-                        <th className="px-4 py-3.5">Receipt No</th>
-                        <th className="px-4 py-3.5">Type</th>
-                        <th className="px-4 py-3.5">Particulars</th>
-                        <th className="px-4 py-3.5 text-center">Days Renewed</th>
-                        <th className="px-4 py-3.5 font-bold">Renewed Till</th>
+                <div className="overflow-x-auto max-h-[500px] overflow-y-auto scrollbar-thin rounded-2xl border border-slate-200">
+                  <table className="w-full text-xs text-left min-w-[950px] border-collapse">
+                    <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-[2px] text-slate-700 uppercase tracking-wider text-[11px] font-sans font-bold border-b border-slate-250">
+                      <tr>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Date</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Receipt No</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Type</th>
+                        <th className="px-4 py-3.5 text-right text-emerald-800 whitespace-nowrap">Interest Paid</th>
+                        <th className="px-4 py-3.5 text-right text-amber-800 whitespace-nowrap">Penalty Paid</th>
+                        <th className="px-4 py-3.5 text-center whitespace-nowrap">Days Renewed</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Renewed Till</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Remarks</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-150 bg-white">
-                      {displayedInterestDetails.map((detail) => (
-                        <tr key={detail.id} className="hover:bg-gray-50/60 transition-colors">
-                          <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(detail.entry_date)}</td>
-                          <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
-                            ₹{Number(detail.credit).toLocaleString('en-IN')}
+                    <tbody className="divide-y divide-slate-200 bg-white font-sans">
+                      {groupedInterestHistoryEntries.map((row, idx) => (
+                        <tr key={row.id || idx} className="odd:bg-white even:bg-slate-50/40 hover:bg-blue-50/40 transition-colors">
+                          <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">{formatDateOld(row.date)}</td>
+                          <td className="px-4 py-3 font-mono font-black text-slate-900 whitespace-nowrap">{row.receiptNo}</td>
+                          <td className="px-4 py-3 font-bold uppercase text-[11px] whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                              row.type === 'Renewal' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                              'bg-blue-100 text-blue-800 border border-blue-200'
+                            }`}>
+                              {row.type}
+                            </span>
                           </td>
-                          <td className="px-4 py-3.5 font-mono text-slate-900 font-black">{detail.receipt_no || '-'}</td>
-                          <td className="px-4 py-3.5 font-black text-slate-950">{detail.row_type || '-'}</td>
-                          <td className="px-4 py-3.5 text-slate-700 font-bold" title={detail.particulars}>{detail.particulars || '-'}</td>
-                          <td className="px-4 py-3.5 text-center font-black text-slate-900">{detail.renewed_days > 0 ? `${detail.renewed_days} Days` : '-'}</td>
-                          <td className="px-4 py-3.5 font-bold text-slate-800">{detail.renewed_till_date ? formatDateOld(detail.renewed_till_date) : '-'}</td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
+                            {row.interestPaid > 0 ? row.interestPaid.toLocaleString('en-IN') : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-amber-700 whitespace-nowrap">
+                            {row.penaltyPaid > 0 ? row.penaltyPaid.toLocaleString('en-IN') : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-center font-mono font-black text-slate-800 whitespace-nowrap">
+                            {row.daysRenewed > 0 ? `${row.daysRenewed} Days` : '—'}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">
+                            {row.renewedTill ? formatDateOld(row.renewedTill) : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-slate-800 font-medium text-[11px] truncate max-w-[220px]" title={row.remarks}>
+                            {row.remarks}
+                          </td>
                         </tr>
                       ))}
-                      {displayedInterestDetails.length === 0 && (
+                      {groupedInterestHistoryEntries.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="text-center py-8 text-gray-400 italic">No interest details found for this loan</td>
+                          <td colSpan={8} className="text-center py-8 text-slate-400 italic">No interest transactions logged</td>
                         </tr>
                       )}
                     </tbody>
+                    {groupedInterestHistoryEntries.length > 0 && (
+                      <tfoot className="sticky bottom-0 z-10 bg-slate-100/95 backdrop-blur-[2px] text-slate-900 font-mono font-black text-xs border-t-2 border-slate-300">
+                        <tr>
+                          <td colSpan={3} className="px-4 py-3 uppercase text-right font-sans font-bold text-slate-700">TOTAL INTEREST COLLECTED:</td>
+                          <td className="px-4 py-3 text-right text-emerald-800 font-black">{interestTotals.interestPaid.toLocaleString('en-IN')}</td>
+                          <td className="px-4 py-3 text-right text-amber-800 font-black">{interestTotals.penaltyPaid.toLocaleString('en-IN')}</td>
+                          <td colSpan={3}></td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               )}
 
               {activeLogTab === 'payment' && (
-                <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
-                  <table className="w-full text-[13px] text-left min-w-[1000px]">
-                    <thead>
-                      <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
-                        <th className="w-10 px-4 py-3.5"></th>
-                        <th className="px-4 py-3.5">Date</th>
-                        <th className="px-4 py-3.5">Receipt No</th>
-                        <th className="px-4 py-3.5">Transaction Type</th>
-                        <th className="px-4 py-3.5 text-right">Amount Paid</th>
-                        <th className="px-4 py-3.5">User</th>
-                        <th className="px-4 py-3.5 text-center">Actions</th>
+                <div className="overflow-x-auto max-h-[500px] overflow-y-auto scrollbar-thin rounded-2xl border border-slate-200">
+                  <table className="w-full text-xs text-left min-w-[950px] border-collapse">
+                    <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-[2px] text-slate-700 uppercase tracking-wider text-[11px] font-sans font-bold border-b border-slate-250">
+                      <tr>
+                        <th className="w-8 px-3.5 py-3.5 text-center"></th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Date</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Receipt No</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Transaction Type</th>
+                        <th className="px-4 py-3.5 text-right text-indigo-950 whitespace-nowrap">Amount Paid</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Collected By</th>
+                        <th className="px-4 py-3.5 text-center whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-150 bg-white">
+                    <tbody className="divide-y divide-slate-200 bg-white font-sans">
                       {loanTransactions
                         .filter((tx: any) => tx.type === 'Collection')
                         .map((tx: any) => {
@@ -2520,7 +2901,6 @@ const CDLedger: React.FC = () => {
                           
                           const isExpanded = expandedTxIds.has(tx.id);
                           
-                          // Allocation details from cdLedgerEntries:
                           const txAllocations = cdLedgerEntries.filter(
                             (entry) => entry.receipt_no === tx.receipt_no
                           );
@@ -2538,34 +2918,35 @@ const CDLedger: React.FC = () => {
                           
                           return (
                             <React.Fragment key={tx.id}>
-                              <tr className={`hover:bg-gray-50/60 transition-colors ${isPending ? 'bg-[#fff7ed]' : ''}`}>
-                                <td className="px-4 py-3.5 text-center">
+                              <tr className={`odd:bg-white even:bg-slate-50/40 hover:bg-blue-50/40 transition-colors ${isPending ? 'bg-[#fff7ed]' : ''}`}>
+                                <td className="px-2.5 py-3 text-center">
                                   <button 
                                     onClick={() => toggleExpandTx(tx.id)}
-                                    className="p-1 hover:bg-gray-100 rounded transition-colors text-slate-500 hover:text-slate-900 focus:outline-none"
+                                    className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded transition-colors focus:outline-none cursor-pointer"
+                                    title={isExpanded ? "Collapse Allocation" : "Expand Allocation"}
                                   >
-                                    {isExpanded ? (
-                                      <ChevronDown className="w-4 h-4" />
-                                    ) : (
-                                      <ChevronRight className="w-4 h-4" />
-                                    )}
+                                    {isExpanded ? <ChevronDown className="w-4 h-4 text-blue-600" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
                                   </button>
                                 </td>
-                                <td className="px-4 py-3.5 font-bold text-slate-800">{formatDateOld(tx.date)}</td>
-                                <td className="px-4 py-3.5 font-mono text-slate-900 font-black">
-                                  {tx.receipt_no || '-'}
+                                <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">{formatDateOld(tx.date)}</td>
+                                <td className="px-4 py-3 font-mono font-black text-slate-900 whitespace-nowrap">
+                                  {tx.receipt_no || '—'}
                                   {isPending && (
                                     <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold bg-orange-50 text-orange-700 border border-orange-200 uppercase tracking-wide">
                                       Pending Approval
                                     </span>
                                   )}
                                 </td>
-                                <td className="px-4 py-3.5 font-black text-slate-950">CD Amount Paid</td>
-                                <td className="px-4 py-3.5 text-right text-green-800 font-black text-sm">
-                                  ₹{Number(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                <td className="px-4 py-3 font-bold uppercase text-[11px] whitespace-nowrap">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                    CD Amount Paid
+                                  </span>
                                 </td>
-                                <td className="px-4 py-3.5 text-slate-800 font-bold">{tx.collected_by || 'Staff'}</td>
-                                <td className="px-4 py-3.5">
+                                <td className="px-4 py-3 text-right font-mono font-black text-indigo-900 text-sm whitespace-nowrap">
+                                  {Number(tx.amount).toLocaleString('en-IN')}
+                                </td>
+                                <td className="px-4 py-3 text-slate-700 font-medium whitespace-nowrap">{tx.collected_by || 'Staff'}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">
                                   <div className="flex items-center justify-center gap-2">
                                     {isTxEditable ? (
                                       <button
@@ -2576,7 +2957,7 @@ const CDLedger: React.FC = () => {
                                         <Edit2 className="w-3.5 h-3.5" />
                                       </button>
                                     ) : (
-                                      <span className="text-gray-400 text-xs italic bg-gray-50 px-2 py-0.5 rounded border border-gray-150" title={isPending ? "Pending approval review" : "Editable only within 24 hours"}>
+                                      <span className="text-slate-400 text-xs italic bg-slate-50 px-2 py-0.5 rounded border border-slate-200" title={isPending ? "Pending approval review" : "Editable only within 24 hours"}>
                                         {isPending ? 'Pending' : 'ReadOnly'}
                                       </span>
                                     )}
@@ -2593,27 +2974,35 @@ const CDLedger: React.FC = () => {
                                 </td>
                               </tr>
                               {isExpanded && (
-                                <tr className="bg-slate-50/60">
-                                  <td colSpan={7} className="px-12 py-3.5 text-xs text-slate-600 border-t border-gray-100">
-                                    <div className="font-bold text-slate-850 mb-2">Allocation:</div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pl-4 font-bold">
-                                      <div>
-                                        <span className="text-slate-500 uppercase font-black tracking-wider text-[10px] block mb-0.5">CD Interest</span>
-                                        <span className="text-sm font-black text-slate-900">
-                                          ₹{interestAllocation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                <tr className="bg-slate-50/90">
+                                  <td colSpan={7} className="px-6 py-3 border-y border-slate-250">
+                                    <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2 shadow-sm">
+                                      <div className="flex items-center justify-between text-[11px] font-mono font-bold text-slate-700 border-b pb-1.5">
+                                        <span className="flex items-center gap-1.5 text-blue-900">
+                                          <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                                          PAYMENT ALLOCATION BREAKDOWN
                                         </span>
+                                        <span className="text-slate-500 font-normal">Receipt: <span className="font-bold text-slate-800">{tx.receipt_no || '—'}</span></span>
                                       </div>
-                                      <div>
-                                        <span className="text-slate-500 uppercase font-black tracking-wider text-[10px] block mb-0.5">CD Penalty</span>
-                                        <span className="text-sm font-black text-slate-900">
-                                          ₹{penaltyAllocation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                        </span>
-                                      </div>
-                                      <div>
-                                        <span className="text-slate-500 uppercase font-black tracking-wider text-[10px] block mb-0.5">CD Principal</span>
-                                        <span className="text-sm font-black text-slate-900">
-                                          ₹{principalAllocation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                        </span>
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
+                                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                                          <span className="text-slate-500 uppercase font-sans font-bold tracking-wider text-[10px] block mb-0.5">CD Principal</span>
+                                          <span className="text-sm font-black text-blue-700">
+                                            {principalAllocation > 0 ? principalAllocation.toLocaleString('en-IN') : '—'}
+                                          </span>
+                                        </div>
+                                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                                          <span className="text-slate-500 uppercase font-sans font-bold tracking-wider text-[10px] block mb-0.5">CD Interest</span>
+                                          <span className="text-sm font-black text-emerald-700">
+                                            {interestAllocation > 0 ? interestAllocation.toLocaleString('en-IN') : '—'}
+                                          </span>
+                                        </div>
+                                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                                          <span className="text-slate-500 uppercase font-sans font-bold tracking-wider text-[10px] block mb-0.5">CD Penalty</span>
+                                          <span className="text-sm font-black text-amber-700">
+                                            {penaltyAllocation > 0 ? penaltyAllocation.toLocaleString('en-IN') : '—'}
+                                          </span>
+                                        </div>
                                       </div>
                                     </div>
                                   </td>
@@ -2624,63 +3013,72 @@ const CDLedger: React.FC = () => {
                         })}
                       {loanTransactions.filter((tx: any) => tx.type === 'Collection').length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="text-center py-8 text-slate-500 font-bold italic">No collection transactions found for this loan</td>
+                          <td colSpan={7} className="text-center py-8 text-slate-400 italic">No collection transactions recorded</td>
                         </tr>
                       ) : null}
                     </tbody>
+                    {loanTransactions.filter((tx: any) => tx.type === 'Collection').length > 0 && (
+                      <tfoot className="sticky bottom-0 z-10 bg-slate-100/95 backdrop-blur-[2px] text-slate-900 font-mono font-black text-xs border-t-2 border-slate-300">
+                        <tr>
+                          <td colSpan={4} className="px-4 py-3 uppercase text-right font-sans font-bold text-slate-700">TOTAL CASH COLLECTED:</td>
+                          <td className="px-4 py-3 text-right text-indigo-950 font-black">{paymentTotals.toLocaleString('en-IN')}</td>
+                          <td colSpan={2}></td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               )}
 
               {activeLogTab === 'editHistory' && (
-                <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
-                  <table className="w-full text-[13px] text-left min-w-[1000px]">
-                    <thead>
-                      <tr className="bg-gray-100 text-slate-955 uppercase tracking-wider text-[11px] font-black border-b border-gray-200">
-                        <th className="px-4 py-3.5">Edited At</th>
-                        <th className="px-4 py-3.5">Edited By</th>
-                        <th className="px-4 py-3.5">Receipt No</th>
-                        <th className="px-4 py-3.5 text-right">Original Date</th>
-                        <th className="px-4 py-3.5 text-right">New Date</th>
-                        <th className="px-4 py-3.5 text-right">Original Amt</th>
-                        <th className="px-4 py-3.5 text-right">New Amt</th>
-                        <th className="px-4 py-3.5">Reason</th>
+                <div className="overflow-x-auto max-h-[500px] overflow-y-auto scrollbar-thin rounded-2xl border border-slate-200">
+                  <table className="w-full text-xs text-left min-w-[950px] border-collapse">
+                    <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-[2px] text-slate-700 uppercase tracking-wider text-[11px] font-sans font-bold border-b border-slate-250">
+                      <tr>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Edited At</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Operator</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Receipt No</th>
+                        <th className="px-4 py-3.5 text-right whitespace-nowrap">Original Date</th>
+                        <th className="px-4 py-3.5 text-right whitespace-nowrap">New Date</th>
+                        <th className="px-4 py-3.5 text-right whitespace-nowrap">Original Amt</th>
+                        <th className="px-4 py-3.5 text-right text-emerald-800 whitespace-nowrap">New Amt</th>
+                        <th className="px-4 py-3.5 whitespace-nowrap">Reason / Remarks</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-150 bg-white">
-                      {editLogs.map((log: any) => {
+                    <tbody className="divide-y divide-slate-200 bg-white font-sans">
+                      {editLogs.map((log: any, idx: number) => {
                         const oldD = log.old_data || {};
                         const newD = log.new_data || {};
                         return (
-                          <tr key={log.id} className="hover:bg-gray-50/60 transition-colors">
-                            <td className="px-4 py-3.5 font-bold text-slate-800">
+                          <tr key={log.id || idx} className="odd:bg-white even:bg-slate-50/40 hover:bg-blue-50/40 transition-colors">
+                            <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">
                               {new Date(log.edited_at).toLocaleString('en-IN')}
                             </td>
-                            <td className="px-4 py-3.5 text-slate-800 font-bold">{log.edited_by}</td>
-                            <td className="px-4 py-3.5 font-mono text-slate-900 font-black">
-                              {newD.receipt_no || oldD.receipt_no || '-'}
+                            <td className="px-4 py-3 text-slate-800 font-bold whitespace-nowrap">{log.edited_by || 'Operator'}</td>
+                            <td className="px-4 py-3 font-mono font-black text-slate-900 whitespace-nowrap">
+                              {newD.receipt_no || oldD.receipt_no || '—'}
                             </td>
-                            <td className="px-4 py-3.5 text-right font-bold text-slate-600">
-                              {oldD.date ? oldD.date.split('T')[0].split('-').reverse().join('/') : '-'}
+                            <td className="px-4 py-3 text-right font-bold text-slate-500 whitespace-nowrap">
+                              {oldD.date ? oldD.date.split('T')[0].split('-').reverse().join('/') : '—'}
                             </td>
-                            <td className="px-4 py-3.5 text-right font-bold text-slate-800">
-                              {newD.date ? newD.date.split('T')[0].split('-').reverse().join('/') : '-'}
+                            <td className="px-4 py-3 text-right font-bold text-slate-900 whitespace-nowrap">
+                              {newD.date ? newD.date.split('T')[0].split('-').reverse().join('/') : '—'}
                             </td>
-                            <td className="px-4 py-3.5 text-right text-slate-700">
-                              {oldD.amount !== undefined ? `₹${Number(oldD.amount).toLocaleString('en-IN')}` : '-'}
+                            <td className="px-4 py-3 text-right font-mono font-semibold text-slate-600 whitespace-nowrap">
+                              {oldD.amount !== undefined ? Number(oldD.amount).toLocaleString('en-IN') : '—'}
                             </td>
-                            <td className="px-4 py-3.5 text-right text-green-800 font-black">
-                              {newD.amount !== undefined ? `₹${Number(newD.amount).toLocaleString('en-IN')}` : '-'}
+                            <td className="px-4 py-3 text-right font-mono font-black text-emerald-700 whitespace-nowrap">
+                              {newD.amount !== undefined ? Number(newD.amount).toLocaleString('en-IN') : '—'}
                             </td>
-                            <td className="px-4 py-3.5 text-slate-700 font-bold" title={log.reason}>
-                              {log.reason || '-'}
+                            <td className="px-4 py-3 text-slate-800 font-medium text-[11px] truncate max-w-[220px]" title={log.reason}>
+                              {log.reason || '—'}
                             </td>
                           </tr>
                         );
                       })}
                       {editLogs.length === 0 && (
                         <tr>
-                          <td colSpan={8} className="text-center py-8 text-gray-400 italic">No transaction edit history found</td>
+                          <td colSpan={8} className="text-center py-8 text-slate-400 italic">No transaction edit history logged</td>
                         </tr>
                       )}
                     </tbody>
@@ -2698,7 +3096,7 @@ const CDLedger: React.FC = () => {
                 <div className="flex flex-col min-w-[90px]">
                   <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Total Credit</span>
                   <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${bottomTotals.totalCredit > 0 ? 'text-green-700' : 'text-slate-300'}`}>
-                    ₹{bottomTotals.totalCredit.toLocaleString('en-IN')}
+                    {bottomTotals.totalCredit.toLocaleString('en-IN')}
                   </span>
                 </div>
 
@@ -2709,7 +3107,7 @@ const CDLedger: React.FC = () => {
                 <div className="flex flex-col min-w-[90px]">
                   <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Total Debit</span>
                   <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${bottomTotals.totalDebit > 0 ? 'text-red-600' : 'text-slate-300'}`}>
-                    ₹{bottomTotals.totalDebit.toLocaleString('en-IN')}
+                    {bottomTotals.totalDebit.toLocaleString('en-IN')}
                   </span>
                 </div>
 
@@ -2723,7 +3121,7 @@ const CDLedger: React.FC = () => {
                     : bottomTotals.presentBalance < bottomTotals.totalDebit * 0.25 ? 'text-emerald-600'
                       : 'text-amber-700'
                     }`}>
-                    ₹{bottomTotals.presentBalance.toLocaleString('en-IN')}
+                    {bottomTotals.presentBalance.toLocaleString('en-IN')}
                   </span>
                 </div>
 
@@ -2734,7 +3132,7 @@ const CDLedger: React.FC = () => {
                 <div className="flex flex-col min-w-[90px]">
                   <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Total Dues</span>
                   <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${bottomTotals.totalDues > 0 ? 'text-slate-800' : 'text-slate-300'}`}>
-                    ₹{bottomTotals.totalDues.toLocaleString('en-IN')}
+                    {bottomTotals.totalDues.toLocaleString('en-IN')}
                   </span>
                   {bottomTotals.totalDues > 0 && (
                     <div className="w-full h-[3px] bg-slate-100 rounded-full mt-1.5 overflow-hidden">
@@ -2766,7 +3164,7 @@ const CDLedger: React.FC = () => {
                     : bottomTotals.pendingDues <= 0 ? 'text-emerald-600'
                       : 'text-emerald-700'
                     }`}>
-                    ₹{bottomTotals.paidDues.toLocaleString('en-IN')}
+                    {bottomTotals.paidDues.toLocaleString('en-IN')}
                   </span>
                 </div>
 
@@ -2778,7 +3176,7 @@ const CDLedger: React.FC = () => {
                   <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Pending Dues</span>
                   <div className="flex items-center gap-1.5">
                     <span className={`text-sm font-black font-mono tabular-nums transition-colors duration-300 ${bottomTotals.pendingDues > 0 ? 'text-red-600' : 'text-slate-300'}`}>
-                      ₹{bottomTotals.pendingDues.toLocaleString('en-IN')}
+                      {bottomTotals.pendingDues.toLocaleString('en-IN')}
                     </span>
                     {bottomTotals.pendingDues > 0 && (
                       <span className="inline-flex items-center gap-1 bg-red-50 border border-red-100 rounded-full px-1.5 py-0.5">
@@ -2974,76 +3372,87 @@ const CDLedger: React.FC = () => {
                 <div className="space-y-1.5 text-[11px] font-sans">
                   <span className="text-[10px] font-black uppercase text-slate-800 tracking-wider block border-b pb-1 mb-1.5">Opening Details</span>
                   <div className="flex justify-between"><span className="text-slate-500">Loan Date (Inclusive):</span> <span className="font-extrabold text-slate-900">{formatDateOld(originalLoanDate || selectedLoan.date)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Opening Loan Principal:</span> <span className="font-extrabold text-slate-900">₹{originalLoanAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Opening Interest/Commission:</span> <span className="font-extrabold text-slate-900">₹{(displayedStatementEntries.filter(e => e.entry_type === 'opening_commission' || e.entry_type === 'Commission').reduce((s, e) => s + Number(e.credit || 0), 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Document Charges Paid:</span> <span className="font-extrabold text-slate-900">₹{statementTotals.documentCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Opening Loan Principal:</span> <span className="font-extrabold text-slate-900">{originalLoanAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Opening Interest/Commission:</span> <span className="font-extrabold text-slate-900">{(displayedStatementEntries.filter(e => e.entry_type === 'opening_commission' || e.entry_type === 'Commission').reduce((s, e) => s + Number(e.credit || 0), 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Document Charges Paid:</span> <span className="font-extrabold text-slate-900">{statementTotals.documentCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
                 </div>
                 <div className="space-y-1.5 text-[11px] font-sans">
                   <span className="text-[10px] font-black uppercase text-slate-800 tracking-wider block border-b pb-1 mb-1.5">Current Balance State</span>
-                  <div className="flex justify-between"><span className="text-slate-500">Current Principal Balance:</span> <span className="font-extrabold text-green-700">₹{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Current Principal Balance:</span> <span className="font-extrabold text-green-700">{ledgerMetrics.principalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
                   <div className="flex justify-between"><span className="text-slate-500">Pending Accrued Interest:</span> <span className="font-extrabold text-orange-600">{formatCDCurrency(ledgerMetrics.pendingInterest)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Pending Accrued Penalty:</span> <span className="font-extrabold text-red-650">₹{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Pending Accrued Penalty:</span> <span className="font-extrabold text-red-650">{ledgerMetrics.pendingPenalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
                   <div className="flex justify-between"><span className="text-slate-500">Current Next Due Date:</span> <span className="font-extrabold text-slate-900">{formatDateOld(renewCalculations?.dueDateStr)}</span></div>
                 </div>
               </div>
 
               {/* Grouped horizontal statement table */}
               <div className="space-y-2">
-                <h4 className="text-green-800 border-b pb-1 text-[10px] font-bold uppercase tracking-wider">Statement Ledger Payments</h4>
+                <h4 className="text-green-800 border-b pb-1 text-[10px] font-bold uppercase tracking-wider">Statement Ledger (Pivot Event History)</h4>
                 <table className="w-full border border-gray-300 text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-gray-100 border-b border-gray-300 text-gray-700 uppercase text-[9px] font-bold">
-                      <th className="p-2 border-r text-center">Sl No</th>
-                      <th className="p-2 border-r">Date</th>
-                      <th className="p-2 border-r">Receipt No</th>
-                      <th className="p-2 border-r text-right">Amount Paid</th>
-                      <th className="p-2 border-r text-right">Interest</th>
-                      <th className="p-2 border-r text-right">Penalty</th>
-                      <th className="p-2 border-r text-right">Principal</th>
-                      <th className="p-2 border-r">Particulars</th>
-                      <th className="p-2 border-r text-center">Days Renewed</th>
-                      <th className="p-2">Renewed Till</th>
+                      <th className="p-1.5 border-r text-center">Sl No</th>
+                      <th className="p-1.5 border-r">Date</th>
+                      <th className="p-1.5 border-r">Receipt No</th>
+                      <th className="p-1.5 border-r">Type</th>
+                      <th className="p-1.5 border-r text-right">Principal</th>
+                      <th className="p-1.5 border-r text-right">Interest</th>
+                      <th className="p-1.5 border-r text-right">Penalty</th>
+                      <th className="p-1.5 border-r text-right">Doc Charges</th>
+                      <th className="p-1.5 border-r text-right">Total Paid</th>
+                      <th className="p-1.5 border-r text-right">Outstanding</th>
+                      <th className="p-1.5 border-r text-right">Present Due</th>
+                      <th className="p-1.5">Remarks</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-250 font-mono text-gray-700">
-                    {groupedPayments.map((row, idx) => (
+                    {groupedPivotStatementEntries.map((row, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/50">
-                        <td className="p-2 border-r text-center font-sans text-slate-500">{idx + 1}</td>
-                        <td className="p-2 border-r font-sans">{formatDateOld(row.date)}</td>
-                        <td className="p-2 border-r font-black text-slate-900">{row.receipt_no || '-'}</td>
-                        <td className="p-2 border-r text-right font-black text-slate-950">
-                          {row.amountPaid > 0 ? `₹${row.amountPaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                        <td className="p-1.5 border-r text-center font-sans text-slate-500">{idx + 1}</td>
+                        <td className="p-1.5 border-r font-sans whitespace-nowrap">{formatDateOld(row.date)}</td>
+                        <td className="p-1.5 border-r font-black text-slate-900">{row.receiptNo}</td>
+                        <td className="p-1.5 border-r font-bold uppercase text-[9px]">{row.eventType}</td>
+                        <td className="p-1.5 border-r text-right text-blue-800 font-bold">
+                          {row.principalPaid > 0 ? row.principalPaid.toLocaleString('en-IN') : '—'}
                         </td>
-                        <td className="p-2 border-r text-right text-green-800 font-bold">
-                          {row.interest > 0 ? `₹${row.interest.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                        <td className="p-1.5 border-r text-right text-green-800 font-bold">
+                          {row.interestPaid > 0 ? row.interestPaid.toLocaleString('en-IN') : '—'}
                         </td>
-                        <td className="p-2 border-r text-right text-red-650 font-bold">
-                          {row.penalty > 0 ? `₹${row.penalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                        <td className="p-1.5 border-r text-right text-amber-700 font-bold">
+                          {row.penaltyPaid > 0 ? row.penaltyPaid.toLocaleString('en-IN') : '—'}
                         </td>
-                        <td className="p-2 border-r text-right text-indigo-750 font-bold">
-                          {row.principal > 0 ? `₹${row.principal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                        <td className="p-1.5 border-r text-right text-purple-700 font-bold">
+                          {row.docCharges > 0 ? row.docCharges.toLocaleString('en-IN') : '—'}
                         </td>
-                        <td className="p-2 border-r font-sans text-gray-600 font-bold">{row.particulars}</td>
-                        <td className="p-2 border-r text-center font-black text-slate-800">{row.daysRenewed > 0 ? `${row.daysRenewed} Days` : '-'}</td>
-                        <td className="p-2 font-sans font-bold">{row.renewedTill ? formatDateOld(row.renewedTill) : '-'}</td>
+                        <td className="p-1.5 border-r text-right text-indigo-900 font-black">
+                          {row.totalPaid > 0 ? row.totalPaid.toLocaleString('en-IN') : '—'}
+                        </td>
+                        <td className="p-1.5 border-r text-right text-rose-700 font-black">
+                          {row.outstandingPrincipal.toLocaleString('en-IN')}
+                        </td>
+                        <td className="p-1.5 border-r text-right text-rose-900 font-black">
+                          {row.presentDue.toLocaleString('en-IN')}
+                        </td>
+                        <td className="p-1.5 font-sans text-gray-700 truncate max-w-[120px]">{row.remarks}</td>
                       </tr>
                     ))}
-                    {groupedPayments.length === 0 ? (
+                    {groupedPivotStatementEntries.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="text-center py-6 font-sans text-gray-400 italic">No payments logged</td>
+                        <td colSpan={12} className="text-center py-6 font-sans text-gray-400 italic">No entries recorded</td>
                       </tr>
                     ) : null}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-slate-100 font-black border-t-2 border-slate-350 text-slate-900">
-                      <td colSpan={3} className="p-2 border-r text-right font-sans">GRAND TOTALS:</td>
-                      <td className="p-2 border-r text-right font-black">₹{statementTotals.amountPaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="p-2 border-r text-right text-green-800">₹{statementTotals.interest.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="p-2 border-r text-right text-red-650">₹{statementTotals.penalty.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="p-2 border-r text-right text-indigo-750">₹{statementTotals.principal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td colSpan={3} className="p-2 font-sans text-[10px] text-slate-600 font-bold">
-                        Pledged Document Status: {documentReturned ? 'Returned' : 'Submitted'}
-                      </td>
+                    <tr className="bg-slate-100 font-black border-t-2 border-slate-350 text-slate-900 text-[10px]">
+                      <td colSpan={4} className="p-1.5 border-r text-right font-sans">GRAND TOTALS:</td>
+                      <td className="p-1.5 border-r text-right text-blue-800">{pivotTotals.principalPaid.toLocaleString('en-IN')}</td>
+                      <td className="p-1.5 border-r text-right text-green-800">{pivotTotals.interestPaid.toLocaleString('en-IN')}</td>
+                      <td className="p-1.5 border-r text-right text-amber-700">{pivotTotals.penaltyPaid.toLocaleString('en-IN')}</td>
+                      <td className="p-1.5 border-r text-right text-purple-700">{pivotTotals.docCharges.toLocaleString('en-IN')}</td>
+                      <td className="p-1.5 border-r text-right text-indigo-900">{pivotTotals.totalPaid.toLocaleString('en-IN')}</td>
+                      <td className="p-1.5 border-r text-right text-rose-700">{pivotTotals.latestOutstanding.toLocaleString('en-IN')}</td>
+                      <td className="p-1.5 border-r text-right text-rose-900">{pivotTotals.latestPresentDue.toLocaleString('en-IN')}</td>
+                      <td className="p-1.5"></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -3192,7 +3601,7 @@ const CDLedger: React.FC = () => {
                   <div>
                     <div className="text-slate-400">Amount Paid</div>
                     <div className="font-bold text-slate-800">
-                      ₹{Number(editingTx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      {Number(editingTx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </div>
                   </div>
                 </div>
@@ -3220,7 +3629,7 @@ const CDLedger: React.FC = () => {
                 </div>
                 <div>
                   <Input 
-                    label="New Payment Amount (₹)" 
+                    label="New Payment Amount ()" 
                     value={editTxAmount} 
                     onChange={setEditTxAmount} 
                     placeholder="Amount paid"

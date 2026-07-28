@@ -322,7 +322,7 @@ const ProfitAndLoss: React.FC = () => {
                             onClick={() => navigateToDetailedLedger(head.name)}
                           >
                             <td className="px-4 py-3 text-slate-700 hover:text-blue-700 hover:underline uppercase font-bold">{head.name}</td>
-                            <td className="px-4 py-3 text-emerald-600 text-right font-black font-mono">₹{head.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-3 text-emerald-600 text-right font-black font-mono">{head.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -354,7 +354,7 @@ const ProfitAndLoss: React.FC = () => {
                             onClick={() => navigateToDetailedLedger(head.name)}
                           >
                             <td className="px-4 py-3 text-slate-700 hover:text-blue-700 hover:underline uppercase font-bold">{head.name}</td>
-                            <td className="px-4 py-3 text-red-600 text-right font-black font-mono">₹{head.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-3 text-red-600 text-right font-black font-mono">{head.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -446,10 +446,10 @@ const ProfitAndLoss: React.FC = () => {
                             {Math.abs(acc.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {acc.opening >= 0 ? 'Cr' : 'Dr'}
                           </td>
                           <td className="px-6 py-4 text-emerald-600 text-right font-medium font-mono">
-                            {acc.credit > 0 ? `₹${acc.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                            {acc.credit > 0 ? `${acc.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
                           <td className="px-6 py-4 text-rose-600 text-right font-medium font-mono">
-                            {acc.debit > 0 ? `₹${acc.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                            {acc.debit > 0 ? `${acc.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                           </td>
                           <td className={`px-6 py-4 text-right font-black font-mono ${acc.closing >= 0 ? 'text-emerald-850' : 'text-rose-850'}`}>
                             {Math.abs(acc.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {acc.closing >= 0 ? 'Cr' : 'Dr'}

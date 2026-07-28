@@ -319,6 +319,7 @@ export interface FinanceCashbookEntry {
   credit: number;
   debit: number;
   created_by: string | null;
+  book_id?: string | null;
   status?: string | null;
   approved_by?: string | null;
   approved_at?: string | null;
@@ -968,8 +969,8 @@ class SupabaseFinance {
           : null;
 
         const noteParticulars = params.actionType === 'Renew'
-          ? `Renewal Completed Note: Total Paid ₹${totalAmount} (Penalty: ₹${params.penaltyPaid}, Interest: ₹${params.interestPaid}, Principal: ₹${params.principalPaid})`
-          : `${params.actionType} Note: Total Paid ₹${totalAmount} (Penalty: ₹${params.penaltyPaid}, Interest: ₹${params.interestPaid}, Principal: ₹${params.principalPaid})`;
+          ? `Renewal Completed Note: Total Paid ${totalAmount} (Penalty: ${params.penaltyPaid}, Interest: ${params.interestPaid}, Principal: ${params.principalPaid})`
+          : `${params.actionType} Note: Total Paid ${totalAmount} (Penalty: ${params.penaltyPaid}, Interest: ${params.interestPaid}, Principal: ${params.principalPaid})`;
 
         await this.addCDInterestDetail({
           loan_id: params.loanId,
@@ -2247,6 +2248,7 @@ class SupabaseFinance {
         'surety_fingerprint_template', 'surety_fingerprint_image_url',
         'surety_fingerprint_added', 'guarantor_1_id', 'guarantor_2_id',
         'grace_days', 'document_charges', 'npa_closed', 'dc_status',
+        'partner_id', 'partner_name',
         // Fields allowed only if protected criteria passes
         'date', 'amount', 'interest_rate', 'duration_months', 'due_type',
         'due_amount', 'penalty_percent', 'period_days', 'loan_category'

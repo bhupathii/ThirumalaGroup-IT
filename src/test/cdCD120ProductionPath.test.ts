@@ -32,7 +32,7 @@ describe('CD120 Production Path Integration Test', () => {
     );
 
     // 4. Assert all locked target values
-    // Principal Balance = 750,000.00 (CD120 original amount was ₹7,50,000)
+    // Principal Balance = 750,000.00 (CD120 original amount was 7,50,000)
     expect(pos.principalBalance).toBe(750000.00);
 
     // Last Payment = 2026-06-29 (RC719)
@@ -55,7 +55,7 @@ describe('CD120 Production Path Integration Test', () => {
     // Today Due = 36740.63
     expect(pos.todayDue).toBe(36740.63);
 
-    // Total Renewal = ₹22,500.00
+    // Total Renewal = 22,500.00
     expect(pos.renewalAmount).toBe(22500.00);
 
     // Total To Regularize = 36740.63 + 22500.00 = 59240.63
@@ -100,7 +100,7 @@ describe('CD120 Production Path Integration Test', () => {
     };
 
     const formatCurrency = (val: number) => {
-      return '₹' + val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return '' + val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
 
     // 4. Map to UI fields (exactly as ledgerMetrics and JSX cards render them now)
@@ -116,13 +116,13 @@ describe('CD120 Production Path Integration Test', () => {
     const uiDueDays            = pos.displayDueDays;
 
     // 5. Assert display values match the user requirements exactly
-    expect(uiPrincipalBalance).toBe('₹7,50,000.00');
-    expect(uiTodayDue).toBe('₹36,740.63');
-    expect(uiAccruedInterest).toBe('₹29,392.50');
-    expect(uiAccruedPenalty).toBe('₹7,348.13');
-    expect(uiTotalForRenewal).toBe('₹22,500.00');
-    expect(uiTotalToRegularize).toBe('₹59,240.63');
-    expect(uiTotalForClose).toBe('₹7,86,740.63');
+    expect(uiPrincipalBalance).toBe('7,50,000.00');
+    expect(uiTodayDue).toBe('36,740.63');
+    expect(uiAccruedInterest).toBe('29,392.50');
+    expect(uiAccruedPenalty).toBe('7,348.13');
+    expect(uiTotalForRenewal).toBe('22,500.00');
+    expect(uiTotalToRegularize).toBe('59,240.63');
+    expect(uiTotalForClose).toBe('7,86,740.63');
     expect(uiLastPayment).toBe('29-Jun-26');
     expect(uiCurrentDueDate).toBe('28-May-26');
     expect(uiDueDays).toBe(39);

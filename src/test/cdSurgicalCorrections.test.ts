@@ -111,7 +111,7 @@ describe('CD Rebuild Surgical Corrections — Issue 1-3 Regression Tests', () =>
       lastPaymentDate: '2026-06-29'
     } as cdLedgerEngine.CDAccountPosition;
 
-    it('correctly allocates split for Close action with ₹7,86,740.63 (exact close amount)', () => {
+    it('correctly allocates split for Close action with 7,86,740.63 (exact close amount)', () => {
       const split = cdLedgerEngine.allocateCDPayment(
         mockPos,
         786740.63,
@@ -125,7 +125,7 @@ describe('CD Rebuild Surgical Corrections — Issue 1-3 Regression Tests', () =>
       expect(split.renewedDays).toBe(0);
     });
 
-    it('correctly allocates split for Close action with ₹7,87,678.13 (close amount for next day)', () => {
+    it('correctly allocates split for Close action with 7,87,678.13 (close amount for next day)', () => {
       const nextDayPos = {
         ...mockPos,
         accruedPenalty: 7535.63,

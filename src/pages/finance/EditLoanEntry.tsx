@@ -114,10 +114,10 @@ const EditLoanEntry: React.FC = () => {
                           {loan.customer?.aadhaar || '-'}
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap text-right text-gray-900 font-bold">
-                          ₹{Number(loan.amount).toLocaleString('en-IN')}
+                          {Number(loan.amount).toLocaleString('en-IN')}
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap text-gray-700">
-                          {loan.due_type} (₹{Number(loan.due_amount).toLocaleString('en-IN')})
+                          {loan.due_type} ({Number(loan.due_amount).toLocaleString('en-IN')})
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap text-center">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${ loan.status === 'Active' ? 'bg-green-100 text-green-800 border border-green-200' : loan.status === 'NPA_CLOSED' ? 'bg-orange-100 text-orange-800 border border-orange-200' : 'bg-gray-100 text-gray-800' }`}>

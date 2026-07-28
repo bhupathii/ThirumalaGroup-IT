@@ -1,10 +1,8 @@
-
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import { FinanceSmartCalendar, isoToDisplayFormatted } from '../../components/finance/FinanceSmartCalendar';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { supabase } from '../../lib/supabase';
 import { Printer, RefreshCw, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
@@ -14,7 +12,14 @@ import { dailyFinancialTransactionService } from '../../services/dailyFinancialT
 import { exportToExcel } from '../../utils/excel';
 import { FinanceCalculationEngine, PartnerMetrics } from '../../services/FinanceCalculationEngine';
 
-interface PartnerPerfRow extends PartnerMetrics {}
+interface PartnerPerfRow extends PartnerMetrics {
+  id: string;
+  name: string;
+  principalFinanced: number;
+  principalCollected: number;
+  interestEarned: number;
+  penaltyEarned: number;
+}
 
 const PartnerPerformance: React.FC = () => {
   const navigate = useNavigate();
@@ -66,8 +71,6 @@ const PartnerPerformance: React.FC = () => {
       'Pending Interest': Math.round(row.pendingInterest),
       'Pending Penalty': Math.round(row.pendingPenalty),
       'Recovery %': Number(row.recoveryPct.toFixed(1)),
-      'Collection %': Number(row.collectionPct.toFixed(1)),
-      'Yield %': Number(row.yieldPct.toFixed(1)),
       'NPA Count': row.npaCount
     }));
 
@@ -88,8 +91,6 @@ const PartnerPerformance: React.FC = () => {
       'Pending Interest': Math.round(grandTotals.pendingInterest),
       'Pending Penalty': Math.round(grandTotals.pendingPenalty),
       'Recovery %': Number(overallRecoveryPct.toFixed(1)),
-      'Collection %': Number(overallCollectionPct.toFixed(1)),
-      'Yield %': Number(overallYieldPct.toFixed(1)),
       'NPA Count': grandTotals.npaCount
     });
 
@@ -103,32 +104,25 @@ const PartnerPerformance: React.FC = () => {
       const partners = await supabaseFinance.getPartners();
       
       const metrics = await FinanceCalculationEngine.computeAllPartnersMetrics(
-        partners,
+        partners as any,
         startDate,
         endDate
       );
 
-      const perfRows: PartnerPerfRow[] = metrics.map(m => ({
+      const mappedRows: PartnerPerfRow[] = metrics.map(m => ({
         ...m,
         id: m.partnerId,
         name: m.partnerName,
-        principalFinanced: m.periodPrincipalFinanced,
-        principalCollected: m.periodPrincipalCollected,
-        interestEarned: m.periodInterestEarned,
-        penaltyEarned: m.periodPenaltyEarned
+        principalFinanced: m.lifetimePrincipalFinanced,
+        principalCollected: m.lifetimePrincipalCollected,
+        interestEarned: m.lifetimeInterestEarned,
+        penaltyEarned: m.lifetimePenaltyEarned
       }));
 
-      // Filter out MD if no loans/capital
-      const activePerfRows = perfRows.filter(r => 
-        r.role === 'Partner' || r.loansIntroduced > 0 || r.netCapital !== 0 || r.outstanding > 0
-      );
-
-      activePerfRows.sort((a, b) => b.principalFinanced - a.principalFinanced);
-      setRows(activePerfRows);
-
+      setRows(mappedRows);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load performance data');
+      toast.error('Failed to calculate partner metrics');
     } finally {
       setLoading(false);
     }
@@ -167,11 +161,8 @@ const PartnerPerformance: React.FC = () => {
     }
   );
 
+  // Approved Business Formula: Recovery % = (Principal Collected / Principal Financed) * 100
   const overallRecoveryPct = grandTotals.principalFinanced > 0 ? (grandTotals.principalCollected / grandTotals.principalFinanced) * 100 : 0;
-  const overallTotalColl = grandTotals.principalCollected + grandTotals.interestEarned + grandTotals.penaltyEarned;
-  const overallTotalDue = overallTotalColl + grandTotals.presentDue;
-  const overallCollectionPct = overallTotalDue > 0 ? (overallTotalColl / overallTotalDue) * 100 : 0;
-  const overallYieldPct = grandTotals.principalFinanced > 0 ? (grandTotals.interestEarned / grandTotals.principalFinanced) * 100 : 0;
 
   const partnerColors = [
     { bar: 'bg-indigo-600', badge: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-600' },
@@ -229,6 +220,7 @@ const PartnerPerformance: React.FC = () => {
                 value={startDate}
                 onChange={setStartDate}
                 module="PARTNER_PERFORMANCE"
+                compact={true}
               />
             </div>
             <div>
@@ -237,6 +229,7 @@ const PartnerPerformance: React.FC = () => {
                 value={endDate}
                 onChange={setEndDate}
                 module="PARTNER_PERFORMANCE"
+                compact={true}
               />
             </div>
           </div>
@@ -257,7 +250,7 @@ const PartnerPerformance: React.FC = () => {
               <h3 className="finance-small-label font-black text-slate-800 uppercase tracking-wider">Partner Performance Split</h3>
             </div>
             <span className="text-[11px] font-mono font-black text-blue-900 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
-              Total Financed: ₹{grandTotals.principalFinanced.toLocaleString('en-IN')}
+              Total Financed: {grandTotals.principalFinanced.toLocaleString('en-IN')}
             </span>
           </div>
 
@@ -271,7 +264,7 @@ const PartnerPerformance: React.FC = () => {
                     <span className="text-[9px] text-slate-400 font-semibold">({p.role})</span>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 font-mono">
-                    <span className="text-[11px] text-slate-500 font-bold">₹{p.principalFinanced.toLocaleString('en-IN')}</span>
+                    <span className="text-[11px] text-slate-500 font-bold">{p.principalFinanced.toLocaleString('en-IN')}</span>
                     <span className={`text-[11px] font-black px-1.5 py-0.2 rounded border ${p.color.badge}`}>
                       {p.pctFormatted}
                     </span>
@@ -310,9 +303,7 @@ const PartnerPerformance: React.FC = () => {
                     <th className="px-3 py-3 text-right text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-emerald-800">Pen Earned</th>
                     <th className="px-3 py-3 text-right text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-rose-800">Outstanding</th>
                     <th className="px-3 py-3 text-right text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-rose-800">Present Due</th>
-                    <th className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-emerald-800">Recovery %</th>
-                    <th className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-emerald-800">Collection %</th>
-                    <th className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-emerald-900">Yield %</th>
+                    <th className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-emerald-800 bg-emerald-50/80">Recovery %</th>
                     <th className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-rose-800">NPA</th>
                     <th className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider whitespace-nowrap">Act / Cls</th>
                   </tr>
@@ -328,23 +319,17 @@ const PartnerPerformance: React.FC = () => {
                         {row.name} <span className="text-[9px] text-slate-400 bg-slate-100 px-1 rounded font-normal">{row.role}</span>
                       </td>
                       <td className={`px-3 py-3 text-right font-medium font-mono text-xs whitespace-nowrap ${row.netCapital >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                        ₹{row.netCapital.toLocaleString('en-IN')}
+                        {row.netCapital.toLocaleString('en-IN')}
                       </td>
                       <td className="px-3 py-3 text-center font-bold text-slate-700 text-xs whitespace-nowrap">{row.loansIntroduced}</td>
-                      <td className="px-3 py-3 text-right text-blue-700 font-black font-mono text-xs whitespace-nowrap">₹{row.principalFinanced.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-emerald-700 font-black font-mono text-xs whitespace-nowrap">₹{row.principalCollected.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-emerald-700 font-bold font-mono text-xs whitespace-nowrap">₹{Math.round(row.interestEarned).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-emerald-700 font-bold font-mono text-xs whitespace-nowrap">₹{Math.round(row.penaltyEarned).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-rose-700 font-black font-mono text-xs whitespace-nowrap">₹{Math.round(row.outstanding).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-rose-700 font-black font-mono text-xs whitespace-nowrap">₹{Math.round(row.presentDue).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-center text-emerald-800 font-black bg-emerald-50/50 text-xs whitespace-nowrap">
+                      <td className="px-3 py-3 text-right text-blue-700 font-black font-mono text-xs whitespace-nowrap">{row.principalFinanced.toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-3 text-right text-emerald-700 font-black font-mono text-xs whitespace-nowrap">{row.principalCollected.toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-3 text-right text-emerald-700 font-bold font-mono text-xs whitespace-nowrap">{Math.round(row.interestEarned).toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-3 text-right text-emerald-700 font-bold font-mono text-xs whitespace-nowrap">{Math.round(row.penaltyEarned).toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-3 text-right text-rose-700 font-black font-mono text-xs whitespace-nowrap">{Math.round(row.outstanding).toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-3 text-right text-rose-700 font-black font-mono text-xs whitespace-nowrap">{Math.round(row.presentDue).toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-3 text-center text-emerald-800 font-black bg-emerald-50/80 text-xs whitespace-nowrap">
                         {row.recoveryPct.toFixed(1)}%
-                      </td>
-                      <td className="px-3 py-3 text-center text-emerald-800 font-black bg-emerald-50/50 text-xs whitespace-nowrap">
-                        {row.collectionPct.toFixed(1)}%
-                      </td>
-                      <td className="px-3 py-3 text-center text-emerald-900 font-black bg-emerald-50/50 text-xs whitespace-nowrap">
-                        {row.yieldPct.toFixed(1)}%
                       </td>
                       <td className="px-3 py-3 text-center text-rose-800 font-black text-xs whitespace-nowrap">
                         {row.npaCount}
@@ -357,35 +342,29 @@ const PartnerPerformance: React.FC = () => {
                   <tr className="bg-slate-100 font-sans font-black border-t-2 border-slate-300 text-xs text-slate-900">
                     <td className="px-3 py-3 font-black uppercase text-left">GRAND TOTAL:</td>
                     <td className="px-3 py-3 text-right font-mono font-bold text-emerald-800 whitespace-nowrap">
-                      ₹{grandTotals.netCapital.toLocaleString('en-IN')}
+                      {grandTotals.netCapital.toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-center font-bold">{grandTotals.loansIntroduced}</td>
                     <td className="px-3 py-3 text-right font-mono font-black text-blue-900 whitespace-nowrap">
-                      ₹{grandTotals.principalFinanced.toLocaleString('en-IN')}
+                      {grandTotals.principalFinanced.toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-right font-mono font-black text-emerald-800 whitespace-nowrap">
-                      ₹{grandTotals.principalCollected.toLocaleString('en-IN')}
+                      {grandTotals.principalCollected.toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-right font-mono font-bold text-emerald-800 whitespace-nowrap">
-                      ₹{Math.round(grandTotals.interestEarned).toLocaleString('en-IN')}
+                      {Math.round(grandTotals.interestEarned).toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-right font-mono font-bold text-emerald-800 whitespace-nowrap">
-                      ₹{Math.round(grandTotals.penaltyEarned).toLocaleString('en-IN')}
+                      {Math.round(grandTotals.penaltyEarned).toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-right font-mono font-black text-rose-800 whitespace-nowrap">
-                      ₹{Math.round(grandTotals.outstanding).toLocaleString('en-IN')}
+                      {Math.round(grandTotals.outstanding).toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-right font-mono font-black text-rose-800 whitespace-nowrap">
-                      ₹{Math.round(grandTotals.presentDue).toLocaleString('en-IN')}
+                      {Math.round(grandTotals.presentDue).toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-center font-black bg-emerald-100 text-emerald-900 whitespace-nowrap">
                       {overallRecoveryPct.toFixed(1)}%
-                    </td>
-                    <td className="px-3 py-3 text-center font-black bg-emerald-100 text-emerald-900 whitespace-nowrap">
-                      {overallCollectionPct.toFixed(1)}%
-                    </td>
-                    <td className="px-3 py-3 text-center font-black bg-emerald-100 text-emerald-950 whitespace-nowrap">
-                      {overallYieldPct.toFixed(1)}%
                     </td>
                     <td className="px-3 py-3 text-center font-black text-rose-900 whitespace-nowrap">
                       {grandTotals.npaCount}
@@ -431,9 +410,7 @@ const PartnerPerformance: React.FC = () => {
                   <th className="p-2 text-right border-r border-slate-300">Pen Earned</th>
                   <th className="p-2 text-right border-r border-slate-300">Outstanding</th>
                   <th className="p-2 text-right border-r border-slate-300">Present Due</th>
-                  <th className="p-2 text-center border-r border-slate-300">Rec. %</th>
-                  <th className="p-2 text-center border-r border-slate-300">Coll. %</th>
-                  <th className="p-2 text-center border-r border-slate-300">Yield %</th>
+                  <th className="p-2 text-center border-r border-slate-300 bg-emerald-50">Rec. %</th>
                   <th className="p-2 text-center border-r border-slate-300 text-red-700">NPA</th>
                   <th className="p-2 text-center border-r border-slate-300">Act.</th>
                   <th className="p-2 text-center">Cls.</th>
@@ -443,17 +420,15 @@ const PartnerPerformance: React.FC = () => {
                 {rows.map((row) => (
                   <tr key={row.id} className="border-b border-slate-200">
                     <td className="p-2 uppercase font-bold border-r border-slate-300">{row.name}</td>
-                    <td className="p-2 text-right border-r border-slate-300">₹{row.netCapital.toLocaleString('en-IN')}</td>
+                    <td className="p-2 text-right border-r border-slate-300">{row.netCapital.toLocaleString('en-IN')}</td>
                     <td className="p-2 text-center border-r border-slate-300">{row.loansIntroduced}</td>
-                    <td className="p-2 text-right border-r border-slate-300 font-bold text-blue-700">₹{row.principalFinanced.toLocaleString('en-IN')}</td>
-                    <td className="p-2 text-right border-r border-slate-300">₹{row.principalCollected.toLocaleString('en-IN')}</td>
-                    <td className="p-2 text-right border-r border-slate-300">₹{Math.round(row.interestEarned).toLocaleString('en-IN')}</td>
-                    <td className="p-2 text-right border-r border-slate-300">₹{Math.round(row.penaltyEarned).toLocaleString('en-IN')}</td>
-                    <td className="p-2 text-right border-r border-slate-300 text-rose-700 font-bold">₹{Math.round(row.outstanding).toLocaleString('en-IN')}</td>
-                    <td className="p-2 text-right border-r border-slate-300 text-rose-700 font-bold">₹{Math.round(row.presentDue).toLocaleString('en-IN')}</td>
-                    <td className="p-2 text-center border-r border-slate-300 font-black">{row.recoveryPct.toFixed(1)}%</td>
-                    <td className="p-2 text-center border-r border-slate-300 font-black">{row.collectionPct.toFixed(1)}%</td>
-                    <td className="p-2 text-center border-r border-slate-300 font-black">{row.yieldPct.toFixed(1)}%</td>
+                    <td className="p-2 text-right border-r border-slate-300 font-bold text-blue-700">{row.principalFinanced.toLocaleString('en-IN')}</td>
+                    <td className="p-2 text-right border-r border-slate-300">{row.principalCollected.toLocaleString('en-IN')}</td>
+                    <td className="p-2 text-right border-r border-slate-300">{Math.round(row.interestEarned).toLocaleString('en-IN')}</td>
+                    <td className="p-2 text-right border-r border-slate-300">{Math.round(row.penaltyEarned).toLocaleString('en-IN')}</td>
+                    <td className="p-2 text-right border-r border-slate-300 text-rose-700 font-bold">{Math.round(row.outstanding).toLocaleString('en-IN')}</td>
+                    <td className="p-2 text-right border-r border-slate-300 text-rose-700 font-bold">{Math.round(row.presentDue).toLocaleString('en-IN')}</td>
+                    <td className="p-2 text-center border-r border-slate-300 font-black bg-emerald-50">{row.recoveryPct.toFixed(1)}%</td>
                     <td className="p-2 text-center border-r border-slate-300 font-black text-red-600">{row.npaCount}</td>
                     <td className="p-2 text-center border-r border-slate-300">{row.activeLoans}</td>
                     <td className="p-2 text-center">{row.closedLoans}</td>
@@ -463,17 +438,15 @@ const PartnerPerformance: React.FC = () => {
                 {/* Grand Total Row in Print */}
                 <tr className="border-t-2 border-slate-900 bg-slate-100 font-black">
                   <td className="p-2 uppercase border-r border-slate-300">GRAND TOTAL</td>
-                  <td className="p-2 text-right border-r border-slate-300">₹{grandTotals.netCapital.toLocaleString('en-IN')}</td>
+                  <td className="p-2 text-right border-r border-slate-300">{grandTotals.netCapital.toLocaleString('en-IN')}</td>
                   <td className="p-2 text-center border-r border-slate-300">{grandTotals.loansIntroduced}</td>
-                  <td className="p-2 text-right border-r border-slate-300 text-blue-900">₹{grandTotals.principalFinanced.toLocaleString('en-IN')}</td>
-                  <td className="p-2 text-right border-r border-slate-300 text-green-800">₹{grandTotals.principalCollected.toLocaleString('en-IN')}</td>
-                  <td className="p-2 text-right border-r border-slate-300">₹{Math.round(grandTotals.interestEarned).toLocaleString('en-IN')}</td>
-                  <td className="p-2 text-right border-r border-slate-300">₹{Math.round(grandTotals.penaltyEarned).toLocaleString('en-IN')}</td>
-                  <td className="p-2 text-right border-r border-slate-300 text-rose-700">₹{Math.round(grandTotals.outstanding).toLocaleString('en-IN')}</td>
-                  <td className="p-2 text-right border-r border-slate-300 text-rose-700">₹{Math.round(grandTotals.presentDue).toLocaleString('en-IN')}</td>
-                  <td className="p-2 text-center border-r border-slate-300">{overallRecoveryPct.toFixed(1)}%</td>
-                  <td className="p-2 text-center border-r border-slate-300">{overallCollectionPct.toFixed(1)}%</td>
-                  <td className="p-2 text-center border-r border-slate-300">{overallYieldPct.toFixed(1)}%</td>
+                  <td className="p-2 text-right border-r border-slate-300 text-blue-900">{grandTotals.principalFinanced.toLocaleString('en-IN')}</td>
+                  <td className="p-2 text-right border-r border-slate-300 text-green-800">{grandTotals.principalCollected.toLocaleString('en-IN')}</td>
+                  <td className="p-2 text-right border-r border-slate-300">{Math.round(grandTotals.interestEarned).toLocaleString('en-IN')}</td>
+                  <td className="p-2 text-right border-r border-slate-300">{Math.round(grandTotals.penaltyEarned).toLocaleString('en-IN')}</td>
+                  <td className="p-2 text-right border-r border-slate-300 text-rose-700">{Math.round(grandTotals.outstanding).toLocaleString('en-IN')}</td>
+                  <td className="p-2 text-right border-r border-slate-300 text-rose-700">{Math.round(grandTotals.presentDue).toLocaleString('en-IN')}</td>
+                  <td className="p-2 text-center border-r border-slate-300 bg-emerald-100 text-emerald-950">{overallRecoveryPct.toFixed(1)}%</td>
                   <td className="p-2 text-center border-r border-slate-300 text-red-600">{grandTotals.npaCount}</td>
                   <td className="p-2 text-center border-r border-slate-300">{grandTotals.activeLoans}</td>
                   <td className="p-2 text-center">{grandTotals.closedLoans}</td>

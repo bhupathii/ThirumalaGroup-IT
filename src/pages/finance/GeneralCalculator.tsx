@@ -194,7 +194,7 @@ const GeneralCalculator: React.FC = () => {
             {/* Principal & Date */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="finance-caption uppercase">PRINCIPAL (₹)</label>
+                <label className="finance-caption uppercase">PRINCIPAL ()</label>
                 <input
                   type="number"
                   value={principal}
@@ -271,7 +271,7 @@ const GeneralCalculator: React.FC = () => {
             {/* Amount Paid & Document Charges */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="finance-caption uppercase">AMOUNT PAID (₹)</label>
+                <label className="finance-caption uppercase">AMOUNT PAID ()</label>
                 <input
                   type="number"
                   value={amountPaid}
@@ -282,7 +282,7 @@ const GeneralCalculator: React.FC = () => {
               </div>
 
               <div>
-                <label className="finance-caption uppercase">DOCUMENT (₹)</label>
+                <label className="finance-caption uppercase">DOCUMENT ()</label>
                 <input
                   type="number"
                   value={documentVal}
@@ -318,7 +318,7 @@ const GeneralCalculator: React.FC = () => {
             <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100">
               <span className="text-slate-400 block finance-small-label uppercase">INTEREST</span>
               <span className="font-mono mt-1 text-red-650 block finance-h1">
-                ₹{calculation.interest.toLocaleString('en-IN')}
+                {calculation.interest.toLocaleString('en-IN')}
               </span>
             </div>
 
@@ -326,7 +326,7 @@ const GeneralCalculator: React.FC = () => {
             <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100">
               <span className="text-slate-400 block finance-small-label uppercase">PENALTY</span>
               <span className="font-mono mt-1 text-red-650 block finance-h1">
-                ₹{calculation.penalty.toLocaleString('en-IN')}
+                {calculation.penalty.toLocaleString('en-IN')}
               </span>
             </div>
 
@@ -334,7 +334,7 @@ const GeneralCalculator: React.FC = () => {
             <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100">
               <span className="text-slate-400 block finance-small-label uppercase">AMOUNT PAID</span>
               <span className="font-mono mt-1 text-emerald-650 block finance-h1">
-                ₹{(parseFloat(amountPaid) || 0).toLocaleString('en-IN')}
+                {(parseFloat(amountPaid) || 0).toLocaleString('en-IN')}
               </span>
             </div>
 
@@ -342,7 +342,7 @@ const GeneralCalculator: React.FC = () => {
             <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100">
               <span className="text-slate-400 block finance-small-label uppercase">DOCUMENT CHARGES</span>
               <span className="font-mono mt-1 text-slate-900 block finance-h1">
-                ₹{(parseFloat(documentVal) || 0).toLocaleString('en-IN')}
+                {(parseFloat(documentVal) || 0).toLocaleString('en-IN')}
               </span>
             </div>
 
@@ -350,7 +350,7 @@ const GeneralCalculator: React.FC = () => {
             <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100">
               <span className="text-emerald-700 block finance-small-label uppercase">PAYOUT</span>
               <span className="font-mono mt-1 text-emerald-700 block finance-h1">
-                ₹{calculation.payout.toLocaleString('en-IN')}
+                {calculation.payout.toLocaleString('en-IN')}
               </span>
             </div>
 
@@ -358,7 +358,7 @@ const GeneralCalculator: React.FC = () => {
             <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100 col-span-2">
               <span className="text-slate-400 block finance-small-label uppercase">TOTAL BALANCE</span>
               <span className="font-mono mt-1 text-slate-900 block finance-h1">
-                ₹{calculation.totalBalance.toLocaleString('en-IN')}
+                {calculation.totalBalance.toLocaleString('en-IN')}
               </span>
             </div>
 
@@ -366,7 +366,7 @@ const GeneralCalculator: React.FC = () => {
             <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100 col-span-2">
               <span className="text-slate-400 block finance-small-label uppercase">FOR CLOSE</span>
               <span className="font-mono mt-1 text-slate-900 block finance-h1">
-                ₹{calculation.forClose.toLocaleString('en-IN')}
+                {calculation.forClose.toLocaleString('en-IN')}
               </span>
             </div>
 
@@ -401,7 +401,7 @@ const GeneralCalculator: React.FC = () => {
               </tr>
               <tr className="border-b border-slate-200">
                 <td className="bg-slate-50 px-3 py-2 w-1/3 border-r border-slate-300 finance-input">PRINCIPAL</td>
-                <td className="px-3 py-2 font-mono finance-input">₹{(parseFloat(principal) || 0).toLocaleString('en-IN')}</td>
+                <td className="px-3 py-2 font-mono finance-input">{(parseFloat(principal) || 0).toLocaleString('en-IN')}</td>
               </tr>
               <tr className="border-b border-slate-200">
                 <td className="bg-slate-50 px-3 py-2 w-1/3 border-r border-slate-300 finance-input">DATE</td>
@@ -425,11 +425,11 @@ const GeneralCalculator: React.FC = () => {
               </tr>
               <tr className="border-b border-slate-200">
                 <td className="bg-slate-50 px-3 py-2 w-1/3 border-r border-slate-300 finance-input">DOCUMENT CHARGES</td>
-                <td className="px-3 py-2 font-mono finance-input">₹{(parseFloat(documentVal) || 0).toLocaleString('en-IN')}</td>
+                <td className="px-3 py-2 font-mono finance-input">{(parseFloat(documentVal) || 0).toLocaleString('en-IN')}</td>
               </tr>
               <tr className="border-b border-slate-200">
                 <td className="bg-slate-50 px-3 py-2 w-1/3 border-r border-slate-300 finance-input">PAYOUT DISBURSED</td>
-                <td className="px-3 py-2 font-mono text-emerald-700 finance-input">₹{calculation.payout.toLocaleString('en-IN')}</td>
+                <td className="px-3 py-2 font-mono text-emerald-700 finance-input">{calculation.payout.toLocaleString('en-IN')}</td>
               </tr>
             </tbody>
           </table>
@@ -442,23 +442,23 @@ const GeneralCalculator: React.FC = () => {
             <tbody>
               <tr className="border-b border-slate-200">
                 <td className="bg-slate-50 px-3 py-2 w-1/3 border-r border-slate-300 finance-input">INTEREST</td>
-                <td className="px-3 py-2 font-mono finance-input">₹{calculation.interest.toLocaleString('en-IN')}</td>
+                <td className="px-3 py-2 font-mono finance-input">{calculation.interest.toLocaleString('en-IN')}</td>
               </tr>
               <tr className="border-b border-slate-200">
                 <td className="bg-slate-50 px-3 py-2 w-1/3 border-r border-slate-300 finance-input">PENALTY</td>
-                <td className="px-3 py-2 font-mono finance-input">₹{calculation.penalty.toLocaleString('en-IN')}</td>
+                <td className="px-3 py-2 font-mono finance-input">{calculation.penalty.toLocaleString('en-IN')}</td>
               </tr>
               <tr className="border-b border-slate-200">
                 <td className="bg-slate-50 px-3 py-2 w-1/3 border-r border-slate-300 finance-input">AMOUNT PAID</td>
-                <td className="px-3 py-2 font-mono finance-input">₹{(parseFloat(amountPaid) || 0).toLocaleString('en-IN')}</td>
+                <td className="px-3 py-2 font-mono finance-input">{(parseFloat(amountPaid) || 0).toLocaleString('en-IN')}</td>
               </tr>
               <tr className="border-b border-slate-200">
                 <td className="bg-slate-50 px-3 py-2 w-1/3 border-r border-slate-300 finance-input">TOTAL BALANCE</td>
-                <td className="px-3 py-2 font-mono text-red-700 finance-input">₹{calculation.totalBalance.toLocaleString('en-IN')}</td>
+                <td className="px-3 py-2 font-mono text-red-700 finance-input">{calculation.totalBalance.toLocaleString('en-IN')}</td>
               </tr>
               <tr className="border-b border-slate-200">
                 <td className="bg-slate-50 px-3 py-2 w-1/3 border-r border-slate-300 font-sans finance-input">FOR CLOSE</td>
-                <td className="px-3 py-2 font-mono text-slate-900 finance-input">₹{calculation.forClose.toLocaleString('en-IN')}</td>
+                <td className="px-3 py-2 font-mono text-slate-900 finance-input">{calculation.forClose.toLocaleString('en-IN')}</td>
               </tr>
             </tbody>
           </table>

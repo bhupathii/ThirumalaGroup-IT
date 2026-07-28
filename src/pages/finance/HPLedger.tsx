@@ -466,16 +466,16 @@ const HPLedger: React.FC = () => {
                       {new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </td>
                     <td className="px-3 py-3 text-right text-gray-900">
-                      ₹{row.principal.toLocaleString('en-IN')}
+                      {row.principal.toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-right text-gray-500">
                       {row.duration} months <span className="text-[10px]">(HP 2% flat)</span>
                     </td>
                     <td className="px-3 py-3 text-right text-gray-900">
-                      ₹{row.totalRepayable.toLocaleString('en-IN')}
+                      {row.totalRepayable.toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-right text-rose-800 font-semibold">
-                      ₹{row.outstanding.toLocaleString('en-IN')}
+                      {row.outstanding.toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${ row.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' }`}>
@@ -540,11 +540,11 @@ const HPLedger: React.FC = () => {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="bg-slate-50 border p-3 rounded-xl">
                   <div className="text-gray-400 text-xs uppercase font-semibold">Principal Disbursed</div>
-                  <div className="text-lg font-bold text-gray-900 mt-1">₹{selectedLoan.principal.toLocaleString('en-IN')}</div>
+                  <div className="text-lg font-bold text-gray-900 mt-1">{selectedLoan.principal.toLocaleString('en-IN')}</div>
                 </div>
                 <div className="bg-slate-50 border p-3 rounded-xl">
                   <div className="text-gray-400 text-xs uppercase font-semibold">Capital Interest (HP 2%)</div>
-                  <div className="text-lg font-bold text-indigo-700 mt-1">₹{selectedLoan.interestAmount.toLocaleString('en-IN')}</div>
+                  <div className="text-lg font-bold text-indigo-700 mt-1">{selectedLoan.interestAmount.toLocaleString('en-IN')}</div>
                 </div>
                 <div className="bg-slate-50 border p-3 rounded-xl">
                   <div className="text-gray-400 text-xs uppercase font-semibold">Installments Paid</div>
@@ -552,7 +552,7 @@ const HPLedger: React.FC = () => {
                 </div>
                 <div className="bg-slate-50 border p-3 rounded-xl">
                   <div className="text-gray-400 text-xs uppercase font-semibold">Principal Receivable</div>
-                  <div className="text-lg font-bold text-rose-800 mt-1">₹{selectedLoan.outstanding.toLocaleString('en-IN')}</div>
+                  <div className="text-lg font-bold text-rose-800 mt-1">{selectedLoan.outstanding.toLocaleString('en-IN')}</div>
                 </div>
               </div>
 
@@ -577,8 +577,8 @@ const HPLedger: React.FC = () => {
                           <tr key={inst.instNo} className="hover:bg-slate-50">
                             <td className="px-2 py-2 text-gray-600 font-mono">#{inst.instNo}</td>
                             <td className="px-2 py-2 text-gray-500">{inst.dueDate}</td>
-                            <td className="px-2 py-2 text-right text-gray-950 font-medium">₹{inst.installmentAmount}</td>
-                            <td className="px-2 py-2 text-right text-red-600">₹{inst.penalty}</td>
+                            <td className="px-2 py-2 text-right text-gray-950 font-medium">{inst.installmentAmount}</td>
+                            <td className="px-2 py-2 text-right text-red-600">{inst.penalty}</td>
                             <td className="px-2 py-2 text-center">
                               <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                                 inst.status === 'Paid' ? 'bg-green-100 text-green-700' :
@@ -658,27 +658,27 @@ const HPLedger: React.FC = () => {
                     <div className="border-t pt-3 space-y-2 text-xs">
                       <div className="flex justify-between text-gray-600">
                         <span>Installments Amount:</span>
-                        <span>₹{payCalcs.instAmt}</span>
+                        <span>{payCalcs.instAmt}</span>
                       </div>
                       <div className="flex justify-between text-red-600">
                         <span>Late Penalty Accrued:</span>
-                        <span>₹{payCalcs.penalty}</span>
+                        <span>{payCalcs.penalty}</span>
                       </div>
                       {waivedPenalty > 0 && (
                         <div className="flex justify-between text-green-600 font-medium">
                           <span>Penalty Waived:</span>
-                          <span>- ₹{waivedPenalty}</span>
+                          <span>- {waivedPenalty}</span>
                         </div>
                       )}
                       {discount > 0 && (
                         <div className="flex justify-between text-green-600 font-medium">
                           <span>Commission Discount:</span>
-                          <span>- ₹{discount}</span>
+                          <span>- {discount}</span>
                         </div>
                       )}
                       <div className="flex justify-between font-bold text-sm text-gray-950 border-t pt-2">
                         <span>Total Cash Received:</span>
-                        <span>₹{payCalcs.total}</span>
+                        <span>{payCalcs.total}</span>
                       </div>
                     </div>
 
@@ -687,16 +687,16 @@ const HPLedger: React.FC = () => {
                       <div className="font-bold uppercase tracking-wider text-indigo-900 border-b pb-0.5 mb-1 text-[9px]">Credits Split Allocation Preview:</div>
                       <div className="flex justify-between">
                         <span>HP A/c (Principal Component):</span>
-                        <span className="font-semibold">₹{payCalcs.principalPaid}</span>
+                        <span className="font-semibold">{payCalcs.principalPaid}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>HP COMMISSION A/C (Interest):</span>
-                        <span className="font-semibold">₹{payCalcs.commissionPaid}</span>
+                        <span className="font-semibold">{payCalcs.commissionPaid}</span>
                       </div>
                       {payCalcs.actualPenaltyPaid > 0 && (
                         <div className="flex justify-between">
                           <span>HP PENALTY A/C (Penalty):</span>
-                          <span className="font-semibold">₹{payCalcs.actualPenaltyPaid}</span>
+                          <span className="font-semibold">{payCalcs.actualPenaltyPaid}</span>
                         </div>
                       )}
                     </div>
@@ -707,7 +707,7 @@ const HPLedger: React.FC = () => {
                       className="w-full text-center py-2 text-sm font-semibold rounded-xl bg-indigo-800 hover:bg-indigo-900 text-white"
                       disabled={submittingPayment}
                     >
-                      {submittingPayment ? 'Posting payment...' : `Submit Payment (₹${payCalcs.total})`}
+                      {submittingPayment ? 'Posting payment...' : `Submit Payment (${payCalcs.total})`}
                     </Button>
                   </div>
                 </div>
@@ -748,7 +748,7 @@ const HPLedger: React.FC = () => {
                               </td>
                               <td className="px-3 py-2 text-gray-600">{tx.collected_by || 'System'}</td>
                               <td className="px-3 py-2 text-gray-400 italic max-w-xs truncate">{tx.remarks}</td>
-                              <td className="px-3 py-2 text-right font-semibold text-gray-950">₹{Number(tx.amount).toLocaleString('en-IN')}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-gray-950">{Number(tx.amount).toLocaleString('en-IN')}</td>
                             </tr>
                           );
                        })}
@@ -797,19 +797,19 @@ const HPLedger: React.FC = () => {
                       {new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </td>
                     <td className="px-3 py-3 text-right finance-input">
-                      ₹{row.principal.toLocaleString('en-IN')}
+                      {row.principal.toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-right text-gray-500 finance-input">
-                      ₹{row.interestAmount.toLocaleString('en-IN')} <span className="text-[9px]">(HP 2% flat)</span>
+                      {row.interestAmount.toLocaleString('en-IN')} <span className="text-[9px]">(HP 2% flat)</span>
                     </td>
                     <td className="px-3 py-3 text-right text-gray-900 finance-input">
-                      ₹{row.totalRepayable.toLocaleString('en-IN')}
+                      {row.totalRepayable.toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-right text-green-600 finance-input">
-                      ₹{row.totalCollected.toLocaleString('en-IN')}
+                      {row.totalCollected.toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-right text-orange-700 finance-input">
-                      ₹{row.outstanding.toLocaleString('en-IN')}
+                      {row.outstanding.toLocaleString('en-IN')}
                     </td>
                     <td className="px-3 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full ${ row.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' } finance-header-time`}>
@@ -822,11 +822,11 @@ const HPLedger: React.FC = () => {
               <tfoot className="bg-gray-50 border-t-2 border-gray-200">
                 <tr className="text-gray-900 md:text-sm finance-header-time">
                   <td colSpan={3} className="px-3 py-3 text-right finance-input uppercase">Total:</td>
-                  <td className="px-3 py-3 text-right">₹{filteredRows.reduce((sum, r) => sum + r.principal, 0).toLocaleString('en-IN')}</td>
-                  <td className="px-3 py-3 text-right text-gray-500">₹{filteredRows.reduce((sum, r) => sum + r.interestAmount, 0).toLocaleString('en-IN')}</td>
-                  <td className="px-3 py-3 text-right">₹{filteredRows.reduce((sum, r) => sum + r.totalRepayable, 0).toLocaleString('en-IN')}</td>
-                  <td className="px-3 py-3 text-right text-green-700">₹{filteredRows.reduce((sum, r) => sum + r.totalCollected, 0).toLocaleString('en-IN')}</td>
-                  <td className="px-3 py-3 text-right text-orange-700">₹{filteredRows.reduce((sum, r) => sum + r.outstanding, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right">{filteredRows.reduce((sum, r) => sum + r.principal, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right text-gray-500">{filteredRows.reduce((sum, r) => sum + r.interestAmount, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right">{filteredRows.reduce((sum, r) => sum + r.totalRepayable, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right text-green-700">{filteredRows.reduce((sum, r) => sum + r.totalCollected, 0).toLocaleString('en-IN')}</td>
+                  <td className="px-3 py-3 text-right text-orange-700">{filteredRows.reduce((sum, r) => sum + r.outstanding, 0).toLocaleString('en-IN')}</td>
                   <td className="px-3 py-3"></td>
                 </tr>
               </tfoot>

@@ -84,9 +84,9 @@ const ApproveRecords: React.FC = () => {
   const [quickFilter, setQuickFilter] = useState<'total_pending' | 'edit_pending' | 'delete_pending' | 'approved_today'>('total_pending');
 
   const formatCompactCurrency = (amount: number | string | null | undefined): string => {
-    if (amount === null || amount === undefined || amount === '') return '₹0';
+    if (amount === null || amount === undefined || amount === '') return '0';
     const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    if (isNaN(num) || num === 0) return '₹0';
+    if (isNaN(num) || num === 0) return '0';
     const hasDecimals = num % 1 !== 0;
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -2252,11 +2252,11 @@ const ApproveRecords: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[9.5px]">Interest Amt</span>
-                    <span className="font-bold text-amber-700">{viewEntry.interest ? formatCompactCurrency(viewEntry.interest) : '₹0'}</span>
+                    <span className="font-bold text-amber-700">{viewEntry.interest ? formatCompactCurrency(viewEntry.interest) : '0'}</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[9.5px]">Penalty Amt</span>
-                    <span className="font-bold text-rose-700">{viewEntry.penalty ? formatCompactCurrency(viewEntry.penalty) : '₹0'}</span>
+                    <span className="font-bold text-rose-700">{viewEntry.penalty ? formatCompactCurrency(viewEntry.penalty) : '0'}</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[9.5px]">Timestamp</span>

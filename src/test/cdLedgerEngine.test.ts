@@ -194,7 +194,7 @@ describe('cdLedgerEngine Unit Tests', () => {
       lastPaymentDate: '2026-06-29'
     };
 
-    // If payment is ₹40,000, it clears outstanding interest/penalty (₹36,740.63)
+    // If payment is 40,000, it clears outstanding interest/penalty (36,740.63)
     // and remainder goes to principal.
     const split = cdEngine.allocateCDPayment(mockPos, 40000.00, 'Partial', 30);
     expect(split.penaltyPaid).toBe(7348.13);

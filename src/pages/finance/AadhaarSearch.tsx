@@ -169,9 +169,9 @@ const AadhaarSearch: React.FC = () => {
                 return (
                   <div key={rec.id || index} className="text-sm font-semibold grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-red-200 pt-3">
                     <div>LOAN ID: {rec.loan_id || 'N/A'}</div>
-                    <div className="text-red-750">TOTAL LIABILITY: ₹{totalLiability.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                    <div className="text-red-750">SETTLEMENT AMOUNT: ₹{(rec.settlement_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                    <div className="text-red-750">WAIVED AMOUNT: ₹{waivedAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    <div className="text-red-750">TOTAL LIABILITY: {totalLiability.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    <div className="text-red-750">SETTLEMENT AMOUNT: {(rec.settlement_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    <div className="text-red-750">WAIVED AMOUNT: {waivedAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                   </div>
                 );
               })}
@@ -233,19 +233,19 @@ const AadhaarSearch: React.FC = () => {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-gray-600 mb-4 finance-caption">
                       <div>
                         <span className="block text-gray-400 finance-small-label uppercase">PRINCIPAL</span>
-                        <span className="text-gray-900 finance-input">₹{Number(loan.amount).toLocaleString('en-IN')}</span>
+                        <span className="text-gray-900 finance-input">{Number(loan.amount).toLocaleString('en-IN')}</span>
                       </div>
                       <div>
                         <span className="block text-gray-400 finance-small-label uppercase">TOTAL REPAYABLE</span>
-                        <span className="text-gray-900 finance-input">₹{loan.totalRepayable.toLocaleString('en-IN')}</span>
+                        <span className="text-gray-900 finance-input">{loan.totalRepayable.toLocaleString('en-IN')}</span>
                       </div>
                       <div>
                         <span className="block text-gray-400 finance-small-label uppercase">PAID COLLECTED</span>
-                        <span className="text-green-600 finance-input">₹{loan.totalCollected.toLocaleString('en-IN')}</span>
+                        <span className="text-green-600 finance-input">{loan.totalCollected.toLocaleString('en-IN')}</span>
                       </div>
                       <div>
                         <span className="block text-gray-400 finance-small-label uppercase">REMAINING BAL</span>
-                        <span className="text-orange-700 finance-input">₹{loan.outstanding.toLocaleString('en-IN')}</span>
+                        <span className="text-orange-700 finance-input">{loan.outstanding.toLocaleString('en-IN')}</span>
                       </div>
                     </div>
 
@@ -283,7 +283,7 @@ const AadhaarSearch: React.FC = () => {
                           {loan.dues.map((due: any) => (
                             <div key={due.id} className="flex justify-between p-2 finance-small-label">
                               <span>{new Date(due.due_date).toLocaleDateString('en-IN')}</span>
-                              <span>DUE: ₹{Number(due.amount).toLocaleString('en-IN')}</span>
+                              <span>DUE: {Number(due.amount).toLocaleString('en-IN')}</span>
                               <span className={`px-2 py-0.5 rounded-full ${ due.status === 'Paid' ? 'bg-green-100 text-green-800' : due.status === 'Partially Paid' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800' } finance-input`}>
                                 {due.status ? due.status.toUpperCase() : ''}
                               </span>

@@ -1,5 +1,5 @@
 /**
- * CD ₹25,00,000 OG ACCESS PARITY FIXTURE
+ * CD 25,00,000 OG ACCESS PARITY FIXTURE
  * ────────────────────────────────────────
  *
  * Source: Real Microsoft Access CD account, forensically verified.
@@ -7,7 +7,7 @@
  * Loan Parameters
  * ───────────────
  *   Loan Date      : 14-Nov-2023
- *   Principal      : ₹25,00,000
+ *   Principal      : 25,00,000
  *   Interest Rate  : 3%  per 30 days
  *   Penalty Rate   : 0.75% per 30 days
  *   Period         : 30 days
@@ -17,11 +17,11 @@
  * ─────────────────────────────────────────
  *   Due Date        = 12-Jun-26
  *   Due Days        = 3
- *   Interest        = ₹8,250
- *   Penalty         = ₹0
- *   Total Amt Ren   = ₹8,250
+ *   Interest        = 8,250
+ *   Penalty         = 0
+ *   Total Amt Ren   = 8,250
  *   Next Due Dt     = 16-Jun-26
- *   Total Close     = ₹25,08,250
+ *   Total Close     = 25,08,250
  *
  * All assertions in this file must pass before any changes to the CD
  * timeline engine are considered correct.

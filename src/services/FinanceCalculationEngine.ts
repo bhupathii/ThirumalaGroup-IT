@@ -79,10 +79,8 @@ export interface PartnerMetrics {
   pendingInterest: number;
   pendingPenalty: number;
 
-  // Ratios
+  // Ratios (Approved Business Formula: Recovery % = (Principal Collected / Principal Financed) * 100)
   recoveryPct: number;
-  collectionPct: number;
-  yieldPct: number;
 }
 
 export class FinanceCalculationEngine {
@@ -351,9 +349,14 @@ export class FinanceCalculationEngine {
     let activeLoans = 0, closedLoans = 0, npaCount = 0;
     pLoans.forEach(l => {
       const s = (l.status || '').trim().toUpperCase();
-      if (s === 'CLOSED') closedLoans++; else activeLoans++;
-      if (s === 'NPA' || s === 'NPA_CLOSED' || s === 'NPA CLOSED' || l.npa_closed === true || (l as any).is_npa === true) {
+      const isNpaClosed = s === 'NPA' || s === 'NPA_CLOSED' || s === 'NPA CLOSED' || l.npa_closed === true || (l as any).is_npa === true;
+      
+      if (isNpaClosed) {
         npaCount++;
+      } else if (s === 'CLOSED') {
+        closedLoans++;
+      } else {
+        activeLoans++;
       }
     });
 
@@ -427,12 +430,8 @@ export class FinanceCalculationEngine {
       }
     });
 
-    // 7. Ratios
+    // 7. Ratios (Approved Business Formula: Recovery % = (Principal Collected / Principal Financed) * 100)
     const recoveryPct = lifetimePrincipalFinanced > 0 ? (lifetimePrincipalCollected / lifetimePrincipalFinanced) * 100 : 0;
-    const lifetimeTotalCollected = lifetimePrincipalCollected + lifetimeInterestEarned + lifetimePenaltyEarned;
-    const totalLifetimeDue = lifetimeTotalCollected + presentDue; 
-    const collectionPct = totalLifetimeDue > 0 ? (lifetimeTotalCollected / totalLifetimeDue) * 100 : 0;
-    const yieldPct = outstanding > 0 ? (periodInterestEarned / outstanding) * 100 : 0;
 
       return {
         partnerId,
@@ -456,8 +455,6 @@ export class FinanceCalculationEngine {
         pendingInterest,
         pendingPenalty,
         recoveryPct,
-        collectionPct,
-        yieldPct
       };
     });
   }

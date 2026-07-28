@@ -318,10 +318,10 @@ const FinalStatement: React.FC = () => {
                       {Math.abs(acc.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {acc.opening >= 0 ? 'Cr' : 'Dr'}
                     </td>
                     <td className="px-6 py-4 text-emerald-600 text-right font-medium font-mono">
-                      {acc.credit > 0 ? `₹${acc.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                      {acc.credit > 0 ? `${acc.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
                     <td className="px-6 py-4 text-rose-600 text-right font-medium font-mono">
-                      {acc.debit > 0 ? `₹${acc.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
+                      {acc.debit > 0 ? `${acc.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
                     <td className={`px-6 py-4 text-right font-black font-mono ${acc.closing >= 0 ? 'text-emerald-850' : 'text-rose-850'}`}>
                       {Math.abs(acc.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {acc.closing >= 0 ? 'Cr' : 'Dr'}

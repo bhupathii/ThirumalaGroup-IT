@@ -17,26 +17,26 @@
  *
  * WHY THE "FULL-MONEY" PATH IS WRONG FOR CD120
  * ─────────────────────────────────────────────
- *   total historical interest paid = ₹3,26,103
- *   dailyInterest                  = ₹750
+ *   total historical interest paid = 3,26,103
+ *   dailyInterest                  = 750
  *   full-money sum                 = 326103 / 750 = 434.804        ← WRONG
  *   persisted renewed_days sum     = 434.81                        ← CORRECT
  *
- *   The ₹7 rounding difference accumulates from 14 non-round transactions
+ *   The 7 rounding difference accumulates from 14 non-round transactions
  *   where the 2-decimal stored value differs from the full-precision quotient.
  *
  * ACCOUNT PARAMETERS (CD120, as of 2026-07-06)
- *   Principal Balance : ₹7,50,000
+ *   Principal Balance : 7,50,000
  *   Last Payment      : 2026-06-29  (RC719)
  *   Current Due Date  : 2026-05-28
  *   Display Due Days  : 39
  *   Exact Due Days    : 39.19
- *   Accrued Interest  : ₹29,392.50
- *   Accrued Penalty   : ₹7,348.13
- *   Today Due         : ₹36,740.63
- *   Standard Renewal  : ₹22,500.00
- *   Total To Regular. : ₹59,240.63
- *   Total For Close   : ₹7,86,740.63
+ *   Accrued Interest  : 29,392.50
+ *   Accrued Penalty   : 7,348.13
+ *   Today Due         : 36,740.63
+ *   Standard Renewal  : 22,500.00
+ *   Total To Regular. : 59,240.63
+ *   Total For Close   : 7,86,740.63
  */
 
 import { describe, it, expect } from 'vitest';
@@ -223,7 +223,7 @@ describe('CD120 Full Account-Position — PRECISION LOCK (DO NOT MODIFY EXPECTED
     expect(pos!.displayDueDays).toBe(EXPECTED_DISPLAY_DUE_DAYS);
   });
 
-  it('8. getCDAccountPositionV2: accruedInterest = ₹29,392.50', () => {
+  it('8. getCDAccountPositionV2: accruedInterest = 29,392.50', () => {
     const tl  = financeCalculationService.buildCDContractualTimeline(
       mockLoan, CD120_INTEREST_ROWS, CD120_LEDGER_ENTRIES
     );
@@ -233,7 +233,7 @@ describe('CD120 Full Account-Position — PRECISION LOCK (DO NOT MODIFY EXPECTED
     expect(Number((EXPECTED_EXACT_DUE_DAYS * DAILY_INTEREST).toFixed(2))).toBe(EXPECTED_ACCRUED_INTEREST);
   });
 
-  it('9. getCDAccountPositionV2: accruedPenalty = ₹7,348.12', () => {
+  it('9. getCDAccountPositionV2: accruedPenalty = 7,348.12', () => {
     const tl  = financeCalculationService.buildCDContractualTimeline(
       mockLoan, CD120_INTEREST_ROWS, CD120_LEDGER_ENTRIES
     );
@@ -243,7 +243,7 @@ describe('CD120 Full Account-Position — PRECISION LOCK (DO NOT MODIFY EXPECTED
     expect(roundCDMoney(EXPECTED_EXACT_DUE_DAYS * DAILY_PENALTY)).toBe(EXPECTED_ACCRUED_PENALTY);
   });
 
-  it('10. todayDue = ₹36,740.63 (interest + penalty)', () => {
+  it('10. todayDue = 36,740.63 (interest + penalty)', () => {
     const tl  = financeCalculationService.buildCDContractualTimeline(
       mockLoan, CD120_INTEREST_ROWS, CD120_LEDGER_ENTRIES
     );
@@ -253,7 +253,7 @@ describe('CD120 Full Account-Position — PRECISION LOCK (DO NOT MODIFY EXPECTED
     expect(Number((EXPECTED_ACCRUED_INTEREST + EXPECTED_ACCRUED_PENALTY).toFixed(2))).toBe(EXPECTED_TODAY_DUE);
   });
 
-  it('11. standardRenewalAmount = ₹22,500 (1 full period at 3% on ₹7.5L)', () => {
+  it('11. standardRenewalAmount = 22,500 (1 full period at 3% on 7.5L)', () => {
     const tl  = financeCalculationService.buildCDContractualTimeline(
       mockLoan, CD120_INTEREST_ROWS, CD120_LEDGER_ENTRIES
     );
@@ -261,7 +261,7 @@ describe('CD120 Full Account-Position — PRECISION LOCK (DO NOT MODIFY EXPECTED
     expect(pos!.standardRenewalAmount).toBe(EXPECTED_STANDARD_RENEWAL);
   });
 
-  it('12. totalToRegularize = ₹59,240.63 (todayDue + standardRenewal)', () => {
+  it('12. totalToRegularize = 59,240.63 (todayDue + standardRenewal)', () => {
     const tl  = financeCalculationService.buildCDContractualTimeline(
       mockLoan, CD120_INTEREST_ROWS, CD120_LEDGER_ENTRIES
     );
@@ -270,7 +270,7 @@ describe('CD120 Full Account-Position — PRECISION LOCK (DO NOT MODIFY EXPECTED
     expect(Number((EXPECTED_TODAY_DUE + EXPECTED_STANDARD_RENEWAL).toFixed(2))).toBe(EXPECTED_TOTAL_TO_REGULARIZE);
   });
 
-  it('13. totalForClose = ₹7,86,740.63 (principal + todayDue)', () => {
+  it('13. totalForClose = 7,86,740.63 (principal + todayDue)', () => {
     const tl  = financeCalculationService.buildCDContractualTimeline(
       mockLoan, CD120_INTEREST_ROWS, CD120_LEDGER_ENTRIES
     );
@@ -279,7 +279,7 @@ describe('CD120 Full Account-Position — PRECISION LOCK (DO NOT MODIFY EXPECTED
     expect(Number((PRINCIPAL + EXPECTED_TODAY_DUE).toFixed(2))).toBe(EXPECTED_TOTAL_FOR_CLOSE);
   });
 
-  it('14. principalBalance = ₹7,50,000 (no principal payments)', () => {
+  it('14. principalBalance = 7,50,000 (no principal payments)', () => {
     const tl  = financeCalculationService.buildCDContractualTimeline(
       mockLoan, CD120_INTEREST_ROWS, CD120_LEDGER_ENTRIES
     );
