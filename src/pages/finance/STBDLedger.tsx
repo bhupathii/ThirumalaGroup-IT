@@ -1,4 +1,3 @@
-import { sortNumerically } from '../../lib/financialCalculations';
 import React, { useEffect, useState } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
@@ -434,13 +433,13 @@ const STBDLedger: React.FC = () => {
 
       {/* Main Ledger Table */}
       <div className={showPrintPreview || isDrawerOpen ? 'hidden' : 'block'}>
-        <Card title="STBD Ledger Accounts" subtitle="Monthly installments ledger index" className="shadow-md">
+        <Card title="STBD Ledger Accounts" className="shadow-md">
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-emerald-600"></div>
           </div>
         ) : filteredRows.length === 0 ? (
-          <div className="text-center py-8 text-gray-400">No STBD ledger entries found</div>
+          <div className="text-center py-8 text-slate-400 font-bold uppercase">No transactions found.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 md:text-sm finance-caption">

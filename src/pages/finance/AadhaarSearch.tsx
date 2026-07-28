@@ -1,4 +1,3 @@
-import { sortNumerically } from '../../lib/financialCalculations';
 import React, { useState } from 'react';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
@@ -129,7 +128,7 @@ const AadhaarSearch: React.FC = () => {
       </div>
 
       {/* Search Bar */}
-      <Card title="QUERY AADHAAR OR PHONE RECORD" subtitle="LOOKUP THE CREDIT REGISTRY DATABASE" className="max-w-md">
+      <Card title="QUERY AADHAAR OR PHONE RECORD" className="max-w-md">
         <form onSubmit={handleSearch} className="space-y-4">
           <Input
             label="AADHAAR CARD NUMBER OR PRIMARY PHONE NUMBER *"
@@ -180,7 +179,7 @@ const AadhaarSearch: React.FC = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Customer profile */}
-            <Card title="CUSTOMER REGISTRY CARD" subtitle="IDENTITY DETAILS SAVED IN CREDIT REGISTRY">
+            <Card title="CUSTOMER REGISTRY CARD">
               <div className="space-y-4 text-gray-700 finance-input">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-green-100 text-green-700 flex items-center justify-center">

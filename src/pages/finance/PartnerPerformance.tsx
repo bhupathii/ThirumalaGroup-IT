@@ -289,7 +289,7 @@ const PartnerPerformance: React.FC = () => {
         </div>
       ) : (
         <div className={`space-y-6`}>
-          <Card title="Partner Portfolio Registry" subtitle="Comprehensive business generated per partner in selected period." className="shadow-md">
+          <Card title="Partner Portfolio Registry" className="shadow-md">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead>

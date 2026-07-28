@@ -200,13 +200,13 @@ const NewCustomers: React.FC = () => {
       </div>
 
       {/* Main UI Card */}
-      <Card title="Customer Entry Directory" subtitle={`${filteredCusts.length} new records created`} className={`shadow-md`}>
+      <Card title="Customer Entry Directory" className={`shadow-md`}>
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-green-500"></div>
           </div>
         ) : filteredCusts.length === 0 ? (
-          <div className="text-center py-8 text-gray-400">No new customers found in this date range</div>
+          <div className="text-center py-8 text-slate-400 font-bold uppercase">No transactions found.</div>
         ) : (
           renderTable()
         )}
@@ -220,9 +220,9 @@ const NewCustomers: React.FC = () => {
         documentTitle="NEW CUSTOMERS REGISTRATION REPORT"
       >
         <div className="space-y-6 mt-6">
-          <Card title="Customer Entry Directory" subtitle={`${filteredCusts.length} new records created`} className="shadow-none border-0">
+          <Card title="Customer Entry Directory" className="shadow-none border-0">
             {filteredCusts.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">No new customers found in this date range</div>
+              <div className="text-center py-8 text-slate-400 font-bold uppercase">No transactions found.</div>
             ) : (
               renderTable()
             )}

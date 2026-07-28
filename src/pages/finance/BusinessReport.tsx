@@ -233,9 +233,6 @@ const BusinessReport: React.FC = () => {
       >
         <div>
           <h1 className='finance-h1'>Business Report</h1>
-          <p className='finance-small-label uppercase'>
-            Business Details & Portfolio Overview
-          </p>
         </div>
         <div className='flex gap-2'>
           <Button
@@ -484,9 +481,9 @@ const BusinessReport: React.FC = () => {
                     <tr>
                       <td
                         colSpan={10}
-                        className='px-4 py-8 text-center text-slate-400 finance-input'
+                        className='px-4 py-8 text-center text-slate-400 font-bold uppercase'
                       >
-                        No loans found for this period.
+                        No transactions found.
                       </td>
                     </tr>
                   ) : (

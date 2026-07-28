@@ -4,10 +4,19 @@ import Button from '../../components/UI/Button';
 import Card from '../../components/UI/Card';
 import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
 import { dailyFinancialTransactionService, DailyFinancialTransaction } from '../../services/dailyFinancialTransactionService';
-import { Printer, RefreshCw, ArrowLeft, ChevronRight, X, Search, FileSpreadsheet } from 'lucide-react';
+import { Printer, RefreshCw, ArrowLeft, ChevronRight, ChevronDown, X, Search, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { useNavigate } from 'react-router-dom';
+
+const formatDateOld = (dateStr?: string | null): string => {
+  if (!dateStr) return '—';
+  const parts = dateStr.split('T')[0].split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+};
 
 const GeneralLedger: React.FC = () => {
   const navigate = useNavigate();
@@ -20,6 +29,11 @@ const GeneralLedger: React.FC = () => {
   const [allEntries, setAllEntries] = useState<DailyFinancialTransaction[]>([]);
   const [allHistoryEntries, setAllHistoryEntries] = useState<DailyFinancialTransaction[]>([]);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  
+  // Expandable Head rows state
+  const [expandedHeadNames, setExpandedHeadNames] = useState<Set<string>>(new Set());
+  
+  // Modal drill-down state (optional secondary view)
   const [selectedHead, setSelectedHead] = useState<string | null>(null);
   const [drillSearchQuery, setDrillSearchQuery] = useState('');
 
@@ -38,6 +52,15 @@ const GeneralLedger: React.FC = () => {
     { value: 'OTHER', label: 'Other Daybook' }
   ];
 
+  const toggleExpandHead = (headName: string) => {
+    setExpandedHeadNames(prev => {
+      const next = new Set(prev);
+      if (next.has(headName)) next.delete(headName);
+      else next.add(headName);
+      return next;
+    });
+  };
+
   useEffect(() => {
     const loadDefaultStartDate = async () => {
       try {
@@ -45,15 +68,11 @@ const GeneralLedger: React.FC = () => {
         if (oldest) {
           setStartDate(oldest);
         } else {
-          const d = new Date();
-          d.setDate(1);
-          setStartDate(d.toISOString().split('T')[0]);
+          setStartDate('1970-01-01');
         }
       } catch (err) {
         console.error(err);
-        const d = new Date();
-        d.setDate(1);
-        setStartDate(d.toISOString().split('T')[0]);
+        setStartDate('1970-01-01');
       }
     };
     loadDefaultStartDate();
@@ -88,8 +107,6 @@ const GeneralLedger: React.FC = () => {
       ]);
 
       setAllEntries(rangeTxs);
-      // We will need to store history to compute opening balances
-      // I'll add a state for it
       setAllHistoryEntries(historyTxs);
     } catch (err) {
       console.error(err);
@@ -105,10 +122,13 @@ const GeneralLedger: React.FC = () => {
     allEntries.forEach(t => {
       if (t.headOfAccount) heads.add(t.headOfAccount);
     });
+    allHistoryEntries.forEach(t => {
+      if (t.headOfAccount) heads.add(t.headOfAccount);
+    });
     return Array.from(heads).sort();
-  }, [allEntries]);
+  }, [allEntries, allHistoryEntries]);
 
-  // Apply Category, Head of Account, and Search Query filters to all entries
+  // Apply Category, Head of Account, and Search Query filters to all current entries
   const filteredEntries = useMemo(() => {
     let list = [...allEntries];
 
@@ -126,7 +146,8 @@ const GeneralLedger: React.FC = () => {
         (t.headOfAccount && t.headOfAccount.toLowerCase().includes(q)) ||
         (t.particulars && t.particulars.toLowerCase().includes(q)) ||
         (t.accountOrLoanNo && t.accountOrLoanNo.toLowerCase().includes(q)) ||
-        (t.customerName && t.customerName.toLowerCase().includes(q))
+        (t.customerName && t.customerName.toLowerCase().includes(q)) ||
+        (t.partnerName && t.partnerName.toLowerCase().includes(q))
       );
     }
 
@@ -135,7 +156,14 @@ const GeneralLedger: React.FC = () => {
 
   // Group and summarize filtered entries by normalized Head of Account
   const summaryData = useMemo(() => {
-    const map: Record<string, { opening: number; debit: number; credit: number; count: number; classification: string }> = {};
+    const map: Record<string, {
+      opening: number;
+      debit: number;
+      credit: number;
+      count: number;
+      classification: string;
+      entries: DailyFinancialTransaction[];
+    }> = {};
 
     // First process history for opening balances
     let historyList = [...allHistoryEntries];
@@ -145,22 +173,21 @@ const GeneralLedger: React.FC = () => {
     if (headFilter !== 'ALL') {
       historyList = historyList.filter(t => t.headOfAccount === headFilter);
     }
-    // We ignore searchQuery for opening balance, because opening balance should be absolute for the head.
-    // Wait, if they search for a specific customer, the opening balance should reflect that customer!
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       historyList = historyList.filter(t =>
         (t.headOfAccount && t.headOfAccount.toLowerCase().includes(q)) ||
         (t.particulars && t.particulars.toLowerCase().includes(q)) ||
         (t.accountOrLoanNo && t.accountOrLoanNo.toLowerCase().includes(q)) ||
-        (t.customerName && t.customerName.toLowerCase().includes(q))
+        (t.customerName && t.customerName.toLowerCase().includes(q)) ||
+        (t.partnerName && t.partnerName.toLowerCase().includes(q))
       );
     }
 
     historyList.forEach(entry => {
       const head = entry.headOfAccount || 'UNCLASSIFIED';
       if (!map[head]) {
-        map[head] = { opening: 0, debit: 0, credit: 0, count: 0, classification: entry.reportClassification };
+        map[head] = { opening: 0, debit: 0, credit: 0, count: 0, classification: entry.reportClassification, entries: [] };
       }
       map[head].opening += (entry.credit || 0) - (entry.debit || 0);
     });
@@ -168,15 +195,16 @@ const GeneralLedger: React.FC = () => {
     filteredEntries.forEach(entry => {
       const head = entry.headOfAccount || 'UNCLASSIFIED';
       if (!map[head]) {
-        map[head] = { opening: 0, debit: 0, credit: 0, count: 0, classification: entry.reportClassification };
+        map[head] = { opening: 0, debit: 0, credit: 0, count: 0, classification: entry.reportClassification, entries: [] };
       }
       map[head].debit += entry.debit || 0;
       map[head].credit += entry.credit || 0;
       map[head].count += 1;
+      map[head].entries.push(entry);
     });
 
     return Object.entries(map)
-      .filter(([_, data]) => data.opening !== 0 || data.debit !== 0 || data.credit !== 0)
+      .filter(([_, data]) => data.opening !== 0 || data.debit !== 0 || data.credit !== 0 || data.count > 0)
       .map(([head, data]) => {
         const netMovement = data.credit - data.debit;
         const closing = data.opening + netMovement;
@@ -188,7 +216,8 @@ const GeneralLedger: React.FC = () => {
           balance: netMovement,
           closing,
           count: data.count,
-          classification: data.classification
+          classification: data.classification,
+          entries: data.entries.sort((a, b) => a.transactionDate.localeCompare(b.transactionDate))
         };
       }).sort((a, b) => a.head.localeCompare(b.head));
   }, [filteredEntries, allHistoryEntries, categoryFilter, headFilter, searchQuery]);
@@ -199,16 +228,18 @@ const GeneralLedger: React.FC = () => {
     let debit = 0;
     let credit = 0;
     let closing = 0;
+    let totalCount = 0;
     summaryData.forEach(s => {
       opening += s.opening;
       debit += s.debit;
       credit += s.credit;
       closing += s.closing;
+      totalCount += s.count;
     });
-    return { opening, debit, credit, balance: credit - debit, closing };
+    return { opening, debit, credit, balance: credit - debit, closing, totalCount };
   }, [summaryData]);
 
-  // Filter entries for drill-down view modal
+  // Filter entries for modal drill-down view
   const drillDownEntries = useMemo(() => {
     if (!selectedHead) return [];
     let list = filteredEntries.filter(e => e.headOfAccount === selectedHead);
@@ -218,7 +249,8 @@ const GeneralLedger: React.FC = () => {
       list = list.filter(e => 
         (e.particulars && e.particulars.toLowerCase().includes(q)) ||
         (e.accountOrLoanNo && e.accountOrLoanNo.toLowerCase().includes(q)) ||
-        (e.customerName && e.customerName.toLowerCase().includes(q))
+        (e.customerName && e.customerName.toLowerCase().includes(q)) ||
+        (e.partnerName && e.partnerName.toLowerCase().includes(q))
       );
     }
 
@@ -246,14 +278,15 @@ const GeneralLedger: React.FC = () => {
       toast.error('No summary data to export');
       return;
     }
-    const headers = ['Head of Account', 'Opening Balance', 'Credit (Cr)', 'Debit (Dr)', 'Net Movement', 'Closing Balance'];
+    const headers = ['Head of Account', 'Opening Balance', 'Credit (Cr)', 'Debit (Dr)', 'Net Movement', 'Closing Balance', 'Transaction Count'];
     const rows = summaryData.map(s => [
       `"${s.head}"`,
       `"${Math.abs(s.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${s.opening >= 0 ? 'Cr' : 'Dr'}"`,
       s.credit,
       s.debit,
       `"${Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${s.balance >= 0 ? 'Cr' : 'Dr'}"`,
-      `"${Math.abs(s.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${s.closing >= 0 ? 'Cr' : 'Dr'}"`
+      `"${Math.abs(s.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${s.closing >= 0 ? 'Cr' : 'Dr'}"`,
+      s.count
     ]);
 
     rows.push([
@@ -262,7 +295,8 @@ const GeneralLedger: React.FC = () => {
       overallTotals.credit,
       overallTotals.debit,
       `"${Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${overallTotals.balance >= 0 ? 'Cr' : 'Dr'}"`,
-      `"${Math.abs(overallTotals.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${overallTotals.closing >= 0 ? 'Cr' : 'Dr'}"`
+      `"${Math.abs(overallTotals.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${overallTotals.closing >= 0 ? 'Cr' : 'Dr'}"`,
+      overallTotals.totalCount
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -281,32 +315,31 @@ const GeneralLedger: React.FC = () => {
   const displayDateRange = `${startDate ? new Date(startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-') : ''} TO ${endDate ? new Date(endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-') : ''}`;
 
   return (
-    <div className="space-y-3 w-full select-none text-slate-800 p-2 font-outfit">
+    <div className="space-y-4 w-full select-none text-slate-800 p-4 font-sans">
       
       {/* Header */}
-      <div className={`flex justify-between items-center bg-white border border-slate-200 p-3 rounded-lg shadow-sm`}>
+      <div className="flex justify-between items-center bg-white border border-slate-200 p-4 md:p-6 rounded-3xl shadow-sm">
         <div>
-          <h1 className="text-[24px] font-bold uppercase tracking-tight text-slate-900 leading-none">General Ledger</h1>
-          <p className="text-[14px] text-slate-400 font-bold uppercase mt-1">Summary of accounts with absolute drill-down capabilities</p>
+          <h1 className="finance-h1">General Ledger</h1>
         </div>
-        <div className="flex gap-1.5 items-center">
-          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-250 font-bold text-xs h-[48px] px-3 uppercase">
+        <div className="flex gap-2 items-center">
+          <Button onClick={() => navigate(-1)} variant="secondary" size="sm" icon={ArrowLeft} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs uppercase">
             Back
           </Button>
-          <Button onClick={fetchLedgerData} variant="secondary" size="sm" icon={RefreshCw} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-250 font-bold text-xs h-[48px] px-3 uppercase">
+          <Button onClick={fetchLedgerData} variant="secondary" size="sm" icon={RefreshCw} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs uppercase">
             Refresh
           </Button>
-          <Button onClick={handleExportCSV} variant="secondary" size="sm" icon={FileSpreadsheet} className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 font-bold text-xs h-[48px] px-4 uppercase">
+          <Button onClick={handleExportCSV} variant="secondary" size="sm" icon={FileSpreadsheet} className="bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 font-bold text-xs uppercase">
             Excel
           </Button>
-          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white font-bold text-xs h-[48px] px-4 uppercase">
-            Print Summary
+          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer} className="bg-[#0b1329] hover:bg-slate-800 text-white font-bold text-xs uppercase">
+            Print
           </Button>
         </div>
       </div>
 
-      {/* Date & Category & Search Filters in One Row */}
-      <div className={`grid grid-cols-1 md:grid-cols-5 gap-3 p-3 bg-white border border-slate-200 rounded-lg shadow-sm items-end`}>
+      {/* Date & Category & Search Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 p-4 bg-white border border-slate-200 rounded-3xl shadow-sm items-end">
         <div>
           <FinanceSmartCalendar
             label="FROM DATE"
@@ -324,11 +357,11 @@ const GeneralLedger: React.FC = () => {
           />
         </div>
         <div className="space-y-1">
-          <label className="text-[15px] font-bold text-slate-500 uppercase block">Category Filter</label>
+          <label className="text-[11px] font-bold text-slate-500 uppercase block">Category Filter</label>
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value as any)}
-            className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] focus:outline-none h-[48px] font-bold uppercase"
+            className="w-full bg-white border border-slate-250 rounded-xl px-3 text-xs focus:outline-none h-[42px] font-bold uppercase"
           >
             {categories.map(cat => (
               <option key={cat.value} value={cat.value}>{cat.label.toUpperCase()}</option>
@@ -336,11 +369,11 @@ const GeneralLedger: React.FC = () => {
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-[15px] font-bold text-slate-500 uppercase block">Head of Account</label>
+          <label className="text-[11px] font-bold text-slate-500 uppercase block">Head of Account</label>
           <select
             value={headFilter}
             onChange={(e) => setHeadFilter(e.target.value)}
-            className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] focus:outline-none h-[48px] font-bold uppercase"
+            className="w-full bg-white border border-slate-250 rounded-xl px-3 text-xs focus:outline-none h-[42px] font-bold uppercase"
           >
             <option value="ALL">ALL HEADS</option>
             {uniqueHeads.map(h => (
@@ -349,15 +382,15 @@ const GeneralLedger: React.FC = () => {
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-[15px] font-bold text-slate-500 uppercase block">Search Transaction</label>
+          <label className="text-[11px] font-bold text-slate-500 uppercase block">Search Transactions</label>
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
-              className="w-full pl-9 pr-3 bg-white border border-slate-250 rounded text-[16px] focus:outline-none h-[48px] font-bold"
+              placeholder="Search party or head..."
+              className="w-full pl-9 pr-3 bg-white border border-slate-250 rounded-xl text-xs focus:outline-none h-[42px] font-bold"
             />
           </div>
         </div>
@@ -368,14 +401,13 @@ const GeneralLedger: React.FC = () => {
         <Card
           title={
             <div className="flex justify-between items-center w-full">
-              <span className="text-[17px] font-bold uppercase">Accounts Summary</span>
-              <span className="font-mono text-slate-500 text-sm font-bold uppercase">
+              <span className="text-sm font-bold uppercase text-slate-900">General Ledger Accounts Summary</span>
+              <span className="font-mono text-slate-500 text-xs font-bold uppercase">
                 {displayDateRange}
               </span>
             </div>
           }
-          subtitle={`Showing ${summaryData.length} account heads matching filters. Click any row to drill down into transaction details.`}
-          className="shadow-sm border-slate-200 rounded overflow-hidden"
+          className="shadow-sm border-slate-200 rounded-3xl overflow-hidden"
         >
           {loading ? (
             <div className="flex justify-center py-16">
@@ -383,79 +415,161 @@ const GeneralLedger: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="overflow-x-auto border border-slate-200 rounded max-h-[550px] overflow-y-auto custom-scrollbar">
-                <table className="w-full text-[16px] divide-y divide-slate-200 table-auto">
-                  <thead className="bg-slate-100 sticky top-0 z-10 text-slate-700">
-                    <tr className="divide-x divide-slate-200">
-                      <th className="px-3 py-2 text-left font-bold text-[15px] uppercase">Head of Account</th>
-                      <th className="w-40 px-3 py-2 text-right font-bold text-[15px] uppercase">Opening Bal</th>
-                      <th className="w-36 px-3 py-2 text-right font-bold text-[15px] uppercase">Credit (Cr)</th>
-                      <th className="w-36 px-3 py-2 text-right font-bold text-[15px] uppercase">Debit (Dr)</th>
-                      <th className="w-40 px-3 py-2 text-right font-bold text-[15px] uppercase">Net Movement</th>
-                      <th className="w-40 px-3 py-2 text-right font-bold text-[15px] uppercase">Closing Bal</th>
-                      <th className="w-16 px-2 py-2 text-center font-bold text-[15px] uppercase">Drill</th>
+              <div className="overflow-x-auto border border-slate-200 rounded-2xl max-h-[550px] overflow-y-auto scrollbar-thin">
+                <table className="w-full text-xs text-left min-w-[950px] border-collapse">
+                  <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-[2px] text-slate-700 uppercase tracking-wider text-[11px] font-bold border-b border-slate-250">
+                    <tr>
+                      <th className="w-8 px-3 py-3.5 text-center"></th>
+                      <th className="px-4 py-3.5 whitespace-nowrap">Head of Account</th>
+                      <th className="px-4 py-3.5 text-right text-slate-600 whitespace-nowrap">Opening Bal</th>
+                      <th className="px-4 py-3.5 text-right text-emerald-800 whitespace-nowrap">Credit (Cr)</th>
+                      <th className="px-4 py-3.5 text-right text-rose-800 whitespace-nowrap">Debit (Dr)</th>
+                      <th className="px-4 py-3.5 text-right text-slate-800 whitespace-nowrap">Net Movement</th>
+                      <th className="px-4 py-3.5 text-right text-slate-900 whitespace-nowrap">Closing Bal</th>
+                      <th className="px-4 py-3.5 text-center whitespace-nowrap">Count</th>
+                      <th className="px-4 py-3.5 text-center whitespace-nowrap">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-slate-100 divide-x divide-slate-55 font-semibold text-slate-800">
+                  <tbody className="divide-y divide-slate-200 bg-white font-sans">
                     {summaryData.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-12 text-center text-slate-400 font-bold uppercase">
-                          No account heads found matching selected filters.
+                        <td colSpan={9} className="px-4 py-12 text-center text-slate-400 font-bold uppercase italic">
+                          No transactions found.
                         </td>
                       </tr>
                     ) : (
-                      summaryData.map(s => (
-                        <tr 
-                          key={s.head} 
-                          onClick={() => setSelectedHead(s.head)}
-                          className="hover:bg-slate-50/50 cursor-pointer transition-colors"
-                          style={{ height: '38px' }}
-                        >
-                          <td className="px-3 py-1.5 text-slate-900 font-bold uppercase truncate">{s.head}</td>
-                          <td className={`px-3 py-1.5 text-right font-black font-mono whitespace-nowrap ${s.opening >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                            {Math.abs(s.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.opening >= 0 ? 'Cr' : 'Dr'}
-                          </td>
-                          <td className="px-3 py-1.5 text-right text-emerald-700 font-bold font-mono whitespace-nowrap">
-                            {s.credit > 0 ? `${s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                          </td>
-                          <td className="px-3 py-1.5 text-right text-red-700 font-bold font-mono whitespace-nowrap">
-                            {s.debit > 0 ? `${s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                          </td>
-                          <td className={`px-3 py-1.5 text-right font-black font-mono whitespace-nowrap ${s.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                            {Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}
-                          </td>
-                          <td className={`px-3 py-1.5 text-right font-black font-mono whitespace-nowrap ${s.closing >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                            {Math.abs(s.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.closing >= 0 ? 'Cr' : 'Dr'}
-                          </td>
-                          <td className="px-2 py-1.5 text-center text-slate-400">
-                            <ChevronRight className="w-4 h-4 mx-auto" />
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                    {/* Overall totals */}
-                    {summaryData.length > 0 && (
-                      <tr className="bg-slate-50 font-black divide-x divide-slate-150 border-t-2 border-slate-200" style={{ height: '42px' }}>
-                        <td className="px-3 py-2 text-slate-800 uppercase text-[15px]">Grand Total:</td>
-                        <td className={`px-3 py-2 text-right font-black font-mono whitespace-nowrap ${overallTotals.opening >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                          {Math.abs(overallTotals.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.opening >= 0 ? 'Cr' : 'Dr'}
-                        </td>
-                        <td className="px-3 py-2 text-right text-emerald-700 font-black font-mono whitespace-nowrap">
-                          {overallTotals.credit > 0 ? `${overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right text-red-700 font-black font-mono whitespace-nowrap">
-                          {overallTotals.debit > 0 ? `${overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                        </td>
-                        <td className={`px-3 py-2 text-right font-black font-mono whitespace-nowrap ${overallTotals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                          {Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}
-                        </td>
-                        <td className={`px-3 py-2 text-right font-black font-mono whitespace-nowrap ${overallTotals.closing >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                          {Math.abs(overallTotals.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.closing >= 0 ? 'Cr' : 'Dr'}
-                        </td>
-                        <td className="px-3 py-2 text-slate-400"></td>
-                      </tr>
+                      summaryData.map(s => {
+                        const isExpanded = expandedHeadNames.has(s.head);
+                        return (
+                          <React.Fragment key={s.head}>
+                            <tr className="odd:bg-white even:bg-slate-50/40 hover:bg-blue-50/40 transition-colors">
+                              <td className="px-2.5 py-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpandHead(s.head)}
+                                  className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded transition-colors cursor-pointer"
+                                  title={isExpanded ? "Hide Details" : "Show Details"}
+                                >
+                                  {isExpanded ? <ChevronDown className="w-4 h-4 text-blue-600" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                                </button>
+                              </td>
+                              <td className="px-4 py-3 font-bold text-slate-900 uppercase whitespace-nowrap">{s.head}</td>
+                              <td className={`px-4 py-3 text-right font-mono font-bold whitespace-nowrap ${s.opening >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                {Math.abs(s.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.opening >= 0 ? 'Cr' : 'Dr'}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
+                                {s.credit > 0 ? s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono font-bold text-rose-700 whitespace-nowrap">
+                                {s.debit > 0 ? s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}
+                              </td>
+                              <td className={`px-4 py-3 text-right font-mono font-bold whitespace-nowrap ${s.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                                {Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}
+                              </td>
+                              <td className={`px-4 py-3 text-right font-mono font-black whitespace-nowrap ${s.closing >= 0 ? 'text-emerald-900' : 'text-rose-900'}`}>
+                                {Math.abs(s.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.closing >= 0 ? 'Cr' : 'Dr'}
+                              </td>
+                              <td className="px-4 py-3 text-center font-mono font-black text-slate-800 whitespace-nowrap">{s.count}</td>
+                              <td className="px-4 py-3 text-center whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedHead(s.head)}
+                                  className="text-indigo-700 hover:text-indigo-900 text-[11px] font-bold hover:underline"
+                                >
+                                  View Details
+                                </button>
+                              </td>
+                            </tr>
+
+                            {/* Inline Expandable Sub-table for Ledger Postings */}
+                            {isExpanded && (
+                              <tr className="bg-slate-50/90">
+                                <td colSpan={9} className="px-4 py-3 border-y border-slate-250">
+                                  <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2 shadow-sm">
+                                    <div className="flex items-center justify-between text-[11px] font-mono font-bold text-slate-700 border-b pb-1.5">
+                                      <span className="flex items-center gap-1.5 text-blue-900">
+                                        <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                                        TRANSACTION BREAKDOWN
+                                      </span>
+                                      <span className="text-slate-500 font-normal">Head: <span className="font-bold text-slate-800">{s.head}</span></span>
+                                    </div>
+                                    <div className="overflow-x-auto max-h-[300px] overflow-y-auto scrollbar-thin">
+                                      <table className="w-full text-[11px] text-left border-collapse">
+                                        <thead className="sticky top-0 bg-slate-100 text-slate-700 font-bold uppercase border-b border-slate-200">
+                                          <tr>
+                                            <th className="p-1.5 whitespace-nowrap">Date</th>
+                                            <th className="p-1.5 whitespace-nowrap">Module</th>
+                                            <th className="p-1.5 whitespace-nowrap">Receipt/Voucher</th>
+                                            <th className="p-1.5 whitespace-nowrap">Loan/Acc No</th>
+                                            <th className="p-1.5 whitespace-nowrap">Party/Customer</th>
+                                            <th className="p-1.5 whitespace-nowrap">Particulars</th>
+                                            <th className="p-1.5 text-right text-emerald-800 whitespace-nowrap">Credit (Cr)</th>
+                                            <th className="p-1.5 text-right text-rose-800 whitespace-nowrap">Debit (Dr)</th>
+                                            <th className="p-1.5 whitespace-nowrap">User</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-150 font-mono">
+                                          {s.entries.map((entry) => {
+                                            const moduleName = entry.sourceType === 'CD_LEDGER' ? 'CD Ledger'
+                                              : entry.sourceType === 'LOAN_TRANSACTION' ? 'Loan Register'
+                                              : entry.sourceType === 'CAPITAL_ENTRY' ? 'Capital Account'
+                                              : 'Daybook';
+                                            return (
+                                              <tr key={entry.id} className="hover:bg-slate-50">
+                                                <td className="p-1.5 font-bold whitespace-nowrap">{formatDateOld(entry.transactionDate)}</td>
+                                                <td className="p-1.5 text-slate-600 font-sans font-medium whitespace-nowrap">{moduleName}</td>
+                                                <td className="p-1.5 font-black whitespace-nowrap">{entry.receiptOrVoucherNo || '—'}</td>
+                                                <td className="p-1.5 font-bold text-blue-900 whitespace-nowrap">{entry.accountOrLoanNo || '—'}</td>
+                                                <td className="p-1.5 font-sans font-medium whitespace-nowrap">{entry.customerName || entry.partnerName || '—'}</td>
+                                                <td className="p-1.5 font-sans text-slate-700 truncate max-w-[200px]" title={entry.particulars}>{entry.particulars || '—'}</td>
+                                                <td className="p-1.5 text-right text-emerald-700 font-bold whitespace-nowrap">{entry.credit > 0 ? entry.credit.toLocaleString('en-IN') : '—'}</td>
+                                                <td className="p-1.5 text-right text-rose-700 font-bold whitespace-nowrap">{entry.debit > 0 ? entry.debit.toLocaleString('en-IN') : '—'}</td>
+                                                <td className="p-1.5 font-sans text-slate-600 whitespace-nowrap">{entry.userName || 'Staff'}</td>
+                                              </tr>
+                                            );
+                                          })}
+                                          {s.entries.length === 0 && (
+                                            <tr>
+                                              <td colSpan={9} className="text-center py-4 text-slate-400 font-bold uppercase italic">No transactions found.</td>
+                                            </tr>
+                                          )}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })
                     )}
                   </tbody>
+                  {/* Overall Totals */}
+                  {summaryData.length > 0 && (
+                    <tfoot className="sticky bottom-0 z-10 bg-slate-100/95 backdrop-blur-[2px] text-slate-900 font-mono font-black text-xs border-t-2 border-slate-300">
+                      <tr>
+                        <td colSpan={2} className="px-4 py-3.5 uppercase text-right font-sans font-bold text-slate-700">GRAND TOTALS:</td>
+                        <td className={`px-4 py-3.5 text-right font-black ${overallTotals.opening >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                          {Math.abs(overallTotals.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.opening >= 0 ? 'Cr' : 'Dr'}
+                        </td>
+                        <td className="px-4 py-3.5 text-right text-emerald-800 font-black">
+                          {overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-3.5 text-right text-rose-800 font-black">
+                          {overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className={`px-4 py-3.5 text-right font-black ${overallTotals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                          {Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}
+                        </td>
+                        <td className={`px-4 py-3.5 text-right font-black ${overallTotals.closing >= 0 ? 'text-emerald-900' : 'text-rose-900'}`}>
+                          {Math.abs(overallTotals.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.closing >= 0 ? 'Cr' : 'Dr'}
+                        </td>
+                        <td className="px-4 py-3.5 text-center text-slate-900 font-black">{overallTotals.totalCount.toLocaleString('en-IN')}</td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
             </div>
@@ -463,36 +577,36 @@ const GeneralLedger: React.FC = () => {
         </Card>
       </div>
 
-      {/* Drill Down Modal */}
+      {/* Secondary Drill Down Modal */}
       {selectedHead && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-lg shadow-2xl border border-slate-200 max-w-5xl w-full h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-5xl w-full h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
             {/* Modal Header */}
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-900 text-white">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-900 text-white">
               <div>
-                <h3 className="text-sm font-bold uppercase tracking-tight leading-none text-slate-100">
-                  Drill Down: {selectedHead}
+                <h3 className="text-base font-bold uppercase tracking-tight text-slate-100">
+                  Account Statement: {selectedHead}
                 </h3>
-                <p className="text-[12px] text-slate-350 font-semibold uppercase mt-1 leading-none">{displayDateRange}</p>
+                <p className="text-xs text-slate-400 font-semibold uppercase mt-0.5">{displayDateRange}</p>
               </div>
               <button 
                 onClick={() => { setSelectedHead(null); setDrillSearchQuery(''); }}
-                className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded"
+                className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Modal Filters */}
-            <div className="p-3 bg-slate-50 border-b border-slate-100 flex gap-4 items-center">
+            <div className="p-3 bg-slate-50 border-b border-slate-200 flex gap-4 items-center">
               <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
                   value={drillSearchQuery}
                   onChange={(e) => setDrillSearchQuery(e.target.value)}
-                  placeholder="Filter drill transactions by account or particulars..."
-                  className="w-full pl-8 pr-3 bg-white border border-slate-250 rounded text-sm h-9 focus:outline-none font-bold"
+                  placeholder="Filter drill transactions by party or particulars..."
+                  className="w-full pl-9 pr-3 bg-white border border-slate-250 rounded-xl text-xs h-9 focus:outline-none font-bold"
                 />
               </div>
               {drillSearchQuery && (
@@ -504,57 +618,45 @@ const GeneralLedger: React.FC = () => {
                 </button>
               )}
             </div>
+
             {/* Modal Body & Table */}
-            <div className="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-3">
-              {/* Compact Ribbon for Drilldown */}
-              <div className="flex gap-4 p-2 bg-slate-100 border border-slate-200 rounded text-xs font-bold uppercase items-center justify-between">
-                <div>Drill Cr: <span className="text-emerald-700 font-mono">{drillTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+            <div className="flex-1 p-4 overflow-y-auto scrollbar-thin space-y-3">
+              <div className="flex gap-4 p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold uppercase items-center justify-between font-mono">
+                <div>Total Cr: <span className="text-emerald-700 font-black">{drillTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
                 <div className="w-px h-4 bg-slate-300"></div>
-                <div>Drill Dr: <span className="text-red-700 font-mono">{drillTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                <div>Total Dr: <span className="text-rose-700 font-black">{drillTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
                 <div className="w-px h-4 bg-slate-300"></div>
-                <div>Net Balance: <span className={`${drillTotals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'} font-mono`}>{drillTotals.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                <div>Net Balance: <span className={`${drillTotals.balance >= 0 ? 'text-emerald-800' : 'text-rose-800'} font-black`}>{drillTotals.balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
               </div>
 
-              <div className="border border-slate-200 rounded overflow-hidden">
-                <table className="w-full text-xs divide-y divide-slate-200">
-                  <thead className="bg-slate-50">
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <table className="w-full text-xs divide-y divide-slate-200 border-collapse">
+                  <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider text-[11px]">
                     <tr>
-                      <th className="px-3 py-2 text-left font-bold text-slate-600 uppercase">Date</th>
-                      <th className="px-3 py-2 text-left font-bold text-slate-600 uppercase">Account/Loan</th>
-                      <th className="px-3 py-2 text-left font-bold text-slate-600 uppercase">Customer</th>
-                      <th className="px-3 py-2 text-left font-bold text-slate-600 uppercase">Particulars</th>
-                      <th className="px-3 py-2 text-right font-bold text-slate-600 uppercase">Credit (Cr)</th>
-                      <th className="px-3 py-2 text-right font-bold text-slate-600 uppercase">Debit (Dr)</th>
+                      <th className="px-3.5 py-3 text-left whitespace-nowrap">Date</th>
+                      <th className="px-3.5 py-3 text-left whitespace-nowrap">Account/Loan</th>
+                      <th className="px-3.5 py-3 text-left whitespace-nowrap">Party/Customer</th>
+                      <th className="px-3.5 py-3 text-left whitespace-nowrap">Particulars</th>
+                      <th className="px-3.5 py-3 text-right text-emerald-800 whitespace-nowrap">Credit (Cr)</th>
+                      <th className="px-3.5 py-3 text-right text-rose-800 whitespace-nowrap">Debit (Dr)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
+                  <tbody className="divide-y divide-slate-200 bg-white font-mono">
                     {drillDownEntries.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-slate-400 font-bold uppercase">
+                        <td colSpan={6} className="px-4 py-8 text-center text-slate-400 font-bold uppercase italic">
                           No transaction records matching filter.
                         </td>
                       </tr>
                     ) : (
                       drillDownEntries.map(e => (
-                        <tr key={e.id} className="hover:bg-slate-50/50">
-                          <td className="px-3 py-1.5 font-mono text-[13px]">
-                            {e.transactionDate.split('-').reverse().join('/')}
-                          </td>
-                          <td className="px-3 py-1.5 font-mono text-[13px] font-bold text-slate-900 uppercase">
-                            {e.accountOrLoanNo || '—'}
-                          </td>
-                          <td className="px-3 py-1.5 text-slate-800 uppercase text-[13px] font-bold">
-                            {e.customerName || e.accountOrLoanNo || '—'}
-                          </td>
-                          <td className="px-3 py-1.5 text-slate-600 uppercase text-[13px]">
-                            {e.particulars || '—'}
-                          </td>
-                          <td className="px-3 py-1.5 text-right font-mono text-emerald-600 text-[13px] font-bold">
-                            {e.credit > 0 ? `${e.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                          </td>
-                          <td className="px-3 py-1.5 text-right font-mono text-red-600 text-[13px] font-bold">
-                            {e.debit > 0 ? `${e.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}
-                          </td>
+                        <tr key={e.id} className="hover:bg-blue-50/40 transition-colors">
+                          <td className="px-3.5 py-2.5 font-bold whitespace-nowrap">{formatDateOld(e.transactionDate)}</td>
+                          <td className="px-3.5 py-2.5 font-bold text-blue-900 uppercase whitespace-nowrap">{e.accountOrLoanNo || '—'}</td>
+                          <td className="px-3.5 py-2.5 font-sans font-medium whitespace-nowrap">{e.customerName || e.partnerName || '—'}</td>
+                          <td className="px-3.5 py-2.5 font-sans text-slate-700 truncate max-w-[220px]" title={e.particulars}>{e.particulars || '—'}</td>
+                          <td className="px-3.5 py-2.5 text-right text-emerald-700 font-bold whitespace-nowrap">{e.credit > 0 ? e.credit.toLocaleString('en-IN') : '—'}</td>
+                          <td className="px-3.5 py-2.5 text-right text-rose-700 font-bold whitespace-nowrap">{e.debit > 0 ? e.debit.toLocaleString('en-IN') : '—'}</td>
                         </tr>
                       ))
                     )}
@@ -567,9 +669,9 @@ const GeneralLedger: React.FC = () => {
             <div className="px-6 py-3 border-t border-slate-200 flex justify-end bg-slate-50">
               <button
                 onClick={() => { setSelectedHead(null); setDrillSearchQuery(''); }}
-                className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 font-bold text-xs uppercase rounded transition-colors"
+                className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 font-bold text-xs uppercase rounded-xl transition-colors"
               >
-                Close View
+                Close Audit View
               </button>
             </div>
           </div>
@@ -581,59 +683,66 @@ const GeneralLedger: React.FC = () => {
         isOpen={showPrintPreview}
         onClose={() => setShowPrintPreview(false)}
         title="General Ledger Report"
-        documentTitle={`GENERAL LEDGER SUMMARY: ${displayDateRange}`}
+        documentTitle={`GENERAL LEDGER STATEMENT OF ACCOUNT: ${displayDateRange}`}
       >
-        <div className="text-center pb-6 border-b-2 border-slate-900">
-          <h2 className="finance-brand">TIRUMALA FINANCE</h2>
-          <p className="mt-1 finance-header-time uppercase">GENERAL LEDGER STATEMENT OF ACCOUNT SUMMARY</p>
-          <p className="text-slate-550 text-[10px] mt-0.5 uppercase">
-            PERIOD: {displayDateRange}
+        <div className="text-center pb-4 border-b-2 border-slate-900 font-sans">
+          <h2 className="text-lg font-black uppercase text-slate-900">General Ledger Reconciled Audit Summary</h2>
+          <p className="text-[10px] text-slate-500 uppercase font-mono mt-0.5">
+            Period: {displayDateRange}
           </p>
         </div>
 
         {/* Overall summary numbers */}
-        <div className="grid grid-cols-3 gap-4 py-6 border-b border-slate-350 finance-caption">
+        <div className="grid grid-cols-4 gap-4 py-4 border-b border-slate-300 font-mono text-[11px] text-center">
           <div>
-            <span className="text-slate-500 text-[9px] uppercase font-bold block">GRAND TOTAL CREDITS (Cr)</span>
-            <span className="text-emerald-700 text-lg font-black font-mono">{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            <span className="text-slate-500 text-[9px] uppercase font-sans font-bold block">Opening Balance</span>
+            <span className="text-slate-900 font-black">{Math.abs(overallTotals.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.opening >= 0 ? 'Cr' : 'Dr'}</span>
           </div>
           <div>
-            <span className="text-slate-500 text-[9px] uppercase font-bold block">GRAND TOTAL DEBITS (Dr)</span>
-            <span className="text-red-700 text-lg font-black font-mono">{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            <span className="text-slate-500 text-[9px] uppercase font-sans font-bold block">Total Credits (Cr)</span>
+            <span className="text-emerald-800 font-black">{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
           </div>
           <div>
-            <span className="text-slate-500 text-[9px] uppercase font-bold block">NET LEDGER VALUE</span>
-            <span className="text-slate-900 text-lg font-black font-mono">
-              {overallTotals.balance >= 0 ? 'Cr ' : 'Dr '}{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-            </span>
+            <span className="text-slate-500 text-[9px] uppercase font-sans font-bold block">Total Debits (Dr)</span>
+            <span className="text-rose-800 font-black">{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div>
+            <span className="text-slate-500 text-[9px] uppercase font-sans font-bold block">Closing Balance</span>
+            <span className="text-slate-900 font-black">{Math.abs(overallTotals.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.closing >= 0 ? 'Cr' : 'Dr'}</span>
           </div>
         </div>
 
         {/* Summary Table */}
-        <div className="py-6">
-          <table className="min-w-full divide-y divide-slate-300 finance-caption">
+        <div className="py-4">
+          <table className="w-full text-[10px] border-collapse font-mono">
             <thead>
-              <tr className="bg-slate-50">
-                <th className="py-2 px-3 text-left font-bold text-slate-700 uppercase">Head of Account</th>
-                <th className="py-2 px-3 text-right font-bold text-slate-700 uppercase">Cr</th>
-                <th className="py-2 px-3 text-right font-bold text-slate-700 uppercase">Dr</th>
-                <th className="py-2 px-3 text-right font-bold text-slate-700 uppercase">Net Balance</th>
+              <tr className="bg-slate-100 font-sans font-bold text-slate-700 uppercase border-b border-slate-300">
+                <th className="py-2 px-2 text-left">Head of Account</th>
+                <th className="py-2 px-2 text-right">Opening</th>
+                <th className="py-2 px-2 text-right text-emerald-800">Credit (Cr)</th>
+                <th className="py-2 px-2 text-right text-rose-800">Debit (Dr)</th>
+                <th className="py-2 px-2 text-right">Closing</th>
+                <th className="py-2 px-2 text-center">Count</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {summaryData.map(s => (
                 <tr key={s.head}>
-                  <td className="py-2 px-3 text-slate-800 font-bold uppercase">{s.head}</td>
-                  <td className="py-2 px-3 text-right font-mono text-emerald-600">{s.credit > 0 ? `${s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
-                  <td className="py-2 px-3 text-right font-mono text-red-600">{s.debit > 0 ? `${s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—'}</td>
-                  <td className="py-2 px-3 text-right font-mono font-bold">{Math.abs(s.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.balance >= 0 ? 'Cr' : 'Dr'}</td>
+                  <td className="py-1.5 px-2 font-bold uppercase">{s.head}</td>
+                  <td className="py-1.5 px-2 text-right">{Math.abs(s.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.opening >= 0 ? 'Cr' : 'Dr'}</td>
+                  <td className="py-1.5 px-2 text-right text-emerald-700 font-bold">{s.credit > 0 ? s.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}</td>
+                  <td className="py-1.5 px-2 text-right text-rose-700 font-bold">{s.debit > 0 ? s.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}</td>
+                  <td className="py-1.5 px-2 text-right font-black">{Math.abs(s.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {s.closing >= 0 ? 'Cr' : 'Dr'}</td>
+                  <td className="py-1.5 px-2 text-center font-bold">{s.count}</td>
                 </tr>
               ))}
-              <tr className="bg-slate-100 font-black border-t border-slate-350">
-                <td className="py-2.5 px-3 text-slate-900 uppercase">Grand Total:</td>
-                <td className="py-2.5 px-3 text-right font-mono">{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td className="py-2.5 px-3 text-right font-mono">{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td className="py-2.5 px-3 text-right font-mono">{Math.abs(overallTotals.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.balance >= 0 ? 'Cr' : 'Dr'}</td>
+              <tr className="bg-slate-100 font-black border-t-2 border-slate-400">
+                <td className="py-2 px-2 uppercase font-sans font-bold">Grand Total:</td>
+                <td className="py-2 px-2 text-right">{Math.abs(overallTotals.opening).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.opening >= 0 ? 'Cr' : 'Dr'}</td>
+                <td className="py-2 px-2 text-right text-emerald-800">{overallTotals.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-2 px-2 text-right text-rose-800">{overallTotals.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-2 px-2 text-right">{Math.abs(overallTotals.closing).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {overallTotals.closing >= 0 ? 'Cr' : 'Dr'}</td>
+                <td className="py-2 px-2 text-center">{overallTotals.totalCount}</td>
               </tr>
             </tbody>
           </table>

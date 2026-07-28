@@ -213,7 +213,7 @@ const SearchPage: React.FC = () => {
           {/* Col 1: Customer Card, Collection Box, Photos */}
           <div className="space-y-6">
             {/* Customer Brief */}
-            <Card title={`Customer Profile (${selectedLoanDetails.loan_id})`} subtitle="Linked identity parameters">
+            <Card title={`Customer Profile (${selectedLoanDetails.loan_id})`}>
               <div className="space-y-2 text-gray-700 finance-input">
                 <div>
                   <span className="text-gray-400 block finance-caption">Customer Name</span>
@@ -241,7 +241,7 @@ const SearchPage: React.FC = () => {
             </Card>
 
             {/* Collection Entry Form */}
-            <Card title="Quick Collection Entry" subtitle="Add collection payments to account" className="border-green-200">
+            <Card title="Quick Collection Entry" className="border-green-200">
               <form onSubmit={handleQuickCollection} className="space-y-4">
                 <FinanceSmartCalendar
                   label="Collection Date"
@@ -292,7 +292,7 @@ const SearchPage: React.FC = () => {
 
             {/* Photos */}
             {selectedLoanDetails.photos.length > 0 && (
-              <Card title="Linked Images" subtitle="Uploaded customer or surety documentation">
+              <Card title="Linked Images">
                 <div className="grid grid-cols-2 gap-2">
                   {selectedLoanDetails.photos.map(p => (
                     <div key={p.id} className="relative rounded overflow-hidden border border-gray-200 bg-gray-50 aspect-square">
@@ -310,7 +310,7 @@ const SearchPage: React.FC = () => {
           {/* Col 2 & 3: Ledger statement, Dues schedule, Transaction history */}
           <div className="lg:col-span-2 space-y-6">
             {/* Account Financial balance */}
-            <Card title="Account Repayment Balance Statement" subtitle="Current status breakdown">
+            <Card title="Account Repayment Balance Statement">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <span className="text-gray-500 block finance-small-label uppercase">Total Repayable</span>
@@ -334,7 +334,7 @@ const SearchPage: React.FC = () => {
             </Card>
 
             {/* Dues Schedule Grid */}
-            <Card title="Payment Schedule (Calendar)" subtitle="Tracking expectations per instalment date">
+            <Card title="Payment Schedule (Calendar)">
               <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-60 overflow-y-auto p-1 custom-scrollbar">
                 {selectedLoanDetails.dues.map((due, idx) => (
                   <div
@@ -360,7 +360,7 @@ const SearchPage: React.FC = () => {
             </Card>
 
             {/* Transaction Ledger list */}
-            <Card title="Transaction Logs" subtitle="Disbursements and Collection entries logged for this account" className="shadow">
+            <Card title="Transaction Logs" className="shadow">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 finance-caption">
                   <thead>

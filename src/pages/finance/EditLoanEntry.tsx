@@ -77,13 +77,13 @@ const EditLoanEntry: React.FC = () => {
             />
           </div>
 
-          <Card title="Loans Ledger Index" subtitle="Click on Edit to modify customer records, status or transaction details">
+          <Card title="Loans Ledger Index">
             {loading ? (
               <div className="flex justify-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-[#0b1329]"></div>
               </div>
             ) : filteredLoans.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">No matching loans found</div>
+              <div className="text-center py-8 text-slate-400 font-bold uppercase">No transactions found.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">

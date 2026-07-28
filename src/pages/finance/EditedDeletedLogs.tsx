@@ -814,9 +814,9 @@ const EditedDeletedLogs: React.FC = () => {
         </div>
       ) : logType === 'edited' ? (
         /* Grouped Edited Logs Table View (1 Event = 1 Row) */
-        <Card title="EDITED RECORDS LOGS" subtitle="EACH ROW REPRESENTS EXACTLY ONE AUDIT EDIT EVENT WITH GROUPED CHANGED FIELDS" className="shadow-md">
+        <Card title="EDITED RECORDS LOGS" className="shadow-md">
           {filteredEvents.length === 0 ? (
-            <div className="text-center py-8 text-slate-400 uppercase font-bold text-xs">NO EDIT AUDIT LOGS MATCH THE FILTERS</div>
+            <div className="text-center py-8 text-slate-400 uppercase font-bold text-xs">No transactions found.</div>
           ) : (
             <div className="overflow-x-auto border border-slate-200 rounded-xl">
               <table className="min-w-full divide-y divide-slate-200">
@@ -894,9 +894,9 @@ const EditedDeletedLogs: React.FC = () => {
         </Card>
       ) : (
         /* Deleted Logs Table View */
-        <Card title="DELETED RECORDS LOGS" subtitle="TRACKING REMOVED ENTRIES FROM THE FINANCE TABLES" className="shadow-md">
+        <Card title="DELETED RECORDS LOGS" className="shadow-md">
           {filteredDeletedLogs.length === 0 ? (
-            <div className="text-center py-8 text-slate-400 uppercase font-bold text-xs">NO DELETION AUDIT LOGS MATCH THE FILTERS</div>
+            <div className="text-center py-8 text-slate-400 uppercase font-bold text-xs">No transactions found.</div>
           ) : (
             <div className="overflow-x-auto border border-slate-200 rounded-xl">
               <table className="min-w-full divide-y divide-slate-200">
