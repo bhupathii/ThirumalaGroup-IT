@@ -377,6 +377,9 @@ export interface FinanceCDLedgerEntry {
   entry_type: string | null;
   created_at: string;
   book_id?: string | null;
+  principal_paid?: number;
+  interest_paid?: number;
+  penalty_paid?: number;
 }
 
 export interface FinanceCDInterestDetail {
@@ -989,6 +992,182 @@ class SupabaseFinance {
       return { success: true, receiptNo };
     } catch (e: any) {
       console.error('Error posting CD ledger payment:', e);
+      return { success: false, error: e?.message || String(e) };
+    }
+  }
+
+  async postCdNpaClose(params: {
+    loanId: string;
+    customerId: string;
+    customerName: string;
+    loanIdStr: string;
+    userName: string;
+    totalOutstanding: number;
+    settlementAmount: number;
+    waivedAmount: number;
+    principalPaid: number;
+    interestPaid: number;
+    penaltyPaid: number;
+    docChargesPaid?: number;
+    paymentDate: string;
+    receiptNo: string;
+    reason: string;
+  }): Promise<{ success: boolean; error?: string; receiptNo?: string }> {
+    try {
+      const entryDate = params.paymentDate.split('T')[0];
+      const receiptNo = params.receiptNo || await this.getNextReceiptNumber();
+
+      // 1. If actual cash was received from customer (Cash Collection)
+      if (params.settlementAmount > 0) {
+        const particularsLines = [
+          `NPA Closed Payment - ${params.loanIdStr} - ${params.customerName}`,
+          `Principal Paid: ₹${params.principalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          `Interest Paid: ₹${params.interestPaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          `Penalty Paid: ₹${params.penaltyPaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          ...((params.docChargesPaid || 0) > 0 ? [`Document Charges: ₹${(params.docChargesPaid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : []),
+          `Total Received: ₹${params.settlementAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          `Receipt: ${receiptNo}`,
+          ...(params.reason ? [`Reason: ${params.reason}`] : [])
+        ];
+        const npaPaymentParticulars = particularsLines.join('\n');
+
+        // Post to finance_transactions (Day Book & Global Transaction Journal)
+        const tx = await this.addTransaction({
+          loan_id: params.loanId,
+          type: 'Collection',
+          amount: params.settlementAmount,
+          date: entryDate,
+          remarks: npaPaymentParticulars,
+          collected_by: params.userName,
+          receipt_no: receiptNo
+        });
+
+        // Log review entry asynchronously
+        this.logTransactionForReview({
+          loanId: params.loanId,
+          sourceType: 'Loan Payment',
+          sourceId: tx.id,
+          receiptNo: receiptNo,
+          transactionType: 'NPA Close',
+          transactionDate: entryDate,
+          amount: params.settlementAmount,
+          penaltyAmount: params.penaltyPaid,
+          interestAmount: params.interestPaid,
+          principalAmount: params.principalPaid,
+          enteredBy: params.userName
+        }).catch(err => console.error('Error logging NPA Close for review:', err));
+
+        // Post to finance_cd_ledger_entries (Cash Collection entry)
+        await this.addCDLedgerEntry({
+          loan_id: params.loanId,
+          customer_id: params.customerId,
+          account_name: 'CD A/C',
+          entry_date: entryDate,
+          credit: params.settlementAmount,
+          debit: 0,
+          receipt_no: receiptNo,
+          particulars: npaPaymentParticulars,
+          user_name: params.userName,
+          entry_type: 'NPA_CLOSE',
+          principal_paid: params.principalPaid,
+          interest_paid: params.interestPaid,
+          penalty_paid: params.penaltyPaid
+        });
+
+        // Audit row for amount paid
+        await this.addCDLedgerEntry({
+          loan_id: params.loanId,
+          customer_id: params.customerId,
+          account_name: 'CD Amount Paid',
+          entry_date: entryDate,
+          credit: params.settlementAmount,
+          debit: 0,
+          receipt_no: receiptNo,
+          particulars: `CD Amount Paid - ${receiptNo}`,
+          user_name: params.userName,
+          entry_type: 'amount_paid'
+        });
+      }
+
+      // 2. If an amount was waived / written off (Balanced Journal Entry)
+      if (params.waivedAmount > 0) {
+        const writeoffParticularsLines = [
+          `NPA CLOSURE / WRITE-OFF / WAIVER - ${params.loanIdStr} - ${params.customerName}`,
+          `Total Outstanding: ₹${params.totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          `Actual Paid: ₹${params.settlementAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          `Waived / Written Off: ₹${params.waivedAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          ...(params.reason ? [`Reason: ${params.reason}`] : [])
+        ];
+        const writeoffParticulars = writeoffParticularsLines.join('\n');
+        const writeoffReceiptNo = receiptNo ? `WO-${receiptNo}` : undefined;
+
+        // Debit side: NPA WRITE-OFF / LOSS A/C (P&L Loss / Expense)
+        await this.addCDLedgerEntry({
+          loan_id: params.loanId,
+          customer_id: params.customerId,
+          account_name: 'NPA WRITE-OFF / LOSS A/C',
+          entry_date: entryDate,
+          credit: 0,
+          debit: params.waivedAmount,
+          receipt_no: writeoffReceiptNo,
+          particulars: writeoffParticulars,
+          user_name: params.userName,
+          entry_type: 'NPA_WRITEOFF',
+          principal_paid: 0,
+          interest_paid: 0,
+          penalty_paid: 0
+        });
+
+        // Credit side: CD LOAN RECEIVABLE A/C (Balance Sheet Asset Reduction)
+        await this.addCDLedgerEntry({
+          loan_id: params.loanId,
+          customer_id: params.customerId,
+          account_name: 'CD LOAN RECEIVABLE A/C',
+          entry_date: entryDate,
+          credit: params.waivedAmount,
+          debit: 0,
+          receipt_no: writeoffReceiptNo,
+          particulars: writeoffParticulars,
+          user_name: params.userName,
+          entry_type: 'NPA_WRITEOFF',
+          principal_paid: 0,
+          interest_paid: 0,
+          penalty_paid: 0
+        });
+
+        // Log audit waiver
+        await this.addWaiverAudit({
+          loan_id: params.loanId,
+          waived_date: entryDate,
+          waived_by: params.userName,
+          waiver_reason: params.reason ? `NPA Closure Write-off: ${params.reason}` : 'NPA Closure Write-off',
+          waived_interest: Math.max(0, params.totalOutstanding - params.principalPaid - params.settlementAmount),
+          waived_penalty: 0,
+          waived_commission: 0,
+          receipt_no: writeoffReceiptNo || receiptNo
+        }).catch(err => console.error('Error logging NPA waiver audit:', err));
+      } else if (params.settlementAmount === 0) {
+        // Zero payment & zero outstanding closure audit row
+        await this.addCDLedgerEntry({
+          loan_id: params.loanId,
+          customer_id: params.customerId,
+          account_name: 'CD A/C',
+          entry_date: entryDate,
+          credit: 0,
+          debit: 0,
+          receipt_no: receiptNo,
+          particulars: `NPA Closed - ${params.loanIdStr} - ${params.customerName}${params.reason ? ` (${params.reason})` : ''}`,
+          user_name: params.userName,
+          entry_type: 'NPA_CLOSE',
+          principal_paid: 0,
+          interest_paid: 0,
+          penalty_paid: 0
+        });
+      }
+
+      return { success: true, receiptNo };
+    } catch (e: any) {
+      console.error('Error posting CD NPA close:', e);
       return { success: false, error: e?.message || String(e) };
     }
   }
@@ -2187,32 +2366,35 @@ class SupabaseFinance {
       // Lock protected fields ONLY when genuine customer repayment activity
       // exists. System-generated opening entries (original_loan,
       // opening_commission, document_charge) must NOT trigger the lock.
-      //
-      // Customer payment entry_types for CD ledger:
-      const CUSTOMER_PAYMENT_ENTRY_TYPES = [
-        'amount_paid',
-        'penalty_payment',
-        'interest_payment',
-        'principal_payment',
-        'Legacy Payment',
-      ];
 
-      // 1. Detect genuine customer repayment activity
-      const [{ count: cdPaymentCount }, { count: txCollectionCount }] = await Promise.all([
+      // 1. Detect genuine transaction/ledger activity
+      const [{ count: cdNonOpeningCount }, { count: txNonDisbCount }, { count: cdInterestCount }, { count: duesPaidCount }] = await Promise.all([
         supabase
           .from('finance_cd_ledger_entries')
           .select('*', { count: 'exact', head: true })
           .eq('loan_id', id)
-          .in('entry_type', CUSTOMER_PAYMENT_ENTRY_TYPES),
+          .not('entry_type', 'in', '(original_loan,opening_commission,document_charge)'),
         supabase
           .from('finance_transactions')
           .select('*', { count: 'exact', head: true })
           .eq('loan_id', id)
-          .eq('type', 'Collection')
+          .neq('type', 'Disbursement'),
+        supabase
+          .from('finance_cd_interest_details')
+          .select('*', { count: 'exact', head: true })
+          .eq('loan_id', id),
+        supabase
+          .from('finance_dues')
+          .select('*', { count: 'exact', head: true })
+          .eq('loan_id', id)
+          .gt('paid_amount', 0)
       ]);
 
       const hasCustomerRepaymentActivity =
-        (cdPaymentCount || 0) > 0 || (txCollectionCount || 0) > 0;
+        (cdNonOpeningCount || 0) > 0 ||
+        (txNonDisbCount || 0) > 0 ||
+        (cdInterestCount || 0) > 0 ||
+        (duesPaidCount || 0) > 0;
 
       if (hasCustomerRepaymentActivity) {
         // Compare protected fields — throw only if the caller is trying to change them
@@ -2231,6 +2413,21 @@ class SupabaseFinance {
           throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
         }
         if (loan.period_days !== undefined && loan.period_days !== oldData.period_days) {
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
+        }
+        if (loan.duration_months !== undefined && Number(loan.duration_months) !== Number(oldData.duration_months)) {
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
+        }
+        if (loan.document_charges !== undefined && Number(loan.document_charges) !== Number(oldData.document_charges || 0)) {
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
+        }
+        if (loan.partner_id !== undefined && (loan.partner_id || null) !== (oldData.partner_id || null)) {
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
+        }
+        if (loan.guarantor_1_id !== undefined && (loan.guarantor_1_id || null) !== (oldData.guarantor_1_id || null)) {
+          throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
+        }
+        if (loan.guarantor_2_id !== undefined && (loan.guarantor_2_id || null) !== (oldData.guarantor_2_id || null)) {
           throw new Error(`CD_CONTRACT_FIELD_IMMUTABLE: Core loan fields cannot be edited because customer repayment activity already exists for ${oldData.loan_id}.`);
         }
         if (loan.loan_category !== undefined && loan.loan_category !== oldData.loan_category) {
@@ -4138,7 +4335,7 @@ class SupabaseFinance {
       (cdRes.data || []).forEach((entry: any) => {
         let head = entry.account_name || 'CD A/C';
         if (head === 'CD COMMISSION A/C') head = 'CD INTEREST';
-        else if (head === 'CD A/C') head = 'CD PRINCIPAL';
+        else if (head === 'CD A/C' || head === 'CD PRINCIPAL') head = 'CD DISBURSEMENT';
         else if (head === 'CD DOCUMENT CHARGES A/C') head = 'CD DOCUMENT CHARGES';
         else if (head === 'PENALTY A/C') head = 'CD PENALTY';
 
@@ -4376,6 +4573,20 @@ class SupabaseFinance {
       }
     }
 
+    let npaRecords: any[] = [];
+    try {
+      const { data: npaData } = await supabase
+        .from('finance_npa_records')
+        .select('*');
+      if (npaData) npaRecords = npaData;
+    } catch (npaErr) {
+      console.warn('Could not fetch finance_npa_records in getActiveCDDuePositions:', npaErr);
+    }
+    const npaRecordByLoanId = new Map<string, any>();
+    npaRecords.forEach(r => {
+      if (r.loan_id) npaRecordByLoanId.set(r.loan_id, r);
+    });
+
     const customerIds = [...new Set(cdLoans.flatMap(l => [l.customer_id, l.guarantor_1_id, l.guarantor_2_id]).filter(Boolean))];
     let borrowers: any[] = [];
     for (let i = 0; i < customerIds.length; i += chunkSize) {
@@ -4391,16 +4602,11 @@ class SupabaseFinance {
         const nativeEntries = cdLedgerEntries.filter(e => e.loan_id === loan.id);
         const interests = cdInterestDetails.filter(d => d.loan_id === loan.id);
 
-        // Mirror getCDLedgerEntries reconciliation: if no original_loan/Disbursement row
-        // exists in finance_cd_ledger_entries, synthesize one from finance_transactions.
-        // This is exactly the MASTER_DATE_DRIFT case (loan.date is stale; the
-        // canonical date is the Disbursement transaction date).
         const hasNativeOriginalLoan = nativeEntries.some(e => e.entry_type === 'original_loan' || e.entry_type === 'Disbursement');
         const syntheticEntries: any[] = [];
         if (!hasNativeOriginalLoan) {
           const disbTx = disbursementByLoan.get(loan.id);
           if (disbTx) {
-            // Inject as original_loan so getCDAccountPosition overrides loan.date
             syntheticEntries.push({
               id: `synthetic-disb-${disbTx.id}`,
               loan_id: loan.id,
@@ -4416,7 +4622,6 @@ class SupabaseFinance {
               created_at: disbTx.created_at || disbTx.date,
             });
           } else {
-            // No Disbursement tx either — synthesize from loan master as getCDLedgerEntries does
             syntheticEntries.push({
               id: `synthetic-loan-${loan.id}`,
               loan_id: loan.id,
@@ -4460,6 +4665,53 @@ class SupabaseFinance {
           })
           .reduce((sum, e) => sum + Number(e.credit || 0), 0);
 
+        const cleanStatus = (loan.status || '').trim().toUpperCase();
+        const isNpaClosed = cleanStatus === 'NPA_CLOSED' || cleanStatus === 'NPA CLOSED' || cleanStatus === 'NPA';
+        const npaRec = npaRecordByLoanId.get(loan.loan_id) || npaRecordByLoanId.get(loan.id);
+
+        if (isNpaClosed) {
+          const loanAmt = Number(loan.amount || (npaRec ? npaRec.loan_amount : 0));
+          const closingAmt = npaRec ? Number(npaRec.settlement_amount || 0) : 0;
+          const pendInt = npaRec ? Number(npaRec.interest_due || 0) : 0;
+          const pendPen = npaRec ? Number(npaRec.penalty_due || 0) : 0;
+          const totCustomerPaid = entries
+            .filter(e => Number(e.credit || 0) > 0 && e.account_name !== 'CD Amount Paid' && e.entry_type !== 'NPA_WRITEOFF' && e.account_name !== 'CD LOAN RECEIVABLE A/C')
+            .reduce((sum, e) => sum + Number(e.credit || 0), 0);
+
+          acc.positions.push({
+            id: loan.id,
+            loan_id: loan.loan_id,
+            customer_name: borrower.name || '',
+            loan_category: loan.loan_category || 'CD',
+            loan_type: 'CD',
+            loan_amount: loanAmt,
+            current_principal: loanAmt,
+            loan_date: originalLoanDateStr,
+            current_due_date: '',
+            interest_paid: interestPaid,
+            pending_interest: pendInt,
+            penalty: pendPen,
+            penalty_paid: penaltyPaid,
+            present_due: 0,
+            due_days: 0,
+            is_npa: true,
+            phone,
+            g1_name,
+            g1_phone,
+            g2_name,
+            g2_phone,
+            partner_name: borrower.partner_name || 'Unassigned',
+            status: loan.status,
+            customer_id: loan.customer_id,
+            guarantor_1_id: loan.guarantor_1_id,
+            guarantor_2_id: loan.guarantor_2_id,
+            closing_amount: closingAmt,
+            total_paid: npaRec && npaRec.paid_amount ? Number(npaRec.paid_amount) : totCustomerPaid,
+            pending_penalty: pendPen
+          });
+          return acc;
+        }
+
         const pos = financeCalculationService.getCDAccountPosition(loan, entries, interests, asOfDate);
 
         acc.positions.push({
@@ -4488,7 +4740,10 @@ class SupabaseFinance {
           status: loan.status,
           customer_id: loan.customer_id,
           guarantor_1_id: loan.guarantor_1_id,
-          guarantor_2_id: loan.guarantor_2_id
+          guarantor_2_id: loan.guarantor_2_id,
+          closing_amount: Math.round(pos.principalBalance + pos.accruedInterest + pos.accruedPenalty),
+          total_paid: entries.filter(e => Number(e.credit || 0) > 0 && e.account_name !== 'CD Amount Paid').reduce((sum, e) => sum + Number(e.credit || 0), 0),
+          pending_penalty: pos.accruedPenalty
         });
       } catch (err: any) {
         console.error(`Error calculating CD Account Position for loan ${loan.loan_id} (${loan.id}):`, err);
@@ -4592,7 +4847,10 @@ class SupabaseFinance {
             status: dueItem.status,
             customer_id: dueItem.customer_id,
             guarantor_1_id: dueItem.guarantor_1_id,
-            guarantor_2_id: dueItem.guarantor_2_id
+            guarantor_2_id: dueItem.guarantor_2_id,
+            closing_amount: dueItem.closingAmount ?? (dueItem.currentPrincipal + dueItem.pendingInterest + dueItem.penalty),
+            total_paid: dueItem.totalPaid ?? (dueItem.interestPaid + dueItem.penaltyPaid),
+            pending_penalty: dueItem.pendingPenalty ?? dueItem.penalty
           };
         });
       }

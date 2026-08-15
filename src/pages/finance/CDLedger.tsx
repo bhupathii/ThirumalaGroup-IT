@@ -10,6 +10,7 @@ import { supabaseFinance, FinanceLoan, FinanceCustomer, FinanceTransaction, Fina
 import { supabase } from '../../lib/supabase';
 import { cdLedgerRebuildService } from '../../services/cdLedgerRebuildService';
 import { useAuth } from '../../contexts/AuthContext';
+import { clearFinanceCalendarCache } from '../../services/financeCalendarService';
 import { financeCalculationService } from '../../services/financeCalculationService';
 import {
   Printer,
@@ -1752,76 +1753,102 @@ const CDLedger: React.FC = () => {
     setIsNpaClosing(true);
     try {
       const npaClosedDate = new Date(paymentDate).toISOString();
+      const entryDate = paymentDate.split('T')[0];
       const npaClosedAmount = Number(npaSettlementAmount) || 0;
       const closedBy = (user?.username || 'Staff').toUpperCase();
       const npaReceiptNo = await supabaseFinance.getNextReceiptNumber();
       const cleanNpaReason = npaReason.trim().toUpperCase();
 
+      const principal_balance = ledgerMetrics.principalBalance;
+      const interest_due = ledgerMetrics.pendingInterest;
+      const penalty_due = ledgerMetrics.pendingPenalty;
+      const docCharges_due = (ledgerMetrics as any).docChargesBalance || (selectedLoan as any).document_charges_due || 0;
+      const total_outstanding = principal_balance + interest_due + penalty_due + docCharges_due;
+
+      // Breakup allocation of actual settlement amount received
+      let remaining = npaClosedAmount;
+      const penaltyPaid = Number(Math.min(remaining, Math.max(0, penalty_due)).toFixed(2));
+      remaining = Number(Math.max(0, remaining - penaltyPaid).toFixed(2));
+
+      const interestPaid = Number(Math.min(remaining, Math.max(0, interest_due)).toFixed(2));
+      remaining = Number(Math.max(0, remaining - interestPaid).toFixed(2));
+
+      const docChargesPaid = Number(Math.min(remaining, Math.max(0, docCharges_due)).toFixed(2));
+      remaining = Number(Math.max(0, remaining - docChargesPaid).toFixed(2));
+
+      const principalPaid = remaining;
+
+      const customerName = (selectedLoan.customer?.name || '').toUpperCase();
+      const loanIdStr = selectedLoan.loan_id || 'CD';
+
       const updatedRemarks = `${selectedLoan.remarks || ''}\n[NPA CLOSED AT ${npaClosedDate} BY ${closedBy} WITH SETTLEMENT AMOUNT: ${npaClosedAmount}]`.trim().toUpperCase();
 
+      const waived_amount = Math.max(0, Number((total_outstanding - npaClosedAmount).toFixed(2)));
+
+      // 1. Update loan status and balance (Outstanding becomes ₹0 upon NPA write-off)
       const { error: loanError } = await supabase.from('finance_loans')
         .update({
           status: 'NPA_CLOSED',
           npa_closed: true,
-          amount: selectedLoan.amount,
+          amount: 0,
           remarks: updatedRemarks
         })
         .eq('id', selectedLoan.id);
       if (loanError) throw loanError;
 
-      const principal_balance = ledgerMetrics.principalBalance;
-      const interest_due = ledgerMetrics.pendingInterest;
-      const penalty_due = ledgerMetrics.pendingPenalty;
-      const total_outstanding = principal_balance + interest_due + penalty_due;
-      const principalPaidTotal = 0;
-
+      // 2. Add NPA Registry Record
       await supabaseFinance.addNPARecord({
         loan_id: selectedLoan.id,
         customer_id: selectedLoan.customer_id,
-        customer_name: (selectedLoan.customer?.name || '').toUpperCase(),
+        customer_name: customerName,
         aadhaar: selectedLoan.customer?.aadhaar || '',
         phone: selectedLoan.customer?.phone || '',
         loan_type: selectedLoan.loan_category || 'CD',
         loan_amount: Number(selectedLoan.amount),
-        paid_amount: principalPaidTotal,
-        balance_amount: principal_balance,
+        paid_amount: npaClosedAmount,
+        balance_amount: 0,
         interest_due: interest_due,
         penalty_due: penalty_due,
         settlement_amount: npaClosedAmount,
         total_liability: total_outstanding,
-        waived_amount: total_outstanding - npaClosedAmount,
+        waived_amount: waived_amount,
         reason: cleanNpaReason,
         closed_by: closedBy,
         closed_at: npaClosedDate
       });
 
-      const npaParticulars = `NPA CLOSE\n` +
-        `Principal Outstanding: ${principal_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-        `Interest Outstanding: ${interest_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-        `Penalty Outstanding: ${penalty_due.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-        `Total Outstanding: ${total_outstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-        `Closed By: ${closedBy}\n` +
-        `Reason: ${cleanNpaReason}`;
-
-      await supabaseFinance.addCDLedgerEntry({
-        loan_id: selectedLoan.id,
-        customer_id: selectedLoan.customer_id,
-        account_name: 'CD A/C',
-        entry_date: npaClosedDate,
-        credit: 0,
-        debit: 0,
-        receipt_no: npaReceiptNo,
-        particulars: npaParticulars.toUpperCase(),
-        user_name: closedBy,
-        entry_type: 'NPA_CLOSE'
+      // 3. Post Day Book & CD Ledger financial transactions
+      const res = await supabaseFinance.postCdNpaClose({
+        loanId: selectedLoan.id,
+        customerId: selectedLoan.customer_id,
+        customerName,
+        loanIdStr,
+        userName: closedBy,
+        totalOutstanding: total_outstanding,
+        settlementAmount: npaClosedAmount,
+        waivedAmount: waived_amount,
+        principalPaid,
+        interestPaid,
+        penaltyPaid,
+        docChargesPaid,
+        paymentDate: entryDate,
+        receiptNo: npaReceiptNo,
+        reason: cleanNpaReason
       });
 
+      if (!res.success) {
+        throw new Error(res.error || 'Failed to record NPA Close financial entry');
+      }
+
+      clearFinanceCalendarCache();
       await refreshLoanData();
-      toast.success('NPA Account closed and settlement recorded.');
+      toast.success(`NPA Account closed. Day Book transaction recorded (Receipt: ${npaReceiptNo}).`);
       setShowNpaModal(false);
-    } catch (e) {
-      console.error(e);
-      toast.error('Error settling NPA account');
+      setNpaSettlementAmount('');
+      setNpaReason('');
+    } catch (e: any) {
+      console.error('Error settling NPA account:', e);
+      toast.error(e?.message || 'Error settling NPA account');
     } finally {
       setIsNpaClosing(false);
     }

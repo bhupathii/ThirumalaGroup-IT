@@ -22,7 +22,7 @@ const GeneralLedger: React.FC = () => {
   const navigate = useNavigate();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState(() => getLocalBusinessDateISO());
-  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'CD' | 'CAPITAL' | 'BANK' | 'SALARY' | 'EXPENSE' | 'OTHER'>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'CD' | 'CAPITAL' | 'BANK' | 'SALARY' | 'EXPENSE' | 'NPA CLOSED' | 'OTHER'>('ALL');
   const [headFilter, setHeadFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -45,6 +45,7 @@ const GeneralLedger: React.FC = () => {
   const categories = [
     { value: 'ALL', label: 'All Categories' },
     { value: 'CD', label: 'CD Ledger' },
+    { value: 'NPA CLOSED', label: 'NPA Closed / Write-off' },
     { value: 'CAPITAL', label: 'Partner Capital' },
     { value: 'BANK', label: 'Bank Book' },
     { value: 'SALARY', label: 'Salary Ledger' },

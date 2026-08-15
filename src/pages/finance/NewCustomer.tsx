@@ -94,8 +94,8 @@ const NewCustomer: React.FC = () => {
         setAadhaarAddress(data.aadhaar_address || '');
         setPresentAddress(data.present_address || '');
         setHouseNo(data.address || '');
-        setMandal(data.mandal || '');
-        setDistrict(data.district || '');
+        setMandal(data.mandal || data.present_mandal || data.aadhaar_mandal || '');
+        setDistrict(data.district || data.present_district || data.aadhaar_district || '');
         setPhone1(data.phone_1 || data.phone || '');
         setPhone2(data.phone_2 || data.phone2 || '');
         setPhotoUrl(data.customer_photo_url || null);
@@ -513,8 +513,12 @@ const NewCustomer: React.FC = () => {
         father_name: `${relationshipType}:${relationshipName.trim()}`,
         aadhaar_address: aadhaarAddress.trim() || null,
         present_address: presentAddress.trim() || null,
+        village: presentAddress.trim() || null,
+        present_village: presentAddress.trim() || null,
         mandal: mandal.trim() || null,
+        present_mandal: mandal.trim() || null,
         district: district.trim() || null,
+        present_district: district.trim() || null,
         phone_1: phone1.trim() || null,
         phone_2: phone2.trim() || null,
         customer_fingerprint_image_url: signatureUrl || null,

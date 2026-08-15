@@ -1,7 +1,13 @@
-import { supabase } from '../lib/supabaseDatabase';
+import { supabase } from '../lib/supabase';
 
 export const normalizeHeadOfAccount = (name: string): string => {
   const clean = (name || '').trim().toUpperCase();
+  if (clean.includes('NPA WRITE-OFF') || clean.includes('NPA LOSS') || clean === 'WRITE-OFF' || clean === 'WAIVER' || clean === 'NPA WRITEOFF') {
+    return 'NPA WRITE-OFF / LOSS A/C';
+  }
+  if (clean.includes('LOAN RECEIVABLE') || clean === 'CD LOAN RECEIVABLE A/C' || clean === 'CD LOAN RECEIVABLE') {
+    return 'CD LOAN RECEIVABLE A/C';
+  }
   if (clean === 'CD COMMISSION A/C' || clean === 'CD COMMISSION' || clean === 'CD INTEREST' || clean === 'CD INTEREST A/C') {
     return 'CD INTEREST';
   }
@@ -11,20 +17,20 @@ export const normalizeHeadOfAccount = (name: string): string => {
   if (clean === 'STBD COMMISSION A/C' || clean === 'STBD COMMISSION' || clean === 'STBD INTEREST' || clean === 'STBD INTEREST A/C') {
     return 'STBD INTEREST';
   }
-  if (clean === 'COMMISSION A/C' || clean === 'COMMISSION') {
+  if (clean === 'COMMISSION A/C' || clean === 'COMMISSION' || clean === 'TBD COMMISSION A/C' || clean === 'TBD COMMISSION' || clean === 'TBD INTEREST' || clean === 'TBD INTEREST A/C') {
     return 'TBD INTEREST';
   }
-  if (clean === 'CD A/C' || clean === 'CD PRINCIPAL') {
-    return 'CD PRINCIPAL';
+  if (clean === 'CD A/C' || clean === 'CD PRINCIPAL' || clean === 'CD DISBURSEMENT' || clean === 'CD COLLECTION') {
+    return 'CD DISBURSEMENT';
   }
-  if (clean === 'HP A/C' || clean === 'HP PRINCIPAL') {
-    return 'HP PRINCIPAL';
+  if (clean === 'HP A/C' || clean === 'HP PRINCIPAL' || clean === 'HP DISBURSEMENT' || clean === 'HP COLLECTION') {
+    return 'HP DISBURSEMENT';
   }
-  if (clean === 'STBD A/C' || clean === 'STBD PRINCIPAL') {
-    return 'STBD PRINCIPAL';
+  if (clean === 'STBD A/C' || clean === 'STBD PRINCIPAL' || clean === 'STBD DISBURSEMENT' || clean === 'STBD COLLECTION') {
+    return 'STBD DISBURSEMENT';
   }
-  if (clean === 'TBD A/C' || clean === 'TBD PRINCIPAL') {
-    return 'TBD PRINCIPAL';
+  if (clean === 'TBD A/C' || clean === 'TBD PRINCIPAL' || clean === 'TBD DISBURSEMENT' || clean === 'TBD COLLECTION') {
+    return 'TBD DISBURSEMENT';
   }
   if (clean === 'CD DOCUMENT CHARGES A/C' || clean === 'CD DOCUMENT CHARGES') {
     return 'CD DOCUMENT CHARGES';
@@ -38,8 +44,53 @@ export const normalizeHeadOfAccount = (name: string): string => {
   if (clean === 'STBD PENALTY A/C' || clean === 'STBD PENALTY') {
     return 'STBD PENALTY';
   }
+  if (clean === 'TBD PENALTY A/C' || clean === 'TBD PENALTY') {
+    return 'TBD PENALTY';
+  }
   return clean;
 };
+
+export function extractLoanPaymentSplits(lt: any, _lCat?: string): {
+  principal: number;
+  interest: number;
+  penalty: number;
+  docCharges: number;
+} {
+  const totalAmt = Number(lt.amount) || 0;
+  const remarks = lt.remarks || '';
+
+  // Extract explicit named amounts if present in remarks
+  const prinMatch = remarks.match(/(?:Principal Paid|Principal Adjusted|Prin|Principal)[:\s]+₹?\s*([\d,]+(?:\.\d+)?)/i);
+  const intMatch = remarks.match(/(?:Interest Paid|Interest|Commission Paid|Comm|Commission)[:\s]+₹?\s*([\d,]+(?:\.\d+)?)/i);
+  const penMatch = remarks.match(/(?:Penalty Paid|Penalty|Pen)[:\s]+₹?\s*([\d,]+(?:\.\d+)?)/i);
+  const docMatch = remarks.match(/(?:Document Charges|Doc Charges|Doc)[:\s]+₹?\s*([\d,]+(?:\.\d+)?)/i);
+
+  const principal = prinMatch ? parseFloat(prinMatch[1].replace(/,/g, '')) : 0;
+  const interest = intMatch ? parseFloat(intMatch[1].replace(/,/g, '')) : 0;
+  const penalty = penMatch ? parseFloat(penMatch[1].replace(/,/g, '')) : 0;
+  const docCharges = docMatch ? parseFloat(docMatch[1].replace(/,/g, '')) : 0;
+
+  const parsedSum = principal + interest + penalty + docCharges;
+  if (parsedSum > 0 && Math.abs(parsedSum - totalAmt) <= 2) {
+    return { principal, interest, penalty, docCharges };
+  }
+
+  // Single component classification if remarks indicate only one type exclusively
+  const upperRemarks = remarks.toUpperCase();
+  if (upperRemarks.includes('PENALTY') && !upperRemarks.includes('INTEREST') && !upperRemarks.includes('PRINCIPAL') && !upperRemarks.includes('PRIN')) {
+    return { principal: 0, interest: 0, penalty: totalAmt, docCharges: 0 };
+  }
+  if ((upperRemarks.includes('INTEREST') || upperRemarks.includes('COMMISSION')) && !upperRemarks.includes('PENALTY') && !upperRemarks.includes('PRINCIPAL') && !upperRemarks.includes('PRIN')) {
+    return { principal: 0, interest: totalAmt, penalty: 0, docCharges: 0 };
+  }
+  if (upperRemarks.includes('DOC') && !upperRemarks.includes('INTEREST') && !upperRemarks.includes('PRINCIPAL')) {
+    return { principal: 0, interest: 0, penalty: 0, docCharges: totalAmt };
+  }
+
+  // Default fallback: Principal repayment credited against Disbursement account (LOAN RECEIVABLE)
+  // Per Rule 3 & 4: Principal is NOT income and is credited against CD DISBURSEMENT.
+  return { principal: totalAmt, interest: 0, penalty: 0, docCharges: 0 };
+}
 
 export interface DailyFinancialTransaction {
   id: string;
@@ -73,9 +124,12 @@ export const dailyFinancialTransactionService = {
   }): Promise<DailyFinancialTransaction[]> {
     const { fromDate, toDate, financeMode } = params;
 
-    console.log(`[DAILY REPORT DEBUG] Fetching for ${fromDate} to ${toDate}, mode: ${financeMode}`);
+    const fromDateClean = fromDate.split('T')[0];
+    const toDateClean = toDate.split('T')[0];
+    const toDateEnd = toDateClean.length === 10 ? `${toDateClean}T23:59:59.999Z` : toDate;
 
-    // 1. Fetch Head of Accounts for classification mapping
+    console.log(`[DAILY REPORT DEBUG] Fetching for ${fromDateClean} to ${toDateEnd}, mode: ${financeMode}`);
+
     const { data: accountsData } = await supabase
       .from('finance_cashbook_accounts')
       .select('*');
@@ -91,13 +145,20 @@ export const dailyFinancialTransactionService = {
       const cleanHead = normalizeHeadOfAccount(headName);
       const upper = cleanHead.toUpperCase();
       
+      if (upper.includes('NPA WRITE-OFF') || upper.includes('NPA LOSS') || upper.includes('WRITE-OFF')) {
+        return 'PROFIT_AND_LOSS';
+      }
+      if (upper.includes('RECEIVABLE')) {
+        return 'BALANCE_SHEET';
+      }
       if (upper === 'CAPITAL' || upper.startsWith('CAPITAL')) return 'BALANCE_SHEET';
       if (
+        upper.includes('DISBURSEMENT') ||
         upper.includes('PRINCIPAL') || 
-        upper === 'CD PRINCIPAL' || 
-        upper === 'HP PRINCIPAL' || 
-        upper === 'STBD PRINCIPAL' || 
-        upper === 'TBD PRINCIPAL' ||
+        upper === 'CD DISBURSEMENT' || 
+        upper === 'HP DISBURSEMENT' || 
+        upper === 'STBD DISBURSEMENT' || 
+        upper === 'TBD DISBURSEMENT' ||
         upper.startsWith('BANK') ||
         upper.endsWith('BANK')
       ) {
@@ -132,11 +193,10 @@ export const dailyFinancialTransactionService = {
       return 'PROFIT_AND_LOSS';
     };
 
-    // Helper for fetching all pages to avoid Supabase default 1000-row limit truncation
     const fetchAllPages = async (queryFactory: (from: number, to: number) => any): Promise<any[]> => {
+      const pageSize = 1000;
       let allRows: any[] = [];
       let page = 0;
-      const pageSize = 1000;
       let hasMore = true;
 
       while (hasMore) {
@@ -148,7 +208,7 @@ export const dailyFinancialTransactionService = {
           break;
         }
         if (data && data.length > 0) {
-          allRows.push(...data);
+          allRows = allRows.concat(data);
           if (data.length < pageSize) {
             hasMore = false;
           } else {
@@ -161,50 +221,46 @@ export const dailyFinancialTransactionService = {
       return allRows;
     };
 
-    // 2. Fetch CD Ledger Entries (Paginated)
     const cdEntries = await fetchAllPages((from, to) =>
       supabase
         .from('finance_cd_ledger_entries')
-        .select('*, loan:finance_loans(loan_id, loan_category, partner_name), customer:finance_customers(name)')
+        .select('*, loan:finance_loans(loan_id, loan_category), customer:finance_customers(name)')
         .neq('account_name', 'CD Amount Paid')
-        .gte('entry_date', fromDate)
-        .lte('entry_date', toDate)
+        .gte('entry_date', fromDateClean)
+        .lte('entry_date', toDateEnd)
         .range(from, to)
     );
 
-    // Track CD receipt numbers to deduplicate loan_transactions
     const cdReceiptSet = new Set<string>();
+    const cdDisbursementLoanIds = new Set<string>();
+
     cdEntries.forEach(e => {
-      if (e.receipt_no) cdReceiptSet.add(e.receipt_no);
+      if (e.receipt_no) {
+        cdReceiptSet.add(e.receipt_no.trim().toUpperCase());
+      }
+      if (e.entry_type === 'original_loan' || (Number(e.debit) > 0 && (e.account_name === 'CD A/C' || e.account_name === 'CD DISBURSEMENT'))) {
+        if (e.loan_id) cdDisbursementLoanIds.add(e.loan_id);
+      }
     });
 
-    console.log(`[DAILY REPORT DEBUG] CD raw rows fetched: ${cdEntries.length}`);
-
-    // 3. Fetch Loan Transactions (Paginated - for non-CD or non-overlapping transactions)
     const ltEntries = await fetchAllPages((from, to) =>
       supabase
         .from('finance_transactions')
         .select('*, loan:finance_loans(loan_id, loan_category, customer:finance_customers(name))')
-        .gte('date', fromDate)
-        .lte('date', toDate)
+        .gte('date', fromDateClean)
+        .lte('date', toDateEnd)
         .range(from, to)
     );
 
-    console.log(`[DAILY REPORT DEBUG] Loan transactions raw rows fetched: ${ltEntries.length}`);
-
-    // 4. Fetch Capital Entries (Paginated)
     const capEntries = await fetchAllPages((from, to) =>
       supabase
         .from('finance_capital_entries')
         .select('*, partner:finance_partners(*)')
-        .gte('entry_date', fromDate)
-        .lte('entry_date', toDate)
+        .gte('entry_date', fromDateClean)
+        .lte('entry_date', toDateEnd)
         .range(from, to)
     );
 
-    console.log(`[DAILY REPORT DEBUG] Capital raw rows fetched: ${capEntries.length}`);
-
-    // 5. Fetch Day Book Entries (cashbook entries - Paginated)
     const { data: bookData } = await supabase
       .from('finance_books')
       .select('id')
@@ -215,36 +271,45 @@ export const dailyFinancialTransactionService = {
       let cbQuery = supabase
         .from('finance_cashbook_entries')
         .select('*')
-        .gte('entry_date', fromDate)
-        .lte('entry_date', toDate);
-
-      if (bookData?.id) {
-        cbQuery = cbQuery.or(`book_id.eq.${bookData.id},book_id.is.null`);
-      }
-
+        .gte('entry_date', fromDateClean)
+        .lte('entry_date', toDateEnd);
+      if (bookData?.id) cbQuery = cbQuery.or(`book_id.eq.${bookData.id},book_id.is.null`);
       return cbQuery.range(from, to);
     });
 
-    console.log(`[DAILY REPORT DEBUG] Cashbook raw rows fetched: ${cbEntries.length}`);
+    const npaEntries = await fetchAllPages((from, to) =>
+      supabase
+        .from('finance_npa_records')
+        .select('*')
+        .gte('closed_at', fromDateClean)
+        .lte('closed_at', toDateEnd)
+        .range(from, to)
+    );
 
     const normalizedList: DailyFinancialTransaction[] = [];
 
-    // Process CD ledger entries
     if (cdEntries) {
       cdEntries.forEach((entry: any) => {
         let head = entry.account_name || 'CD A/C';
         if (head === 'CD COMMISSION A/C') head = 'CD INTEREST';
-        else if (head === 'CD A/C') head = 'CD PRINCIPAL';
+        else if (head === 'CD A/C' || head === 'CD PRINCIPAL') head = 'CD DISBURSEMENT';
         else if (head === 'CD DOCUMENT CHARGES A/C') head = 'CD DOCUMENT CHARGES';
         else if (head === 'PENALTY A/C') head = 'CD PENALTY';
 
         const normHead = normalizeHeadOfAccount(head);
+        const transDate = entry.entry_date ? entry.entry_date.split('T')[0] : fromDateClean;
+        const isNpaRelated = entry.entry_type === 'NPA_CLOSE' || 
+                             entry.entry_type === 'NPA_WRITEOFF' || 
+                             normHead === 'NPA WRITE-OFF / LOSS A/C' || 
+                             normHead === 'CD LOAN RECEIVABLE A/C' ||
+                             (entry.particulars && entry.particulars.toUpperCase().includes('NPA'));
+        const cat = isNpaRelated ? 'NPA CLOSED' : 'CD';
 
         normalizedList.push({
           id: `CD_LEDGER:${entry.id}`,
           sourceType: 'CD_LEDGER',
           sourceRecordId: entry.id,
-          transactionDate: entry.entry_date,
+          transactionDate: transDate,
           headOfAccount: normHead,
           particulars: entry.particulars || '',
           receiptOrVoucherNo: entry.receipt_no || null,
@@ -257,57 +322,257 @@ export const dailyFinancialTransactionService = {
           reportClassification: getClassification(normHead),
           customerName: entry.customer?.name || null,
           partnerName: entry.loan?.partner_name || null,
-          category: 'CD',
+          category: cat,
           loanCategory: entry.loan?.loan_category || 'CD'
         });
       });
     }
 
-    // Process Loan transactions (excluding rows already represented in CD ledger entries)
     if (ltEntries) {
       ltEntries.forEach((lt: any) => {
-        // Skip if this receipt number was already processed in cdEntries
-        if (lt.receipt_no && cdReceiptSet.has(lt.receipt_no)) {
-          return;
-        }
+        // Skip if this receipt is already represented in CD ledger entries
+        if (lt.receipt_no && cdReceiptSet.has(lt.receipt_no.trim().toUpperCase())) return;
 
-        const lCat = lt.loan?.loan_category || 'LOAN';
+        const lCat = lt.loan?.loan_category || (lt.loan_id?.startsWith('CD') ? 'CD' : (lt.loan_id?.startsWith('HP') ? 'HP' : (lt.loan_id?.startsWith('STBD') ? 'STBD' : (lt.loan_id?.startsWith('TBD') ? 'TBD' : 'LOAN'))));
         const isDisb = lt.type === 'Disbursement';
-        const amt = Number(lt.amount) || 0;
-        const head = isDisb ? `${lCat} DISBURSEMENT` : `${lCat} COLLECTION`;
-        const normHead = normalizeHeadOfAccount(head);
 
-        normalizedList.push({
-          id: `LOAN_TRANSACTION:${lt.id}`,
-          sourceType: 'LOAN_TRANSACTION',
-          sourceRecordId: lt.id,
-          transactionDate: lt.date,
-          headOfAccount: normHead,
-          particulars: lt.remarks || `${isDisb ? 'Loan Disbursed' : 'Loan Collection'} - ${lt.loan?.loan_id || ''}`,
-          receiptOrVoucherNo: lt.receipt_no || null,
-          accountOrLoanNo: lt.loan?.loan_id || 'LOAN',
-          debit: isDisb ? amt : 0,
-          credit: isDisb ? 0 : amt,
-          userName: lt.collected_by || 'Staff',
-          entryTime: lt.created_at,
-          createdAt: lt.created_at,
-          reportClassification: getClassification(normHead),
-          customerName: lt.loan?.customer?.name || null,
-          category: lCat,
-          loanCategory: lCat
-        });
+        // If disbursement already accounted for in cdEntries, skip to avoid double counting
+        if (isDisb && lCat === 'CD' && lt.loan_id && cdDisbursementLoanIds.has(lt.loan_id)) return;
+
+        const amt = Number(lt.amount) || 0;
+        const transDate = lt.date ? lt.date.split('T')[0] : fromDateClean;
+        const isNpa = (lt.remarks && lt.remarks.toUpperCase().includes('NPA')) || (lt.type === 'NPA Close');
+        const cat = isNpa ? 'NPA CLOSED' : (lCat === 'LOAN' ? 'OTHER' : lCat);
+
+        if (isDisb) {
+          const normHead = normalizeHeadOfAccount(`${lCat} DISBURSEMENT`);
+          normalizedList.push({
+            id: `LOAN_TRANSACTION:${lt.id}`,
+            sourceType: 'LOAN_TRANSACTION',
+            sourceRecordId: lt.id,
+            transactionDate: transDate,
+            headOfAccount: normHead,
+            particulars: lt.remarks || `Loan Disbursed - ${lt.loan?.loan_id || lt.loan_id || ''}`,
+            receiptOrVoucherNo: lt.receipt_no || null,
+            accountOrLoanNo: lt.loan?.loan_id || lt.loan_id || lCat,
+            debit: amt,
+            credit: 0,
+            userName: lt.collected_by || 'Staff',
+            entryTime: lt.created_at,
+            createdAt: lt.created_at,
+            reportClassification: getClassification(normHead),
+            customerName: lt.loan?.customer?.name || null,
+            category: cat,
+            loanCategory: lCat
+          });
+        } else {
+          // Collection Transaction: Split into Principal, Interest, Penalty, Doc Charges components
+          const splits = extractLoanPaymentSplits(lt, lCat);
+          const baseParticulars = lt.remarks || `Loan Collection - ${lt.loan?.loan_id || lt.loan_id || ''}`;
+          const loanAcc = lt.loan?.loan_id || lt.loan_id || lCat;
+          const custName = lt.loan?.customer?.name || null;
+
+          // 1. Principal Component -> ${lCat} DISBURSEMENT (Credit)
+          if (splits.principal > 0) {
+            const headPrin = normalizeHeadOfAccount(`${lCat} DISBURSEMENT`);
+            normalizedList.push({
+              id: `LOAN_TRANSACTION_PRIN:${lt.id}`,
+              sourceType: 'LOAN_TRANSACTION',
+              sourceRecordId: lt.id,
+              transactionDate: transDate,
+              headOfAccount: headPrin,
+              particulars: splits.interest > 0 || splits.penalty > 0 
+                ? `${baseParticulars} [Principal: ₹${splits.principal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}]`
+                : baseParticulars,
+              receiptOrVoucherNo: lt.receipt_no || null,
+              accountOrLoanNo: loanAcc,
+              debit: 0,
+              credit: splits.principal,
+              userName: lt.collected_by || 'Staff',
+              entryTime: lt.created_at,
+              createdAt: lt.created_at,
+              reportClassification: getClassification(headPrin),
+              customerName: custName,
+              category: cat,
+              loanCategory: lCat
+            });
+          }
+
+          // 2. Interest Component -> ${lCat} INTEREST (Credit)
+          if (splits.interest > 0) {
+            const headInt = normalizeHeadOfAccount(`${lCat} INTEREST`);
+            normalizedList.push({
+              id: `LOAN_TRANSACTION_INT:${lt.id}`,
+              sourceType: 'LOAN_TRANSACTION',
+              sourceRecordId: lt.id,
+              transactionDate: transDate,
+              headOfAccount: headInt,
+              particulars: `${baseParticulars} [Interest: ₹${splits.interest.toLocaleString('en-IN', { minimumFractionDigits: 2 })}]`,
+              receiptOrVoucherNo: lt.receipt_no || null,
+              accountOrLoanNo: loanAcc,
+              debit: 0,
+              credit: splits.interest,
+              userName: lt.collected_by || 'Staff',
+              entryTime: lt.created_at,
+              createdAt: lt.created_at,
+              reportClassification: getClassification(headInt),
+              customerName: custName,
+              category: cat,
+              loanCategory: lCat
+            });
+          }
+
+          // 3. Penalty Component -> ${lCat} PENALTY (Credit)
+          if (splits.penalty > 0) {
+            const headPen = normalizeHeadOfAccount(`${lCat} PENALTY`);
+            normalizedList.push({
+              id: `LOAN_TRANSACTION_PEN:${lt.id}`,
+              sourceType: 'LOAN_TRANSACTION',
+              sourceRecordId: lt.id,
+              transactionDate: transDate,
+              headOfAccount: headPen,
+              particulars: `${baseParticulars} [Penalty: ₹${splits.penalty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}]`,
+              receiptOrVoucherNo: lt.receipt_no || null,
+              accountOrLoanNo: loanAcc,
+              debit: 0,
+              credit: splits.penalty,
+              userName: lt.collected_by || 'Staff',
+              entryTime: lt.created_at,
+              createdAt: lt.created_at,
+              reportClassification: getClassification(headPen),
+              customerName: custName,
+              category: cat,
+              loanCategory: lCat
+            });
+          }
+
+          // 4. Document Charges Component -> ${lCat} DOCUMENT CHARGES (Credit)
+          if (splits.docCharges > 0) {
+            const headDoc = normalizeHeadOfAccount(`${lCat} DOCUMENT CHARGES`);
+            normalizedList.push({
+              id: `LOAN_TRANSACTION_DOC:${lt.id}`,
+              sourceType: 'LOAN_TRANSACTION',
+              sourceRecordId: lt.id,
+              transactionDate: transDate,
+              headOfAccount: headDoc,
+              particulars: `${baseParticulars} [Doc Charges: ₹${splits.docCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}]`,
+              receiptOrVoucherNo: lt.receipt_no || null,
+              accountOrLoanNo: loanAcc,
+              debit: 0,
+              credit: splits.docCharges,
+              userName: lt.collected_by || 'Staff',
+              entryTime: lt.created_at,
+              createdAt: lt.created_at,
+              reportClassification: getClassification(headDoc),
+              customerName: custName,
+              category: cat,
+              loanCategory: lCat
+            });
+          }
+        }
       });
     }
 
-    // Process Capital entries
+    if (npaEntries) {
+      npaEntries.forEach((npa: any) => {
+        const matchedReceipt = npa.reason?.match(/RC\d+/i)?.[0] || null;
+        if (matchedReceipt && cdReceiptSet.has(matchedReceipt.trim().toUpperCase())) return;
+
+        const alreadyListed = normalizedList.some(tx => 
+          (tx.sourceRecordId === npa.id) ||
+          (matchedReceipt && tx.receiptOrVoucherNo === matchedReceipt) ||
+          (tx.accountOrLoanNo === npa.loan_id && tx.particulars.includes('NPA'))
+        );
+        if (alreadyListed) return;
+
+        const lCat = npa.loan?.loan_category || npa.loan_type || 'CD';
+        const head = `${lCat} DISBURSEMENT`;
+        const normHead = normalizeHeadOfAccount(head);
+        const amt = Number(npa.settlement_amount || npa.paid_amount) || 0;
+        const waivedAmt = Number(npa.waived_amount) || 0;
+        const closedDate = (npa.closed_at || npa.created_at || fromDateClean).split('T')[0];
+        const loanNo = npa.loan?.loan_id || npa.loan_id || lCat;
+
+        if (amt > 0) {
+          normalizedList.push({
+            id: `NPA_RECORD_CASH:${npa.id}`,
+            sourceType: 'CD_LEDGER',
+            sourceRecordId: npa.id,
+            transactionDate: closedDate,
+            headOfAccount: normHead,
+            particulars: npa.reason ? `NPA Closed Payment - ${loanNo} - ${npa.customer_name} (${npa.reason})` : `NPA Closed Payment - ${loanNo} - ${npa.customer_name}`,
+            receiptOrVoucherNo: matchedReceipt,
+            accountOrLoanNo: loanNo,
+            debit: 0,
+            credit: amt,
+            userName: npa.closed_by || 'Staff',
+            entryTime: npa.closed_at || npa.created_at,
+            createdAt: npa.closed_at || npa.created_at,
+            reportClassification: getClassification(normHead),
+            customerName: npa.customer_name,
+            partnerName: npa.loan?.partner_name || null,
+            category: 'NPA CLOSED',
+            loanCategory: lCat
+          });
+        }
+
+        if (waivedAmt > 0) {
+          const writeoffParticulars = `NPA CLOSURE / WRITE-OFF / WAIVER - ${loanNo} - ${npa.customer_name}\nTotal Outstanding: ₹${(Number(npa.total_liability) || (amt + waivedAmt)).toFixed(2)}\nActual Paid: ₹${amt.toFixed(2)}\nWaived / Written Off: ₹${waivedAmt.toFixed(2)}${npa.reason ? `\nReason: ${npa.reason}` : ''}`;
+          
+          normalizedList.push({
+            id: `NPA_RECORD_WO_DR:${npa.id}`,
+            sourceType: 'CD_LEDGER',
+            sourceRecordId: npa.id,
+            transactionDate: closedDate,
+            headOfAccount: 'NPA WRITE-OFF / LOSS A/C',
+            particulars: writeoffParticulars,
+            receiptOrVoucherNo: matchedReceipt ? `WO-${matchedReceipt}` : null,
+            accountOrLoanNo: loanNo,
+            debit: waivedAmt,
+            credit: 0,
+            userName: npa.closed_by || 'Staff',
+            entryTime: npa.closed_at || npa.created_at,
+            createdAt: npa.closed_at || npa.created_at,
+            reportClassification: 'PROFIT_AND_LOSS',
+            customerName: npa.customer_name,
+            partnerName: npa.loan?.partner_name || null,
+            category: 'NPA CLOSED',
+            loanCategory: lCat
+          });
+
+          normalizedList.push({
+            id: `NPA_RECORD_WO_CR:${npa.id}`,
+            sourceType: 'CD_LEDGER',
+            sourceRecordId: npa.id,
+            transactionDate: closedDate,
+            headOfAccount: 'CD LOAN RECEIVABLE A/C',
+            particulars: writeoffParticulars,
+            receiptOrVoucherNo: matchedReceipt ? `WO-${matchedReceipt}` : null,
+            accountOrLoanNo: loanNo,
+            debit: 0,
+            credit: waivedAmt,
+            userName: npa.closed_by || 'Staff',
+            entryTime: npa.closed_at || npa.created_at,
+            createdAt: npa.closed_at || npa.created_at,
+            reportClassification: 'BALANCE_SHEET',
+            customerName: npa.customer_name,
+            partnerName: npa.loan?.partner_name || null,
+            category: 'NPA CLOSED',
+            loanCategory: lCat
+          });
+        }
+      });
+    }
+
     if (capEntries) {
       capEntries.forEach((cap: any) => {
         const pName = cap.partner?.name || cap.partner_name || 'Partner';
+        const transDate = cap.entry_date ? cap.entry_date.split('T')[0] : fromDateClean;
         normalizedList.push({
           id: `CAPITAL_ENTRY:${cap.id}`,
           sourceType: 'CAPITAL_ENTRY',
           sourceRecordId: cap.id,
-          transactionDate: cap.entry_date,
+          transactionDate: transDate,
           headOfAccount: 'CAPITAL',
           particulars: cap.particulars || 'Capital Entry',
           receiptOrVoucherNo: null,
@@ -330,6 +595,7 @@ export const dailyFinancialTransactionService = {
       cbEntries.forEach((cb: any) => {
         const head = cb.head_of_account;
         const normHead = normalizeHeadOfAccount(head);
+        const transDate = cb.entry_date ? cb.entry_date.split('T')[0] : fromDateClean;
         
         let cat: string = 'OTHER';
         const acc = accountsMap.get(normHead.toUpperCase()) || accountsMap.get(head.toUpperCase());
@@ -345,7 +611,7 @@ export const dailyFinancialTransactionService = {
           id: `DAY_BOOK_ENTRY:${cb.id}`,
           sourceType: 'DAY_BOOK_ENTRY',
           sourceRecordId: cb.id,
-          transactionDate: cb.entry_date,
+          transactionDate: transDate,
           headOfAccount: normHead,
           particulars: cb.particulars || '',
           receiptOrVoucherNo: null,
@@ -422,6 +688,7 @@ export const dailyFinancialTransactionService = {
     const { currentDate, direction, financeMode } = params;
     const isPrev = direction === 'prev';
     const orderOptions = { ascending: !isPrev };
+    const dateOnly = currentDate.split('T')[0];
 
     try {
       // 1. Fetch nearest from CD ledger entries
@@ -430,9 +697,9 @@ export const dailyFinancialTransactionService = {
         .select('entry_date')
         .neq('account_name', 'CD Amount Paid');
       if (isPrev) {
-        cdQuery = cdQuery.lt('entry_date', currentDate);
+        cdQuery = cdQuery.lt('entry_date', dateOnly);
       } else {
-        cdQuery = cdQuery.gt('entry_date', currentDate);
+        cdQuery = cdQuery.gt('entry_date', `${dateOnly}T23:59:59.999Z`);
       }
       const { data: cdData } = await cdQuery
         .order('entry_date', orderOptions)
@@ -443,15 +710,41 @@ export const dailyFinancialTransactionService = {
         .from('finance_capital_entries')
         .select('entry_date');
       if (isPrev) {
-        capQuery = capQuery.lt('entry_date', currentDate);
+        capQuery = capQuery.lt('entry_date', dateOnly);
       } else {
-        capQuery = capQuery.gt('entry_date', currentDate);
+        capQuery = capQuery.gt('entry_date', `${dateOnly}T23:59:59.999Z`);
       }
       const { data: capData } = await capQuery
         .order('entry_date', orderOptions)
         .limit(1);
 
-      // 3. Fetch nearest from Cashbook entries
+      // 3. Fetch nearest from Loan transactions
+      let ltQuery = supabase
+        .from('finance_transactions')
+        .select('date');
+      if (isPrev) {
+        ltQuery = ltQuery.lt('date', dateOnly);
+      } else {
+        ltQuery = ltQuery.gt('date', `${dateOnly}T23:59:59.999Z`);
+      }
+      const { data: ltData } = await ltQuery
+        .order('date', orderOptions)
+        .limit(1);
+
+      // 4. Fetch nearest from NPA records
+      let npaQuery = supabase
+        .from('finance_npa_records')
+        .select('closed_at');
+      if (isPrev) {
+        npaQuery = npaQuery.lt('closed_at', dateOnly);
+      } else {
+        npaQuery = npaQuery.gt('closed_at', `${dateOnly}T23:59:59.999Z`);
+      }
+      const { data: npaData } = await npaQuery
+        .order('closed_at', orderOptions)
+        .limit(1);
+
+      // 5. Fetch nearest from Cashbook entries
       const { data: bookData } = await supabase
         .from('finance_books')
         .select('id')
@@ -465,9 +758,9 @@ export const dailyFinancialTransactionService = {
           .select('entry_date')
           .eq('book_id', bookData.id);
         if (isPrev) {
-          cbQuery = cbQuery.lt('entry_date', currentDate);
+          cbQuery = cbQuery.lt('entry_date', dateOnly);
         } else {
-          cbQuery = cbQuery.gt('entry_date', currentDate);
+          cbQuery = cbQuery.gt('entry_date', `${dateOnly}T23:59:59.999Z`);
         }
         const { data: fetchedCb } = await cbQuery
           .order('entry_date', orderOptions)
@@ -485,6 +778,8 @@ export const dailyFinancialTransactionService = {
 
       if (cdData?.[0]) extractDate(cdData[0].entry_date);
       if (capData?.[0]) extractDate(capData[0].entry_date);
+      if (ltData?.[0]) extractDate(ltData[0].date);
+      if (npaData?.[0]) extractDate(npaData[0].closed_at);
       if (cbData?.[0]) extractDate(cbData[0].entry_date);
 
       if (dates.length === 0) return null;

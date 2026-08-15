@@ -86,7 +86,7 @@ const Customers: React.FC = () => {
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sortBy, setSortBy] = useState<'Latest' | 'Oldest' | 'Name' | 'Customer ID' | 'Village' | 'Partner'>('Latest');
+  const [sortBy, setSortBy] = useState<'Customer ID' | 'Latest' | 'Oldest' | 'Name' | 'Village' | 'Mandal' | 'District' | 'Partner'>('Customer ID');
   const [pageSize, setPageSize] = useState<25 | 50 | 100>(25);
   const [pageIndex, setPageIndex] = useState(0);
 
@@ -182,7 +182,7 @@ const Customers: React.FC = () => {
         const partnerNames = partnerMatches ? partnerMatches.map(p => p.name) : [];
 
         const isNum = !isNaN(Number(trimmedQuery));
-        let filterStr = `name.ilike.%${trimmedQuery}%,phone.ilike.%${trimmedQuery}%,phone_1.ilike.%${trimmedQuery}%,phone_2.ilike.%${trimmedQuery}%,aadhaar.ilike.%${trimmedQuery}%,father_name.ilike.%${trimmedQuery}%,father_husband_name.ilike.%${trimmedQuery}%,address.ilike.%${trimmedQuery}%,present_address.ilike.%${trimmedQuery}%,present_village.ilike.%${trimmedQuery}%,village.ilike.%${trimmedQuery}%,mandal.ilike.%${trimmedQuery}%,district.ilike.%${trimmedQuery}%`;
+        let filterStr = `name.ilike.%${trimmedQuery}%,phone.ilike.%${trimmedQuery}%,phone_1.ilike.%${trimmedQuery}%,phone_2.ilike.%${trimmedQuery}%,aadhaar.ilike.%${trimmedQuery}%,father_name.ilike.%${trimmedQuery}%,father_husband_name.ilike.%${trimmedQuery}%,address.ilike.%${trimmedQuery}%,present_address.ilike.%${trimmedQuery}%,present_village.ilike.%${trimmedQuery}%,village.ilike.%${trimmedQuery}%,mandal.ilike.%${trimmedQuery}%,present_mandal.ilike.%${trimmedQuery}%,district.ilike.%${trimmedQuery}%,present_district.ilike.%${trimmedQuery}%`;
         
         if (isNum) {
           filterStr += `,customer_id.eq.${trimmedQuery}`;
@@ -201,19 +201,25 @@ const Customers: React.FC = () => {
         queryBuilder = queryBuilder.or(filterStr);
       }
 
-      // Apply Sorting
+      // Apply Sorting - default to ascending numerical Customer ID
       if (sortBy === 'Name') {
         queryBuilder = queryBuilder.order('name', { ascending: true });
       } else if (sortBy === 'Customer ID') {
-        queryBuilder = queryBuilder.order('customer_id', { ascending: true });
+        queryBuilder = queryBuilder.order('customer_id', { ascending: true, nullsFirst: false });
+      } else if (sortBy === 'Latest') {
+        queryBuilder = queryBuilder.order('created_at', { ascending: false });
       } else if (sortBy === 'Oldest') {
         queryBuilder = queryBuilder.order('created_at', { ascending: true });
       } else if (sortBy === 'Village') {
         queryBuilder = queryBuilder.order('present_village', { ascending: true });
+      } else if (sortBy === 'Mandal') {
+        queryBuilder = queryBuilder.order('present_mandal', { ascending: true });
+      } else if (sortBy === 'District') {
+        queryBuilder = queryBuilder.order('present_district', { ascending: true });
       } else if (sortBy === 'Partner') {
         queryBuilder = queryBuilder.order('partner_name', { ascending: true });
       } else {
-        queryBuilder = queryBuilder.order('created_at', { ascending: false });
+        queryBuilder = queryBuilder.order('customer_id', { ascending: true, nullsFirst: false });
       }
 
       // Pagination
@@ -605,11 +611,13 @@ const Customers: React.FC = () => {
             onChange={(e) => setSortBy(e.target.value as any)}
             className="w-full bg-white border border-slate-250 rounded px-3 text-[16px] text-slate-850 focus:outline-none h-[48px] font-bold uppercase"
           >
+            <option value="Customer ID">Customer ID (Asc)</option>
             <option value="Latest">Newest</option>
             <option value="Oldest">Oldest</option>
             <option value="Name">Name A-Z</option>
-            <option value="Customer ID">Customer ID</option>
             <option value="Village">Village</option>
+            <option value="Mandal">Mandal</option>
+            <option value="District">District</option>
             <option value="Partner">Partner</option>
           </select>
         </div>
@@ -645,47 +653,54 @@ const Customers: React.FC = () => {
       ) : (
         <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col w-full">
           {/* Table Container */}
-          <div className="overflow-x-auto overflow-y-auto max-h-[500px] w-full custom-scrollbar">
-            <table className="w-full table-fixed divide-y divide-slate-200 text-[14px]">
+          <div className="overflow-x-auto overflow-y-auto max-h-[520px] w-full custom-scrollbar">
+            <table className="w-full table-fixed divide-y divide-slate-200 text-[13px]">
               <thead className="bg-slate-100 sticky top-0 z-10 text-slate-700">
                 <tr className="divide-x divide-slate-200">
-                  <th className="w-16 px-2 py-2 text-center font-bold uppercase">SL</th>
-                  <th className="w-28 px-2 py-2 text-left font-bold uppercase">Cust ID</th>
-                  <th className="w-80 px-3 py-2 text-left font-bold uppercase">Borrower Name</th>
-                  <th className="w-44 px-3 py-2 text-left font-bold uppercase">Phone 1</th>
-                  <th className="w-44 px-3 py-2 text-left font-bold uppercase">Phone 2</th>
-                  <th className="w-56 px-3 py-2 text-left font-bold uppercase">Village</th>
-                  <th className="w-36 px-2 py-2 text-center font-bold uppercase">Actions</th>
+                  <th className="w-[4%] min-w-[36px] px-1.5 py-2.5 text-center font-bold uppercase text-[11px] tracking-wider">SL</th>
+                  <th className="w-[6%] min-w-[55px] px-2 py-2.5 text-center font-bold uppercase text-[11px] tracking-wider">Cust ID</th>
+                  <th className="w-[19%] min-w-[140px] px-3 py-2.5 text-left font-bold uppercase text-[11px] tracking-wider">Borrower Name</th>
+                  <th className="w-[11%] min-w-[95px] px-2 py-2.5 text-left font-bold uppercase text-[11px] tracking-wider">Phone 1</th>
+                  <th className="w-[11%] min-w-[95px] px-2 py-2.5 text-left font-bold uppercase text-[11px] tracking-wider">Phone 2</th>
+                  <th className="w-[13%] min-w-[100px] px-2.5 py-2.5 text-left font-bold uppercase text-[11px] tracking-wider">Village</th>
+                  <th className="w-[13%] min-w-[100px] px-2.5 py-2.5 text-left font-bold uppercase text-[11px] tracking-wider">Mandal</th>
+                  <th className="w-[14%] min-w-[100px] px-2.5 py-2.5 text-left font-bold uppercase text-[11px] tracking-wider">District</th>
+                  <th className="w-[9%] min-w-[80px] px-1.5 py-2.5 text-center font-bold uppercase text-[11px] tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white divide-x divide-slate-55 font-semibold text-slate-800">
+              <tbody className="divide-y divide-slate-100 bg-white divide-x divide-slate-100 font-semibold text-slate-800">
                 {customers.map((cust, index) => {
                   return (
                     <tr
                       key={cust.id}
                       onClick={() => setSelectedCust(cust)}
                       className="hover:bg-slate-50 transition-colors cursor-pointer"
-                      style={{ height: '44px' }}
                     >
-                      <td className="px-2 py-2 text-center text-slate-400 font-mono font-bold">
+                      <td className="px-1.5 py-2 text-center text-slate-400 font-mono font-bold text-xs">
                         {pageIndex * pageSize + index + 1}
                       </td>
-                      <td className="px-2 py-2 font-mono text-slate-900 font-bold">
-                        #{cust.customer_id || '—'}
+                      <td className="px-2 py-2 font-mono text-slate-900 font-bold text-center text-xs">
+                        {cust.customer_id ?? '—'}
                       </td>
-                      <td className="px-3 py-2 truncate uppercase text-slate-900 font-bold">
+                      <td className="px-3 py-2 uppercase text-slate-900 font-bold break-words whitespace-normal leading-snug">
                         {cust.name}
                       </td>
-                      <td className="px-3 py-2 font-mono text-slate-800 font-bold whitespace-nowrap">
+                      <td className="px-2 py-2 font-mono text-slate-800 font-bold whitespace-nowrap text-xs">
                         {cust.phone_1 || cust.phone || '—'}
                       </td>
-                      <td className="px-3 py-2 font-mono text-slate-500 whitespace-nowrap">
+                      <td className="px-2 py-2 font-mono text-slate-500 whitespace-nowrap text-xs">
                         {cust.phone_2 || cust.phone2 || '—'}
                       </td>
-                      <td className="px-3 py-2 text-slate-800 uppercase truncate">
-                        {cust.present_village || cust.village || '—'}
+                      <td className="px-2.5 py-2 text-slate-800 uppercase break-words whitespace-normal text-xs leading-snug">
+                        {cust.present_village || cust.village || cust.aadhaar_village || '—'}
                       </td>
-                      <td className="px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2.5 py-2 text-slate-800 uppercase break-words whitespace-normal text-xs leading-snug">
+                        {cust.present_mandal || cust.mandal || cust.aadhaar_mandal || '—'}
+                      </td>
+                      <td className="px-2.5 py-2 text-slate-800 uppercase break-words whitespace-normal text-xs leading-snug">
+                        {cust.present_district || cust.district || cust.aadhaar_district || '—'}
+                      </td>
+                      <td className="px-1.5 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-center gap-1.5 items-center">
                           <button
                             onClick={() => setSelectedCust(cust)}

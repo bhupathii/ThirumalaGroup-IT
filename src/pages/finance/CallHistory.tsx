@@ -168,13 +168,12 @@ const CallHistory: React.FC = () => {
       return;
     }
 
-    const headers = ['Loan Number', 'Category', 'Customer Name', 'Phone', 'Partner', 'Staff Name', 'Call Date', 'Result', 'Promised Amount', 'Remarks'];
+    const headers = ['Loan Number', 'Category', 'Customer Name', 'Phone', 'Staff Name', 'Call Date', 'Result', 'Promised Amount', 'Remarks'];
     const rows = filteredGroups.map(g => [
       g.loan_number,
       g.loan_category,
       g.customer_name,
       g.customer_phone,
-      g.partner_name,
       g.latest_follow_up.followed_up_by,
       g.latest_follow_up.follow_up_date,
       g.latest_follow_up.result,
@@ -246,11 +245,10 @@ const CallHistory: React.FC = () => {
         </div>
 
         {/* Compact Metadata Header Box */}
-        <div className="grid grid-cols-4 gap-2 bg-slate-50 border border-slate-300 p-2 rounded mb-3 font-bold text-[9px]">
+        <div className="grid grid-cols-3 gap-2 bg-slate-50 border border-slate-300 p-2 rounded mb-3 font-bold text-[9px]">
           <div><span className="text-slate-500 block text-[8px]">LOAN NUMBER</span> <span className="font-mono text-[10px] text-slate-950 font-black">{selectedGroup.loan_number}</span></div>
           <div><span className="text-slate-500 block text-[8px]">BORROWER</span> <span className="text-[10px] text-slate-950 font-black">{selectedGroup.customer_name}</span></div>
           <div><span className="text-slate-500 block text-[8px]">PHONE</span> <span className="font-mono text-slate-800">{selectedGroup.customer_phone || '—'}</span></div>
-          <div><span className="text-slate-500 block text-[8px]">PARTNER</span> <span className="text-slate-800">{selectedGroup.partner_name || '—'}</span></div>
         </div>
 
         {/* Ledger Table */}
@@ -321,7 +319,6 @@ const CallHistory: React.FC = () => {
             <tr className="bg-slate-100">
               <th className="border border-slate-400 p-1.5 text-left">LOAN NO</th>
               <th className="border border-slate-400 p-1.5 text-left">CUSTOMER</th>
-              <th className="border border-slate-400 p-1.5 text-left">PARTNER</th>
               <th className="border border-slate-400 p-1.5 text-left">DATE</th>
               <th className="border border-slate-400 p-1.5 text-left">RESULT</th>
               <th className="border border-slate-400 p-1.5 text-left">STAFF</th>
@@ -333,7 +330,6 @@ const CallHistory: React.FC = () => {
               <tr key={g.loan_id} className="h-[36px]">
                 <td className="border border-slate-400 p-1.5 font-mono">{g.loan_number}</td>
                 <td className="border border-slate-400 p-1.5">{g.customer_name}</td>
-                <td className="border border-slate-400 p-1.5">{g.partner_name}</td>
                 <td className="border border-slate-400 p-1.5">{g.latest_follow_up.follow_up_date}</td>
                 <td className="border border-slate-400 p-1.5">{g.latest_follow_up.result}</td>
                 <td className="border border-slate-400 p-1.5">{g.latest_follow_up.followed_up_by}</td>
@@ -470,7 +466,6 @@ const CallHistory: React.FC = () => {
                 <tr>
                   <th className="px-3 py-2.5 text-left">Loan ID</th>
                   <th className="px-3 py-2.5 text-left">Borrower Name</th>
-                  <th className="px-3 py-2.5 text-left">Partner</th>
                   <th className="px-3 py-2.5 text-center">Last Call Date</th>
                   <th className="px-3 py-2.5 text-center">Result</th>
                   <th className="px-3 py-2.5 text-left">Staff Name</th>
@@ -491,7 +486,6 @@ const CallHistory: React.FC = () => {
                       <div className="font-bold text-slate-900">{g.customer_name}</div>
                       <div className="text-[10px] text-slate-400 font-mono">{g.customer_phone}</div>
                     </td>
-                    <td className="px-3 py-1.5 font-bold text-slate-800">{g.partner_name}</td>
                     <td className="px-3 py-1.5 text-center font-mono font-bold text-slate-700">
                       {g.latest_follow_up.follow_up_date}
                     </td>
@@ -539,8 +533,6 @@ const CallHistory: React.FC = () => {
                 <span>BORROWER: <span className="text-slate-100">{selectedGroup.customer_name}</span></span>
                 <span className="text-slate-500">•</span>
                 <span>PHONE: <span className="text-slate-300 font-mono">{selectedGroup.customer_phone || '—'}</span></span>
-                <span className="text-slate-500">•</span>
-                <span>PARTNER: <span className="text-slate-300">{selectedGroup.partner_name || '—'}</span></span>
               </div>
               <button 
                 onClick={() => setShowModal(false)}

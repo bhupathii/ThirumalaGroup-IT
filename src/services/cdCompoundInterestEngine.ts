@@ -1,7 +1,7 @@
 /**
  * CD COMPOUND INTEREST (CI) DISPLAY ENGINE
  * ====================================================
- * TIMELINE-BASED COMPOUND INTEREST SIMULATOR
+ * TIMELINE-BASED 30-DAY COMPOUND INTEREST ENGINE
  * 
  * IMPORTANT:
  * This engine is PURELY READ-ONLY and INFORMATIONAL.
@@ -12,13 +12,20 @@
  *   - Payment Splits or Closures
  *   - FinanceCalculationEngine
  *
- * SIMULATION ALGORITHM:
- * 1. Start with Outstanding = Original Loan Principal at Loan Date.
- * 2. Walk through ledger events chronologically (Disbursements, Renewals, Payments, Close/Reopen).
- * 3. For each elapsed period between events, compound the balance based on elapsed days.
- * 4. Adjust outstanding principal when a payment reduces principal.
- * 5. If loan is closed, freeze simulation at the closure date.
- * 6. Return step-by-step timeline audit rows & summary metrics for UI display & Modal drill-down.
+ * CALCULATION RULES (Time-Based 30-Day Cycles):
+ * 1. Start with Outstanding = Original Loan Principal at Loan Date (Day 0: Loan Start).
+ * 2. Break timeline into sequential 30-day compound interest cycles + remaining days.
+ * 3. At each 30-day boundary:
+ *      Interest = Current Balance * (Monthly Rate / 100)
+ *      Future Value = Current Balance + Interest
+ * 4. For remaining partial days (R < 30):
+ *      Interest = Current Balance * (Monthly Rate / 100) * (R / 30)
+ *      Future Value = Current Balance + Interest
+ * 5. When a payment occurs at day T:
+ *      Accrue interest for complete 30-day cycles + remaining days up to day T.
+ *      Deduct payment from accrued balance: Balance = max(0, Future Value - Payment).
+ *      The next 30-day cycle restarts from the remaining balance at that payment date.
+ * 6. If loan is closed, freeze simulation at the closure date.
  */
 
 import { financeCalculationService } from './financeCalculationService';
@@ -36,15 +43,21 @@ export interface CILedgerEvent {
 
 export interface CIReportRow {
   date: string;
+  period: string;
   particulars: string;
   eventType: string;
+  days: number;
   daysElapsed: number;
+  startBalance: number;
   startingBalance: number;
-  outstandingPrincipal: number;
+  interest: number;
   interestAdded: number;
+  payment: number;
   paymentReceived: number;
   principalReduction: number;
+  endBalance: number;
   endingBalance: number;
+  futureValue: number;
 }
 
 export interface CISummary {
@@ -66,11 +79,11 @@ export interface CIResult {
   reportRows: CIReportRow[];
 }
 
-export const TOOLTIP_TEXT = "Estimated compounded value based on actual loan timeline, renewals and principal reductions. Informational only.";
+export const TOOLTIP_TEXT = "Estimated compounded value based on pure 30-day time cycles, payments and principal reductions. Informational only.";
 
 export const cdCompoundInterestEngine = {
   /**
-   * Calculates Compound Interest (CI) timeline for a CD loan.
+   * Calculates Compound Interest (CI) timeline for a CD loan using 30-day cycles.
    * 
    * @param loan Basic loan details (id, amount, date, interest_rate, status, closed_at)
    * @param ledgerEntries Raw ledger entries or payment logs
@@ -89,7 +102,7 @@ export const cdCompoundInterestEngine = {
     ledgerEntries: any[] = [],
     asOfDate?: string
   ): CIResult {
-    const initialPrincipal = Number(loan.amount) || 0;
+    let initialPrincipal = Number(loan.amount) || 0;
     const monthlyRate = Number(loan.interest_rate) || 0;
     const loanStartDate = (loan.date || '').split('T')[0];
 
@@ -112,18 +125,18 @@ export const cdCompoundInterestEngine = {
       endDate = loanStartDate;
     }
 
-    // 1. Build chronological event stream
-    const events: CILedgerEvent[] = [];
+    // 1. Group payment and financial events by date
+    interface DateEventAgg {
+      date: string;
+      paymentCredit: number;
+      principalPaid: number;
+      additionalDebit: number;
+      isClose: boolean;
+      particularsList: string[];
+    }
 
-    // Add initial disbursement
-    events.push({
-      date: loanStartDate,
-      type: 'DISBURSEMENT',
-      particulars: 'Original Loan Disbursement',
-      debit: initialPrincipal
-    });
+    const eventsByDate = new Map<string, DateEventAgg>();
 
-    // Extract events from ledger entries
     (ledgerEntries || []).forEach(e => {
       const eDate = (e.entry_date || e.date || '').split('T')[0];
       if (!eDate || eDate < loanStartDate || (isClosed && eDate > endDate)) return;
@@ -132,181 +145,308 @@ export const cdCompoundInterestEngine = {
       const partLower = (e.particulars || e.account_name || '').toLowerCase();
       const credit = Number(e.credit) || 0;
       const debit = Number(e.debit) || 0;
+      const principalPaid = Number(e.principal_paid) || Number(e.principal_amount) || 0;
 
-      if (typeLower === 'renewal' || partLower.includes('renewal')) {
-        const principalPaid = Number(e.principal_paid) || 0;
-        events.push({
-          date: eDate,
-          type: 'RENEWAL',
-          particulars: e.particulars || 'Loan Renewal',
-          credit,
-          principalPaid
-        });
+      // Ignore initial disbursement on loanStartDate as it is already the starting principal
+      if (eDate === loanStartDate && (typeLower === 'original_loan' || typeLower === 'disbursement')) {
+        return;
+      }
+
+      let isPayment = false;
+      let isClose = false;
+      let isAdditionalDisb = false;
+
+      if (typeLower === 'close' || partLower.includes('loan closed')) {
+        isClose = true;
+        isPayment = credit > 0;
       } else if (
-        typeLower === 'principal_payment' || 
-        typeLower === 'amount_paid' || 
+        typeLower === 'renewal' ||
+        typeLower === 'principal_payment' ||
+        typeLower === 'interest_payment' ||
+        typeLower === 'penalty_payment' ||
+        typeLower === 'amount_paid' ||
         typeLower === 'partial_payment' ||
-        partLower.includes('principal paid') ||
-        partLower.includes('amount paid')
+        credit > 0
       ) {
-        // Payment with principal reduction
-        const principalPaid = Number(e.principal_paid) || Number(e.principal_amount) || (typeLower === 'principal_payment' ? credit : 0);
-        events.push({
+        isPayment = credit > 0;
+      } else if ((typeLower === 'disbursement' || typeLower === 'original_loan') && debit > 0 && eDate > loanStartDate) {
+        isAdditionalDisb = true;
+      }
+
+      if (isPayment || isClose || isAdditionalDisb) {
+        const existing: DateEventAgg = eventsByDate.get(eDate) || {
           date: eDate,
-          type: 'PAYMENT',
-          particulars: e.particulars || 'Payment Received',
-          credit,
-          principalPaid
-        });
-      } else if (typeLower === 'interest_payment' || typeLower === 'penalty_payment') {
-        // Interest-only payment (principal unchanged)
-        events.push({
-          date: eDate,
-          type: 'PAYMENT',
-          particulars: e.particulars || 'Interest Payment Received',
-          credit,
-          principalPaid: 0
-        });
-      } else if (typeLower === 'close' || partLower.includes('loan closed')) {
-        events.push({
-          date: eDate,
-          type: 'CLOSE',
-          particulars: 'Loan Closed',
-          credit,
-          principalPaid: credit,
-          isCloseEvent: true
-        });
-      } else if ((typeLower === 'disbursement' || typeLower === 'original_loan') && eDate > loanStartDate) {
-        events.push({
-          date: eDate,
-          type: 'DISBURSEMENT',
-          particulars: e.particulars || 'Additional Disbursement',
-          debit
-        });
+          paymentCredit: 0,
+          principalPaid: 0,
+          additionalDebit: 0,
+          isClose: false,
+          particularsList: []
+        };
+
+        if (credit > 0) {
+          existing.paymentCredit += credit;
+        }
+        if (principalPaid > 0) {
+          existing.principalPaid += principalPaid;
+        }
+        if (debit > 0 && isAdditionalDisb) {
+          existing.additionalDebit += debit;
+        }
+        if (isClose) {
+          existing.isClose = true;
+        }
+        if (e.particulars) {
+          existing.particularsList.push(String(e.particulars));
+        }
+
+        eventsByDate.set(eDate, existing);
       }
     });
 
-    // Add target end date event if not already present
-    const hasEndDateEvent = events.some(e => e.date === endDate);
-    if (!hasEndDateEvent) {
-      events.push({
+    // Ensure final target end date is represented if not closed before endDate
+    if (!eventsByDate.has(endDate) && !isClosed) {
+      eventsByDate.set(endDate, {
         date: endDate,
-        type: 'TARGET_DATE',
-        particulars: isClosed ? 'Loan Closed Value' : 'Compounded Value to Date',
-        credit: 0,
-        principalPaid: 0
+        paymentCredit: 0,
+        principalPaid: 0,
+        additionalDebit: 0,
+        isClose: false,
+        particularsList: ['Target Date']
       });
     }
 
-    // Sort events strictly by date, breaking ties by event priority
-    const priorityMap: Record<string, number> = {
-      'DISBURSEMENT': 1,
-      'RENEWAL': 2,
-      'PAYMENT': 3,
-      'PRINCIPAL_REDUCTION': 4,
-      'CLOSE': 5,
-      'TARGET_DATE': 6
-    };
+    // Sort event dates chronologically
+    const sortedEventDates = Array.from(eventsByDate.keys()).sort();
 
-    events.sort((a, b) => {
-      if (a.date !== b.date) {
-        return a.date.localeCompare(b.date);
-      }
-      return (priorityMap[a.type] || 99) - (priorityMap[b.type] || 99);
-    });
-
-    // 2. Timeline Walk Simulation
-    let outstandingPrincipal = initialPrincipal;
-    let compoundedBalance = initialPrincipal;
+    // 2. Timeline Walk Simulation with 30-day cycles
+    let currentBalance = initialPrincipal;
     let accumulatedInterest = 0;
+    let totalPaymentsReceived = 0;
     let totalPrincipalPaid = 0;
-    let lastDate = loanStartDate;
     let totalDaysSimulated = 0;
+    let anchorDate = loanStartDate;
+    let cycleCount = 1;
 
     const reportRows: CIReportRow[] = [];
 
-    for (let i = 0; i < events.length; i++) {
-      const ev = events[i];
-      const daysElapsed = Math.max(0, financeCalculationService.differenceInCalendarDays(ev.date, lastDate));
-      
-      const startingBalance = compoundedBalance;
-      let interestAdded = 0;
+    // Helper for standard financial half-up 2-decimal rounding
+    const round2 = (num: number): number => {
+      return Math.round((num + Number.EPSILON) * 100) / 100;
+    };
 
-      // Compound balance for elapsed days
-      if (daysElapsed > 0 && outstandingPrincipal > 0 && monthlyRate > 0) {
-        // Compound growth formula over days elapsed:
-        // Future Value = Current Balance * (1 + (monthlyRate/100)) ^ (daysElapsed / 30)
-        const compoundingFactor = Math.pow(1 + monthlyRate / 100, daysElapsed / 30);
-        const newBalance = startingBalance * compoundingFactor;
-        interestAdded = Number((newBalance - startingBalance).toFixed(2));
-        accumulatedInterest += interestAdded;
-        compoundedBalance = Number(newBalance.toFixed(2));
-        totalDaysSimulated += daysElapsed;
+    // Helper to build a clean report row object
+    const createRow = (
+      date: string,
+      period: string,
+      particulars: string,
+      eventType: string,
+      days: number,
+      startBal: number,
+      interest: number,
+      payment: number,
+      endBal: number
+    ): CIReportRow => {
+      const rDays = Math.round(days);
+      const rStart = round2(startBal);
+      const rInt = round2(interest);
+      const rPay = round2(payment);
+      const rEnd = round2(endBal);
+      return {
+        date,
+        period,
+        particulars,
+        eventType,
+        days: rDays,
+        daysElapsed: rDays,
+        startBalance: rStart,
+        startingBalance: rStart,
+        interest: rInt,
+        interestAdded: rInt,
+        payment: rPay,
+        paymentReceived: rPay,
+        principalReduction: rPay,
+        endBalance: rEnd,
+        endingBalance: rEnd,
+        futureValue: rEnd
+      };
+    };
+
+    // Row 0: Loan Start
+    reportRows.push(createRow(
+      loanStartDate,
+      'Loan Start',
+      'Loan Start',
+      'DISBURSEMENT',
+      0,
+      initialPrincipal,
+      0,
+      0,
+      initialPrincipal
+    ));
+
+    for (const eventDate of sortedEventDates) {
+      const eventAgg = eventsByDate.get(eventDate)!;
+      let daysFromAnchor = Math.max(0, financeCalculationService.differenceInCalendarDays(eventDate, anchorDate));
+
+      if (daysFromAnchor <= 0 && eventDate !== anchorDate) {
+        continue;
       }
 
-      // Process Event Financial Adjustments
-      let creditReceived = ev.credit || 0;
-      let principalReduction = ev.principalPaid || 0;
+      const numFullCycles = Math.floor(daysFromAnchor / 30);
+      const remainingDays = daysFromAnchor % 30;
 
-      if (ev.type === 'DISBURSEMENT') {
-        // Initial row or additional disbursement
-        if (i > 0 && ev.debit) {
-          outstandingPrincipal += ev.debit;
-          compoundedBalance += ev.debit;
+      // A. Process complete 30-day cycles in this interval
+      for (let k = 1; k <= numFullCycles; k++) {
+        const cycleDate = financeCalculationService.addCalendarDays(anchorDate, 30 * k);
+        const startVal = currentBalance;
+        let cycleInterest = 0;
+
+        if (currentBalance > 0 && monthlyRate > 0) {
+          cycleInterest = round2(currentBalance * (monthlyRate / 100));
         }
-      } else if (ev.type === 'RENEWAL' || ev.type === 'PAYMENT') {
-        if (principalReduction > 0) {
-          totalPrincipalPaid += principalReduction;
-          outstandingPrincipal = Math.max(0, outstandingPrincipal - principalReduction);
-          compoundedBalance = Math.max(0, compoundedBalance - principalReduction);
+
+        accumulatedInterest += cycleInterest;
+        let balanceAfterInterest = round2(currentBalance + cycleInterest);
+        totalDaysSimulated += 30;
+
+        // Check if event happens exactly on this 30-day boundary and is the final step of interval
+        if (k === numFullCycles && remainingDays === 0 && eventAgg.paymentCredit > 0) {
+          const payAmt = eventAgg.paymentCredit;
+          totalPaymentsReceived += payAmt;
+          totalPrincipalPaid += (eventAgg.principalPaid > 0 ? eventAgg.principalPaid : payAmt);
+          const endVal = round2(Math.max(0, balanceAfterInterest - payAmt));
+          currentBalance = endVal;
+
+          reportRows.push(createRow(
+            cycleDate,
+            `Cycle ${cycleCount}`,
+            `Cycle ${cycleCount}`,
+            'CYCLE',
+            30,
+            startVal,
+            cycleInterest,
+            payAmt,
+            endVal
+          ));
+        } else {
+          currentBalance = balanceAfterInterest;
+          reportRows.push(createRow(
+            cycleDate,
+            `Cycle ${cycleCount}`,
+            `Cycle ${cycleCount}`,
+            'CYCLE',
+            30,
+            startVal,
+            cycleInterest,
+            0,
+            currentBalance
+          ));
         }
-      } else if (ev.type === 'CLOSE') {
-        if (principalReduction > 0) {
-          totalPrincipalPaid += principalReduction;
-          outstandingPrincipal = 0;
-        }
+
+        cycleCount++;
       }
 
-      const endingBalance = compoundedBalance;
+      // B. Process remaining partial days up to eventDate
+      if (remainingDays > 0) {
+        const startVal = currentBalance;
+        let partialInterest = 0;
 
-      // Include in report if days elapsed > 0 or financial transaction occurred
-      if (daysElapsed > 0 || creditReceived > 0 || principalReduction > 0 || ev.type === 'DISBURSEMENT' || ev.type === 'TARGET_DATE') {
-        reportRows.push({
-          date: ev.date,
-          particulars: ev.particulars,
-          eventType: ev.type,
-          daysElapsed,
-          startingBalance: Number(startingBalance.toFixed(2)),
-          outstandingPrincipal: Number(outstandingPrincipal.toFixed(2)),
-          interestAdded: Number(interestAdded.toFixed(2)),
-          paymentReceived: Number(creditReceived.toFixed(2)),
-          principalReduction: Number(principalReduction.toFixed(2)),
-          endingBalance: Number(endingBalance.toFixed(2))
-        });
+        if (currentBalance > 0 && monthlyRate > 0) {
+          // Prorated interest formula: Current Balance * (Monthly Rate / 100) * (Remaining Days / 30)
+          partialInterest = round2(currentBalance * (monthlyRate / 100) * (remainingDays / 30));
+        }
+
+        accumulatedInterest += partialInterest;
+        let balanceAfterInterest = round2(currentBalance + partialInterest);
+        totalDaysSimulated += remainingDays;
+
+        if (eventAgg.paymentCredit > 0) {
+          const payAmt = eventAgg.paymentCredit;
+          totalPaymentsReceived += payAmt;
+          totalPrincipalPaid += (eventAgg.principalPaid > 0 ? eventAgg.principalPaid : payAmt);
+          const endVal = round2(Math.max(0, balanceAfterInterest - payAmt));
+          currentBalance = endVal;
+
+          reportRows.push(createRow(
+            eventDate,
+            'Partial Cycle',
+            `Partial Cycle (${remainingDays} Days)`,
+            'PAYMENT',
+            remainingDays,
+            startVal,
+            partialInterest,
+            payAmt,
+            endVal
+          ));
+        } else {
+          currentBalance = balanceAfterInterest;
+          reportRows.push(createRow(
+            eventDate,
+            'Partial Cycle',
+            `Partial Cycle (${remainingDays} Days)`,
+            'TARGET_DATE',
+            remainingDays,
+            startVal,
+            partialInterest,
+            0,
+            currentBalance
+          ));
+        }
+      } else if (numFullCycles === 0 && eventAgg.paymentCredit > 0 && daysFromAnchor === 0 && eventDate !== loanStartDate) {
+        // Payment on exact same day as anchor without days elapsed
+        const startVal = currentBalance;
+        const payAmt = eventAgg.paymentCredit;
+        totalPaymentsReceived += payAmt;
+        totalPrincipalPaid += (eventAgg.principalPaid > 0 ? eventAgg.principalPaid : payAmt);
+        const endVal = round2(Math.max(0, currentBalance - payAmt));
+        currentBalance = endVal;
+
+        reportRows.push(createRow(
+          eventDate,
+          'Payment',
+          'Payment Received',
+          'PAYMENT',
+          0,
+          startVal,
+          0,
+          payAmt,
+          endVal
+        ));
       }
 
-      lastDate = ev.date;
+      // Handle additional disbursement if any
+      if (eventAgg.additionalDebit > 0) {
+        currentBalance += eventAgg.additionalDebit;
+        initialPrincipal += eventAgg.additionalDebit;
+      }
 
-      // Stop simulation if loan closed or outstanding principal becomes 0
-      if (ev.isCloseEvent) {
+      // Reset anchor date for the next cycle
+      if (eventAgg.paymentCredit > 0 || eventAgg.additionalDebit > 0) {
+        anchorDate = eventDate;
+      } else if (daysFromAnchor > 0) {
+        anchorDate = eventDate;
+      }
+
+      // If loan closed at this event, terminate simulation
+      if (eventAgg.isClose) {
         break;
       }
     }
 
-    const finalCompoundBalance = Number(compoundedBalance.toFixed(2));
-    const compoundInterestEarned = Number(accumulatedInterest.toFixed(2));
+    const finalCompoundBalance = round2(currentBalance);
+    const compoundInterestEarned = round2(accumulatedInterest);
 
     return {
       summary: {
-        initialPrincipal: Number(initialPrincipal.toFixed(2)),
-        currentOutstandingPrincipal: Number(outstandingPrincipal.toFixed(2)),
-        totalPrincipalPaid: Number(totalPrincipalPaid.toFixed(2)),
+        initialPrincipal: round2(initialPrincipal),
+        currentOutstandingPrincipal: round2(currentBalance),
+        totalPrincipalPaid: round2(totalPrincipalPaid),
         compoundInterestEarned,
         finalCompoundBalance,
         effectiveLoanDays: totalDaysSimulated,
         isClosed,
-        calculatedUntilDate: lastDate,
-        calculatedUntil: lastDate,
+        calculatedUntilDate: anchorDate,
+        calculatedUntil: anchorDate,
         monthlyInterestRate: monthlyRate,
         tooltipText: TOOLTIP_TEXT
       },

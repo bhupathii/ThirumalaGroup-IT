@@ -6,7 +6,6 @@ import {
   ChevronLeft, 
   ChevronRight, 
   RotateCcw, 
-  X, 
   Scale, 
   BookOpen, 
   ArrowUpRight,
@@ -24,6 +23,64 @@ import { useAuth } from '../../contexts/AuthContext';
 export interface DaybookRowItem extends DailyFinancialTransaction {
   runningBalance: number;
 }
+
+// Format Helper for Transaction Row Date (DD-Mon-YYYY)
+export const formatRowDate = (dateStr?: string | null): string => {
+  if (!dateStr) return '—';
+  try {
+    const clean = dateStr.split('T')[0];
+    const parts = clean.split('-');
+    if (parts.length === 3) {
+      const year = parts[0];
+      const monthIdx = parseInt(parts[1], 10) - 1;
+      const day = parts[2].padStart(2, '0');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      if (monthIdx >= 0 && monthIdx < 12) {
+        return `${day}-${months[monthIdx]}-${year}`;
+      }
+    }
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = months[d.getMonth()];
+      const year = d.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+  } catch (e) {
+    // fallback
+  }
+  return dateStr || '—';
+};
+
+// Format Helper for Transaction Row Time (hh:mm AM/PM)
+export const formatRowTime = (timeStr?: string | null, createdAt?: string | null): string => {
+  const target = timeStr || createdAt;
+  if (!target) return '—';
+  try {
+    const timeMatch = target.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (timeMatch) {
+      let hours = parseInt(timeMatch[1], 10);
+      const minutes = timeMatch[2];
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const strHours = String(hours).padStart(2, '0');
+      return `${strHours}:${minutes} ${ampm}`;
+    }
+
+    const d = new Date(target);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+    }
+  } catch (e) {
+    // fallback
+  }
+  if (target.length > 8 && target.includes('T')) {
+    return target.substring(11, 16);
+  }
+  return target;
+};
 
 const Daybook: React.FC = () => {
   const { user } = useAuth();
@@ -50,8 +107,7 @@ const Daybook: React.FC = () => {
   const [loanTypeFilter, setLoanTypeFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Add Cashbook Entry Modal States
-  const [showAddModal, setShowAddModal] = useState(false);
+  // Direct Cashbook Entry Inline States
   const [accounts, setAccounts] = useState<FinanceCashbookAccount[]>([]);
   const [headOfAccount, setHeadOfAccount] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -203,7 +259,7 @@ const Daybook: React.FC = () => {
       if (adjacentDate) {
         setSelectedDate(adjacentDate);
       } else {
-        toast.info(direction === 'prev' ? 'No earlier transaction date found' : 'No later transaction date found');
+        toast(direction === 'prev' ? 'No earlier transaction date found' : 'No later transaction date found', { icon: 'ℹ️' });
       }
     } catch (e) {
       console.error('Error navigating to adjacent transaction date:', e);
@@ -222,20 +278,6 @@ const Daybook: React.FC = () => {
     return `${parts[2]} ${months[parseInt(parts[1], 10) - 1]} ${parts[0]} ${dayName ? `(${dayName})` : ''}`;
   };
 
-  // Format Time Helper
-  const formatTime = (timeStr?: string | null) => {
-    if (!timeStr) return '—';
-    try {
-      const d = new Date(timeStr);
-      if (!isNaN(d.getTime())) {
-        return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-      }
-    } catch (e) {
-      // fallback
-    }
-    return timeStr.length > 8 ? timeStr.substring(11, 16) : timeStr;
-  };
-
   // Clear All Filters
   const handleClearFilters = () => {
     setTypeFilter('ALL');
@@ -244,7 +286,7 @@ const Daybook: React.FC = () => {
     setSearchQuery('');
   };
 
-  // Save Direct Cashbook Entry Modal Handler
+  // Save Direct Cashbook Entry Handler
   const handleSaveCashbookEntry = async (e: React.FormEvent) => {
     e.preventDefault();
     const crVal = Number(credit) || 0;
@@ -258,12 +300,16 @@ const Daybook: React.FC = () => {
       toast.error('Please enter Particulars');
       return;
     }
+    if (crVal < 0 || drVal < 0) {
+      toast.error('Amounts cannot be negative');
+      return;
+    }
     if (crVal <= 0 && drVal <= 0) {
-      toast.error('Please enter Credit or Debit amount greater than 0');
+      toast.error('Please enter Cash In (Credit) or Cash Out (Debit) amount greater than 0');
       return;
     }
     if (crVal > 0 && drVal > 0) {
-      toast.error('Cannot enter both Credit and Debit amount in a single entry');
+      toast.error('Cannot enter both Cash In and Cash Out in a single entry');
       return;
     }
 
@@ -290,9 +336,8 @@ const Daybook: React.FC = () => {
         approved_at: new Date().toISOString()
       });
 
-      toast.success('Cashbook entry added to Day Book');
+      toast.success('Cashbook entry saved to Day Book');
       clearFinanceCalendarCache();
-      setShowAddModal(false);
       setHeadOfAccount('');
       setAccountNumber('');
       setParticulars('');
@@ -331,13 +376,6 @@ const Daybook: React.FC = () => {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs font-extrabold uppercase shadow-2xs transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" /> Add Cashbook Entry
-          </button>
-          
           <button
             onClick={() => setShowPrintPreview(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 text-xs font-extrabold uppercase shadow-2xs transition-colors cursor-pointer"
@@ -568,21 +606,22 @@ const Daybook: React.FC = () => {
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-slate-900"></div>
           </div>
         ) : (
-          <div className="overflow-y-auto w-full" style={{ maxHeight: 'calc(100vh - 275px)' }}>
-            <table className="w-full table-fixed divide-y divide-slate-200">
+          <>
+            <div className="overflow-y-auto w-full" style={{ maxHeight: 'calc(100vh - 330px)' }}>
+              <table className="w-full table-fixed divide-y divide-slate-200">
               <thead className="sticky top-0 z-10 bg-slate-200 shadow-[inset_0_-2px_0_rgba(0,0,0,0.1)]">
                 <tr className="text-slate-950 uppercase font-black text-[10px] tracking-wider">
                   <th className="w-[3%] px-1 py-2.5 text-center border-r border-slate-300 overflow-hidden">#</th>
-                  <th className="w-[5.5%] px-1.5 py-2.5 text-center border-r border-slate-300 overflow-hidden">Time</th>
                   <th className="w-[8.5%] px-1.5 py-2.5 text-center border-r border-slate-300 overflow-hidden">Receipt</th>
                   <th className="w-[7.5%] px-1.5 py-2.5 text-center border-r border-slate-300 overflow-hidden">Type</th>
                   <th className="w-[8.5%] px-1.5 py-2.5 text-left border-r border-slate-300 overflow-hidden">Loan / Acc</th>
-                  <th className="w-[21%] px-2 py-2.5 text-left border-r border-slate-300 overflow-hidden">Customer Name</th>
+                  <th className="w-[20%] px-2 py-2.5 text-left border-r border-slate-300 overflow-hidden">Customer Name</th>
                   <th className="w-[9.5%] px-1.5 py-2.5 text-right border-r border-slate-300 text-emerald-950 bg-emerald-100/60 overflow-hidden">Cash In (Cr)</th>
                   <th className="w-[9.5%] px-1.5 py-2.5 text-right border-r border-slate-300 text-rose-950 bg-rose-100/60 overflow-hidden">Cash Out (Dr)</th>
-                  <th className="w-[11.5%] px-1.5 py-2.5 text-right border-r border-slate-300 text-indigo-950 bg-indigo-100/60 overflow-hidden">Balance</th>
-                  <th className="w-[6%] px-1.5 py-2.5 text-left border-r border-slate-300 overflow-hidden">Operator</th>
-                  <th className="w-[9.5%] px-2 py-2.5 text-left overflow-hidden">Particulars / Remarks</th>
+                  <th className="w-[11%] px-1.5 py-2.5 text-right border-r border-slate-300 text-indigo-950 bg-indigo-100/60 overflow-hidden">Balance</th>
+                  <th className="w-[6.5%] px-1.5 py-2.5 text-left border-r border-slate-300 overflow-hidden">Operator</th>
+                  <th className="w-[8%] px-1.5 py-2.5 text-left border-r border-slate-300 overflow-hidden">Date</th>
+                  <th className="w-[8%] px-2 py-2.5 text-left overflow-hidden">Particulars / Remarks</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-200 text-[12px]">
@@ -604,11 +643,6 @@ const Daybook: React.FC = () => {
                           {idx + 1}
                         </td>
 
-                        {/* Time */}
-                        <td className="w-[5.5%] px-1.5 py-2 border-r border-slate-100 text-center text-slate-800 font-mono font-bold text-[11px] overflow-hidden whitespace-nowrap">
-                          {formatTime(row.entryTime || row.createdAt)}
-                        </td>
-
                         {/* Receipt */}
                         <td className="w-[8.5%] px-1.5 py-2 border-r border-slate-100 text-center overflow-hidden">
                           {row.receiptOrVoucherNo ? (
@@ -620,7 +654,7 @@ const Daybook: React.FC = () => {
                           )}
                         </td>
 
-                        {/* Type (Renamed from Voucher Type, centered badge) */}
+                        {/* Type */}
                         <td className="w-[7.5%] px-1 py-2 border-r border-slate-100 text-center overflow-hidden">
                           <span className={`inline-block px-1.5 py-0.5 rounded border text-[9px] font-black uppercase tracking-tight truncate max-w-full text-center ${
                             row.headOfAccount.includes('INTEREST') || row.headOfAccount.includes('COMMISSION')
@@ -640,35 +674,47 @@ const Daybook: React.FC = () => {
                           {row.accountOrLoanNo || '—'}
                         </td>
 
-                        {/* Customer Name (Strict 2-Line Space-Boundary Natural Wrap) */}
-                        <td className="w-[21%] px-2 py-2 border-r border-slate-100 font-sans font-extrabold text-slate-950 leading-snug overflow-hidden">
+                        {/* Customer Name */}
+                        <td className="w-[20%] px-2 py-2 border-r border-slate-100 font-sans font-extrabold text-slate-950 leading-snug overflow-hidden">
                           <div className="line-clamp-2 break-words text-[12px] whitespace-normal" title={row.customerName || '—'}>
                             {row.customerName || '—'}
                           </div>
                         </td>
 
-                        {/* Cash In (Credit) - Strictly Bounded Inside Cell */}
+                        {/* Cash In (Credit) */}
                         <td className="w-[9.5%] px-1.5 py-2 border-r border-slate-100 text-right font-mono font-black text-[12px] text-emerald-700 bg-emerald-50/20 overflow-hidden text-ellipsis whitespace-nowrap">
                           {isCredit ? row.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}
                         </td>
 
-                        {/* Cash Out (Debit) - Strictly Bounded Inside Cell */}
+                        {/* Cash Out (Debit) */}
                         <td className="w-[9.5%] px-1.5 py-2 border-r border-slate-100 text-right font-mono font-black text-[12px] text-rose-700 bg-rose-50/20 overflow-hidden text-ellipsis whitespace-nowrap">
                           {isDebit ? row.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—'}
                         </td>
 
-                        {/* Running Balance - Extended Width & Strictly Bounded Inside Cell */}
-                        <td className="w-[11.5%] px-1.5 py-2 border-r border-slate-100 text-right font-mono font-black text-[12px] text-indigo-950 bg-indigo-50/20 overflow-hidden text-ellipsis whitespace-nowrap">
+                        {/* Running Balance */}
+                        <td className="w-[11%] px-1.5 py-2 border-r border-slate-100 text-right font-mono font-black text-[12px] text-indigo-950 bg-indigo-50/20 overflow-hidden text-ellipsis whitespace-nowrap">
                           {row.runningBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
 
                         {/* Operator */}
-                        <td className="w-[6%] px-1.5 py-2 border-r border-slate-100 font-sans font-black text-slate-800 text-[11px] uppercase overflow-hidden text-ellipsis whitespace-nowrap" title={row.userName || 'Staff'}>
+                        <td className="w-[6.5%] px-1.5 py-2 border-r border-slate-100 font-sans font-black text-slate-800 text-[11px] uppercase overflow-hidden text-ellipsis whitespace-nowrap" title={row.userName || 'Staff'}>
                           {row.userName || 'Staff'}
                         </td>
 
-                        {/* Particulars / Remarks (Natural 2-3 Line Wrap) */}
-                        <td className="w-[9.5%] px-2 py-2 font-sans text-[11px] font-semibold text-slate-800 leading-snug overflow-hidden">
+                        {/* Date (Date on 1st line, Time on 2nd line) */}
+                        <td className="w-[8%] px-1.5 py-1.5 border-r border-slate-100 text-left overflow-hidden">
+                          <div className="flex flex-col leading-tight">
+                            <span className="font-mono font-bold text-slate-900 text-[11px] whitespace-nowrap">
+                              {formatRowDate(row.transactionDate || row.createdAt)}
+                            </span>
+                            <span className="font-mono font-medium text-slate-500 text-[10px] whitespace-nowrap">
+                              {formatRowTime(row.entryTime, row.createdAt)}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Particulars / Remarks */}
+                        <td className="w-[8%] px-2 py-2 font-sans text-[11px] font-semibold text-slate-800 leading-snug overflow-hidden">
                           <div className="line-clamp-3 break-words whitespace-normal" title={row.particulars || '—'}>
                             {row.particulars || '—'}
                           </div>
@@ -679,162 +725,115 @@ const Daybook: React.FC = () => {
                   })
                 )}
 
-                {/* Day Summary Total Footer Row aligned with columns */}
-                {filteredRows.length > 0 && (
-                  <tr className="bg-slate-200 font-sans font-black border-t-2 border-slate-400 text-xs">
-                    <td colSpan={5} className="w-[33%] px-2 py-2.5 border-r border-slate-300 text-right text-slate-950 uppercase tracking-wider text-[11px]">
-                      Journal Day Totals:
-                    </td>
-                    <td className="w-[21%] px-2 py-2.5 border-r border-slate-300 text-left text-slate-800 font-mono text-[11px]">
-                      Rows: {filteredRows.length}
-                    </td>
-                    <td className="w-[9.5%] px-1.5 py-2.5 border-r border-slate-300 text-right text-emerald-800 font-mono font-black text-[12px] whitespace-nowrap bg-emerald-100">
-                      {filteredTotals.inSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="w-[9.5%] px-1.5 py-2.5 border-r border-slate-300 text-right text-rose-800 font-mono font-black text-[12px] whitespace-nowrap bg-rose-100">
-                      {filteredTotals.outSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="w-[11.5%] px-1.5 py-2.5 border-r border-slate-300 text-right text-indigo-950 font-mono font-black text-[12px] whitespace-nowrap bg-indigo-100">
-                      {daySummary.closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td colSpan={2} className="w-[15.5%] px-2 py-2.5 text-slate-900 font-mono text-[11px] font-black">
-                      NET: {daySummary.netChange >= 0 ? '+' : ''}{daySummary.netChange.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                )}
-
               </tbody>
             </table>
           </div>
-        )}
-      </div>
 
-      {/* ── ROW 6: Inline Add Cashbook Entry Modal ─────────────────────────────── */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Plus className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-black uppercase tracking-wide">Add Cashbook Entry</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+          {/* ── DIRECT ENTRY ROW (Straight Horizontal Input Row Directly Below Table) ── */}
+          <form onSubmit={handleSaveCashbookEntry} className="bg-slate-50 border-t-2 border-slate-300 px-3 py-2 flex flex-wrap lg:flex-nowrap items-center gap-2.5">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[10px] font-black text-slate-800 uppercase tracking-wider whitespace-nowrap">
+                ENTRY:
+              </span>
             </div>
 
-            <form onSubmit={handleSaveCashbookEntry} className="p-4 space-y-3">
-              <div>
-                <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider mb-1">
-                  Entry Date
-                </label>
-                <input
-                  type="text"
-                  disabled
-                  value={formatDisplayDate(selectedDate)}
-                  className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 font-mono"
-                />
-              </div>
+            {/* Head of Account */}
+            <div className="w-full sm:w-[220px] lg:w-[22%] shrink-0">
+              <select
+                value={headOfAccount}
+                onChange={(e) => {
+                  setHeadOfAccount(e.target.value);
+                  const selectedAcc = accounts.find(a => a.id === e.target.value);
+                  if (selectedAcc?.account_number) setAccountNumber(selectedAcc.account_number);
+                }}
+                className="w-full h-8 px-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                required
+              >
+                <option value="">-- Select Head of Account * --</option>
+                {accounts.map(acc => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.account_name} {acc.account_number ? `(${acc.account_number})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider mb-1">
-                  Head of Account <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={headOfAccount}
-                  onChange={(e) => {
-                    setHeadOfAccount(e.target.value);
-                    const selectedAcc = accounts.find(a => a.id === e.target.value);
-                    if (selectedAcc?.account_number) setAccountNumber(selectedAcc.account_number);
-                  }}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  required
-                >
-                  <option value="">-- Select Head of Account --</option>
-                  {accounts.map(acc => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.account_name} {acc.account_number ? `(${acc.account_number})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {/* Particulars / Description */}
+            <div className="flex-1 min-w-[200px]">
+              <input
+                type="text"
+                placeholder="Particulars / Description *"
+                value={particulars}
+                onChange={(e) => setParticulars(e.target.value)}
+                className="w-full h-8 px-2.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                required
+              />
+            </div>
 
-              <div>
-                <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider mb-1">
-                  Particulars / Description <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Office Rent / Staff Salary / Tea Expense"
-                  value={particulars}
-                  onChange={(e) => setParticulars(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  required
-                />
-              </div>
+            {/* Cash In (Credit) */}
+            <div className="w-28 sm:w-32 shrink-0">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Cash In (Cr)"
+                value={credit}
+                onChange={(e) => {
+                  setCredit(e.target.value);
+                  if (e.target.value) setDebit('');
+                }}
+                className="w-full h-8 px-2.5 bg-emerald-50 border border-emerald-300 rounded-lg text-xs font-bold font-mono text-emerald-900 placeholder:text-emerald-700/60 focus:outline-none focus:ring-2 focus:ring-emerald-600 text-right"
+              />
+            </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div>
-                  <label className="block text-[10px] font-black text-emerald-800 uppercase tracking-wider mb-1">
-                    Cash In (Credit)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={credit}
-                    onChange={(e) => {
-                      setCredit(e.target.value);
-                      if (e.target.value) setDebit('');
-                    }}
-                    className="w-full px-3 py-2 bg-emerald-50/50 border border-emerald-300 rounded-xl text-xs font-bold font-mono text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                  />
-                </div>
+            {/* Cash Out (Debit) */}
+            <div className="w-28 sm:w-32 shrink-0">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Cash Out (Dr)"
+                value={debit}
+                onChange={(e) => {
+                  setDebit(e.target.value);
+                  if (e.target.value) setCredit('');
+                }}
+                className="w-full h-8 px-2.5 bg-rose-50 border border-rose-300 rounded-lg text-xs font-bold font-mono text-rose-900 placeholder:text-rose-700/60 focus:outline-none focus:ring-2 focus:ring-rose-600 text-right"
+              />
+            </div>
 
-                <div>
-                  <label className="block text-[10px] font-black text-rose-800 uppercase tracking-wider mb-1">
-                    Cash Out (Debit)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={debit}
-                    onChange={(e) => {
-                      setDebit(e.target.value);
-                      if (e.target.value) setCredit('');
-                    }}
-                    className="w-full px-3 py-2 bg-rose-50/50 border border-rose-300 rounded-xl text-xs font-bold font-mono text-rose-900 focus:outline-none focus:ring-2 focus:ring-rose-600"
-                  />
-                </div>
-              </div>
+            {/* Save Button */}
+            <div className="shrink-0">
+              <button
+                type="submit"
+                disabled={savingEntry}
+                className="h-8 px-4 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                {savingEntry ? 'Saving...' : 'Save Entry'}
+              </button>
+            </div>
+          </form>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingEntry}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold uppercase transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  {savingEntry ? 'Saving...' : 'Save Entry'}
-                </button>
-              </div>
-            </form>
+          {/* ── JOURNAL TOTALS (Day Totals Summary Bar Below Direct Entry Row) ── */}
+          <div className="bg-slate-200 border-t border-slate-300 px-3 py-2 flex flex-wrap items-center justify-between gap-3 text-xs font-mono font-black text-slate-900">
+            <div className="flex items-center gap-2">
+              <span className="uppercase text-[11px] font-sans font-black tracking-wider text-slate-950">Journal Day Totals:</span>
+              <span className="text-[10px] font-sans font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-300">
+                {filteredRows.length} {filteredRows.length === 1 ? 'Row' : 'Rows'}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
+              <span>Total In: <strong className="text-emerald-800 text-[12px] bg-emerald-100/90 px-2 py-0.5 rounded border border-emerald-300 font-mono font-black">{filteredTotals.inSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+              <span>Total Out: <strong className="text-rose-800 text-[12px] bg-rose-100/90 px-2 py-0.5 rounded border border-rose-300 font-mono font-black">{filteredTotals.outSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+              <span>Closing Balance: <strong className="text-indigo-950 text-[12px] bg-indigo-100/90 px-2 py-0.5 rounded border border-indigo-300 font-mono font-black">{daySummary.closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+              <span className="text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">NET: {daySummary.netChange >= 0 ? '+' : ''}{daySummary.netChange.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
           </div>
-        </div>
+        </>
       )}
+    </div>
 
       {/* ── ROW 7: Print Preview Component ───────────────────────────────────── */}
       <FinancePrintPreview
@@ -867,7 +866,6 @@ const Daybook: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-300 text-xs">
               <thead>
                 <tr className="bg-gray-100 text-left uppercase text-[9px] font-black">
-                  <th className="px-2 py-2">Time</th>
                   <th className="px-2 py-2">Receipt/Ref</th>
                   <th className="px-2 py-2">Type</th>
                   <th className="px-2 py-2">Loan/Acc</th>
@@ -875,12 +873,14 @@ const Daybook: React.FC = () => {
                   <th className="px-2 py-2 text-right">Cash In</th>
                   <th className="px-2 py-2 text-right">Cash Out</th>
                   <th className="px-2 py-2 text-right">Balance</th>
+                  <th className="px-2 py-2">Operator</th>
+                  <th className="px-2 py-2">Date</th>
+                  <th className="px-2 py-2">Particulars</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 font-mono text-[11px]">
                 {filteredRows.map((r) => (
                   <tr key={r.id}>
-                    <td className="px-2 py-1.5">{formatTime(r.entryTime || r.createdAt)}</td>
                     <td className="px-2 py-1.5 font-bold">{r.receiptOrVoucherNo || '-'}</td>
                     <td className="px-2 py-1.5">{r.headOfAccount}</td>
                     <td className="px-2 py-1.5">{r.accountOrLoanNo || '-'}</td>
@@ -888,6 +888,12 @@ const Daybook: React.FC = () => {
                     <td className="px-2 py-1.5 text-right font-bold text-green-700">{r.credit > 0 ? r.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}</td>
                     <td className="px-2 py-1.5 text-right font-bold text-red-700">{r.debit > 0 ? r.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}</td>
                     <td className="px-2 py-1.5 text-right font-bold">{r.runningBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="px-2 py-1.5 text-left">{r.userName || 'Staff'}</td>
+                    <td className="px-2 py-1.5 text-left">
+                      <div className="font-bold text-[10px] text-gray-900">{formatRowDate(r.transactionDate || r.createdAt)}</div>
+                      <div className="text-[9px] text-gray-500">{formatRowTime(r.entryTime, r.createdAt)}</div>
+                    </td>
+                    <td className="px-2 py-1.5 text-[10px] text-gray-700">{r.particulars || '-'}</td>
                   </tr>
                 ))}
               </tbody>

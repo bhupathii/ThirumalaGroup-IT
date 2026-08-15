@@ -1,14 +1,13 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { FinanceCalculationEngine, OverdueDueItem } from '../../services/FinanceCalculationEngine';
+import { FinanceCalculationEngine, OverdueDueItem, DuesReportType } from '../../services/FinanceCalculationEngine';
 import { FinanceSmartCalendar } from '../../components/finance/FinanceSmartCalendar';
-import { Printer, Search, AlertTriangle, RotateCcw } from 'lucide-react';
+import { Printer, Search, AlertTriangle, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
 
-type ReportType = 'OUTSTANDING' | 'TOTAL DUE LIST' | 'CD DUE LIST' | 'A -> B DUE LIST' | 'NPA LIST';
+type ReportType = DuesReportType;
 
 const DuesLedger: React.FC = () => {
   const [dues, setDues] = useState<OverdueDueItem[]>([]);
@@ -22,6 +21,7 @@ const DuesLedger: React.FC = () => {
   const [searchName, setSearchName] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [dueDaysSort, setDueDaysSort] = useState<'DEFAULT' | 'ASC' | 'DESC'>('DEFAULT');
   
   const [loading, setLoading] = useState(true);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -66,37 +66,10 @@ const DuesLedger: React.FC = () => {
         g2Phone: row.g2_phone || '',
         partnerName: row.partner_name || 'Unassigned',
         status: row.status || 'Active',
-        pendingPenalty: Number(row.pending_penalty || 0)
+        pendingPenalty: Number(row.pending_penalty || 0),
+        closingAmount: row.closing_amount !== undefined ? Number(row.closing_amount) : (Number(row.current_principal || 0) + Number(row.pending_interest || 0) + Number(row.penalty || 0)),
+        totalPaid: row.total_paid !== undefined ? Number(row.total_paid) : (Number(row.interest_paid || 0) + Number(row.penalty_paid || 0))
       }));
-
-      // --- VALIDATION: Compare CD Ledger vs Due List ---
-      try {
-        const { supabase } = await import('../../lib/supabase');
-        const { data: cdLoans } = await supabase
-          .from('finance_loans')
-          .select('id, loan_id, status')
-          .like('loan_id', 'CD%')
-          .eq('status', 'Active');
-          
-        if (cdLoans) {
-          const expectedCount = cdLoans.length;
-          const actualCdList = formatted.filter(d => d.loanType === 'CD' && d.status === 'Active');
-          const actualCount = actualCdList.length;
-          
-          if (expectedCount !== actualCount) {
-            console.error(`WARNING\nCD Ledger Count = ${expectedCount}\nDue List Count = ${actualCount}\nMissing Accounts = ${expectedCount - actualCount}`);
-            
-            const foundIds = new Set(actualCdList.map(d => d.loanId));
-            const missing = cdLoans.filter(l => !foundIds.has(l.loan_id)).map(l => l.loan_id);
-            if (missing.length > 0) {
-              console.error('Missing loan numbers:', missing.join(', '));
-            }
-          }
-        }
-      } catch (valErr) {
-        console.error('Validation check failed:', valErr);
-      }
-      // --------------------------------------------------
 
       setDues(formatted);
       setIntegrityErrors(errorsData);
@@ -108,7 +81,6 @@ const DuesLedger: React.FC = () => {
     }
   };
 
-
   const filteredDues = useMemo(() => {
     return FinanceCalculationEngine.filterDueList(
       dues,
@@ -117,9 +89,10 @@ const DuesLedger: React.FC = () => {
       loanTypeFilter,
       searchName,
       startDate,
-      endDate
+      endDate,
+      dueDaysSort
     );
-  }, [dues, activeReport, selectedPartner, loanTypeFilter, searchName, startDate, endDate]);
+  }, [dues, activeReport, selectedPartner, loanTypeFilter, searchName, startDate, endDate, dueDaysSort]);
 
   const totals = useMemo(() => {
     return FinanceCalculationEngine.computeDueListTotals(filteredDues);
@@ -130,7 +103,8 @@ const DuesLedger: React.FC = () => {
     { id: 'TOTAL DUE LIST', label: 'Due List' },
     { id: 'CD DUE LIST', label: 'CD Due List' },
     { id: 'A -> B DUE LIST', label: 'A→B Due List' },
-    { id: 'NPA LIST', label: 'NPA List' }
+    { id: 'NPA LIST', label: 'NPA List' },
+    { id: 'DUE DAYS', label: 'Due Days' }
   ];
 
   const handleResetFilters = () => {
@@ -139,6 +113,15 @@ const DuesLedger: React.FC = () => {
     setSearchName('');
     setStartDate('');
     setEndDate('');
+    setDueDaysSort('DEFAULT');
+  };
+
+  const handleToggleDueDaysSort = () => {
+    setDueDaysSort(prev => {
+      if (prev === 'DEFAULT') return 'ASC';
+      if (prev === 'ASC') return 'DESC';
+      return 'DEFAULT';
+    });
   };
 
   return (
@@ -271,11 +254,15 @@ const DuesLedger: React.FC = () => {
           ))}
         </div>
 
-        {/* Present Dues KPI (Right Aligned in Tab Bar) */}
+        {/* Present Dues KPI (Right Aligned in Tab Bar - Hidden/0 for NPA List) */}
         <div className="flex items-center gap-2.5 shrink-0 px-2 py-0.5 sm:ml-auto">
-          <span className="text-xs font-black text-red-600 uppercase tracking-wider">Present Dues</span>
+          <span className="text-xs font-black text-red-600 uppercase tracking-wider">
+            {activeReport === 'NPA LIST' ? 'Settlement Total' : 'Present Dues'}
+          </span>
           <span className="text-red-700 text-xl font-black font-mono tracking-tight">
-            {totals.presentDue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {activeReport === 'NPA LIST' 
+              ? totals.amountToClose.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              : totals.presentDue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
       </div>
@@ -321,18 +308,53 @@ const DuesLedger: React.FC = () => {
                 <tr className="border-b border-slate-200 text-[11px] font-black uppercase text-slate-500 select-none">
                   <th className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-10 bg-slate-50 finance-small-label">SL</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-24 bg-slate-50 finance-small-label">CD Number</th>
-                  <th className="px-2.5 py-1.5 border-r border-slate-200 text-slate-800 w-60 min-w-[200px] bg-slate-50 finance-small-label">Borrower</th>
+                  <th className="px-2.5 py-1.5 border-r border-slate-200 text-slate-800 w-60 min-w-[180px] bg-slate-50 finance-small-label">Borrower</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Paid Interest</th>
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Paid Penalty</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-36 min-w-[130px] bg-slate-50 finance-small-label">Pending Interest</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-36 min-w-[130px] bg-slate-50 finance-small-label">Pending Penalty</th>
-                  <th className="px-2.5 py-1.5 border-r border-slate-200 text-right text-slate-800 w-36 min-w-[140px] bg-slate-50 finance-small-label font-black">Present Due</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-32 min-w-[110px] bg-slate-50 finance-small-label">Pending Interest</th>
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-32 min-w-[110px] bg-slate-50 finance-small-label">Pending Penalty</th>
+                  
+                  {/* Present Due: Shown for active tabs, Hidden for NPA LIST */}
+                  {activeReport !== 'NPA LIST' && (
+                    <th className="px-2.5 py-1.5 border-r border-slate-200 text-right text-slate-800 w-36 min-w-[120px] bg-slate-50 finance-small-label font-black">Present Due</th>
+                  )}
+                  
                   <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label">Principal</th>
-                  <th className="px-2.5 py-1.5 border-r border-slate-200 text-right text-slate-800 w-36 min-w-[140px] bg-slate-50 finance-small-label font-black text-blue-900">Closing Amount</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-32 min-w-[110px] bg-slate-50 finance-small-label">Due Date</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-32 min-w-[110px] bg-slate-50 finance-small-label">Date</th>
-                  <th className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-16 bg-slate-50 finance-small-label">Days</th>
-                  <th className="px-2.5 py-1.5 text-slate-800 text-left min-w-[160px] bg-slate-50 finance-small-label">Contact</th>
+                  <th className="px-2.5 py-1.5 border-r border-slate-200 text-right text-slate-800 w-36 min-w-[120px] bg-slate-50 finance-small-label font-black text-blue-900">Closing Amount</th>
+                  
+                  {/* Total Paid: Shown for NPA LIST */}
+                  {activeReport === 'NPA LIST' && (
+                    <th className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 w-28 bg-slate-50 finance-small-label font-black text-emerald-800">Total Paid</th>
+                  )}
+
+                  {/* Loan Date: Renamed from Date */}
+                  <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-28 min-w-[100px] bg-slate-50 finance-small-label">Loan Date</th>
+
+                  {/* Due Date: Hidden for NPA LIST */}
+                  {activeReport !== 'NPA LIST' && (
+                    <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-28 min-w-[100px] bg-slate-50 finance-small-label">Due Date</th>
+                  )}
+
+                  {/* Days / Due Days: Hidden for NPA LIST, Sortable in DUE DAYS tab */}
+                  {activeReport === 'DUE DAYS' && (
+                    <th 
+                      onClick={handleToggleDueDaysSort}
+                      className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-24 bg-slate-50 finance-small-label cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                      title="Click to sort by Due Days"
+                    >
+                      <div className="inline-flex items-center justify-center gap-1">
+                        <span>Due Days</span>
+                        {dueDaysSort === 'ASC' && <ArrowUp className="w-3.5 h-3.5 text-blue-600 inline" />}
+                        {dueDaysSort === 'DESC' && <ArrowDown className="w-3.5 h-3.5 text-blue-600 inline" />}
+                        {dueDaysSort === 'DEFAULT' && <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60 inline" />}
+                      </div>
+                    </th>
+                  )}
+                  {activeReport !== 'NPA LIST' && activeReport !== 'DUE DAYS' && (
+                    <th className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-16 bg-slate-50 finance-small-label">Days</th>
+                  )}
+
+                  <th className="px-2.5 py-1.5 text-slate-800 text-left min-w-[150px] bg-slate-50 finance-small-label">Contact</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-100 font-mono text-[14px]">
@@ -351,20 +373,53 @@ const DuesLedger: React.FC = () => {
                       {due.pendingInterest < 0 ? `-${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : `${Math.round(due.pendingInterest).toLocaleString('en-IN')}`}
                     </td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-right text-red-650 text-[14px] font-bold whitespace-nowrap">
-                      {due.penalty < 0 ? `-${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : `${Math.round(due.penalty).toLocaleString('en-IN')}`}
+                      {(due.pendingPenalty ?? due.penalty) < 0 ? `-${Math.abs(Math.round(due.pendingPenalty ?? due.penalty)).toLocaleString('en-IN')}` : `${Math.round(due.pendingPenalty ?? due.penalty).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-[14px] font-black whitespace-nowrap">
-                      {due.presentDue < 0 ? `-${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : `${Math.round(due.presentDue).toLocaleString('en-IN')}`}
-                    </td>
+                    
+                    {/* Present Due: Active tabs only */}
+                    {activeReport !== 'NPA LIST' && (
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-950 font-sans text-[14px] font-black whitespace-nowrap">
+                        {due.presentDue < 0 ? `-${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : `${Math.round(due.presentDue).toLocaleString('en-IN')}`}
+                      </td>
+                    )}
+
                     <td className="px-2 py-1.5 border-r border-slate-100 text-right text-slate-700 text-[14px] font-bold whitespace-nowrap">
-                      {due.currentPrincipal < 0 ? `-${Math.abs(Math.round(due.currentPrincipal)).toLocaleString('en-IN')}` : `${Math.round(due.currentPrincipal).toLocaleString('en-IN')}`}
+                      {(due.loanAmount || due.currentPrincipal) < 0 ? `-${Math.abs(Math.round(due.loanAmount || due.currentPrincipal)).toLocaleString('en-IN')}` : `${Math.round(due.loanAmount || due.currentPrincipal).toLocaleString('en-IN')}`}
                     </td>
                     <td className="px-2 py-1.5 border-r border-slate-100 text-right text-blue-900 font-sans text-[14px] font-black whitespace-nowrap">
-                      {due.currentPrincipal + due.pendingInterest + due.penalty < 0 ? `-${Math.abs(Math.round(due.currentPrincipal + due.pendingInterest + due.penalty)).toLocaleString('en-IN')}` : `${Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}`}
+                      {(due.closingAmount ?? (due.currentPrincipal + due.pendingInterest + due.penalty)) < 0 
+                        ? `-${Math.abs(Math.round(due.closingAmount ?? (due.currentPrincipal + due.pendingInterest + due.penalty))).toLocaleString('en-IN')}` 
+                        : `${Math.round(due.closingAmount ?? (due.currentPrincipal + due.pendingInterest + due.penalty)).toLocaleString('en-IN')}`}
                     </td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-[14px] font-bold">{due.currentDueDate ? due.currentDueDate.split('-').reverse().join('/') : '—'}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-[14px]">{due.loanDate ? due.loanDate.split('-').reverse().join('/') : '—'}</td>
-                    <td className="px-2 py-1.5 border-r border-slate-100 text-center text-red-650 text-[14px] font-black whitespace-nowrap">{due.dueDays}</td>
+
+                    {/* Total Paid: NPA LIST only */}
+                    {activeReport === 'NPA LIST' && (
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-right text-emerald-800 font-sans text-[14px] font-black whitespace-nowrap">
+                        {(due.totalPaid ?? (due.interestPaid + due.penaltyPaid)) < 0 
+                          ? `-${Math.abs(Math.round(due.totalPaid ?? (due.interestPaid + due.penaltyPaid))).toLocaleString('en-IN')}` 
+                          : `${Math.round(due.totalPaid ?? (due.interestPaid + due.penaltyPaid)).toLocaleString('en-IN')}`}
+                      </td>
+                    )}
+
+                    {/* Loan Date: Formatted loan disbursement date */}
+                    <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-[14px]">
+                      {due.loanDate ? due.loanDate.split('-').reverse().join('/') : '—'}
+                    </td>
+
+                    {/* Due Date: Active tabs only */}
+                    {activeReport !== 'NPA LIST' && (
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-slate-600 font-sans whitespace-nowrap text-[14px] font-bold">
+                        {due.currentDueDate ? due.currentDueDate.split('-').reverse().join('/') : '—'}
+                      </td>
+                    )}
+
+                    {/* Days / Due Days: Active tabs only */}
+                    {activeReport !== 'NPA LIST' && (
+                      <td className="px-2 py-1.5 border-r border-slate-100 text-center text-red-650 text-[14px] font-black whitespace-nowrap">
+                        {due.dueDays}
+                      </td>
+                    )}
+
                     <td className="px-2 py-1.5 font-sans text-[14px] text-slate-600 space-y-0.5">
                       <div><span className="font-semibold text-slate-900">B:</span> {due.phone || '—'}</div>
                       {due.g1Name && (
@@ -384,10 +439,23 @@ const DuesLedger: React.FC = () => {
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-emerald-700 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.penaltyPaid).toLocaleString('en-IN')}</td>
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-orange-750 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.interest).toLocaleString('en-IN')}</td>
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-red-655 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
-                  <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-950 font-black text-[14px] whitespace-nowrap">{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
+                  
+                  {activeReport !== 'NPA LIST' && (
+                    <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-950 font-black text-[14px] whitespace-nowrap">{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
+                  )}
+                  
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-slate-800 font-bold text-[14px] whitespace-nowrap">{Math.round(totals.principal).toLocaleString('en-IN')}</td>
                   <td className="px-2 py-1.5 border-r border-slate-200 text-right text-blue-955 font-black text-[14px] whitespace-nowrap">{Math.round(totals.amountToClose).toLocaleString('en-IN')}</td>
-                  <td colSpan={4}></td>
+                  
+                  {activeReport === 'NPA LIST' && (
+                    <td className="px-2 py-1.5 border-r border-slate-200 text-right text-emerald-800 font-black text-[14px] whitespace-nowrap">{Math.round(totals.totalPaid).toLocaleString('en-IN')}</td>
+                  )}
+                  
+                  {activeReport === 'NPA LIST' ? (
+                    <td colSpan={2}></td>
+                  ) : (
+                    <td colSpan={4}></td>
+                  )}
                 </tr>
               </tbody>
             </table>
@@ -428,12 +496,31 @@ const DuesLedger: React.FC = () => {
                   <th className="p-1 border text-right print-nowrap">PD PENALTY</th>
                   <th className="p-1 border text-right print-nowrap">PND INT</th>
                   <th className="p-1 border text-right print-nowrap">PND PENALTY</th>
-                  <th className="p-1 border text-right print-nowrap">PRESENT DUE</th>
+                  
+                  {activeReport !== 'NPA LIST' && (
+                    <th className="p-1 border text-right print-nowrap">PRESENT DUE</th>
+                  )}
+                  
                   <th className="p-1 border text-right print-nowrap">PRINCIPAL</th>
                   <th className="p-1 border text-right print-nowrap">CLOSE AMT</th>
-                  <th className="p-1 border text-left print-nowrap">DUE DATE</th>
-                  <th className="p-1 border text-left print-nowrap">DATE</th>
-                  <th className="p-1 border text-center print-nowrap">DAYS</th>
+                  
+                  {activeReport === 'NPA LIST' && (
+                    <th className="p-1 border text-right print-nowrap">TOTAL PAID</th>
+                  )}
+                  
+                  <th className="p-1 border text-left print-nowrap">LOAN DATE</th>
+
+                  {activeReport !== 'NPA LIST' && (
+                    <th className="p-1 border text-left print-nowrap">DUE DATE</th>
+                  )}
+
+                  {activeReport === 'DUE DAYS' && (
+                    <th className="p-1 border text-center print-nowrap">DUE DAYS</th>
+                  )}
+                  {activeReport !== 'NPA LIST' && activeReport !== 'DUE DAYS' && (
+                    <th className="p-1 border text-center print-nowrap">DAYS</th>
+                  )}
+
                   <th className="p-1 border text-left print-nowrap">CONTACT</th>
                 </tr>
               </thead>
@@ -455,20 +542,38 @@ const DuesLedger: React.FC = () => {
                       {due.pendingInterest < 0 ? `-${Math.abs(Math.round(due.pendingInterest)).toLocaleString('en-IN')}` : Math.round(due.pendingInterest).toLocaleString('en-IN')}
                     </td>
                     <td className="p-1 border text-right text-red-600 print-amount">
-                      {due.penalty < 0 ? `-${Math.abs(Math.round(due.penalty)).toLocaleString('en-IN')}` : Math.round(due.penalty).toLocaleString('en-IN')}
+                      {(due.pendingPenalty ?? due.penalty) < 0 ? `-${Math.abs(Math.round(due.pendingPenalty ?? due.penalty)).toLocaleString('en-IN')}` : Math.round(due.pendingPenalty ?? due.penalty).toLocaleString('en-IN')}
                     </td>
-                    <td className="p-1 border text-right font-black print-amount">
-                      {due.presentDue < 0 ? `-${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : Math.round(due.presentDue).toLocaleString('en-IN')}
-                    </td>
+
+                    {activeReport !== 'NPA LIST' && (
+                      <td className="p-1 border text-right font-black print-amount">
+                        {due.presentDue < 0 ? `-${Math.abs(Math.round(due.presentDue)).toLocaleString('en-IN')}` : Math.round(due.presentDue).toLocaleString('en-IN')}
+                      </td>
+                    )}
+
                     <td className="p-1 border text-right print-amount">
-                      {due.currentPrincipal < 0 ? `-${Math.abs(Math.round(due.currentPrincipal)).toLocaleString('en-IN')}` : Math.round(due.currentPrincipal).toLocaleString('en-IN')}
+                      {(due.loanAmount || due.currentPrincipal) < 0 ? `-${Math.abs(Math.round(due.loanAmount || due.currentPrincipal)).toLocaleString('en-IN')}` : Math.round(due.loanAmount || due.currentPrincipal).toLocaleString('en-IN')}
                     </td>
                     <td className="p-1 border text-right font-black text-blue-900 print-amount">
-                      {Math.round(due.currentPrincipal + due.pendingInterest + due.penalty).toLocaleString('en-IN')}
+                      {Math.round(due.closingAmount ?? (due.currentPrincipal + due.pendingInterest + due.penalty)).toLocaleString('en-IN')}
                     </td>
-                    <td className="p-1 border print-nowrap">{due.currentDueDate ? due.currentDueDate.split('-').reverse().join('/') : ''}</td>
+
+                    {activeReport === 'NPA LIST' && (
+                      <td className="p-1 border text-right font-black text-emerald-800 print-amount">
+                        {Math.round(due.totalPaid ?? (due.interestPaid + due.penaltyPaid)).toLocaleString('en-IN')}
+                      </td>
+                    )}
+
                     <td className="p-1 border print-nowrap">{due.loanDate ? due.loanDate.split('-').reverse().join('/') : ''}</td>
-                    <td className="p-1 border text-center text-red-600 font-bold print-nowrap">{due.dueDays}</td>
+
+                    {activeReport !== 'NPA LIST' && (
+                      <td className="p-1 border print-nowrap">{due.currentDueDate ? due.currentDueDate.split('-').reverse().join('/') : ''}</td>
+                    )}
+
+                    {activeReport !== 'NPA LIST' && (
+                      <td className="p-1 border text-center text-red-600 font-bold print-nowrap">{due.dueDays}</td>
+                    )}
+
                     <td className="p-1 border print-nowrap leading-tight" style={{ fontSize: '7.5px' }}>
                       {due.phone && <div><span className="font-semibold">B:</span> {due.phone}</div>}
                       {due.g1Phone && <div><span className="font-semibold">G1:</span> {due.g1Phone}</div>}
@@ -484,10 +589,23 @@ const DuesLedger: React.FC = () => {
                   <td className="p-1 border text-right text-green-700 print-amount">{Math.round(totals.penaltyPaid).toLocaleString('en-IN')}</td>
                   <td className="p-1 border text-right text-orange-700 print-amount">{Math.round(totals.interest).toLocaleString('en-IN')}</td>
                   <td className="p-1 border text-right text-red-600 print-amount">{Math.round(totals.penalty).toLocaleString('en-IN')}</td>
-                  <td className="p-1 border text-right print-amount">{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
+                  
+                  {activeReport !== 'NPA LIST' && (
+                    <td className="p-1 border text-right print-amount">{Math.round(totals.presentDue).toLocaleString('en-IN')}</td>
+                  )}
+                  
                   <td className="p-1 border text-right print-amount">{Math.round(totals.principal).toLocaleString('en-IN')}</td>
                   <td className="p-1 border text-right text-blue-900 print-amount">{Math.round(totals.amountToClose).toLocaleString('en-IN')}</td>
-                  <td colSpan={4} className="p-1 border"></td>
+                  
+                  {activeReport === 'NPA LIST' && (
+                    <td className="p-1 border text-right text-emerald-800 print-amount">{Math.round(totals.totalPaid).toLocaleString('en-IN')}</td>
+                  )}
+                  
+                  {activeReport === 'NPA LIST' ? (
+                    <td colSpan={2} className="p-1 border"></td>
+                  ) : (
+                    <td colSpan={4} className="p-1 border"></td>
+                  )}
                 </tr>
               </tbody>
             </table>
@@ -497,7 +615,7 @@ const DuesLedger: React.FC = () => {
               <div className="border-2 border-slate-900 rounded p-3 bg-slate-50" style={{ fontSize: '9px', minWidth: '320px' }}>
                 <h4 className="font-bold text-center border-b-2 border-slate-900 pb-1 mb-2 uppercase tracking-wider" style={{ fontSize: '10px', margin: 0 }}>Report Totals</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '3px 12px' }}>
-                  <span className="font-semibold text-slate-700 uppercase">Outstanding Principal:</span>
+                  <span className="font-semibold text-slate-700 uppercase">Principal:</span>
                   <span className="font-bold text-right">{Math.round(totals.principal).toLocaleString('en-IN')}</span>
                   <span className="font-semibold text-slate-700 uppercase">Interest Paid:</span>
                   <span className="font-bold text-right text-green-700">{Math.round(totals.interestPaid).toLocaleString('en-IN')}</span>
@@ -507,11 +625,23 @@ const DuesLedger: React.FC = () => {
                   <span className="font-bold text-right text-green-700">{Math.round(totals.penaltyPaid).toLocaleString('en-IN')}</span>
                   <span className="font-semibold text-slate-700 uppercase">Pending Penalty:</span>
                   <span className="font-bold text-right text-red-600">{Math.round(totals.penalty).toLocaleString('en-IN')}</span>
-                  <span className="font-semibold text-slate-700 uppercase">Present Due:</span>
-                  <span className="font-bold text-right text-red-700">{Math.round(totals.presentDue).toLocaleString('en-IN')}</span>
+                  {activeReport !== 'NPA LIST' && (
+                    <>
+                      <span className="font-semibold text-slate-700 uppercase">Present Due:</span>
+                      <span className="font-bold text-right text-red-700">{Math.round(totals.presentDue).toLocaleString('en-IN')}</span>
+                    </>
+                  )}
+                  {activeReport === 'NPA LIST' && (
+                    <>
+                      <span className="font-semibold text-slate-700 uppercase">Total Paid:</span>
+                      <span className="font-bold text-right text-emerald-800">{Math.round(totals.totalPaid).toLocaleString('en-IN')}</span>
+                    </>
+                  )}
                 </div>
                 <div className="mt-2 border-t-2 border-slate-900 pt-2 flex justify-between items-center bg-slate-900 text-white px-2 py-1 rounded" style={{ fontSize: '10px' }}>
-                  <span className="font-black uppercase tracking-wide">Total to Close:</span>
+                  <span className="font-black uppercase tracking-wide">
+                    {activeReport === 'NPA LIST' ? 'Settlement / Close Total:' : 'Total to Close:'}
+                  </span>
                   <span className="font-black">{Math.round(totals.amountToClose).toLocaleString('en-IN')}</span>
                 </div>
               </div>

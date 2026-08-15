@@ -50,9 +50,12 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const dateRef = useRef<HTMLInputElement>(null);
   const loanIdRef = useRef<HTMLInputElement>(null);
+  const partnerRef = useRef<HTMLSelectElement>(null);
   const custNameRef = useRef<HTMLInputElement>(null);
   const custPhoneRef = useRef<HTMLInputElement>(null);
+  const g1SearchRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
+  const docChargesRef = useRef<HTMLInputElement>(null);
   const interestRateRef = useRef<HTMLInputElement>(null);
   const durationMonthsRef = useRef<HTMLInputElement>(null);
   const particularsRef = useRef<HTMLTextAreaElement>(null);
@@ -286,40 +289,39 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
         return;
       }
 
-      // ── CORRECT LOCK DETECTION ────────────────────────────────────────────
-      // Lock core fields ONLY when genuine customer repayment activity exists.
-      // System-generated opening entries (original_loan, opening_commission,
-      // document_charge) must NOT trigger the lock.
-      //
-      // For CD loans  → check finance_cd_ledger_entries for payment entry_types
-      // For all loans → check finance_transactions for Collection type entries
-      //                 (these are only created by actual customer payments)
-      const CUSTOMER_PAYMENT_ENTRY_TYPES = [
-        'amount_paid',
-        'penalty_payment',
-        'interest_payment',
-        'principal_payment',
-        'Legacy Payment',
-      ];
-
-      const [cdPaymentsRes, txCollectionsRes] = await Promise.all([
+      // ── TRANSACTION LOCK DETECTION ─────────────────────────────────────────
+      // Lock core fields when ANY transaction or ledger activity beyond opening entries exists.
+      const [cdNonOpeningRes, txNonDisbRes, cdInterestRes, duesPaidRes] = await Promise.all([
         supabase
           .from('finance_cd_ledger_entries')
           .select('id')
           .eq('loan_id', id)
-          .in('entry_type', CUSTOMER_PAYMENT_ENTRY_TYPES)
+          .not('entry_type', 'in', '(original_loan,opening_commission,document_charge)')
           .limit(1),
         supabase
           .from('finance_transactions')
           .select('id')
           .eq('loan_id', id)
-          .eq('type', 'Collection')
+          .neq('type', 'Disbursement')
+          .limit(1),
+        supabase
+          .from('finance_cd_interest_details')
+          .select('id')
+          .eq('loan_id', id)
+          .limit(1),
+        supabase
+          .from('finance_dues')
+          .select('id')
+          .eq('loan_id', id)
+          .gt('paid_amount', 0)
           .limit(1),
       ]);
 
       const hasCustomerRepaymentActivity =
-        !!(cdPaymentsRes.data && cdPaymentsRes.data.length > 0) ||
-        !!(txCollectionsRes.data && txCollectionsRes.data.length > 0);
+        !!(cdNonOpeningRes.data && cdNonOpeningRes.data.length > 0) ||
+        !!(txNonDisbRes.data && txNonDisbRes.data.length > 0) ||
+        !!(cdInterestRes.data && cdInterestRes.data.length > 0) ||
+        !!(duesPaidRes.data && duesPaidRes.data.length > 0);
 
       setHasLedgerActivity(hasCustomerRepaymentActivity);
 
@@ -343,11 +345,8 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
 
       setLoanId(fullLoan.loan_id);
       setLoanCategory(fullLoan.loan_category as any || 'CD');
-      // ── BUG 1 FIX: Always load the stored loan date, never default to today ──
-      // fullLoan.date is a yyyy-mm-dd ISO string stored in the database.
-      // The input[type=date] value format must be yyyy-mm-dd.
+      // ── Always load the stored loan date ──
       if (fullLoan.date) {
-        // Ensure we use only the date part (strip time if present)
         setDate(fullLoan.date.substring(0, 10));
       }
       setAmount(String(fullLoan.amount));
@@ -379,6 +378,10 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
         _deferredEditPartnerName = null;
       }
 
+      let loadedParticulars = '';
+      let loadedExtraDetails = '';
+      let loadedRemarks = '';
+
       const { data: colLogs } = await supabase
         .from('finance_edited_logs')
         .select('*')
@@ -389,11 +392,11 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
 
       if (colLogs && colLogs.length > 0) {
         const cLog = colLogs[0].new_values;
-        setParticulars(cLog.particulars || '');
-        setExtraDetails(cLog.extraDetails || '');
+        if (cLog.particulars) loadedParticulars = cLog.particulars;
+        if (cLog.extraDetails) loadedExtraDetails = cLog.extraDetails;
         if (cLog.locations && Array.isArray(cLog.locations)) {
           setLocations(cLog.locations);
-        } else {
+        } else if (cLog.collateral_address || cLog.gps_latitude) {
           setLocations([{
             address: cLog.collateral_address || '',
             latitude: cLog.gps_latitude || '',
@@ -403,6 +406,37 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
           }]);
         }
       }
+
+      // Fallback or augment from fullLoan.remarks if not found in colLogs
+      if (fullLoan.remarks) {
+        const rawRemarks = fullLoan.remarks;
+        const partMatch = rawRemarks.match(/Particulars:\s*([^|]+)/i);
+        if (partMatch && partMatch[1] && !loadedParticulars) {
+          loadedParticulars = partMatch[1].trim();
+        }
+
+        const extraMatch = rawRemarks.match(/Extra:\s*([^|]+)/i);
+        if (extraMatch && extraMatch[1] && !loadedExtraDetails) {
+          const ext = extraMatch[1].trim();
+          if (ext !== 'N/A') loadedExtraDetails = ext;
+        }
+
+        // Extract base remarks (parts before Particulars/Collateral/Extra)
+        const parts = rawRemarks.split('|').map(s => s.trim());
+        const baseParts = parts.filter(p => 
+          !p.toLowerCase().startsWith('particulars:') &&
+          !p.toLowerCase().startsWith('collateral:') &&
+          !p.toLowerCase().startsWith('extra:') &&
+          !p.startsWith('[NPA CLOSED')
+        );
+        if (baseParts.length > 0) {
+          loadedRemarks = baseParts.join(' | ');
+        }
+      }
+
+      setParticulars(loadedParticulars);
+      setExtraDetails(loadedExtraDetails);
+      setRemarks(loadedRemarks);
 
       const { data: dbDocs } = await supabase
         .from('finance_loan_documents')
@@ -944,18 +978,18 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
     const fields: ValidationField[] = [
       { name: 'date', label: 'Date', value: date, required: true, ref: dateRef },
       { name: 'loanId', label: 'Loan Number', value: loanId, required: true, ref: loanIdRef },
+      { name: 'selectedPartnerId', label: 'Assigned Partner', value: selectedPartnerId, required: true, ref: partnerRef as any },
       { name: 'custName', label: 'Customer Name', value: custName, required: true, ref: custNameRef },
       { name: 'custPhone', label: 'Customer Phone', value: custPhone, required: mandatoryFields.borrowerPhone, ref: custPhoneRef },
       { name: 'custAadhaar', label: 'Customer Aadhaar UID', value: custAadhaar, required: mandatoryFields.borrowerAadhaar },
-      { name: 'g1SelectedId', label: 'Guarantor 1', value: g1SelectedId || g1Name, required: true },
-      { name: 'g1Name', label: 'Guarantor 1 Name', value: g1Name, required: true },
+      { name: 'g1SelectedId', label: 'Guarantor 1', value: g1SelectedId || g1Name, required: true, ref: g1SearchRef as any },
       { name: 'g1Aadhaar', label: 'Guarantor 1 Aadhaar', value: g1Aadhaar, required: mandatoryFields.g1Aadhaar },
       { name: 'g1Phone', label: 'Guarantor 1 Phone', value: g1Phone, required: mandatoryFields.g1Phone },
       { name: 'amount', label: 'Loan Amount', value: amount, required: true, ref: amountRef },
-      { name: 'docCharges', label: 'Document Charges', value: docCharges, required: true },
+      { name: 'docCharges', label: 'Document Charges', value: docCharges, required: true, ref: docChargesRef as any },
       { name: 'interestRate', label: 'Rate of Interest', value: interestRate, required: true, ref: interestRateRef },
       { name: 'durationMonths', label: 'Period', value: durationMonths, required: true, ref: durationMonthsRef },
-      { name: 'particulars', label: 'Particulars', value: particulars, required: true, ref: particularsRef },
+      { name: 'particulars', label: 'Particulars', value: particulars, required: true, ref: particularsRef as any },
     ];
 
     if (g2Name?.trim() || g2Aadhaar?.trim() || g2Phone?.trim()) {
@@ -1008,11 +1042,23 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
       const combinedSuretyAadhaarAddress = [g1AadhaarAddress, g2AadhaarAddress].filter(Boolean).join(' / ') || null;
       const combinedSuretyPresentAddress = [g1PresentAddress, g2PresentAddress].filter(Boolean).join(' / ') || null;
 
-      const finalRemarks = [
-         remarks,
-        `Collateral: ${locations.map(l => l.address).filter(Boolean).join(', ') || 'N/A'}, GPS: ${locations.map(l => l.latitude && l.longitude ? `${l.latitude},${l.longitude}` : '').filter(Boolean).join(' / ') || 'N/A'}`,
-        `Extra: ${extraDetails || 'N/A'}`
-      ].filter(Boolean).join(' | ');
+      const remarksParts: string[] = [];
+      if (remarks?.trim()) {
+        remarksParts.push(remarks.trim());
+      }
+      if (particulars?.trim()) {
+        remarksParts.push(`Particulars: ${particulars.trim()}`);
+      }
+      const locStr = locations.map(l => l.address).filter(Boolean).join(', ') || 'N/A';
+      const gpsStr = locations.map(l => l.latitude && l.longitude ? `${l.latitude},${l.longitude}` : '').filter(Boolean).join(' / ') || 'N/A';
+      remarksParts.push(`Collateral: ${locStr}, GPS: ${gpsStr}`);
+      if (extraDetails?.trim()) {
+        remarksParts.push(`Extra: ${extraDetails.trim()}`);
+      } else {
+        remarksParts.push('Extra: N/A');
+      }
+
+      const finalRemarks = remarksParts.join(' | ');
 
       const selectedPartner = partners.find(p => p.id === selectedPartnerId);
       const partnerName = selectedPartner ? selectedPartner.name : null;
@@ -1077,7 +1123,9 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
           aadhaar_address: custAadhaarAddress || null,
           present_address: custPresentAddress || null,
           mandal: custMandal || null,
+          present_mandal: custMandal || null,
           district: custDistrict || null,
+          present_district: custDistrict || null,
           partner_name: partnerName
         }, staffName);
 
@@ -1085,15 +1133,38 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
         // 2. Update loan record
         await supabaseFinance.updateLoan(editLoanId, loanPayload, staffName);
 
+        // 3. Persist collateral and particulars metadata
+        const collateralJSON = {
+          locations: locations,
+          collateral_address: locations[0]?.address || '',
+          gps_latitude: locations[0]?.latitude || '',
+          gps_longitude: locations[0]?.longitude || '',
+          google_maps_link: locations[0]?.mapsLink || '',
+          collateral_image: locations[0]?.image || null,
+          particulars,
+          extraDetails,
+          document_charges: liveCalculations?.docFees || Number(docCharges) || 0
+        };
+        try {
+          await supabase.from('finance_edited_logs').insert([{
+            table_name: 'finance_loans_collateral',
+            record_id: editLoanId,
+            old_values: {},
+            new_values: collateralJSON,
+            edited_by: staffName
+          }]);
+        } catch (err) {
+          console.warn('Could not record collateral JSON metadata for edit loan', err);
+        }
 
-        // 3. Update documents
+        // 4. Update documents
         await supabase.from('finance_loan_documents').delete().eq('loan_id', editLoanId);
         if (linkedDocs.length > 0) {
           const mappedDocs = linkedDocs.map(d => ({ ...d, loan_id: editLoanId }));
           await supabase.from('finance_loan_documents').insert(mappedDocs);
         }
 
-        // 4. CD Sequential Rebuild
+        // 5. CD Sequential Rebuild
         if (loanCategory === 'CD' && hasLedgerActivity) {
           const rebuildResult = await cdLedgerRebuildService.rebuildCDLoanLifecycle(editLoanId, 'FULL_RECALCULATE');
           if (!rebuildResult.success) {
@@ -1123,7 +1194,9 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
             aadhaar_address: custAadhaarAddress || null,
             present_address: custPresentAddress || null,
             mandal: custMandal || null,
+            present_mandal: custMandal || null,
             district: custDistrict || null,
+            present_district: custDistrict || null,
             partner_name: partnerName
           }, staffName, true);
         }
@@ -1260,8 +1333,8 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
         <div className="bg-amber-50 border-l-4 border-amber-500 px-3 py-2 rounded-r flex gap-2 items-center">
           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
           <div>
-            <span className="text-amber-800 font-bold text-[13px] uppercase">Financial Field Protection Active — </span>
-            <span className="text-amber-700 text-[12px] uppercase">Core loan fields cannot be edited because customer repayment activity already exists for this loan. Documents, address, guarantor details and collateral remain editable.</span>
+            <span className="text-amber-800 font-bold text-[13px] uppercase">Original Loan Terms Locked — </span>
+            <span className="text-amber-700 text-[12px] uppercase">Core loan terms (Date, Principal, Rate, Penalty, Period, Doc Charges, Partner, Guarantors, Particulars) cannot be changed because transaction/ledger activity exists for this loan.</span>
           </div>
         </div>
       )}
@@ -1531,12 +1604,21 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
 
               <div className="space-y-1">
                 <label className="peek-label uppercase block text-[11px] font-bold text-slate-700">
-                  ASSIGNED PARTNER
+                  ASSIGNED PARTNER <span className="text-red-500 ml-1">*</span>
                 </label>
                 <select
+                  ref={partnerRef}
                   value={selectedPartnerId}
-                  onChange={(e) => setSelectedPartnerId(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-slate-900 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12 font-bold h-[38px]"
+                  disabled={!!editLoanId && hasLedgerActivity}
+                  onChange={(e) => {
+                    setSelectedPartnerId(e.target.value);
+                    setErrors((p) => ({ ...p, selectedPartnerId: false }));
+                  }}
+                  className={`w-full bg-white border rounded-lg p-2 text-slate-900 focus:outline-none peek-caption-12 font-bold h-[38px] disabled:bg-slate-100 disabled:cursor-not-allowed ${
+                    errors.selectedPartnerId
+                      ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500'
+                      : 'border-slate-200 focus:ring-1 focus:ring-slate-900'
+                  }`}
                   style={{ fontFamily: 'Times New Roman', fontSize: '15px' }}
                 >
                   <option value="">-- SELECT PARTNER --</option>
@@ -1685,9 +1767,9 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
           <div className="space-y-3 pb-4 border-b border-slate-100">
             <div className="flex justify-between items-center">
               <h4 className="text-slate-900 font-bold text-xs uppercase tracking-wide">
-                GUARANTOR 1
+                GUARANTOR 1 <span className="text-red-500 ml-1">*</span>
               </h4>
-              {g1SelectedId && (
+              {g1SelectedId && (!editLoanId || !hasLedgerActivity) && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1700,6 +1782,7 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
                     setG1PresentAddress('');
                     setG1Photo(null);
                     setG1Signature(null);
+                    setErrors(p => ({ ...p, g1SelectedId: false }));
                   }}
                   className="text-[10px] text-red-655 hover:underline peek-button uppercase font-bold"
                 >
@@ -1714,15 +1797,26 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
                 <Search className="h-4 w-4 text-slate-400" />
               </div>
               <input
+                ref={g1SearchRef}
                 type="text"
                 value={g1Search}
+                disabled={!!editLoanId && hasLedgerActivity}
                 onChange={(e) => {
                   setG1Search(e.target.value);
                   setG1DropdownOpen(true);
+                  setErrors(p => ({ ...p, g1SelectedId: false }));
                 }}
-                onFocus={() => setG1DropdownOpen(true)}
-                placeholder="Type to search guarantor 1..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
+                onFocus={() => {
+                  if (!editLoanId || !hasLedgerActivity) setG1DropdownOpen(true);
+                }}
+                placeholder={!!editLoanId && hasLedgerActivity ? "Guarantor 1 locked" : "Type to search guarantor 1..."}
+                className={`w-full border rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:outline-none peek-caption-12 ${
+                  !!editLoanId && hasLedgerActivity
+                    ? 'bg-slate-100 cursor-not-allowed'
+                    : errors.g1SelectedId
+                      ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500'
+                      : 'bg-slate-50 border-slate-200 focus:ring-1 focus:ring-slate-900'
+                }`}
               />
               
               {isSearchingG1 && (
@@ -1730,7 +1824,7 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
                   <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-slate-400"></div>
                 </div>
               )}
-              {g1DropdownOpen && (
+              {g1DropdownOpen && (!editLoanId || !hasLedgerActivity) && (
                 <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
                   {g1SearchResults.length === 0 && !isSearchingG1 ? (
                     <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase text-xs">
@@ -1744,6 +1838,7 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
                           if (g.id) setG1SelectedId(g.id);
                           setG1DropdownOpen(false);
                           setG1Search('');
+                          setErrors(p => ({ ...p, g1SelectedId: false }));
                         }}
                         className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center border-b border-slate-50 last:border-0"
                       >
@@ -1827,7 +1922,7 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
               <h4 className="text-slate-900 font-bold text-xs uppercase tracking-wide">
                 GUARANTOR 2
               </h4>
-              {g2SelectedId && (
+              {g2SelectedId && (!editLoanId || !hasLedgerActivity) && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1856,13 +1951,20 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
               <input
                 type="text"
                 value={g2Search}
+                disabled={!!editLoanId && hasLedgerActivity}
                 onChange={(e) => {
                   setG2Search(e.target.value);
                   setG2DropdownOpen(true);
                 }}
-                onFocus={() => setG2DropdownOpen(true)}
-                placeholder="Type to search guarantor 2..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none peek-caption-12"
+                onFocus={() => {
+                  if (!editLoanId || !hasLedgerActivity) setG2DropdownOpen(true);
+                }}
+                placeholder={!!editLoanId && hasLedgerActivity ? "Guarantor 2 locked" : "Type to search guarantor 2..."}
+                className={`w-full border rounded-lg pl-9 pr-4 py-2 text-slate-800 focus:outline-none peek-caption-12 ${
+                  !!editLoanId && hasLedgerActivity
+                    ? 'bg-slate-100 cursor-not-allowed'
+                    : 'bg-slate-50 border-slate-200 focus:ring-1 focus:ring-slate-900'
+                }`}
               />
               
               {isSearchingG2 && (
@@ -1870,7 +1972,7 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
                   <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-slate-400"></div>
                 </div>
               )}
-              {g2DropdownOpen && (
+              {g2DropdownOpen && (!editLoanId || !hasLedgerActivity) && (
                 <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
                   {g2SearchResults.length === 0 && !isSearchingG2 ? (
                     <div className="px-4 py-3 text-slate-400 text-center peek-h3 uppercase text-xs">
@@ -2021,12 +2123,21 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
               />
             </div>
             <div>
-              <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">DOC CHARGES ()</label>
+              <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">DOC CHARGES () <span className="text-red-500">*</span></label>
               <input
+                ref={docChargesRef}
                 type="number"
                 value={docCharges}
-                onChange={(e) => setDocCharges(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:ring-1 focus:ring-slate-900 focus:outline-none h-[38px]"
+                disabled={!!editLoanId && hasLedgerActivity}
+                onChange={(e) => {
+                  setDocCharges(e.target.value);
+                  setErrors((p) => ({ ...p, docCharges: false }));
+                }}
+                className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none h-[38px] disabled:bg-slate-100 disabled:cursor-not-allowed ${
+                  errors.docCharges
+                    ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500'
+                    : 'border-slate-200 focus:ring-1 focus:ring-slate-900'
+                }`}
               />
             </div>
             
@@ -2040,13 +2151,14 @@ const LoanEntry: React.FC<LoanEntryProps> = ({ editLoanId, onCancelEdit }) => {
           </div>
 
           <div className="w-full">
-            <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">PARTICULARS</label>
+            <label className="text-[11px] font-bold text-slate-700 uppercase mb-1 block">PARTICULARS <span className="text-red-500">*</span></label>
             <textarea
               ref={particularsRef}
               value={particulars}
+              disabled={!!editLoanId && hasLedgerActivity}
               onChange={(e) => { setParticulars(e.target.value); setErrors(p => ({...p, particulars: false})) }}
               rows={1}
-              className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none resize-none h-[38px] ${errors.particulars ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
+              className={`w-full bg-white border rounded-lg p-2 text-sm text-slate-800 focus:outline-none resize-none h-[38px] disabled:bg-slate-100 disabled:cursor-not-allowed ${errors.particulars ? 'border-red-500 bg-red-50 focus:ring-1 focus:ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-900'}`}
             />
           </div>
         </div>

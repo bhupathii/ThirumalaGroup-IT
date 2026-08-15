@@ -157,7 +157,7 @@ const BusinessReport: React.FC = () => {
         tot++;
         
         const rawStatus = String(l.status || '').trim().toUpperCase();
-        const isNpaClosed = rawStatus === 'NPA_CLOSED' || rawStatus === 'NPA CLOSED' || rawStatus === 'NPA' || l.npa_closed === true || (l as any).is_npa === true;
+        const isNpaClosed = rawStatus === 'NPA_CLOSED' || rawStatus === 'NPA CLOSED' || rawStatus === 'NPA' || l.npa_closed === true || (l as any).is_npa === true || (l as any).is_npa_closed === true;
 
         let displayStatus = 'Active';
         if (isNpaClosed) {
@@ -188,7 +188,7 @@ const BusinessReport: React.FC = () => {
           loanId: l.id,
           cdNumber: l.loan_id,
           borrower: l.customer?.name || 'Unknown',
-          principal: metrics.principalFinanced,
+          principal: metrics.outstanding,
           interestReceived: metrics.interestEarned,
           penaltyReceived: metrics.penaltyEarned,
           pendingInterest: metrics.pendingInterest,

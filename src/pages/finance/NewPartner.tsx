@@ -8,6 +8,53 @@ import { ArrowLeft, RotateCcw, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 
+export function generateNextPartnerId(existingPartners: Array<{ partner_id?: number | string | null; partner_code?: string | null }>): string {
+  if (!existingPartners || existingPartners.length === 0) {
+    return 'P01';
+  }
+
+  let maxSeq = 0;
+  let usesTwoDigitPadding = true;
+
+  for (const p of existingPartners) {
+    // 1. Check partner_code (e.g. 'P01', 'P02', 'P1', 'P-05', etc.)
+    if (p.partner_code) {
+      const codeStr = String(p.partner_code).trim();
+      const match = codeStr.match(/^P-?(\d+)$/i);
+      if (match) {
+        const digitsStr = match[1];
+        const num = parseInt(digitsStr, 10);
+        if (!isNaN(num)) {
+          if (num > maxSeq) maxSeq = num;
+          if (digitsStr.length === 1 && num < 10) {
+            usesTwoDigitPadding = false;
+          } else if (digitsStr.length >= 2 && digitsStr.startsWith('0')) {
+            usesTwoDigitPadding = true;
+          }
+        }
+      } else {
+        const num = parseInt(codeStr.replace(/[^0-9]/g, ''), 10);
+        if (!isNaN(num) && num > maxSeq) maxSeq = num;
+      }
+    }
+
+    // 2. Check numeric or string partner_id
+    if (p.partner_id !== undefined && p.partner_id !== null) {
+      const num = typeof p.partner_id === 'number'
+        ? p.partner_id
+        : parseInt(String(p.partner_id).replace(/[^0-9]/g, ''), 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+  }
+
+  const nextNum = maxSeq + 1;
+  return usesTwoDigitPadding
+    ? `P${String(nextNum).padStart(2, '0')}`
+    : `P${nextNum}`;
+}
+
 const NewPartner: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -39,36 +86,15 @@ const NewPartner: React.FC = () => {
 
   const fetchNextPartnerId = async () => {
     try {
-      const financeMode = (sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode')) === 'itr' ? 'ITR' : 'REGULAR';
-      const bookId = await supabaseFinance.getLegacyBookId(financeMode);
-      if (!bookId) {
-        throw new Error('Book configuration is missing.');
-      }
-
-      // Fetch all partner codes / partner_ids to find maximum existing sequence index
+      // Fetch all existing partners across database to find the maximum existing sequence index
       const { data, error } = await supabase
         .from('finance_partners')
-        .select('partner_id, partner_code')
-        .eq('book_id', bookId);
+        .select('id, partner_id, partner_code, name');
 
       if (error) throw error;
 
-      let maxSeq = 0;
-      if (data && data.length > 0) {
-        data.forEach(p => {
-          if (p.partner_code && /^P\d+$/i.test(p.partner_code)) {
-            const num = parseInt(p.partner_code.replace(/[^0-9]/g, ''), 10);
-            if (!isNaN(num) && num > maxSeq) maxSeq = num;
-          }
-          if (p.partner_id && typeof p.partner_id === 'number' && p.partner_id > maxSeq) {
-            maxSeq = p.partner_id;
-          }
-        });
-      }
-
-      const nextNum = maxSeq + 1;
-      const formattedCode = `P${nextNum.toString().padStart(2, '0')}`;
-      setPartnerId(formattedCode);
+      const nextId = generateNextPartnerId(data || []);
+      setPartnerId(nextId);
     } catch (err) {
       console.error('Error fetching next partner ID:', err);
       setPartnerId('P01'); // Default fallback
@@ -146,24 +172,28 @@ const NewPartner: React.FC = () => {
     try {
       const staffName = user?.username || 'Staff';
       const financeMode = (sessionStorage.getItem('finance_previous_mode') || localStorage.getItem('finance_previous_mode')) === 'itr' ? 'ITR' : 'REGULAR';
-      const bookId = await supabaseFinance.getLegacyBookId(financeMode);
-      if (!bookId) {
-        throw new Error('Book configuration is missing.');
+      let bookId: string | null = null;
+      try {
+        bookId = await supabaseFinance.getLegacyBookId(financeMode);
+      } catch (e) {
+        console.warn('Could not get legacy book id', e);
       }
 
       const seqNum = parseInt(String(partnerId).replace(/[^0-9]/g, ''), 10) || 1;
 
-      const payload = {
+      const payload: any = {
         name: name.trim(),
         is_md: role === 'MANAGING PARTNER',
         phone: phone.trim() || null,
         home_phone: homePhone.trim() || null,
         village: village.trim() || null,
         address: address.trim() || null,
-        book_id: bookId,
         partner_code: String(partnerId),
         partner_id: seqNum
       };
+      if (bookId) {
+        payload.book_id = bookId;
+      }
 
       let result;
       if (editId) {

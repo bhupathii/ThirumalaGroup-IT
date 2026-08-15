@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import Card from '../../components/UI/Card';
 import Button from '../../components/UI/Button';
 import { FinanceSmartCalendar, isoToDisplayFormatted } from '../../components/finance/FinanceSmartCalendar';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { Printer, RefreshCw, Download } from 'lucide-react';
+import { Printer, RefreshCw, Download, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FinancePrintPreview from '../../components/finance/FinancePrintPreview';
 import { getLocalBusinessDateISO } from '../../utils/dateUtils';
@@ -185,35 +184,69 @@ const PartnerPerformance: React.FC = () => {
   }).sort((a, b) => b.pct - a.pct);
 
   return (
-    <div className="space-y-6 p-6 max-w-7xl mx-auto print:p-0">
-      {/* Header */}
-      <div className={`flex justify-between items-center border-b border-green-100 pb-4`}>
+    <div className="space-y-4 w-full select-none px-2 sm:px-4 py-3 print:p-0 text-slate-900 font-sans">
+      
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-slate-200 p-3.5 rounded-xl shadow-sm gap-3">
         <div>
-          <h1 className="finance-h1">Partner Performance</h1>
-          <p className="finance-small-label uppercase font-black text-slate-500">Portfolio &amp; Collection Performance</p>
+          <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900 leading-none">Partner Performance</h1>
+          <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mt-1.5">
+            Portfolio &amp; Collection Performance
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={fetchPerformanceData} variant="secondary" size="sm" icon={RefreshCw}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button 
+            onClick={() => navigate(-1)} 
+            variant="secondary" 
+            size="sm" 
+            icon={ArrowLeft} 
+            className="h-[38px] min-w-[85px] justify-center bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg uppercase font-bold text-xs shadow-sm"
+          >
+            Back
+          </Button>
+          <Button 
+            onClick={fetchPerformanceData} 
+            variant="secondary" 
+            size="sm" 
+            icon={RefreshCw} 
+            className="h-[38px] min-w-[95px] justify-center bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg uppercase font-bold text-xs shadow-sm"
+          >
             Refresh
           </Button>
-          <Button onClick={() => setShowPrintPreview(true)} variant="primary" size="sm" icon={Printer}>
+          <Button 
+            onClick={() => setShowPrintPreview(true)} 
+            variant="primary" 
+            size="sm" 
+            icon={Printer} 
+            className="h-[38px] min-w-[85px] justify-center bg-slate-900 hover:bg-slate-800 text-white rounded-lg uppercase font-bold text-xs shadow-sm"
+          >
             Print
           </Button>
-          <Button onClick={handleExportExcel} variant="secondary" size="sm" icon={Download}>
+          <Button 
+            onClick={handleExportExcel} 
+            variant="secondary" 
+            size="sm" 
+            icon={Download} 
+            className="h-[38px] min-w-[85px] justify-center bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg uppercase font-bold text-xs shadow-sm"
+          >
             Excel
           </Button>
         </div>
       </div>
 
       {/* Date Filters + Partner Performance Split KPI Card */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-        {/* Date Filter Box (Left - 5 Columns) */}
-        <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between gap-3">
-          <div className="border-b border-slate-100 pb-2">
-            <span className="text-xs font-black text-slate-500 uppercase tracking-wider block">DATE FILTER RANGE</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
+        
+        {/* Date Filter Box (Left - 4 Columns) */}
+        <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 shadow-sm p-3.5 flex flex-col justify-between gap-2.5">
+          <div className="border-b border-slate-100 pb-1.5 flex items-center justify-between">
+            <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">DATE FILTER RANGE</span>
+            <span className="text-[10px] font-bold text-slate-400 font-mono">
+              {isoToDisplayFormatted(startDate) || 'Beginning'} → {isoToDisplayFormatted(endDate) || 'Today'}
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
             <div>
               <FinanceSmartCalendar
                 label="FROM DATE"
@@ -233,39 +266,32 @@ const PartnerPerformance: React.FC = () => {
               />
             </div>
           </div>
-
-          <div className="pt-1 text-center">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Business Period</span>
-            <span className="text-xs font-extrabold font-mono text-slate-700">
-              {isoToDisplayFormatted(startDate) || 'Beginning'} → {isoToDisplayFormatted(endDate) || 'Today'}
-            </span>
-          </div>
         </div>
 
-        {/* Partner Performance Split Summary Card (Right - 7 Columns) */}
-        <div className="lg:col-span-7 bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between">
+        {/* Partner Performance Split Summary Card (Right - 8 Columns) */}
+        <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200 shadow-sm p-3.5 flex flex-col justify-between">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
-              <h3 className="finance-small-label font-black text-slate-800 uppercase tracking-wider">Partner Performance Split</h3>
+              <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Partner Performance Split</h3>
             </div>
-            <span className="text-[11px] font-mono font-black text-blue-900 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
-              Total Financed: {grandTotals.principalFinanced.toLocaleString('en-IN')}
+            <span className="text-xs font-mono font-black text-blue-900 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
+              Total Financed: ₹ {grandTotals.principalFinanced.toLocaleString('en-IN')}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 pt-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-x-5 gap-y-2.5 pt-2.5">
             {partnerSplitData.map((p) => (
               <div key={p.id} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${p.color.dot}`}></span>
                     <span className="font-bold text-slate-900 uppercase truncate text-[12px]">{p.name}</span>
-                    <span className="text-[9px] text-slate-400 font-semibold">({p.role})</span>
+                    <span className="text-[10px] text-slate-400 font-semibold">({p.role})</span>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 font-mono">
-                    <span className="text-[11px] text-slate-500 font-bold">{p.principalFinanced.toLocaleString('en-IN')}</span>
-                    <span className={`text-[11px] font-black px-1.5 py-0.2 rounded border ${p.color.badge}`}>
+                  <div className="flex items-center gap-1.5 flex-shrink-0 font-mono">
+                    <span className="text-[11px] text-slate-600 font-bold">₹ {p.principalFinanced.toLocaleString('en-IN')}</span>
+                    <span className={`text-[10px] font-black px-1.5 py-0.2 rounded border ${p.color.badge}`}>
                       {p.pctFormatted}
                     </span>
                   </div>
@@ -284,99 +310,107 @@ const PartnerPerformance: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className={`flex justify-center py-12`}>
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-green-500"></div>
+        <div className="flex justify-center py-12 bg-white rounded-xl border border-slate-200">
+          <div className="animate-spin rounded-full h-8 w-8 border-4 border-slate-200 border-t-slate-900"></div>
         </div>
       ) : (
-        <div className={`space-y-6`}>
-          <Card title="Partner Portfolio Registry" className="shadow-md">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
-                    <th className="px-3 py-3 text-left text-[10px] font-black uppercase tracking-wider whitespace-nowrap">Partner Name</th>
-                    <th className="px-3 py-3 text-right text-[10px] font-black uppercase tracking-wider whitespace-nowrap">Capital</th>
-                    <th className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider whitespace-nowrap">Introduced</th>
-                    <th className="px-3 py-3 text-right text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-blue-800">Financed</th>
-                    <th className="px-3 py-3 text-right text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-emerald-800">Collected</th>
-                    <th className="px-3 py-3 text-right text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-emerald-800">Int Earned</th>
-                    <th className="px-3 py-3 text-right text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-emerald-800">Pen Earned</th>
-                    <th className="px-3 py-3 text-right text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-rose-800">Outstanding</th>
-                    <th className="px-3 py-3 text-right text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-rose-800">Present Due</th>
-                    <th className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-emerald-800 bg-emerald-50/80">Recovery %</th>
-                    <th className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-rose-800">NPA</th>
-                    <th className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider whitespace-nowrap">Act / Cls</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {rows.map((row) => (
-                    <tr 
-                      key={row.id} 
-                      className="hover:bg-slate-50/50 cursor-pointer transition-colors"
-                      onClick={() => navigate('/finance/business-report', { state: { targetPartnerId: row.id } })}
-                    >
-                      <td className="px-3 py-3 text-slate-900 font-bold uppercase whitespace-nowrap text-xs">
-                        {row.name} <span className="text-[9px] text-slate-400 bg-slate-100 px-1 rounded font-normal">{row.role}</span>
-                      </td>
-                      <td className={`px-3 py-3 text-right font-medium font-mono text-xs whitespace-nowrap ${row.netCapital >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                        {row.netCapital.toLocaleString('en-IN')}
-                      </td>
-                      <td className="px-3 py-3 text-center font-bold text-slate-700 text-xs whitespace-nowrap">{row.loansIntroduced}</td>
-                      <td className="px-3 py-3 text-right text-blue-700 font-black font-mono text-xs whitespace-nowrap">{row.principalFinanced.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-emerald-700 font-black font-mono text-xs whitespace-nowrap">{row.principalCollected.toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-emerald-700 font-bold font-mono text-xs whitespace-nowrap">{Math.round(row.interestEarned).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-emerald-700 font-bold font-mono text-xs whitespace-nowrap">{Math.round(row.penaltyEarned).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-rose-700 font-black font-mono text-xs whitespace-nowrap">{Math.round(row.outstanding).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-right text-rose-700 font-black font-mono text-xs whitespace-nowrap">{Math.round(row.presentDue).toLocaleString('en-IN')}</td>
-                      <td className="px-3 py-3 text-center text-emerald-800 font-black bg-emerald-50/80 text-xs whitespace-nowrap">
-                        {row.recoveryPct.toFixed(1)}%
-                      </td>
-                      <td className="px-3 py-3 text-center text-rose-800 font-black text-xs whitespace-nowrap">
-                        {row.npaCount}
-                      </td>
-                      <td className="px-3 py-3 text-center text-slate-800 font-bold text-xs whitespace-nowrap">{row.activeLoans} / {row.closedLoans}</td>
-                    </tr>
-                  ))}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <h2 className="text-xs font-black uppercase text-slate-800 tracking-wider flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
+              Partner Portfolio Registry ({rows.length} Partners)
+            </h2>
+            <span className="text-[11px] font-bold text-slate-500 uppercase hidden sm:inline">
+              Click any row to view Partner Business Details
+            </span>
+          </div>
 
-                  {/* Grand Total Reconciliation Row */}
-                  <tr className="bg-slate-100 font-sans font-black border-t-2 border-slate-300 text-xs text-slate-900">
-                    <td className="px-3 py-3 font-black uppercase text-left">GRAND TOTAL:</td>
-                    <td className="px-3 py-3 text-right font-mono font-bold text-emerald-800 whitespace-nowrap">
-                      {grandTotals.netCapital.toLocaleString('en-IN')}
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-xs text-left border-collapse">
+              <thead className="bg-slate-100/90 text-slate-700 uppercase tracking-wider text-[11px] font-bold border-b border-slate-200 sticky top-0 z-10">
+                <tr>
+                  <th className="px-3.5 py-2.5 text-left whitespace-nowrap">Partner Name</th>
+                  <th className="px-3.5 py-2.5 text-right whitespace-nowrap text-slate-700">Capital</th>
+                  <th className="px-3 py-2.5 text-center whitespace-nowrap text-slate-600">Introduced</th>
+                  <th className="px-3.5 py-2.5 text-right whitespace-nowrap text-blue-900">Financed</th>
+                  <th className="px-3.5 py-2.5 text-right whitespace-nowrap text-emerald-800">Collected</th>
+                  <th className="px-3.5 py-2.5 text-right whitespace-nowrap text-emerald-800">Int Earned</th>
+                  <th className="px-3.5 py-2.5 text-right whitespace-nowrap text-emerald-800">Pen Earned</th>
+                  <th className="px-3.5 py-2.5 text-right whitespace-nowrap text-rose-800">Outstanding</th>
+                  <th className="px-3.5 py-2.5 text-right whitespace-nowrap text-rose-800">Present Due</th>
+                  <th className="px-3.5 py-2.5 text-center whitespace-nowrap text-emerald-900 bg-emerald-50/80">Recovery %</th>
+                  <th className="px-3 py-2.5 text-center whitespace-nowrap text-rose-800">NPA</th>
+                  <th className="px-3.5 py-2.5 text-center whitespace-nowrap text-slate-700">Act / Cls</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-150 bg-white font-mono text-[11px]">
+                {rows.map((row) => (
+                  <tr 
+                    key={row.id} 
+                    className="hover:bg-slate-50/80 cursor-pointer transition-colors"
+                    onClick={() => navigate('/finance/business-report', { state: { targetPartnerId: row.id } })}
+                  >
+                    <td className="px-3.5 py-2.5 text-slate-900 font-sans font-bold uppercase whitespace-nowrap text-xs">
+                      {row.name} <span className="text-[9px] text-slate-500 bg-slate-100 border border-slate-200 px-1 py-0.5 rounded font-bold uppercase ml-1">{row.role}</span>
                     </td>
-                    <td className="px-3 py-3 text-center font-bold">{grandTotals.loansIntroduced}</td>
-                    <td className="px-3 py-3 text-right font-mono font-black text-blue-900 whitespace-nowrap">
-                      {grandTotals.principalFinanced.toLocaleString('en-IN')}
+                    <td className={`px-3.5 py-2.5 text-right font-bold whitespace-nowrap ${row.netCapital >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      ₹ {row.netCapital.toLocaleString('en-IN')}
                     </td>
-                    <td className="px-3 py-3 text-right font-mono font-black text-emerald-800 whitespace-nowrap">
-                      {grandTotals.principalCollected.toLocaleString('en-IN')}
+                    <td className="px-3 py-2.5 text-center font-bold text-slate-700 whitespace-nowrap">{row.loansIntroduced}</td>
+                    <td className="px-3.5 py-2.5 text-right text-blue-700 font-black whitespace-nowrap">₹ {row.principalFinanced.toLocaleString('en-IN')}</td>
+                    <td className="px-3.5 py-2.5 text-right text-emerald-700 font-black whitespace-nowrap">₹ {row.principalCollected.toLocaleString('en-IN')}</td>
+                    <td className="px-3.5 py-2.5 text-right text-emerald-700 font-bold whitespace-nowrap">₹ {Math.round(row.interestEarned).toLocaleString('en-IN')}</td>
+                    <td className="px-3.5 py-2.5 text-right text-emerald-700 font-bold whitespace-nowrap">₹ {Math.round(row.penaltyEarned).toLocaleString('en-IN')}</td>
+                    <td className="px-3.5 py-2.5 text-right text-rose-700 font-black whitespace-nowrap">₹ {Math.round(row.outstanding).toLocaleString('en-IN')}</td>
+                    <td className="px-3.5 py-2.5 text-right text-rose-700 font-black whitespace-nowrap">₹ {Math.round(row.presentDue).toLocaleString('en-IN')}</td>
+                    <td className="px-3.5 py-2.5 text-center text-emerald-900 font-black bg-emerald-50/80 whitespace-nowrap">
+                      {row.recoveryPct.toFixed(1)}%
                     </td>
-                    <td className="px-3 py-3 text-right font-mono font-bold text-emerald-800 whitespace-nowrap">
-                      {Math.round(grandTotals.interestEarned).toLocaleString('en-IN')}
+                    <td className="px-3 py-2.5 text-center text-rose-800 font-black whitespace-nowrap">
+                      {row.npaCount}
                     </td>
-                    <td className="px-3 py-3 text-right font-mono font-bold text-emerald-800 whitespace-nowrap">
-                      {Math.round(grandTotals.penaltyEarned).toLocaleString('en-IN')}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono font-black text-rose-800 whitespace-nowrap">
-                      {Math.round(grandTotals.outstanding).toLocaleString('en-IN')}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono font-black text-rose-800 whitespace-nowrap">
-                      {Math.round(grandTotals.presentDue).toLocaleString('en-IN')}
-                    </td>
-                    <td className="px-3 py-3 text-center font-black bg-emerald-100 text-emerald-900 whitespace-nowrap">
-                      {overallRecoveryPct.toFixed(1)}%
-                    </td>
-                    <td className="px-3 py-3 text-center font-black text-rose-900 whitespace-nowrap">
-                      {grandTotals.npaCount}
-                    </td>
-                    <td className="px-3 py-3 text-center font-bold whitespace-nowrap">
-                      {grandTotals.activeLoans} / {grandTotals.closedLoans}
-                    </td>
+                    <td className="px-3.5 py-2.5 text-center text-slate-700 font-sans font-bold whitespace-nowrap">{row.activeLoans} / {row.closedLoans}</td>
                   </tr>
-                </tbody>
-              </table>
-            </div>
-          </Card>
+                ))}
+
+                {/* Grand Total Reconciliation Row */}
+                <tr className="bg-slate-100 font-mono font-black border-t-2 border-slate-300 text-xs text-slate-900">
+                  <td className="px-3.5 py-3 font-sans font-black uppercase text-left">GRAND TOTAL:</td>
+                  <td className="px-3.5 py-3 text-right font-bold text-emerald-800 whitespace-nowrap">
+                    ₹ {grandTotals.netCapital.toLocaleString('en-IN')}
+                  </td>
+                  <td className="px-3 py-3 text-center font-bold">{grandTotals.loansIntroduced}</td>
+                  <td className="px-3.5 py-3 text-right font-black text-blue-900 whitespace-nowrap">
+                    ₹ {grandTotals.principalFinanced.toLocaleString('en-IN')}
+                  </td>
+                  <td className="px-3.5 py-3 text-right font-black text-emerald-800 whitespace-nowrap">
+                    ₹ {grandTotals.principalCollected.toLocaleString('en-IN')}
+                  </td>
+                  <td className="px-3.5 py-3 text-right font-bold text-emerald-800 whitespace-nowrap">
+                    ₹ {Math.round(grandTotals.interestEarned).toLocaleString('en-IN')}
+                  </td>
+                  <td className="px-3.5 py-3 text-right font-bold text-emerald-800 whitespace-nowrap">
+                    ₹ {Math.round(grandTotals.penaltyEarned).toLocaleString('en-IN')}
+                  </td>
+                  <td className="px-3.5 py-3 text-right font-black text-rose-800 whitespace-nowrap">
+                    ₹ {Math.round(grandTotals.outstanding).toLocaleString('en-IN')}
+                  </td>
+                  <td className="px-3.5 py-3 text-right font-black text-rose-800 whitespace-nowrap">
+                    ₹ {Math.round(grandTotals.presentDue).toLocaleString('en-IN')}
+                  </td>
+                  <td className="px-3.5 py-3 text-center font-black bg-emerald-100 text-emerald-950 whitespace-nowrap">
+                    {overallRecoveryPct.toFixed(1)}%
+                  </td>
+                  <td className="px-3 py-3 text-center font-black text-rose-900 whitespace-nowrap">
+                    {grandTotals.npaCount}
+                  </td>
+                  <td className="px-3.5 py-3 text-center font-sans font-bold whitespace-nowrap">
+                    {grandTotals.activeLoans} / {grandTotals.closedLoans}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

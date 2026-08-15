@@ -255,15 +255,14 @@ const Partners: React.FC = () => {
             <table className="min-w-full divide-y divide-slate-150 md:text-sm finance-caption">
               <thead>
                 <tr className="bg-slate-50/50">
-                  <th className="finance-small-label uppercase">S.No</th>
-                  <th className="finance-small-label uppercase">Partner ID</th>
-                  <th className="finance-small-label uppercase">Name</th>
-                  <th className="finance-small-label uppercase">Role</th>
-                  <th className="finance-small-label uppercase">Phone</th>
-                  <th className="finance-small-label uppercase">Home Phone</th>
-                  <th className="finance-small-label uppercase">Village</th>
-                  <th className="finance-small-label uppercase">Created Date</th>
-                  <th className="text-right finance-small-label uppercase">Actions</th>
+                  <th className="w-14 px-3 py-3 text-left finance-small-label uppercase">S.No</th>
+                  <th className="w-28 px-3 py-3 text-left finance-small-label uppercase">Partner ID</th>
+                  <th className="px-3 py-3 text-left finance-small-label uppercase">Name</th>
+                  <th className="w-32 px-3 py-3 text-left finance-small-label uppercase">Role</th>
+                  <th className="w-36 px-3 py-3 text-left finance-small-label uppercase">Phone</th>
+                  <th className="w-36 px-3 py-3 text-left finance-small-label uppercase">Home Phone</th>
+                  <th className="px-3 py-3 text-left finance-small-label uppercase">Village</th>
+                  <th className="w-24 px-3 py-3 text-right finance-small-label uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -275,7 +274,7 @@ const Partners: React.FC = () => {
                     <td className="px-3 py-3 font-mono font-bold text-slate-800 finance-input">
                       {partner.partner_code || (partner.partner_id ? `P${String(partner.partner_id).padStart(2, '0')}` : '—')}
                     </td>
-                    <td className="px-3 py-3 text-slate-900 finance-input">
+                    <td className="px-3 py-3 text-slate-900 font-semibold finance-input">
                       {partner.name}
                     </td>
                     <td className="px-3 py-3">
@@ -283,17 +282,14 @@ const Partners: React.FC = () => {
                         {partner.is_md ? 'MD' : 'Partner'}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-slate-700 finance-input">
+                    <td className="px-3 py-3 text-slate-700 font-mono finance-input">
                       {partner.phone || '—'}
                     </td>
-                    <td className="px-3 py-3 text-slate-700 finance-input">
+                    <td className="px-3 py-3 text-slate-700 font-mono finance-input">
                       {partner.home_phone || '—'}
                     </td>
-                    <td className="px-3 py-3 text-slate-600 finance-input">
+                    <td className="px-3 py-3 text-slate-600 uppercase finance-input">
                       {partner.village || '—'}
-                    </td>
-                    <td className="px-3 py-3 text-slate-500 finance-input">
-                      {new Date(partner.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </td>
                     <td className="px-3 py-3 text-right whitespace-nowrap">
                       <div className="flex justify-end gap-1.5">

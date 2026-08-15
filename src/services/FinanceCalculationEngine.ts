@@ -79,7 +79,37 @@ export interface OverdueDueItem {
   customer_id?: string;
   guarantor_1_id?: string;
   guarantor_2_id?: string;
+  closingAmount?: number;
+  totalPaid?: number;
+  pendingPenalty?: number;
 }
+
+export function naturalSortLoanId(idA: string, idB: string): number {
+  const strA = (idA || '').trim();
+  const strB = (idB || '').trim();
+
+  // Extract alphanumeric prefix (e.g. "CD", "HP") and numeric portion
+  const matchA = strA.match(/^([A-Za-z\s_-]*)(\d+)(.*)$/);
+  const matchB = strB.match(/^([A-Za-z\s_-]*)(\d+)(.*)$/);
+
+  if (matchA && matchB) {
+    const prefixA = matchA[1].toUpperCase();
+    const prefixB = matchB[1].toUpperCase();
+    if (prefixA !== prefixB) {
+      return prefixA.localeCompare(prefixB);
+    }
+    const numA = parseInt(matchA[2], 10);
+    const numB = parseInt(matchB[2], 10);
+    if (numA !== numB) {
+      return numA - numB;
+    }
+    return strA.localeCompare(strB);
+  }
+
+  return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+export type DuesReportType = 'OUTSTANDING' | 'TOTAL DUE LIST' | 'CD DUE LIST' | 'A -> B DUE LIST' | 'NPA LIST' | 'DUE DAYS';
 
 export interface PartnerMetrics {
   partnerId: string;
@@ -113,9 +143,10 @@ export interface PartnerMetrics {
   recoveryPct: number;
 }
 
-export interface FinalStatementBSAccount {
+export interface FinalStatementAccount {
   accountName: string;
-  category: 'ASSET' | 'LIABILITY' | 'CAPITAL';
+  category: 'ASSET' | 'LIABILITY' | 'CAPITAL' | 'INCOME' | 'EXPENSE';
+  reportClassification: 'BALANCE_SHEET' | 'PROFIT_AND_LOSS';
   opening: number;
   credit: number;
   debit: number;
@@ -125,14 +156,14 @@ export interface FinalStatementBSAccount {
   entries: any[];
 }
 
-export interface PartnerEquityShare {
-  partnerId: string;
+export interface FinalStatementPLHead {
   name: string;
-  isMd: boolean;
-  sharePercent: number;
-  capitalContributed: number;
-  periodProfitShare: number;
-  totalNetWorthShare: number;
+  opening: number;
+  currentPeriod: number;
+  total: number;
+  percentage: number;
+  ledgerCount: number;
+  entries: any[];
 }
 
 export interface FinalStatementMetrics {
@@ -140,26 +171,29 @@ export interface FinalStatementMetrics {
   closingCash: number;
   totalInflows: number;
   totalOutflows: number;
+  totalIncome: number;
+  totalExpenses: number;
+  netProfit: number;
   totalAssets: number;
+  totalLoanPrincipal: number;
   totalLiabilities: number;
   totalCapital: number;
-  totalCapitalContributed: number;
-  netProfit: number;
+  totalLiabilitiesAndCapital: number;
   netWorth: number;
-  reconciliationDifference: number;
-  isBalanced: boolean;
-  accounts: FinalStatementBSAccount[];
-  partnerShares: PartnerEquityShare[];
+  incomeHeads: FinalStatementPLHead[];
+  expenseHeads: FinalStatementPLHead[];
+  accounts: FinalStatementAccount[];
 }
 
 export class FinanceCalculationEngine {
   
   /**
-   * Evaluates if a loan is considered active/NPA for outstanding calculations
+   * Evaluates if a loan is considered active/open for outstanding calculations
    */
   static isActiveOrNpa(status: string, isNpaFlag: boolean = false): boolean {
     const s = (status || '').trim().toUpperCase();
-    return s === 'ACTIVE' || s === 'NPA' || s === 'NPA_CLOSED' || s === 'NPA CLOSED' || isNpaFlag;
+    if (s === 'CLOSED' || s === 'NPA_CLOSED' || s === 'NPA CLOSED' || s === 'NPA' || s === 'WRITTEN_OFF' || s === 'WRITTEN OFF') return false;
+    return s === 'ACTIVE';
   }
 
   /**
@@ -169,15 +203,27 @@ export class FinanceCalculationEngine {
     const due = dues.find(d => d.loan_id === loan.loan_id || d.loanId === loan.id || d.id === loan.id);
     const p = Number(loan.amount) || 0;
     
-    const isActive = this.isActiveOrNpa(loan.status, loan.npa_closed === true || (loan as any).is_npa === true);
+    const rawStatus = (loan.status || '').trim().toUpperCase();
+    const isNpaClosed = rawStatus === 'NPA_CLOSED' || 
+                        rawStatus === 'NPA CLOSED' || 
+                        rawStatus === 'NPA' ||
+                        rawStatus === 'WRITTEN_OFF' ||
+                        rawStatus === 'WRITTEN OFF' ||
+                        loan.npa_closed === true ||
+                        (loan as any).is_npa_closed === true;
+
+    const isClosed = rawStatus === 'CLOSED' || isNpaClosed;
+
+    const isActive = !isClosed && (rawStatus === 'ACTIVE' || rawStatus === 'OPEN');
     
+    // For NPA CLOSED or regular CLOSED, current outstanding positions MUST BE ZERO:
     const outstanding = isActive 
-      ? (due ? Number(due.current_principal || due.currentPrincipal || due.principal || 0) : p)
+      ? (due ? Number(due.current_principal ?? due.currentPrincipal ?? due.principal ?? 0) : p)
       : 0;
 
-    const presentDue = isActive && due ? Number(due.present_due || due.presentDue || due.totalPending || 0) : 0;
-    const pendingInterest = isActive && due ? Number(due.pending_interest || due.pendingInterest || due.interestPending || 0) : 0;
-    const pendingPenalty = isActive && due ? Number(due.penalty || due.penaltyPending || 0) : 0;
+    const presentDue = isActive && due ? Number(due.present_due ?? due.presentDue ?? due.totalPending ?? 0) : 0;
+    const pendingInterest = isActive && due ? Number(due.pending_interest ?? due.pendingInterest ?? due.interestPending ?? 0) : 0;
+    const pendingPenalty = isActive && due ? Number(due.penalty ?? due.pending_penalty ?? due.penaltyPending ?? 0) : 0;
     
     const interestEarned = due ? Number(due.interest_paid || 0) : 0;
     const penaltyEarned = due ? Number(due.penalty_paid || 0) : 0;
@@ -198,42 +244,152 @@ export class FinanceCalculationEngine {
   }
 
   /**
+   * Builds an OverdueDueItem from raw loan & ledger data for CD loans.
+   */
+  static buildCDDueItem(
+    loan: any,
+    pos: any,
+    interestPaid: number,
+    penaltyPaid: number,
+    borrowerMap: Map<string, any>,
+    disbEntryDate?: string,
+    npaRecord?: any
+  ): OverdueDueItem {
+    const borrower = borrowerMap.get(loan.customer_id) || {};
+    const g1 = borrowerMap.get(loan.guarantor_1_id) || {};
+    const g2 = borrowerMap.get(loan.guarantor_2_id) || {};
+
+    const phone = borrower.phone || borrower.phone_1 || borrower.phone_2 || '';
+    const g1_name = g1.name || '';
+    const g1_phone = g1.phone || g1.phone_1 || g1.phone_2 || '';
+    const g2_name = g2.name || '';
+    const g2_phone = g2.phone || g2.phone_1 || g2.phone_2 || '';
+
+    const cleanStatus = (loan.status || '').trim().toUpperCase();
+    const isNpaClosed = cleanStatus === 'NPA_CLOSED' || cleanStatus === 'NPA CLOSED' || cleanStatus === 'NPA';
+
+    const originalLoanDateStr = disbEntryDate 
+      ? disbEntryDate.split('T')[0] 
+      : (loan.date ? loan.date.split('T')[0] : (loan.loan_date ? loan.loan_date.split('T')[0] : ''));
+
+    if (isNpaClosed) {
+      const loanAmt = Number(loan.amount || (npaRecord ? npaRecord.loan_amount : 0));
+      const closingAmt = npaRecord ? Number(npaRecord.settlement_amount || 0) : 0;
+      const pendInt = npaRecord ? Number(npaRecord.interest_due || 0) : (pos ? pos.accruedInterest : 0);
+      const pendPen = npaRecord ? Number(npaRecord.penalty_due || 0) : (pos ? pos.accruedPenalty : 0);
+      const totPaid = npaRecord ? Number(npaRecord.paid_amount || 0) : (interestPaid + penaltyPaid);
+
+      return {
+        id: loan.id,
+        loanId: loan.loan_id,
+        customerName: borrower.name || loan.borrower_name || '',
+        loanCategory: loan.loan_category || 'CD',
+        loanType: 'CD',
+        loanAmount: loanAmt,
+        currentPrincipal: loanAmt,
+        loanDate: originalLoanDateStr,
+        currentDueDate: '',
+        interestPaid,
+        pendingInterest: pendInt,
+        penalty: pendPen,
+        penaltyPaid,
+        presentDue: 0,
+        dueDays: 0,
+        isNPA: true,
+        phone,
+        g1Name: g1_name,
+        g1Phone: g1_phone,
+        g2Name: g2_name,
+        g2Phone: g2_phone,
+        partnerName: borrower.partner_name || loan.partner_name || 'Unassigned',
+        status: loan.status,
+        customer_id: loan.customer_id,
+        guarantor_1_id: loan.guarantor_1_id,
+        guarantor_2_id: loan.guarantor_2_id,
+        closingAmount: closingAmt,
+        totalPaid: totPaid,
+        pendingPenalty: pendPen
+      };
+    }
+
+    return {
+      id: loan.id,
+      loanId: loan.loan_id,
+      customerName: borrower.name || loan.borrower_name || '',
+      loanCategory: loan.loan_category || 'CD',
+      loanType: 'CD',
+      loanAmount: Number(loan.amount || 0),
+      currentPrincipal: pos.principalBalance,
+      loanDate: originalLoanDateStr,
+      currentDueDate: pos.currentDueDate || '',
+      interestPaid,
+      pendingInterest: pos.accruedInterest,
+      penalty: pos.accruedPenalty,
+      penaltyPaid,
+      presentDue: pos.todayDue,
+      dueDays: pos.displayDueDays,
+      isNPA: pos.displayDueDays > 90,
+      phone,
+      g1Name: g1_name,
+      g1Phone: g1_phone,
+      g2Name: g2_name,
+      g2Phone: g2_phone,
+      partnerName: borrower.partner_name || loan.partner_name || 'Unassigned',
+      status: loan.status,
+      customer_id: loan.customer_id,
+      guarantor_1_id: loan.guarantor_1_id,
+      guarantor_2_id: loan.guarantor_2_id,
+      closingAmount: Math.round(pos.principalBalance + pos.accruedInterest + pos.accruedPenalty),
+      totalPaid: interestPaid + penaltyPaid,
+      pendingPenalty: pos.accruedPenalty
+    };
+  }
+
+  /**
    * Filters a list of OverdueDueItems according to standardized business rules.
    */
   static filterDueList(
     dues: OverdueDueItem[],
-    activeReport: 'OUTSTANDING' | 'TOTAL DUE LIST' | 'CD DUE LIST' | 'A -> B DUE LIST' | 'NPA LIST',
+    activeReport: DuesReportType,
     selectedPartner: string,
     loanTypeFilter: 'ALL' | 'CD' | 'HP' | 'STBD' | 'TBD',
     searchName: string,
     startDate: string,
-    endDate: string
+    endDate: string,
+    dueDaysSort?: 'DEFAULT' | 'ASC' | 'DESC'
   ): OverdueDueItem[] {
     return dues.filter(due => {
+      const cleanStatus = (due.status || '').trim().toUpperCase();
+      const isNpaClosed = cleanStatus === 'NPA_CLOSED' || cleanStatus === 'NPA CLOSED' || cleanStatus === 'NPA';
+
       // 1. Report Type Filter
       if (activeReport === 'OUTSTANDING') {
         const isActive = due.status === 'Active';
-        const isOverdue = due.presentDue > 0 || due.pendingInterest > 0 || due.penalty > 0 || due.dueDays > 0;
-        if (!isActive || !isOverdue) return false;
+        const isOverdue = due.presentDue > 0 || due.pendingInterest > 0 || due.penalty > 0 || due.dueDays > 0 || due.currentPrincipal > 0;
+        if (!isActive || !isOverdue || isNpaClosed) return false;
       } else if (activeReport === 'TOTAL DUE LIST') {
-        // Show all accounts in ledgers
+        // Active accounts
+        if (due.status !== 'Active' || isNpaClosed) return false;
       } else if (activeReport === 'CD DUE LIST') {
         const isActive = due.status === 'Active';
-        if (due.loanType !== 'CD' || !isActive) return false;
+        if (due.loanType !== 'CD' || !isActive || isNpaClosed) return false;
       } else if (activeReport === 'A -> B DUE LIST') {
         const isActive = due.status === 'Active';
-        if (!isActive) return false;
+        if (!isActive || isNpaClosed) return false;
       } else if (activeReport === 'NPA LIST') {
-        // Thirumala Finance NPA Definition: Accounts explicitly closed under NPA (e.g. status = NPA_CLOSED, NPA CLOSED, NPA)
-        const cleanStatus = (due.status || '').trim().toUpperCase();
-        const isNpaClosed = cleanStatus === 'NPA_CLOSED' || cleanStatus === 'NPA CLOSED' || cleanStatus === 'NPA';
+        // NPA closed accounts only
         if (!isNpaClosed) return false;
+      } else if (activeReport === 'DUE DAYS') {
+        // Active accounts only
+        const isActive = due.status === 'Active';
+        if (!isActive || isNpaClosed) return false;
       }
 
       // 2. Date Filters for all reports
-      if (due.currentDueDate) {
-        if (startDate && due.currentDueDate < startDate) return false;
-        if (endDate && due.currentDueDate > endDate) return false;
+      const dateToCheck = (activeReport === 'NPA LIST' ? due.loanDate : due.currentDueDate) || due.loanDate;
+      if (dateToCheck) {
+        if (startDate && dateToCheck < startDate) return false;
+        if (endDate && dateToCheck > endDate) return false;
       }
 
       // 3. Partner Filter
@@ -252,22 +408,28 @@ export class FinanceCalculationEngine {
 
       return true;
     }).sort((a, b) => {
-      if (activeReport === 'OUTSTANDING') {
-        if (a.currentDueDate !== b.currentDueDate) {
-          return a.currentDueDate.localeCompare(b.currentDueDate);
+      // 1. DUE DAYS specific sorting
+      if (activeReport === 'DUE DAYS') {
+        if (dueDaysSort === 'ASC') {
+          if (a.dueDays !== b.dueDays) return a.dueDays - b.dueDays;
+          return naturalSortLoanId(a.loanId, b.loanId);
         }
-        const numA = Number(a.loanId.replace(/\\D/g, '')) || 0;
-        const numB = Number(b.loanId.replace(/\\D/g, '')) || 0;
-        if (numA !== numB) return numA - numB;
-        return a.loanId.localeCompare(b.loanId);
-      } else if (activeReport === 'A -> B DUE LIST') {
-        return a.customerName.localeCompare(b.customerName);
-      } else {
-        const numA = Number(a.loanId.replace(/\\D/g, '')) || 0;
-        const numB = Number(b.loanId.replace(/\\D/g, '')) || 0;
-        if (numA !== numB) return numA - numB;
-        return a.loanId.localeCompare(b.loanId);
+        if (dueDaysSort === 'DESC') {
+          if (a.dueDays !== b.dueDays) return b.dueDays - a.dueDays;
+          return naturalSortLoanId(a.loanId, b.loanId);
+        }
+        return naturalSortLoanId(a.loanId, b.loanId);
       }
+
+      // 2. A -> B DUE LIST: alphabetical by borrower name
+      if (activeReport === 'A -> B DUE LIST') {
+        const nameComp = a.customerName.localeCompare(b.customerName);
+        if (nameComp !== 0) return nameComp;
+        return naturalSortLoanId(a.loanId, b.loanId);
+      }
+
+      // 3. OUTSTANDING, TOTAL DUE LIST, CD DUE LIST, NPA LIST: Natural CD Number ascending
+      return naturalSortLoanId(a.loanId, b.loanId);
     });
   }
 
@@ -277,18 +439,20 @@ export class FinanceCalculationEngine {
   static computeDueListTotals(filteredDues: OverdueDueItem[]) {
     let principal = 0, interestPaid = 0, interest = 0;
     let penaltyPaid = 0, penalty = 0, presentDue = 0, amountToClose = 0;
+    let totalPaid = 0;
 
     filteredDues.forEach(d => {
-      principal += d.currentPrincipal;
-      interestPaid += d.interestPaid;
-      interest += d.pendingInterest;
-      penaltyPaid += d.penaltyPaid;
-      penalty += d.penalty;
-      presentDue += d.presentDue;
-      amountToClose += d.currentPrincipal + d.pendingInterest + d.penalty;
+      principal += (d.loanAmount || d.currentPrincipal || 0);
+      interestPaid += (d.interestPaid || 0);
+      interest += (d.pendingInterest || 0);
+      penaltyPaid += (d.penaltyPaid || 0);
+      penalty += (d.pendingPenalty ?? d.penalty ?? 0);
+      presentDue += (d.presentDue || 0);
+      amountToClose += (d.closingAmount ?? (d.currentPrincipal + d.pendingInterest + d.penalty));
+      totalPaid += (d.totalPaid || 0);
     });
 
-    return { principal, interestPaid, interest, penaltyPaid, penalty, presentDue, amountToClose };
+    return { principal, interestPaid, interest, penaltyPaid, penalty, presentDue, amountToClose, totalPaid };
   }
 
   /**
@@ -687,18 +851,28 @@ export class FinanceCalculationEngine {
       });
     }
 
-    // 2. Fetch date range transactions & partner details
-    const [rangeTxs, partners, capitalEntries] = await Promise.all([
-      dailyFinancialTransactionService.getDailyFinancialTransactions({
-        fromDate,
-        toDate,
-        financeMode
-      }),
-      supabaseFinance.getPartners(),
-      supabase.from('finance_capital_entries').select('*')
-    ]);
+    // 2. Fetch date range transactions
+    const rangeTxs = await dailyFinancialTransactionService.getDailyFinancialTransactions({
+      fromDate,
+      toDate,
+      financeMode
+    });
 
-    const capData = capitalEntries.data || [];
+    // Helper for principal/capital exclusions from P&L
+    const isPrincipalOrCapitalHead = (headName: string): boolean => {
+      const upper = (headName || '').toUpperCase();
+      return (
+        upper.includes('DISBURSEMENT') ||
+        upper.includes('PRINCIPAL') ||
+        upper.includes('RECEIVABLE') ||
+        upper.includes('COLLECTION') ||
+        upper === 'CD A/C' ||
+        upper === 'CAPITAL' ||
+        upper.startsWith('CAPITAL') ||
+        upper.startsWith('BANK') ||
+        upper.endsWith('BANK')
+      );
+    };
 
     // Calculate cash balances
     let prevCash = 0;
@@ -709,95 +883,128 @@ export class FinanceCalculationEngine {
 
     let totalInflows = 0;
     let totalOutflows = 0;
-    let profitCredits = 0;
-    let profitDebits = 0;
+    rangeTxs.forEach(t => {
+      totalInflows += Number(t.credit || 0);
+      totalOutflows += Number(t.debit || 0);
+    });
+    const closingCash = openingCash + totalInflows - totalOutflows;
+
+    // 3. Compute Profit & Loss Head Details
+    const prevIncomeMap = new Map<string, number>();
+    const prevExpenseMap = new Map<string, number>();
+
+    prevTxs.forEach(t => {
+      const head = t.headOfAccount || 'UNCLASSIFIED';
+      if (isPrincipalOrCapitalHead(head)) return;
+
+      if (t.reportClassification === 'PROFIT_AND_LOSS') {
+        const cr = Number(t.credit || 0);
+        const dr = Number(t.debit || 0);
+        if (cr > 0) prevIncomeMap.set(head, (prevIncomeMap.get(head) || 0) + (cr - dr));
+        if (dr > 0) prevExpenseMap.set(head, (prevExpenseMap.get(head) || 0) + (dr - cr));
+      }
+    });
+
+    const incomeEntriesMap = new Map<string, any[]>();
+    const expenseEntriesMap = new Map<string, any[]>();
 
     rangeTxs.forEach(t => {
-      const cr = Number(t.credit || 0);
-      const dr = Number(t.debit || 0);
-      totalInflows += cr;
-      totalOutflows += dr;
+      const head = t.headOfAccount || 'UNCLASSIFIED';
+      if (isPrincipalOrCapitalHead(head)) return;
+
       if (t.reportClassification === 'PROFIT_AND_LOSS') {
-        profitCredits += cr;
-        profitDebits += dr;
+        const cr = Number(t.credit || 0);
+        const dr = Number(t.debit || 0);
+        if (cr > 0) {
+          if (!incomeEntriesMap.has(head)) incomeEntriesMap.set(head, []);
+          incomeEntriesMap.get(head)!.push(t);
+        }
+        if (dr > 0) {
+          if (!expenseEntriesMap.has(head)) expenseEntriesMap.set(head, []);
+          expenseEntriesMap.get(head)!.push(t);
+        }
       }
     });
 
-    const closingCash = openingCash + totalInflows - totalOutflows;
-    const netProfit = profitCredits - profitDebits;
+    const allIncomeHeadNames = new Set<string>([
+      ...Array.from(prevIncomeMap.keys()),
+      ...Array.from(incomeEntriesMap.keys())
+    ]);
 
-    // Calculate partner capital & equity distribution
-    const partnerCount = partners.length || 1;
-    
-    // First calculate capital contributed for each partner
-    const partnerCapitals = partners.map(p => {
-      const pEntries = capData.filter((c: any) => 
-        c.partner_id === p.id || 
-        c.partner_id === String(p.partner_id) || 
-        c.partner_name === p.name
-      );
-      let capContributed = 0;
-      pEntries.forEach((c: any) => {
-        const cr = Number(c.credit) || 0;
-        const dr = Number(c.debit) || 0;
-        capContributed += (cr - dr);
-      });
-      return capContributed;
+    const allExpenseHeadNames = new Set<string>([
+      ...Array.from(prevExpenseMap.keys()),
+      ...Array.from(expenseEntriesMap.keys())
+    ]);
+
+    let totalIncome = 0;
+    allIncomeHeadNames.forEach(head => {
+      const entries = incomeEntriesMap.get(head) || [];
+      entries.forEach(e => totalIncome += (Number(e.credit || 0) - Number(e.debit || 0)));
     });
 
-    const totalSystemCapital = partnerCapitals.reduce((sum, c) => sum + c, 0);
-    const totalExplicitPercent = partners.reduce((sum, p) => sum + (Number(p.share_percent) || 0), 0);
+    let totalExpenses = 0;
+    allExpenseHeadNames.forEach(head => {
+      const entries = expenseEntriesMap.get(head) || [];
+      entries.forEach(e => totalExpenses += (Number(e.debit || 0) - Number(e.credit || 0)));
+    });
 
-    const partnerShares: PartnerEquityShare[] = partners.map((p, idx) => {
-      const capContributed = partnerCapitals[idx];
-
-      let sharePct = 0;
-      if (totalExplicitPercent > 0 && Number(p.share_percent) > 0) {
-        // Business Rule 1: Use registered explicit share_percent
-        sharePct = Number(p.share_percent);
-      } else if (totalSystemCapital > 0) {
-        // Business Rule 2: Capital-weighted share
-        sharePct = (capContributed / totalSystemCapital) * 100;
-      } else {
-        // Business Rule 3: Equal split
-        sharePct = 100 / partnerCount;
-      }
-
-      const pProfitShare = netProfit * (sharePct / 100);
-      const pNetWorth = capContributed + pProfitShare;
-
+    const incomeHeads: FinalStatementPLHead[] = Array.from(allIncomeHeadNames).map(head => {
+      const op = prevIncomeMap.get(head) || 0;
+      const entries = incomeEntriesMap.get(head) || [];
+      const curr = entries.reduce((sum, e) => sum + (Number(e.credit || 0) - Number(e.debit || 0)), 0);
+      const tot = op + curr;
+      const pct = totalIncome > 0 ? (curr / totalIncome) * 100 : 0;
       return {
-        partnerId: p.id,
-        name: p.name,
-        isMd: Boolean(p.is_md),
-        sharePercent: parseFloat(sharePct.toFixed(2)),
-        capitalContributed: parseFloat(capContributed.toFixed(2)),
-        periodProfitShare: parseFloat(pProfitShare.toFixed(2)),
-        totalNetWorthShare: parseFloat(pNetWorth.toFixed(2))
+        name: head,
+        opening: parseFloat(op.toFixed(2)),
+        currentPeriod: parseFloat(curr.toFixed(2)),
+        total: parseFloat(tot.toFixed(2)),
+        percentage: parseFloat(pct.toFixed(1)),
+        ledgerCount: entries.length,
+        entries
       };
     });
 
-    const totalCapitalContributed = partnerShares.reduce((sum, p) => sum + p.capitalContributed, 0);
-    const totalCapital = totalCapitalContributed + netProfit;
+    const expenseHeads: FinalStatementPLHead[] = Array.from(allExpenseHeadNames).map(head => {
+      const op = prevExpenseMap.get(head) || 0;
+      const entries = expenseEntriesMap.get(head) || [];
+      const curr = entries.reduce((sum, e) => sum + (Number(e.debit || 0) - Number(e.credit || 0)), 0);
+      const tot = op + curr;
+      const pct = totalExpenses > 0 ? (curr / totalExpenses) * 100 : 0;
+      return {
+        name: head,
+        opening: parseFloat(op.toFixed(2)),
+        currentPeriod: parseFloat(curr.toFixed(2)),
+        total: parseFloat(tot.toFixed(2)),
+        percentage: parseFloat(pct.toFixed(1)),
+        ledgerCount: entries.length,
+        entries
+      };
+    });
 
-    // Collect all Balance Sheet Account Heads
-    const bsHeads = new Set<string>();
+    incomeHeads.sort((a, b) => b.currentPeriod - a.currentPeriod);
+    expenseHeads.sort((a, b) => b.currentPeriod - a.currentPeriod);
+
+    const netProfit = totalIncome - totalExpenses;
+
+    // 4. Collect all General Ledger Account Heads
+    const allGLHeads = new Set<string>();
     prevTxs.forEach(t => {
-      if (t.reportClassification === 'BALANCE_SHEET') bsHeads.add(t.headOfAccount || 'UNCLASSIFIED');
+      if (t.headOfAccount) allGLHeads.add(t.headOfAccount);
     });
     rangeTxs.forEach(t => {
-      if (t.reportClassification === 'BALANCE_SHEET') bsHeads.add(t.headOfAccount || 'UNCLASSIFIED');
+      if (t.headOfAccount) allGLHeads.add(t.headOfAccount);
     });
 
-    const accounts: FinalStatementBSAccount[] = Array.from(bsHeads).map(head => {
+    const accounts: FinalStatementAccount[] = Array.from(allGLHeads).map(head => {
       let op = 0;
-      prevTxs.filter(t => (t.headOfAccount || 'UNCLASSIFIED') === head).forEach(t => {
+      prevTxs.filter(t => t.headOfAccount === head).forEach(t => {
         op += (Number(t.credit || 0) - Number(t.debit || 0));
       });
 
       let cr = 0;
       let dr = 0;
-      const entries = rangeTxs.filter(t => (t.headOfAccount || 'UNCLASSIFIED') === head);
+      const entries = rangeTxs.filter(t => t.headOfAccount === head);
       entries.forEach(t => {
         cr += Number(t.credit || 0);
         dr += Number(t.debit || 0);
@@ -806,22 +1013,37 @@ export class FinanceCalculationEngine {
       const netMovement = cr - dr;
       const closing = op + netMovement;
 
-      // Account Classification Logic
       const headUpper = head.toUpperCase();
-      let category: 'ASSET' | 'LIABILITY' | 'CAPITAL' = 'ASSET';
-      if (headUpper.includes('CAPITAL') || headUpper.includes('EQUITY') || headUpper.includes('PARTNER')) {
+      let category: 'ASSET' | 'LIABILITY' | 'CAPITAL' | 'INCOME' | 'EXPENSE' = 'ASSET';
+      let reportClassification: 'BALANCE_SHEET' | 'PROFIT_AND_LOSS' = 'BALANCE_SHEET';
+
+      if (headUpper.startsWith('CAPITAL') || headUpper.includes('EQUITY')) {
         category = 'CAPITAL';
-      } else if (headUpper.includes('SUSPENSE') || headUpper.includes('BORROWING') || headUpper.includes('PAYABLE') || headUpper.includes('ADVANCE RECEIVED') || headUpper.includes('LIABILITY')) {
-        category = 'LIABILITY';
-      } else if (headUpper.includes('CASH') || headUpper.includes('BANK') || headUpper.includes('LOAN') || headUpper.includes('RECEIVABLE') || headUpper.includes('ADVANCE') || headUpper.includes('ASSET')) {
+        reportClassification = 'BALANCE_SHEET';
+      } else if (headUpper.includes('DISBURSEMENT') || headUpper.includes('PRINCIPAL') || headUpper.includes('RECEIVABLE') || headUpper.includes('LOAN') || headUpper.includes('BANK') || headUpper.includes('CASH') || headUpper.includes('ASSET')) {
         category = 'ASSET';
+        reportClassification = 'BALANCE_SHEET';
+      } else if (headUpper.includes('BORROWING') || headUpper.includes('PAYABLE') || headUpper.includes('LIABILITY') || headUpper.includes('SUSPENSE')) {
+        category = 'LIABILITY';
+        reportClassification = 'BALANCE_SHEET';
+      } else if (headUpper.includes('INTEREST') || headUpper.includes('PENALTY') || headUpper.includes('DOCUMENT CHARGES') || headUpper.includes('COMMISSION') || headUpper.includes('INCOME')) {
+        category = 'INCOME';
+        reportClassification = 'PROFIT_AND_LOSS';
       } else {
-        category = closing >= 0 ? 'ASSET' : 'LIABILITY';
+        const sampleTx = entries[0] || prevTxs.find(t => t.headOfAccount === head);
+        if (sampleTx?.reportClassification === 'PROFIT_AND_LOSS' || (!isPrincipalOrCapitalHead(head) && (dr > 0 || cr > 0))) {
+          category = cr >= dr ? 'INCOME' : 'EXPENSE';
+          reportClassification = 'PROFIT_AND_LOSS';
+        } else {
+          category = closing <= 0 ? 'ASSET' : 'LIABILITY';
+          reportClassification = 'BALANCE_SHEET';
+        }
       }
 
       return {
         accountName: head,
         category,
+        reportClassification,
         opening: parseFloat(op.toFixed(2)),
         credit: parseFloat(cr.toFixed(2)),
         debit: parseFloat(dr.toFixed(2)),
@@ -834,37 +1056,49 @@ export class FinanceCalculationEngine {
 
     accounts.sort((a, b) => a.accountName.localeCompare(b.accountName));
 
-    // Calculate Assets, Liabilities & Accounting Identity
-    let totalAssets = closingCash;
-    let totalLiabilities = 0;
+    // 5. Calculate Balance Sheet Totals
+    const loanPrincipalAccounts = accounts.filter(acc => 
+      acc.category === 'ASSET' && (
+        acc.accountName.toUpperCase().includes('DISBURSEMENT') ||
+        acc.accountName.toUpperCase().includes('PRINCIPAL') ||
+        acc.accountName.toUpperCase().includes('RECEIVABLE')
+      )
+    );
+    const totalLoanPrincipal = loanPrincipalAccounts.reduce((sum, acc) => sum + Math.abs(acc.closing), 0);
 
-    accounts.forEach(acc => {
-      if (acc.category === 'ASSET') {
-        totalAssets += Math.max(0, acc.closing);
-      } else if (acc.category === 'LIABILITY') {
-        totalLiabilities += Math.abs(acc.closing);
-      }
-    });
+    const otherAssetAccounts = accounts.filter(acc => 
+      acc.category === 'ASSET' && !loanPrincipalAccounts.some(lp => lp.accountName === acc.accountName)
+    );
+    const totalOtherAssets = otherAssetAccounts.reduce((sum, acc) => sum + Math.abs(acc.closing), 0);
 
+    const totalAssets = totalLoanPrincipal + Math.max(0, closingCash) + totalOtherAssets;
+
+    const capitalAccounts = accounts.filter(acc => acc.category === 'CAPITAL');
+    const totalCapital = capitalAccounts.reduce((sum, acc) => sum + acc.closing, 0);
+
+    const liabilityAccounts = accounts.filter(acc => acc.category === 'LIABILITY');
+    const totalLiabilities = liabilityAccounts.reduce((sum, acc) => sum + Math.abs(acc.closing), 0);
+
+    const totalLiabilitiesAndCapital = totalCapital + totalLiabilities + netProfit;
     const netWorth = totalAssets - totalLiabilities;
-    const reconciliationDifference = parseFloat(Math.abs(totalAssets - (totalLiabilities + totalCapital)).toFixed(2));
-    const isBalanced = reconciliationDifference < 0.01;
 
     return {
       openingCash: parseFloat(openingCash.toFixed(2)),
       closingCash: parseFloat(closingCash.toFixed(2)),
       totalInflows: parseFloat(totalInflows.toFixed(2)),
       totalOutflows: parseFloat(totalOutflows.toFixed(2)),
+      totalIncome: parseFloat(totalIncome.toFixed(2)),
+      totalExpenses: parseFloat(totalExpenses.toFixed(2)),
+      netProfit: parseFloat(netProfit.toFixed(2)),
       totalAssets: parseFloat(totalAssets.toFixed(2)),
+      totalLoanPrincipal: parseFloat(totalLoanPrincipal.toFixed(2)),
       totalLiabilities: parseFloat(totalLiabilities.toFixed(2)),
       totalCapital: parseFloat(totalCapital.toFixed(2)),
-      totalCapitalContributed: parseFloat(totalCapitalContributed.toFixed(2)),
-      netProfit: parseFloat(netProfit.toFixed(2)),
+      totalLiabilitiesAndCapital: parseFloat(totalLiabilitiesAndCapital.toFixed(2)),
       netWorth: parseFloat(netWorth.toFixed(2)),
-      reconciliationDifference,
-      isBalanced,
-      accounts,
-      partnerShares
+      incomeHeads,
+      expenseHeads,
+      accounts
     };
   }
 

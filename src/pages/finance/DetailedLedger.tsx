@@ -48,7 +48,7 @@ const DetailedLedgerFinance: React.FC = () => {
 
   const [fromDate, setFromDate] = useState(initialFrom);
   const [toDate, setToDate] = useState(initialTo);
-  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'CD' | 'CAPITAL' | 'BANK' | 'SALARY' | 'EXPENSE' | 'OTHER'>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'CD' | 'CAPITAL' | 'BANK' | 'SALARY' | 'EXPENSE' | 'NPA CLOSED' | 'OTHER'>('ALL');
   const [selectedHead, setSelectedHead] = useState<string>(initialHead);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -240,6 +240,7 @@ const DetailedLedgerFinance: React.FC = () => {
   const categories = [
     { value: 'ALL', label: 'All Categories' },
     { value: 'CD', label: 'CD Ledger' },
+    { value: 'NPA CLOSED', label: 'NPA Closed / Write-off' },
     { value: 'CAPITAL', label: 'Partner Capital' },
     { value: 'BANK', label: 'Bank Book' },
     { value: 'SALARY', label: 'Salary Ledger' },
