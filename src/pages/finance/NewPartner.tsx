@@ -3,56 +3,52 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../../components/UI/Card';
 import Input from '../../components/UI/Input';
 import { supabaseFinance } from '../../lib/supabaseFinance';
-import { supabase } from '../../lib/supabase';
 import { ArrowLeft, RotateCcw, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 
-export function generateNextPartnerId(existingPartners: Array<{ partner_id?: number | string | null; partner_code?: string | null }>): string {
+export function generateNextPartnerId(existingPartners: Array<{ partner_id?: number | string | null; partner_code?: string | null; name?: string | null }>): string {
   if (!existingPartners || existingPartners.length === 0) {
     return 'P01';
   }
 
   let maxSeq = 0;
-  let usesTwoDigitPadding = true;
 
   for (const p of existingPartners) {
-    // 1. Check partner_code (e.g. 'P01', 'P02', 'P1', 'P-05', etc.)
+    if (!p) continue;
+
+    // 1. Check partner_code (e.g. 'P01', 'P02', 'P04', 'P-05', etc.)
     if (p.partner_code) {
       const codeStr = String(p.partner_code).trim();
-      const match = codeStr.match(/^P-?(\d+)$/i);
-      if (match) {
-        const digitsStr = match[1];
-        const num = parseInt(digitsStr, 10);
-        if (!isNaN(num)) {
-          if (num > maxSeq) maxSeq = num;
-          if (digitsStr.length === 1 && num < 10) {
-            usesTwoDigitPadding = false;
-          } else if (digitsStr.length >= 2 && digitsStr.startsWith('0')) {
-            usesTwoDigitPadding = true;
-          }
+      const match = codeStr.match(/\d+/g);
+      if (match && match.length > 0) {
+        const num = parseInt(match[match.length - 1], 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
         }
-      } else {
-        const num = parseInt(codeStr.replace(/[^0-9]/g, ''), 10);
-        if (!isNaN(num) && num > maxSeq) maxSeq = num;
       }
     }
 
     // 2. Check numeric or string partner_id
     if (p.partner_id !== undefined && p.partner_id !== null) {
-      const num = typeof p.partner_id === 'number'
-        ? p.partner_id
-        : parseInt(String(p.partner_id).replace(/[^0-9]/g, ''), 10);
-      if (!isNaN(num) && num > maxSeq) {
-        maxSeq = num;
+      const idStr = String(p.partner_id).trim();
+      const match = idStr.match(/\d+/g);
+      if (match && match.length > 0) {
+        const num = parseInt(match[match.length - 1], 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
+        }
       }
     }
   }
 
+  // If no sequence numbers found at all but there are N partners, fallback to N
+  if (maxSeq === 0 && existingPartners.length > 0) {
+    maxSeq = existingPartners.length;
+  }
+
   const nextNum = maxSeq + 1;
-  return usesTwoDigitPadding
-    ? `P${String(nextNum).padStart(2, '0')}`
-    : `P${nextNum}`;
+  return `P${String(nextNum).padStart(2, '0')}`;
 }
 
 const NewPartner: React.FC = () => {
@@ -86,14 +82,8 @@ const NewPartner: React.FC = () => {
 
   const fetchNextPartnerId = async () => {
     try {
-      // Fetch all existing partners across database to find the maximum existing sequence index
-      const { data, error } = await supabase
-        .from('finance_partners')
-        .select('id, partner_id, partner_code, name');
-
-      if (error) throw error;
-
-      const nextId = generateNextPartnerId(data || []);
+      const partners = await supabaseFinance.getPartners();
+      const nextId = generateNextPartnerId(partners || []);
       setPartnerId(nextId);
     } catch (err) {
       console.error('Error fetching next partner ID:', err);
@@ -103,13 +93,8 @@ const NewPartner: React.FC = () => {
 
   const loadPartnerDetails = async (id: string) => {
     try {
-      const { data, error } = await supabase
-        .from('finance_partners')
-        .select('*')
-        .eq('id', id)
-        .single();
-      
-      if (error) throw error;
+      const partners = await supabaseFinance.getPartners();
+      const data = partners.find(p => p.id === id);
       
       if (data) {
         setPartnerId(data.partner_code || (data.partner_id ? `P${String(data.partner_id).padStart(2, '0')}` : 'P01'));
@@ -119,6 +104,8 @@ const NewPartner: React.FC = () => {
         setHomePhone(data.home_phone || '');
         setVillage(data.village || '');
         setAddress(data.address || '');
+      } else {
+        toast.error('Partner record not found');
       }
     } catch (err) {
       console.error('Error loading partner details:', err);
@@ -278,9 +265,10 @@ const NewPartner: React.FC = () => {
                   label="PARTNER ID *"
                   value={partnerId}
                   readOnly={true}
-                  disabled={true}
+                  placeholder="Generating Partner ID..."
+                  className="bg-slate-50 font-bold font-mono text-slate-900 border-slate-200 cursor-not-allowed"
                 />
-                
+
                 <div>
                   <label className="finance-caption uppercase">
                     ROLE *
@@ -288,74 +276,107 @@ const NewPartner: React.FC = () => {
                   <select
                     value={role}
                     onChange={(e) => setRole(e.target.value as any)}
-                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg shadow-sm focus:ring-1 focus:ring-slate-950 focus:outline-none text-slate-850 finance-header-time"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-850 font-semibold focus:ring-1 focus:ring-slate-950 focus:outline-none finance-header-time uppercase"
                   >
                     <option value="PARTNER">PARTNER</option>
-                    <option value="MANAGING PARTNER">MANAGING PARTNER</option>
+                    <option value="MANAGING PARTNER">MANAGING PARTNER (MD)</option>
                   </select>
                 </div>
               </div>
 
-              {/* Name (Full Width) */}
-              <Input
-                label="NAME *"
-                value={name}
-                onChange={(val) => { setName(val); setErrors(p => ({...p, name: false})) }}
-                placeholder="Full Name"
-                required
-                ref={nameRef}
-                error={errors.name}
-              />
-
-              {/* Phones (Grid of 2) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input
-                  label="PHONE *"
-                  value={phone}
-                  onChange={(val) => { setPhone(val); setErrors(p => ({...p, phone: false})) }}
-                  placeholder="Primary contact number (10 digits)"
-                  ref={phoneRef}
-                  error={errors.phone}
-                />
-                <Input
-                  label="HOME PHONE"
-                  value={homePhone}
-                  onChange={setHomePhone}
-                  placeholder="Alternate/Home number"
+              {/* Name */}
+              <div>
+                <label className="finance-caption uppercase">
+                  NAME * {errors.name && <span className="text-red-500 text-xs">Required</span>}
+                </label>
+                <input
+                  ref={nameRef}
+                  type="text"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (errors.name) setErrors(prev => ({ ...prev, name: false }));
+                  }}
+                  placeholder="Full Name"
+                  className={`w-full bg-white border ${errors.name ? 'border-red-500 bg-red-50/20' : 'border-slate-200'} rounded-lg p-2.5 text-slate-850 placeholder-slate-400 focus:ring-1 focus:ring-slate-950 focus:outline-none finance-header-time uppercase`}
                 />
               </div>
 
-              {/* Village */}
-              <Input
-                label="VILLAGE *"
-                value={village}
-                onChange={(val) => { setVillage(val); setErrors(p => ({...p, village: false})) }}
-                placeholder="Village / Location"
-                error={errors.village}
-              />
+              {/* Contact Numbers Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="finance-caption uppercase">
+                    PHONE * {errors.phone && <span className="text-red-500 text-xs">Required 10-Digits</span>}
+                  </label>
+                  <input
+                    ref={phoneRef}
+                    type="tel"
+                    maxLength={10}
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      if (errors.phone) setErrors(prev => ({ ...prev, phone: false }));
+                    }}
+                    placeholder="Primary contact number (10 digits)"
+                    className={`w-full bg-white border ${errors.phone ? 'border-red-500 bg-red-50/20' : 'border-slate-200'} rounded-lg p-2.5 text-slate-850 placeholder-slate-400 focus:ring-1 focus:ring-slate-950 focus:outline-none finance-header-time font-mono`}
+                  />
+                </div>
 
-              {/* Address (Textarea) */}
+                <div>
+                  <label className="finance-caption uppercase">
+                    HOME PHONE
+                  </label>
+                  <input
+                    type="tel"
+                    value={homePhone}
+                    onChange={(e) => setHomePhone(e.target.value)}
+                    placeholder="Alternate/Home number"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-slate-850 placeholder-slate-400 focus:ring-1 focus:ring-slate-950 focus:outline-none finance-header-time font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Village */}
               <div>
                 <label className="finance-caption uppercase">
-                  ADDRESS <span className="text-red-500">*</span>
+                  VILLAGE * {errors.village && <span className="text-red-500 text-xs">Required</span>}
+                </label>
+                <input
+                  type="text"
+                  value={village}
+                  onChange={(e) => {
+                    setVillage(e.target.value);
+                    if (errors.village) setErrors(prev => ({ ...prev, village: false }));
+                  }}
+                  placeholder="Village / Location"
+                  className={`w-full bg-white border ${errors.village ? 'border-red-500 bg-red-50/20' : 'border-slate-200'} rounded-lg p-2.5 text-slate-850 placeholder-slate-400 focus:ring-1 focus:ring-slate-950 focus:outline-none finance-header-time uppercase`}
+                />
+              </div>
+
+              {/* Full Address */}
+              <div>
+                <label className="finance-caption uppercase">
+                  ADDRESS * {errors.address && <span className="text-red-500 text-xs">Required</span>}
                 </label>
                 <textarea
                   value={address}
-                  onChange={(e) => { setAddress(e.target.value); setErrors(p => ({...p, address: false})) }}
+                  onChange={(e) => {
+                    setAddress(e.target.value);
+                    if (errors.address) setErrors(prev => ({ ...prev, address: false }));
+                  }}
                   placeholder="Residential or Office address"
-                  className={`w-full bg-white border rounded-lg p-2 text-slate-855 focus:outline-none h-24 finance-header-time ${errors.address ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'border-slate-200 focus:ring-1 focus:ring-slate-955'}`}
+                  rows={3}
+                  className={`w-full bg-white border ${errors.address ? 'border-red-500 bg-red-50/20' : 'border-slate-200'} rounded-lg p-2.5 text-slate-850 placeholder-slate-400 focus:ring-1 focus:ring-slate-950 focus:outline-none finance-header-time uppercase resize-none`}
                 />
-                {errors.address && <p className="text-xs text-red-500 font-bold mt-1">Address is required</p>}
               </div>
 
             </div>
           </Card>
         </form>
       </div>
+
     </div>
   );
 };
 
 export default NewPartner;
-
-
