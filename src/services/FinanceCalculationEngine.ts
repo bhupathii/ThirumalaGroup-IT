@@ -190,7 +190,7 @@ export class FinanceCalculationEngine {
   /**
    * Evaluates if a loan is considered active/open for outstanding calculations
    */
-  static isActiveOrNpa(status: string, isNpaFlag: boolean = false): boolean {
+  static isActiveOrNpa(status: string): boolean {
     const s = (status || '').trim().toUpperCase();
     if (s === 'CLOSED' || s === 'NPA_CLOSED' || s === 'NPA CLOSED' || s === 'NPA' || s === 'WRITTEN_OFF' || s === 'WRITTEN OFF') return false;
     return s === 'ACTIVE';
@@ -408,16 +408,13 @@ export class FinanceCalculationEngine {
 
       return true;
     }).sort((a, b) => {
-      // 1. DUE DAYS specific sorting
-      if (activeReport === 'DUE DAYS') {
-        if (dueDaysSort === 'ASC') {
-          if (a.dueDays !== b.dueDays) return a.dueDays - b.dueDays;
-          return naturalSortLoanId(a.loanId, b.loanId);
-        }
-        if (dueDaysSort === 'DESC') {
-          if (a.dueDays !== b.dueDays) return b.dueDays - a.dueDays;
-          return naturalSortLoanId(a.loanId, b.loanId);
-        }
+      // 1. Due Days sort — applies across all tabs when user has clicked the Days column arrow
+      if (dueDaysSort === 'ASC') {
+        if (a.dueDays !== b.dueDays) return a.dueDays - b.dueDays;
+        return naturalSortLoanId(a.loanId, b.loanId);
+      }
+      if (dueDaysSort === 'DESC') {
+        if (a.dueDays !== b.dueDays) return b.dueDays - a.dueDays;
         return naturalSortLoanId(a.loanId, b.loanId);
       }
 

@@ -335,23 +335,20 @@ const DuesLedger: React.FC = () => {
                     <th className="px-2 py-1.5 border-r border-slate-200 text-slate-800 w-28 min-w-[100px] bg-slate-50 finance-small-label">Due Date</th>
                   )}
 
-                  {/* Days / Due Days: Hidden for NPA LIST, Sortable in DUE DAYS tab */}
-                  {activeReport === 'DUE DAYS' && (
-                    <th 
+                  {/* Days / Due Days: Sortable on all active-loan tabs, hidden for NPA LIST */}
+                  {activeReport !== 'NPA LIST' && (
+                    <th
                       onClick={handleToggleDueDaysSort}
                       className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-24 bg-slate-50 finance-small-label cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                      title="Click to sort by Due Days"
+                      title="Click to sort by Due Days (ascending / descending)"
                     >
                       <div className="inline-flex items-center justify-center gap-1">
-                        <span>Due Days</span>
-                        {dueDaysSort === 'ASC' && <ArrowUp className="w-3.5 h-3.5 text-blue-600 inline" />}
-                        {dueDaysSort === 'DESC' && <ArrowDown className="w-3.5 h-3.5 text-blue-600 inline" />}
-                        {dueDaysSort === 'DEFAULT' && <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60 inline" />}
+                        <span>{activeReport === 'DUE DAYS' ? 'Due Days' : 'Days'}</span>
+                        {dueDaysSort === 'ASC' && <ArrowUp className="w-3.5 h-3.5 text-blue-600" />}
+                        {dueDaysSort === 'DESC' && <ArrowDown className="w-3.5 h-3.5 text-blue-600" />}
+                        {dueDaysSort === 'DEFAULT' && <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />}
                       </div>
                     </th>
-                  )}
-                  {activeReport !== 'NPA LIST' && activeReport !== 'DUE DAYS' && (
-                    <th className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-16 bg-slate-50 finance-small-label">Days</th>
                   )}
 
                   <th className="px-2.5 py-1.5 text-slate-800 text-left min-w-[150px] bg-slate-50 finance-small-label">Contact</th>
