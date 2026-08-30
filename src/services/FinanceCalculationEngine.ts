@@ -190,7 +190,8 @@ export class FinanceCalculationEngine {
   /**
    * Evaluates if a loan is considered active/open for outstanding calculations
    */
-  static isActiveOrNpa(status: string): boolean {
+  static isActiveOrNpa(status: string, isNpa?: boolean): boolean {
+    if (isNpa) return false;
     const s = (status || '').trim().toUpperCase();
     if (s === 'CLOSED' || s === 'NPA_CLOSED' || s === 'NPA CLOSED' || s === 'NPA' || s === 'WRITTEN_OFF' || s === 'WRITTEN OFF') return false;
     return s === 'ACTIVE';
@@ -408,8 +409,8 @@ export class FinanceCalculationEngine {
 
       return true;
     }).sort((a, b) => {
-      // 1. Due Days sort — applies across all tabs when user has clicked the Days column arrow
-      if (dueDaysSort === 'ASC') {
+      // 1. Due Days sort — applies across all tabs when user has clicked the Days column arrow, or by default on DUE DAYS tab
+      if (dueDaysSort === 'ASC' || (activeReport === 'DUE DAYS' && dueDaysSort !== 'DESC')) {
         if (a.dueDays !== b.dueDays) return a.dueDays - b.dueDays;
         return naturalSortLoanId(a.loanId, b.loanId);
       }

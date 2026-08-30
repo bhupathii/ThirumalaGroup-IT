@@ -113,15 +113,34 @@ const DuesLedger: React.FC = () => {
     setSearchName('');
     setStartDate('');
     setEndDate('');
-    setDueDaysSort('DEFAULT');
+    setDueDaysSort(activeReport === 'DUE DAYS' ? 'ASC' : 'DEFAULT');
   };
 
   const handleToggleDueDaysSort = () => {
     setDueDaysSort(prev => {
+      if (activeReport === 'DUE DAYS') {
+        return prev === 'DESC' ? 'ASC' : 'DESC';
+      }
       if (prev === 'DEFAULT') return 'ASC';
       if (prev === 'ASC') return 'DESC';
       return 'DEFAULT';
     });
+  };
+
+  const handleTabClick = (tabId: ReportType) => {
+    if (tabId === 'DUE DAYS') {
+      if (activeReport === 'DUE DAYS') {
+        // Toggle sort between ASC and DESC
+        setDueDaysSort(prev => (prev === 'DESC' ? 'ASC' : 'DESC'));
+      } else {
+        setActiveReport('DUE DAYS');
+        if (dueDaysSort !== 'DESC') {
+          setDueDaysSort('ASC');
+        }
+      }
+    } else {
+      setActiveReport(tabId);
+    }
   };
 
   return (
@@ -239,19 +258,36 @@ const DuesLedger: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-1.5 gap-2 w-full">
         {/* Tabs (Left) */}
         <div className="flex items-center gap-1 flex-wrap">
-          {options.map(opt => (
-            <button
-              key={opt.id}
-              onClick={() => setActiveReport(opt.id)}
-              className={`px-3.5 py-1.5 border-b-2 text-xs font-black uppercase tracking-wider transition-colors cursor-pointer ${
-                activeReport === opt.id 
-                  ? 'border-slate-900 text-slate-900 bg-slate-100/60 rounded-t-lg' 
-                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+          {options.map(opt => {
+            const isActive = activeReport === opt.id;
+            const isDueDays = opt.id === 'DUE DAYS';
+            const currentSort = dueDaysSort === 'DESC' ? 'DESC' : 'ASC';
+
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => handleTabClick(opt.id)}
+                className={`px-3.5 py-1.5 border-b-2 text-xs font-black uppercase tracking-wider transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
+                  isActive 
+                    ? 'border-slate-900 text-slate-900 bg-slate-100/60 rounded-t-lg' 
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                }`}
+                title={isDueDays ? `Due Days (${currentSort === 'ASC' ? 'Lowest first ↑' : 'Highest first ↓'} - click to toggle)` : opt.label}
+              >
+                <span>{opt.label}</span>
+                {isDueDays && (
+                  <span className={`inline-flex items-center justify-center p-0.5 rounded transition-transform ${isActive ? 'text-slate-950 font-black' : 'text-slate-400'}`}>
+                    {currentSort === 'DESC' ? (
+                      <ArrowDown className="w-3.5 h-3.5 stroke-[2.5]" />
+                    ) : (
+                      <ArrowUp className="w-3.5 h-3.5 stroke-[2.5]" />
+                    )}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Present Dues KPI (Right Aligned in Tab Bar - Hidden/0 for NPA List) */}
@@ -340,13 +376,25 @@ const DuesLedger: React.FC = () => {
                     <th
                       onClick={handleToggleDueDaysSort}
                       className="px-2 py-1.5 border-r border-slate-200 text-center text-slate-800 w-24 bg-slate-50 finance-small-label cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                      title="Click to sort by Due Days (ascending / descending)"
+                      title={activeReport === 'DUE DAYS'
+                        ? `Due Days: ${dueDaysSort === 'DESC' ? 'Highest first (Descending)' : 'Lowest first (Ascending)'} - click to toggle`
+                        : "Click to sort by Due Days (ascending / descending)"}
                     >
                       <div className="inline-flex items-center justify-center gap-1">
                         <span>{activeReport === 'DUE DAYS' ? 'Due Days' : 'Days'}</span>
-                        {dueDaysSort === 'ASC' && <ArrowUp className="w-3.5 h-3.5 text-blue-600" />}
-                        {dueDaysSort === 'DESC' && <ArrowDown className="w-3.5 h-3.5 text-blue-600" />}
-                        {dueDaysSort === 'DEFAULT' && <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />}
+                        {activeReport === 'DUE DAYS' ? (
+                          dueDaysSort === 'DESC' ? (
+                            <ArrowDown className="w-3.5 h-3.5 text-blue-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUp className="w-3.5 h-3.5 text-blue-600 stroke-[2.5]" />
+                          )
+                        ) : (
+                          <>
+                            {dueDaysSort === 'ASC' && <ArrowUp className="w-3.5 h-3.5 text-blue-600 stroke-[2.5]" />}
+                            {dueDaysSort === 'DESC' && <ArrowDown className="w-3.5 h-3.5 text-blue-600 stroke-[2.5]" />}
+                            {dueDaysSort === 'DEFAULT' && <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />}
+                          </>
+                        )}
                       </div>
                     </th>
                   )}

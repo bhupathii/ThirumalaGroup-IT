@@ -222,6 +222,91 @@ describe('Dues List Enhancements & Sorting Tests', () => {
     expect(descList.map(d => d.dueDays)).toEqual([75, 60, 45, 15]);
   });
 
+  it('DUE DAYS tab defaults to ascending numeric sort when no sort direction is passed', () => {
+    const defaultList = FinanceCalculationEngine.filterDueList(
+      sampleDues,
+      'DUE DAYS',
+      'ALL PARTNERS',
+      'ALL',
+      '',
+      '',
+      ''
+    );
+    // Default order should be lowest due days first (CD2: 15, CD10: 45, CD9: 60, CD1: 75)
+    expect(defaultList.map(d => d.loanId)).toEqual(['CD2', 'CD10', 'CD9', 'CD1']);
+    expect(defaultList.map(d => d.dueDays)).toEqual([15, 45, 60, 75]);
+  });
+
+  it('DUE DAYS sorting is strictly NUMERIC, not lexicographical string sorting', () => {
+    const numericTestDues: OverdueDueItem[] = [
+      { ...sampleDues[0], id: 'a', loanId: 'CD100', dueDays: 100 },
+      { ...sampleDues[0], id: 'b', loanId: 'CD5', dueDays: 5 },
+      { ...sampleDues[0], id: 'c', loanId: 'CD1000', dueDays: 1000 },
+      { ...sampleDues[0], id: 'd', loanId: 'CD20', dueDays: 20 },
+      { ...sampleDues[0], id: 'e', loanId: 'CD500', dueDays: 500 },
+      { ...sampleDues[0], id: 'f', loanId: 'CD45', dueDays: 45 },
+    ];
+
+    // Ascending: 5, 20, 45, 100, 500, 1000 (NOT string sorted: 100, 1000, 20, 45, 5, 500)
+    const ascSorted = FinanceCalculationEngine.filterDueList(
+      numericTestDues,
+      'DUE DAYS',
+      'ALL PARTNERS',
+      'ALL',
+      '',
+      '',
+      '',
+      'ASC'
+    );
+    expect(ascSorted.map(d => d.dueDays)).toEqual([5, 20, 45, 100, 500, 1000]);
+    expect(ascSorted.map(d => d.loanId)).toEqual(['CD5', 'CD20', 'CD45', 'CD100', 'CD500', 'CD1000']);
+
+    // Descending: 1000, 500, 100, 45, 20, 5
+    const descSorted = FinanceCalculationEngine.filterDueList(
+      numericTestDues,
+      'DUE DAYS',
+      'ALL PARTNERS',
+      'ALL',
+      '',
+      '',
+      '',
+      'DESC'
+    );
+    expect(descSorted.map(d => d.dueDays)).toEqual([1000, 500, 100, 45, 20, 5]);
+    expect(descSorted.map(d => d.loanId)).toEqual(['CD1000', 'CD500', 'CD100', 'CD45', 'CD20', 'CD5']);
+  });
+
+  it('DUE DAYS sorting works seamlessly alongside search filters and partner filters', () => {
+    // Filter by Partner A + search "B" (matches Karthik B CD10, Bhanu Pratap CD9)
+    const filteredAsc = FinanceCalculationEngine.filterDueList(
+      sampleDues,
+      'DUE DAYS',
+      'Partner A',
+      'ALL',
+      'B',
+      '',
+      '',
+      'ASC'
+    );
+    // CD10 (45 days), CD9 (60 days)
+    expect(filteredAsc.map(d => d.loanId)).toEqual(['CD10', 'CD9']);
+    expect(filteredAsc.map(d => d.dueDays)).toEqual([45, 60]);
+
+    const filteredDesc = FinanceCalculationEngine.filterDueList(
+      sampleDues,
+      'DUE DAYS',
+      'Partner A',
+      'ALL',
+      'B',
+      '',
+      '',
+      'DESC'
+    );
+    // CD9 (60 days), CD10 (45 days)
+    expect(filteredDesc.map(d => d.loanId)).toEqual(['CD9', 'CD10']);
+    expect(filteredDesc.map(d => d.dueDays)).toEqual([60, 45]);
+  });
+
   it('Requirement 2 & 3: NPA LIST returns NPA closed accounts with presentDue = 0 and accurate closingAmount/totalPaid', () => {
     const npaList = FinanceCalculationEngine.filterDueList(
       sampleDues,
