@@ -607,9 +607,16 @@ const NewCustomer: React.FC = () => {
       {/* Top Action Header */}
       <div className="flex justify-between items-center bg-white border border-slate-200 p-3 rounded-lg shadow-sm">
         <div>
-          <h1 className="text-[24px] font-bold uppercase text-slate-900 tracking-tight leading-none">
-            {editId ? `EDIT CUSTOMER PRO#${estimatedId}` : `NEW CUSTOMER REGISTRATION`}
-          </h1>
+          <div className="flex items-center gap-3 leading-none">
+            <h1 className="text-[24px] font-bold uppercase text-slate-900 tracking-tight leading-none">
+              {editId ? `EDIT CUSTOMER` : `NEW CUSTOMER REGISTRATION`}
+            </h1>
+            {!editId && estimatedId && (
+              <span className="inline-flex items-center px-2.5 py-1 rounded bg-slate-900 text-white font-mono font-black text-[13px] tracking-wider leading-none">
+                NEXT ID: #{estimatedId}
+              </span>
+            )}
+          </div>
           <p className="text-[14px] text-slate-400 font-bold uppercase mt-1">
             Demographic, photograph, signature and biometrics
           </p>

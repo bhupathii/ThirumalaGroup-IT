@@ -87,7 +87,8 @@ const NewPartner: React.FC = () => {
       setPartnerId(nextId);
     } catch (err) {
       console.error('Error fetching next partner ID:', err);
-      setPartnerId('P01'); // Default fallback
+      setPartnerId('P??'); // Safe placeholder — prevents silent duplicate on DB error
+      toast.error('Could not determine next Partner ID. Please refresh before saving.');
     }
   };
 
