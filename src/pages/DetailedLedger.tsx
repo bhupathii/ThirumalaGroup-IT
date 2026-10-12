@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import SearchableSelect from '../components/UI/SearchableSelect';
@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import ModeLabel from '../components/UI/ModeLabel';
 import CustomCalendar from '../components/UI/CustomCalendar';
 import { format } from 'date-fns';
-import { getSharedPrintStyles } from '../utils/print';
+import { getSharedPrintStyles, printPreviewFrame, toDisplayCase } from '../utils/print';
 import { TrendingUp, TrendingDown, Search, BarChart3, Plus, Database, RefreshCw, Calendar, AlertTriangle } from 'lucide-react';
 import { useBook } from '../contexts/BookContext';
 
@@ -132,6 +132,7 @@ const DetailedLedger: React.FC = () => {
   const [showFilters, setShowFilters] = useState(true);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [printAllEntries, setPrintAllEntries] = useState(false);
+  const previewFrameRef = useRef<HTMLIFrameElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFromCalendar, setShowFromCalendar] = useState(false);
   const [showToCalendar, setShowToCalendar] = useState(false);
@@ -722,314 +723,128 @@ const DetailedLedger: React.FC = () => {
     toast.success('Filters reset');
   };
 
+  // One print document for both the preview and the printer, so they always match.
   const generatePrintContent = (entriesToPrint: LedgerEntry[], isAllEntries: boolean) => {
-    // Calculate totals
     const totalCredit = entriesToPrint.reduce((s, e) => s + (e.credit || 0), 0);
     const totalDebit = entriesToPrint.reduce((s, e) => s + (e.debit || 0), 0);
     const totalSaleQty = entriesToPrint.reduce((s, e) => s + (e.saleQuantity || 0), 0);
     const totalPurchaseQty = entriesToPrint.reduce((s, e) => s + (e.purchaseQuantity || 0), 0);
-    const printTotals = {
-      totalCredit,
-      totalDebit,
-      totalSaleQty,
-      totalPurchaseQty,
-      balance: totalCredit - totalDebit,
-      quantityBalance: totalPurchaseQty - totalSaleQty,
-    };
+    const balance = totalCredit - totalDebit;
+    const quantityBalance = totalPurchaseQty - totalSaleQty;
 
-    // Generate all rows - browser will handle pagination naturally
-    let allRows = '';
-    entriesToPrint.forEach((entry, index) => {
-      allRows += `
+    const qty = (n: number) => (n > 0 ? n.toLocaleString() : '-');
+    const amount = (n: number) => (n > 0 ? n.toLocaleString() : '-');
+
+    const rowsHtml = entriesToPrint
+      .map(
+        (entry, index) => `
         <tr>
-            <td class="col-sno text-center">${index + 1}</td>
-            <td class="col-date">${format(new Date(entry.date), 'dd/MM/yyyy')}</td>
-            <td class="col-company">${entry.companyName}</td>
-            <td class="col-account">${entry.accountName}</td>
-            <td class="col-sub-account">${entry.subAccount || '-'}</td>
-            <td class="col-particulars">${entry.particulars}</td>
-            <td class="col-purchase-qty">${entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}</td>
-            <td class="col-sale-qty">${entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}</td>
-            <td class="col-credit">${entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}</td>
-            <td class="col-debit">${entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}</td>
-        </tr>
-      `;
-    });
+          <td class="col-sno">${index + 1}</td>
+          <td class="col-date">${format(new Date(entry.date), 'dd/MM/yyyy')}</td>
+          <td class="col-company">${toDisplayCase(entry.companyName)}</td>
+          <td class="col-account">${toDisplayCase(entry.accountName)}</td>
+          <td class="col-sub-account">${toDisplayCase(entry.subAccount) || '-'}</td>
+          <td class="col-particulars">${toDisplayCase(entry.particulars)}</td>
+          <td class="col-purchase-qty">${qty(entry.purchaseQuantity)}</td>
+          <td class="col-sale-qty">${qty(entry.saleQuantity)}</td>
+          <td class="col-credit">${amount(entry.credit)}</td>
+          <td class="col-debit">${amount(entry.debit)}</td>
+        </tr>`
+      )
+      .join('');
 
-    const totalsRow = `
-      <tr style="background-color: #f0f0f0; font-weight: bold;">
-          <td colspan="6" class="text-right">TOTAL:</td>
-          <td class="col-purchase-qty">${printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}</td>
-          <td class="col-sale-qty">${printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}</td>
-          <td class="col-credit">${printTotals.totalCredit.toLocaleString()}</td>
-          <td class="col-debit">${printTotals.totalDebit.toLocaleString()}</td>
-        </tr>
-        <tr style="background-color: #e8e8e8;">
-          <td colspan="6" class="text-right">QUANTITY BALANCE:</td>
-          <td colspan="1" class="col-purchase-qty" style="color: ${printTotals.quantityBalance >= 0 ? '#059669' : '#dc2626'};">
-${printTotals.quantityBalance > 0 ? printTotals.quantityBalance.toLocaleString() : printTotals.quantityBalance < 0 ? Math.abs(printTotals.quantityBalance).toLocaleString() : '-'} ${printTotals.quantityBalance >= 0 ? 'CR' : printTotals.quantityBalance < 0 ? 'DR' : ''}
-        </td>
-        <td colspan="1" class="text-right">BALANCE:</td>
-        <td colspan="2" class="col-balance text-center" style="color: ${printTotals.balance >= 0 ? '#059669' : '#dc2626'};">
-${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? 'CR' : 'DR'}
-        </td>
+    const totalsRows = `
+      <tr class="totals">
+        <td colspan="6" class="text-right">Total</td>
+        <td class="col-purchase-qty">${qty(totalPurchaseQty)}</td>
+        <td class="col-sale-qty">${qty(totalSaleQty)}</td>
+        <td class="col-credit">${totalCredit.toLocaleString()}</td>
+        <td class="col-debit">${totalDebit.toLocaleString()}</td>
       </tr>
-    `;
+      <tr class="totals">
+        <td colspan="6" class="text-right">Quantity Balance</td>
+        <td class="col-purchase-qty ${quantityBalance >= 0 ? 'text-green' : 'text-red'}">${quantityBalance === 0 ? '-' : `${Math.abs(quantityBalance).toLocaleString()} ${quantityBalance > 0 ? 'CR' : 'DR'}`}</td>
+        <td class="text-right">Balance</td>
+        <td colspan="2" class="col-balance ${balance >= 0 ? 'text-green' : 'text-red'}">${Math.abs(balance).toLocaleString()} ${balance >= 0 ? 'CR' : 'DR'}</td>
+      </tr>`;
 
-    const filterInfo = !isAllEntries && (filters.subAccount || filters.staffwise || filters.user || filters.paymentMode) 
-      ? `
-        <div style="margin-bottom: 3px; font-size: 10px; padding: 3px 5px; background-color: #f5f5f5;">
-          ${filters.subAccount ? `<span style="margin-right: 15px;">Sub Account: <strong>${filters.subAccount}</strong></span>` : ''}
-          ${filters.staffwise ? `<span style="margin-right: 15px;">Staff: <strong>${filters.staffwise}</strong></span>` : ''}
-          ${filters.user ? `<span style="margin-right: 15px;">User: <strong>${filters.user}</strong></span>` : ''}
-          ${filters.paymentMode ? `<span>Payment Mode: <strong>${filters.paymentMode}</strong></span>` : ''}
-        </div>
-      ` : '';
+    const filterParts = [
+      !isAllEntries && filters.companyName ? `Company: <strong>${toDisplayCase(filters.companyName)}</strong>` : '',
+      !isAllEntries && filters.mainAccount ? `Account: <strong>${toDisplayCase(filters.mainAccount)}</strong>` : '',
+      !isAllEntries && filters.subAccount ? `Sub Account: <strong>${toDisplayCase(filters.subAccount)}</strong>` : '',
+      !isAllEntries && filters.staffwise ? `Staff: <strong>${toDisplayCase(filters.staffwise)}</strong>` : '',
+      !isAllEntries && filters.user ? `User: <strong>${filters.user}</strong>` : '',
+      !isAllEntries && filters.paymentMode ? `Payment Mode: <strong>${filters.paymentMode}</strong>` : '',
+    ].filter(Boolean);
 
-    // Generate single page content - browser will paginate automatically
-    let pagesContent = `
-      <div class="print-page" style="margin: 0; padding: 0;">
-        <div class="header" style="margin: 0; padding: 0;">
-          <h1 style="margin: 0; padding: 0; line-height: 1;">Thirumala Group</h1>
-          <h2 style="margin: 0; padding: 0; line-height: 1;">Detailed Ledger Report ${isAllEntries ? '(All Records)' : ''}</h2>
-          <p style="margin: 0; padding: 0; line-height: 1;">${isAllEntries ? 'All Records' : `From ${format(new Date(filters.fromDate), 'dd/MM/yyyy')} to ${format(new Date(filters.toDate), 'dd/MM/yyyy')}`}</p>
-          ${!isAllEntries ? `
-            <div style="font-size: 11px; margin: 0; padding: 0; line-height: 1;">
-              ${filters.companyName ? `<span style="margin-right: 15px;">Company: <strong>${filters.companyName}</strong></span>` : ''}
-              ${filters.mainAccount ? `<span>Account: <strong>${filters.mainAccount}</strong></span>` : ''}
-            </div>
-          ` : ''}
-        </div>
+    const period = isAllEntries
+      ? 'All Records'
+      : `Period: <strong>${format(new Date(filters.fromDate), 'dd/MM/yyyy')}</strong> to <strong>${format(new Date(filters.toDate), 'dd/MM/yyyy')}</strong>`;
 
-        ${filterInfo ? `<div style="margin: 0; padding: 0; line-height: 1;">${filterInfo}</div>` : ''}
-
-        <table class="no-repeat-header" style="margin: 0; padding: 0; border-top: 1px solid #000;">
-          <thead>
-            <tr>
-              <th class="col-sno">S.No</th>
-              <th class="col-date">Date</th>
-              <th class="col-company">Company</th>
-              <th class="col-account">Account</th>
-              <th class="col-sub-account">Sub Account</th>
-              <th class="col-particulars">Particulars</th>
-              <th class="col-purchase-qty">Purchase Qty</th>
-              <th class="col-sale-qty">Sale Qty</th>
-              <th class="col-credit">Credit</th>
-              <th class="col-debit">Debit</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${allRows}
-            ${totalsRow}
-          </tbody>
-        </table>
+    return `<!DOCTYPE html>
+<html>
+  <head>
+    <title>Detailed Ledger Report</title>
+    <meta charset="utf-8">
+    <style>
+      ${getSharedPrintStyles({ isLandscape: false, fontSizePt: 7.5 })}
+      th, td { padding: 2px 4px; }
+      /* Share the width fairly between the text columns so names wrap as little as possible */
+      table th.col-company { width: 15% !important; }
+      table th.col-account { width: 13% !important; }
+      table th.col-sub-account { width: 10% !important; }
+      table th.col-particulars { width: 26% !important; }
+      body { background: #f3f4f6; padding: 16px; }
+      .page { background: #fff; max-width: 210mm; margin: 0 auto; padding: 10mm 8mm; border: 1px solid #d1d5db; box-sizing: border-box; }
+      .header { text-align: center; border-bottom: 1.5px solid #111; padding-bottom: 5px; margin-bottom: 6px; }
+      .header h1 { margin: 0; font-size: 13pt; }
+      .header h2 { margin: 1px 0 0; font-size: 10.5pt; font-weight: 600; }
+      .header .meta { margin-top: 2px; font-size: 8.5pt; }
+      .header .filters span { margin: 0 8px; }
+      .text-green { color: #047857; }
+      .text-red { color: #b91c1c; }
+      .footer { margin-top: 8px; text-align: center; font-size: 7.5pt; color: #555; border-top: 1px solid #d1d5db; padding-top: 4px; }
+      @media print {
+        body { background: #fff !important; padding: 0 !important; }
+        .page { max-width: none; border: none; padding: 0; margin: 0; }
+        thead { display: table-header-group; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="header">
+        <h1>Thirumala Group</h1>
+        <h2>Detailed Ledger Report${isAllEntries ? ' (All Records)' : ''}</h2>
+        <div class="meta">${period}</div>
+        ${filterParts.length ? `<div class="meta filters">${filterParts.map(p => `<span>${p}</span>`).join('')}</div>` : ''}
       </div>
-    `;
 
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Detailed Ledger Report</title>
-          <style>
-            @page {
-              size: A4 portrait;
-              margin: 1.2cm 1.0cm 1.2cm 1.0cm;
-            }
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-            body {
-              font-family: Arial, sans-serif;
-              margin: 0;
-              padding: 0;
-              background-color: #fff;
-            }
-            @media screen {
-              body {
-                background-color: #f3f4f6;
-                padding: 20px;
-              }
-              .print-page {
-                background: white;
-                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-                border-radius: 8px;
-                padding: 1.2cm 1.0cm;
-                margin: 0 auto 20px auto;
-                max-width: 210mm;
-                box-sizing: border-box;
-              }
-            }
-            .header {
-              text-align: center;
-              margin-bottom: 2px;
-              margin-top: 0;
-              padding-top: 0;
-              padding-bottom: 0;
-            }
-            .header h1 {
-              font-size: 18px;
-              margin: 0;
-              padding: 0;
-              font-weight: bold;
-              line-height: 1;
-            }
-            .header h2 {
-              font-size: 14px;
-              margin: 0;
-              padding: 0;
-              font-weight: 600;
-              line-height: 1;
-            }
-            .header p {
-              font-size: 11px;
-              margin: 0;
-              padding: 0;
-              line-height: 1;
-            }
-            .summary-section {
-              margin-bottom: 3px;
-              font-size: 11px;
-            }
-            .summary-boxes {
-              display: grid;
-              grid-template-columns: 1fr 1fr 1fr;
-              gap: 8px;
-            }
-            .summary-box {
-              text-align: center;
-              padding: 6px;
-              border: 2px solid #666;
-            }
-            .summary-label {
-              font-size: 11px;
-              margin-bottom: 2px;
-            }
-            .summary-value {
-              font-size: 14px;
-              font-weight: bold;
-            }
-            .print-page {
-              page-break-after: always;
-              margin: 0;
-              padding: 0;
-            }
-            .print-page:last-child {
-              page-break-after: auto;
-            }
-            table {
-              width: 100%;
-              max-width: 100%;
-              border-collapse: collapse;
-              font-size: 11px;
-              table-layout: fixed;
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-            th, td {
-              border: 1px solid #000;
-              padding: 2px 1px;
-              word-wrap: break-word;
-              line-height: 1.1;
-              box-sizing: border-box;
-              font-weight: bold;
-            }
-            th {
-              background-color: #e5e5e5;
-              font-weight: bold;
-              text-align: left;
-              font-size: 11px;
-            }
-            .no-repeat-header thead {
-              display: table-header-group;
-            }
-            .no-header-table thead {
-              display: none !important;
-            }
-            .text-right {
-              text-align: right;
-            }
-            .text-center {
-              text-align: center;
-            }
-            .footer {
-              text-align: center;
-              font-size: 11px;
-              margin-top: 5px;
-              color: #666;
-              font-weight: bold;
-            }
-            @media print {
-              body { 
-                margin: 0;
-                padding: 0;
-              }
-              .print-page {
-                page-break-after: always;
-                margin: 0;
-                padding: 0;
-              }
-              .print-page:last-child {
-                page-break-after: auto;
-              }
-              table {
-                margin: 0 !important;
-                padding: 0 !important;
-                border-spacing: 0;
-                width: 100% !important;
-                max-width: 100% !important;
-                box-sizing: border-box !important;
-              }
-              td, th {
-                box-sizing: border-box !important;
-                overflow: hidden;
-                word-wrap: break-word;
-              }
-              /* Hide thead on all pages by default - prevent browser from repeating it */
-              thead {
-                display: none !important;
-              }
-              /* Show thead only on the first page */
-              .print-page:first-child table thead {
-                display: table-header-group !important;
-              }
-              .header {
-                margin: 0 !important;
-                padding: 0 !important;
-              }
-              .header h1, .header h2, .header p, .header div {
-                margin: 0 !important;
-                padding: 0 !important;
-                line-height: 1 !important;
-              }
-              * {
-                box-sizing: border-box;
-              }
-            }
-            .no-repeat-header thead {
-              display: table-header-group;
-            }
-            .no-header-table thead {
-              display: none !important;
-            }
-            table {
-              page-break-inside: auto;
-            }
-            tr {
-              page-break-inside: avoid;
-              page-break-after: auto;
-            }
-            ${getSharedPrintStyles({ isLandscape: false })}
-          </style>
-        </head>
-        <body>
-          ${pagesContent}
-        </body>
-      </html>
-    `;
+      <table>
+        <thead>
+          <tr>
+            <th class="col-sno">S.No</th>
+            <th class="col-date">Date</th>
+            <th class="col-company">Company</th>
+            <th class="col-account">Account</th>
+            <th class="col-sub-account">Sub Account</th>
+            <th class="col-particulars">Particulars</th>
+            <th class="col-purchase-qty">Purchase Qty</th>
+            <th class="col-sale-qty">Sale Qty</th>
+            <th class="col-credit">Credit</th>
+            <th class="col-debit">Debit</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+          ${totalsRows}
+        </tbody>
+      </table>
+
+      <div class="footer">Generated on ${format(new Date(), 'dd/MM/yyyy HH:mm')}${user?.username ? ` by ${user.username}` : ''} &middot; Total Records: ${entriesToPrint.length}</div>
+    </div>
+  </body>
+</html>`;
   };
 
   const printReport = () => {
@@ -1716,1284 +1531,40 @@ ${Math.abs(printTotals.balance).toLocaleString()} ${printTotals.balance >= 0 ? '
         )}
       </Card>
 
-      {/* Print Preview Modal */}
+      {/* Print Preview Modal: shows the exact document that gets printed */}
       {showPrintPreview && (
         <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50'>
-          <div className='bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto'>
-            <div className='p-6'>
-              <div className='flex items-center justify-between mb-6 no-print'>
-                <h3 className='text-lg font-semibold'>
-                  Print Preview - Detailed Ledger
-                </h3>
-                <div className='flex items-center gap-2'>
-                  <Button 
-                    size='sm' 
-                    onClick={() => {
-                      const entriesToPrint = printAllEntries ? ledgerEntries : filteredEntries;
-                      if (entriesToPrint.length === 0) {
-                        toast.error('No entries to print');
-                        return;
-                      }
-
-                      const printWindow = window.open('', '_blank');
-                      if (!printWindow) {
-                        toast.error('Please allow popups to print');
-                        return;
-                      }
-
-                      const printContent = generatePrintContent(entriesToPrint, printAllEntries);
-                      printWindow.document.write(printContent);
-                      printWindow.document.close();
-                      printWindow.focus();
-
-                      // Wait for content to load then print
-                      setTimeout(() => {
-                        printWindow.print();
-                        // Don't close immediately, let user see the print dialog
-                      }, 500);
-                    }}
-                  >
-                    Print
-                  </Button>
-                  <Button
-                    size='sm'
-                    variant='secondary'
-                    onClick={() => setShowPrintPreview(false)}
-                  >
-                    Close
-                  </Button>
-                </div>
-              </div>
-
-              {/* Print Styles */}
-              <style>{`
-                @media print {
-                  @page {
-                    size: A4 portrait;
-                    margin: 0.02cm 0.3cm 0.3cm 0.3cm;
-                  }
-                  * {
-                    -webkit-print-color-adjust: exact;
-                    print-color-adjust: exact;
-                    box-sizing: border-box;
-                  }
-                  html {
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    width: 100% !important;
-                    height: 100% !important;
-                    background: white !important;
-                    overflow: hidden !important;
-                  }
-                  body {
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    width: 100% !important;
-                    height: 100% !important;
-                    max-width: 100% !important;
-                    max-height: 100% !important;
-                    background: white !important;
-                    overflow: hidden !important;
-                    position: relative !important;
-                  }
-                  /* Hide everything on the page except the modal */
-                  body > *:not(.fixed.inset-0),
-                  #root > *:not(.fixed.inset-0),
-                  [id^="root"] > *:not(.fixed.inset-0) {
-                    display: none !important;
-                    visibility: hidden !important;
-                  }
-                  
-                  /* Make modal overlay full page for printing */
-                  .fixed.inset-0 {
-                    position: fixed !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    right: 0 !important;
-                    bottom: 0 !important;
-                    width: 100% !important;
-                    height: 100% !important;
-                    background: white !important;
-                    padding: 0 !important;
-                    margin: 0 !important;
-                    z-index: 999999 !important;
-                    display: block !important;
-                    overflow: visible !important;
-                  }
-                  
-                  /* Show all containers inside modal */
-                  .fixed.inset-0 > div {
-                    display: block !important;
-                    visibility: visible !important;
-                    width: 100% !important;
-                    height: auto !important;
-                    background: white !important;
-                    padding: 0 !important;
-                    margin: 0 !important;
-                  }
-                  
-                  .fixed.inset-0 .bg-white {
-                    position: static !important;
-                    width: 100% !important;
-                    height: auto !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    border-radius: 0 !important;
-                    box-shadow: none !important;
-                    max-width: 100% !important;
-                    max-height: none !important;
-                    overflow: visible !important;
-                    background: white !important;
-                    display: block !important;
-                    visibility: visible !important;
-                  }
-                  
-                  /* Remove padding from inner div */
-                  .fixed.inset-0 .p-6 {
-                    padding: 0 !important;
-                    margin: 0 !important;
-                    display: block !important;
-                    visibility: visible !important;
-                  }
-                  
-                  /* Hide buttons and UI elements */
-                  .no-print,
-                  button,
-                  .flex.items-center,
-                  .flex.items-center.justify-between,
-                  h3 {
-                    display: none !important;
-                    visibility: hidden !important;
-                  }
-                  
-                  /* Show print-content and ALL its children */
-                  .print-content {
-                    display: block !important;
-                    visibility: visible !important;
-                    position: relative !important;
-                    width: 100% !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    height: auto !important;
-                    overflow: visible !important;
-                    font-family: Arial, sans-serif !important;
-                  }
-                  
-                  /* Ensure all print-content children are visible */
-                  .print-content * {
-                    visibility: visible !important;
-                  }
-                  
-                  /* Ensure tables are visible */
-                  .print-content table {
-                    display: table !important;
-                    visibility: visible !important;
-                    width: 100% !important;
-                  }
-                  
-                  .print-content thead {
-                    display: table-header-group !important;
-                    visibility: visible !important;
-                  }
-                  
-                  .print-content tbody {
-                    display: table-row-group !important;
-                    visibility: visible !important;
-                  }
-                  
-                  .print-content tr {
-                    display: table-row !important;
-                    visibility: visible !important;
-                  }
-                  
-                  .print-content td,
-                  .print-content th {
-                    display: table-cell !important;
-                    visibility: visible !important;
-                  }
-                  
-                  .print-content div {
-                    display: block !important;
-                    visibility: visible !important;
-                  }
-                  
-                  /* Ensure page divs are visible */
-                  .print-content > div,
-                  .print-page {
-                    display: block !important;
-                    visibility: visible !important;
-                    width: 100% !important;
-                  }
-                  /* Step 7: Table elements - explicit display values */
-                  .print-content table,
-                  .print-content .print-table {
-                    display: table !important;
-                    visibility: visible !important;
-                    width: 100% !important;
-                    border-collapse: collapse !important;
-                  }
-                  .print-content thead {
-                    display: table-header-group !important;
-                    visibility: visible !important;
-                  }
-                  .print-content tbody {
-                    display: table-row-group !important;
-                    visibility: visible !important;
-                  }
-                  .print-content tr {
-                    display: table-row !important;
-                    visibility: visible !important;
-                  }
-                  .print-content td,
-                  .print-content th {
-                    display: table-cell !important;
-                    visibility: visible !important;
-                  }
-                  
-                  /* Step 8: Show thead only on first page */
-                  .print-content .print-page:first-child .print-table thead,
-                  .print-content .print-page[data-page-index="0"] .print-table thead {
-                    display: table-header-group !important;
-                    visibility: visible !important;
-                  }
-                  /* Hide thead on continuation pages */
-                  .print-content .print-table.no-header-table thead,
-                  .print-content .print-page:not(:first-child) .print-table thead,
-                  .print-content .print-page[data-page-index]:not([data-page-index="0"]) .print-table thead {
-                    display: none !important;
-                    visibility: hidden !important;
-                  }
-                  /* Step 9: Text elements */
-                  .print-content h1,
-                  .print-content h2,
-                  .print-content h3,
-                  .print-content h4 {
-                    display: block !important;
-                    visibility: visible !important;
-                  }
-                  .print-content p {
-                    display: block !important;
-                    visibility: visible !important;
-                  }
-                  .print-content span {
-                    display: inline !important;
-                    visibility: visible !important;
-                  }
-                  .print-content div {
-                    display: block !important;
-                    visibility: visible !important;
-                  }
-                  /* FINAL OVERRIDE: Ensure ALL print-content elements are visible */
-                  .print-content,
-                  .print-content *,
-                  .print-content * *,
-                  .print-content * * *,
-                  .print-content * * * *,
-                  .print-content * * * * * {
-                    visibility: visible !important;
-                  }
-                  /* Ensure proper display for all elements */
-                  .print-content div {
-                    display: block !important;
-                    visibility: visible !important;
-                  }
-                  .print-content table {
-                    display: table !important;
-                    visibility: visible !important;
-                  }
-                  .print-content thead {
-                    display: table-header-group !important;
-                    visibility: visible !important;
-                  }
-                  .print-content tbody {
-                    display: table-row-group !important;
-                    visibility: visible !important;
-                  }
-                  .print-content tr {
-                    display: table-row !important;
-                    visibility: visible !important;
-                  }
-                  .print-content td,
-                  .print-content th {
-                    display: table-cell !important;
-                    visibility: visible !important;
-                  }
-                  /* Ensure page divs are visible */
-                  .print-content > div {
-                    display: block !important;
-                    visibility: visible !important;
-                    width: 100% !important;
-                    height: auto !important;
-                    page-break-after: always !important;
-                  }
-                  .print-content > div:last-child {
-                    page-break-after: auto !important;
-                  }
-                  .print-page {
-                    display: block !important;
-                    visibility: visible !important;
-                  }
-                  /* Text elements */
-                  .print-content h1,
-                  .print-content h2,
-                  .print-content h3 {
-                    display: block !important;
-                    visibility: visible !important;
-                  }
-                  .print-content p,
-                  .print-content span {
-                    display: inline !important;
-                    visibility: visible !important;
-                  }
-                  /* Ensure all nested elements are visible */
-                  .print-content * * {
-                    visibility: visible !important;
-                  }
-                  .print-content * * * {
-                    visibility: visible !important;
-                  }
-                  .print-content * * * * {
-                    visibility: visible !important;
-                  }
-                  /* Force ALL children to be visible */
-                  .print-content * {
-                    visibility: visible !important;
-                  }
-                  /* Ensure page divs respect page boundaries */
-                  .print-content > div {
-                    display: block !important;
-                    visibility: visible !important;
-                    position: relative !important;
-                    width: 100% !important;
-                    max-width: 100% !important;
-                    height: auto !important;
-                    min-height: 0 !important;
-                    page-break-after: always !important;
-                    break-after: page !important;
-                    page-break-inside: avoid !important;
-                    break-inside: avoid !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    overflow: visible !important;
-                    box-sizing: border-box !important;
-                    /* Ensure content fits within page */
-                    overflow-x: hidden !important;
-                    overflow-y: visible !important;
-                  }
-                  .print-content > div:last-child {
-                    page-break-after: auto !important;
-                    break-after: auto !important;
-                  }
-                  .print-page {
-                    display: block !important;
-                    visibility: visible !important;
-                    width: 100% !important;
-                    max-width: 100% !important;
-                  }
-                  /* Ensure tables are visible and properly displayed */
-                  .print-content table {
-                    display: table !important;
-                    visibility: visible !important;
-                    width: 100% !important;
-                  }
-                  .print-content thead {
-                    display: table-header-group !important;
-                    visibility: visible !important;
-                  }
-                  .print-content tbody {
-                    display: table-row-group !important;
-                    visibility: visible !important;
-                  }
-                  .print-content tr {
-                    display: table-row !important;
-                    visibility: visible !important;
-                  }
-                  .print-content td,
-                  .print-content th {
-                    display: table-cell !important;
-                    visibility: visible !important;
-                  }
-                  /* OVERRIDE ANY RULE THAT MIGHT HIDE CONTENT - MUST BE LAST */
-                  .print-content,
-                  .print-content *,
-                  .print-content * *,
-                  .print-content * * *,
-                  .print-content * * * *,
-                  .print-content * * * * * {
-                    visibility: visible !important;
-                    display: revert !important;
-                  }
-                  .print-content table {
-                    display: table !important;
-                  }
-                  .print-content thead {
-                    display: table-header-group !important;
-                  }
-                  .print-content tbody {
-                    display: table-row-group !important;
-                  }
-                  .print-content tr {
-                    display: table-row !important;
-                  }
-                  .print-content td,
-                  .print-content th {
-                    display: table-cell !important;
-                  }
-                  .print-content div {
-                    display: block !important;
-                  }
-                  .print-content span,
-                  .print-content p,
-                  .print-content h1,
-                  .print-content h2,
-                  .print-content h3 {
-                    display: block !important;
-                  }
-                  /* Disable browser's automatic table header repetition */
-                  table {
-                    -webkit-print-color-adjust: exact;
-                    print-color-adjust: exact;
-                  }
-                  /* Prevent thead repetition - critical for print */
-                  thead {
-                    display: table-header-group !important;
-                  }
-                  /* Explicitly prevent header repetition on continuation pages */
-                  .print-page:not(:first-child) table thead,
-                  .print-page[data-page-index]:not([data-page-index="0"]) table thead,
-                  .print-table.no-header thead {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    min-height: 0 !important;
-                    overflow: hidden !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    border: none !important;
-                    line-height: 0 !important;
-                    font-size: 0 !important;
-                  }
-                  .print-page:not(:first-child) table thead tr,
-                  .print-page[data-page-index]:not([data-page-index="0"]) table thead tr,
-                  .print-table.no-header thead tr {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    min-height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    border: none !important;
-                  }
-                  .print-page:not(:first-child) table thead th,
-                  .print-page[data-page-index]:not([data-page-index="0"]) table thead th,
-                  .print-table.no-header thead th {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    min-height: 0 !important;
-                    padding: 0 !important;
-                    margin: 0 !important;
-                    border: none !important;
-                    font-size: 0 !important;
-                    line-height: 0 !important;
-                    width: 0 !important;
-                  }
-                  /* Consolidated print-content rules - use relative positioning for print */
-                  .print-content {
-                    position: relative !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    width: 100% !important;
-                    font-family: Arial, sans-serif !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    display: block !important;
-                    visibility: visible !important;
-                    height: auto !important;
-                    overflow: visible !important;
-                  }
-                  .print-content > div:first-child {
-                    margin-top: 0 !important;
-                    padding-top: 0 !important;
-                  }
-                  /* Ensure no duplication - each page appears exactly once */
-                  .print-content > div {
-                    display: block !important;
-                    position: relative !important;
-                    page-break-after: always !important;
-                  }
-                  .print-content > div:last-child {
-                    page-break-after: auto !important;
-                  }
-                  /* Ensure first page has no top spacing */
-                  .print-page:first-child {
-                    margin-top: 0 !important;
-                    padding-top: 0 !important;
-                  }
-                  .print-page:first-child .print-page-header:first-child {
-                    margin-top: 0 !important;
-                    padding-top: 0 !important;
-                  }
-                  .print-page:first-child h1 {
-                    margin-top: 0 !important;
-                    padding-top: 0 !important;
-                  }
-                  /* Hide summary boxes on continuation pages - ensure they don't appear */
-                  .print-page:not(:first-child) .summary-section,
-                  .print-page[data-page-index]:not([data-page-index="0"]) .summary-section,
-                  .print-page:not(:first-child) .summary-boxes,
-                  .print-page[data-page-index]:not([data-page-index="0"]) .summary-boxes {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    overflow: hidden !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                  }
-                  /* Hide summary boxes on continuation pages - alternative selectors */
-                  .print-page:not(:first-child) .print-page-header:has(> div[style*="gridTemplateColumns"]),
-                  .print-page[data-page-index]:not([data-page-index="0"]) .print-page-header:has(> div[style*="gridTemplateColumns"]) {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    overflow: hidden !important;
-                  }
-                  /* Alternative selector for summary boxes */
-                  .print-page:not(:first-child) .print-page-header > div[style*="gridTemplateColumns"],
-                  .print-page[data-page-index]:not([data-page-index="0"]) .print-page-header > div[style*="gridTemplateColumns"] {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    overflow: hidden !important;
-                  }
-                  /* Ensure continuation header is minimal */
-                  .continuation-header {
-                    margin-bottom: 3px !important;
-                    margin-top: 0 !important;
-                    padding-top: 0 !important;
-                    padding-bottom: 2px !important;
-                  }
-                  .no-print {
-                    display: none !important;
-                  }
-                  .print-page {
-                    page-break-after: always !important;
-                    break-after: page !important;
-                    page-break-inside: avoid !important;
-                    break-inside: avoid !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    display: block !important;
-                    width: 100% !important;
-                    min-height: 0 !important;
-                    overflow: visible !important;
-                    position: relative !important;
-                  }
-                  /* Prevent page duplication */
-                  .print-page::before,
-                  .print-page::after {
-                    content: none !important;
-                    display: none !important;
-                  }
-                  /* Ensure each page appears only once - show all divs with data-page-index */
-                  .print-content > div[data-page-index] {
-                    display: block !important;
-                    visibility: visible !important;
-                  }
-                  .print-content > div.print-page {
-                    display: block !important;
-                    visibility: visible !important;
-                  }
-                  /* Don't hide divs - they might be page containers */
-                  .print-content > div {
-                    display: block !important;
-                    visibility: visible !important;
-                  }
-                  .print-page:last-child {
-                    page-break-after: auto !important;
-                    break-after: auto !important;
-                  }
-                  .print-page-header {
-                    page-break-after: avoid !important;
-                    break-after: avoid !important;
-                    margin-bottom: 5px !important;
-                    margin-top: 0 !important;
-                    padding-bottom: 3px !important;
-                    padding-top: 0 !important;
-                  }
-                  .print-page:first-child .print-page-header:first-child {
-                    margin-top: 0 !important;
-                    padding-top: 0 !important;
-                  }
-                  .print-page-footer {
-                    page-break-before: avoid !important;
-                    break-before: avoid !important;
-                    margin-top: 8px !important;
-                    padding-top: 5px !important;
-                  }
-                  .print-table {
-                    width: 100% !important;
-                    max-width: 100% !important;
-                    font-size: 11px !important;
-                    border-collapse: collapse !important;
-                    border-spacing: 0 !important;
-                    table-layout: fixed !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    page-break-inside: auto !important;
-                    /* Disable browser's automatic header repetition */
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                    /* Prevent table from breaking layout */
-                    display: table !important;
-                    empty-cells: show !important;
-                    /* Ensure table fits page width */
-                    box-sizing: border-box !important;
-                    /* Prevent overflow */
-                    overflow: visible !important;
-                    /* Fit within page margins */
-                    min-width: 0 !important;
-                  }
-                  /* Prevent browser from repeating table headers - critical for print */
-                  .print-table.no-header-table {
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                  }
-                  /* Explicitly tell browser not to repeat headers on continuation pages */
-                  .print-page:not(:first-child) table,
-                  .print-page[data-page-index]:not([data-page-index="0"]) table {
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                  }
-                  /* CRITICAL: Ensure no thead exists on continuation pages - browsers can't repeat what doesn't exist */
-                  .print-table.no-header-table thead,
-                  .print-page:not(:first-child) .print-table thead,
-                  .print-page[data-page-index]:not([data-page-index="0"]) .print-table thead {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    min-height: 0 !important;
-                    overflow: hidden !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    border: none !important;
-                    font-size: 0 !important;
-                    line-height: 0 !important;
-                    position: absolute !important;
-                    left: -9999px !important;
-                    width: 0 !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                  }
-                  /* Prevent browser from creating thead automatically */
-                  .print-table.no-header-table::before,
-                  .print-table.no-header-table::after {
-                    content: none !important;
-                  }
-                  /* Critical: Disable thead repetition on continuation pages */
-                  .print-table.no-header,
-                  .print-table.no-header-table {
-                    border-collapse: collapse !important;
-                  }
-                  .print-table.no-header thead,
-                  .print-table.no-header-table thead {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    overflow: hidden !important;
-                  }
-                  /* Ensure no-header-table has no thead at all */
-                  .print-table.no-header-table thead,
-                  .print-table.no-header-table > thead {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    overflow: hidden !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    border: none !important;
-                    font-size: 0 !important;
-                    line-height: 0 !important;
-                  }
-                  /* Disable browser's automatic table header repetition */
-                  thead {
-                    display: table-header-group !important;
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                  }
-                  /* Explicitly hide thead on continuation pages - multiple selectors for maximum compatibility */
-                  .print-page[data-page-index]:not([data-page-index="0"]) .print-table thead,
-                  .print-page:not(:first-child) .print-table thead,
-                  .print-page:nth-child(n+2) .print-table thead {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    min-height: 0 !important;
-                    overflow: hidden !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    line-height: 0 !important;
-                    font-size: 0 !important;
-                    border: none !important;
-                  }
-                  .print-page[data-page-index]:not([data-page-index="0"]) .print-table thead tr,
-                  .print-page:not(:first-child) .print-table thead tr,
-                  .print-page:nth-child(n+2) .print-table thead tr {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    min-height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                  }
-                  .print-page[data-page-index]:not([data-page-index="0"]) .print-table thead th,
-                  .print-page:not(:first-child) .print-table thead th,
-                  .print-page:nth-child(n+2) .print-table thead th {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    min-height: 0 !important;
-                    padding: 0 !important;
-                    margin: 0 !important;
-                    border: none !important;
-                    font-size: 0 !important;
-                    line-height: 0 !important;
-                  }
-                  /* Only show thead on first page */
-                  .print-page:first-child .print-table thead,
-                  .print-page[data-page-index="0"] .print-table thead {
-                    display: table-header-group !important;
-                    visibility: visible !important;
-                  }
-                  .print-table thead {
-                    page-break-after: avoid !important;
-                    break-after: avoid !important;
-                  }
-                  /* Additional aggressive rules to prevent browser header repetition */
-                  .print-page:not(:first-child) .print-table::before {
-                    content: "" !important;
-                    display: none !important;
-                  }
-                  /* Ensure no thead exists on continuation pages - remove from layout completely */
-                  .print-page[data-page-index]:not([data-page-index="0"]) .print-table > thead,
-                  .print-page:not(:first-child) .print-table > thead,
-                  .print-table.no-header > thead {
-                    position: absolute !important;
-                    left: -9999px !important;
-                    width: 0 !important;
-                    height: 0 !important;
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    border: none !important;
-                    font-size: 0 !important;
-                    line-height: 0 !important;
-                  }
-                  /* Prevent browser from creating thead automatically */
-                  .print-table.no-header {
-                    border-collapse: separate !important;
-                  }
-                  /* Force remove thead from print layout on continuation pages */
-                  @supports (display: table) {
-                    .print-table.no-header thead {
-                      display: none !important;
+          <div className='bg-white rounded-lg max-w-6xl w-full h-[90vh] flex flex-col'>
+            <div className='flex items-center justify-between px-6 py-4 border-b no-print'>
+              <h3 className='text-lg font-semibold'>
+                Print Preview - Detailed Ledger
+              </h3>
+              <div className='flex items-center gap-2'>
+                <Button
+                  size='sm'
+                  onClick={() => {
+                    if (!printPreviewFrame(previewFrameRef.current)) {
+                      toast.error('Print failed. Please try again.');
                     }
-                  }
-                  .print-table tbody {
-                    display: table-row-group !important;
-                    page-break-inside: auto !important;
-                    /* Ensure tbody doesn't break awkwardly */
-                    orphans: 3 !important;
-                    widows: 3 !important;
-                  }
-                  /* Prevent table from breaking across pages inappropriately */
-                  .print-table {
-                    orphans: 3 !important;
-                    widows: 3 !important;
-                  }
-                  .print-table tr {
-                    page-break-inside: avoid !important;
-                    break-inside: avoid !important;
-                    page-break-after: auto !important;
-                    break-after: auto !important;
-                    height: auto !important;
-                    min-height: 12px !important;
-                    max-height: none !important;
-                    display: table-row !important;
-                    border-collapse: collapse !important;
-                    /* Prevent row from being cut */
-                    orphans: 3 !important;
-                    widows: 3 !important;
-                  }
-                  .print-table tbody tr {
-                    border-top: 1px solid #000 !important;
-                    border-bottom: 1px solid #000 !important;
-                  }
-                  .print-table th,
-                  .print-table td {
-                    padding: 4px 3px !important;
-                    border-left: 1px solid #000 !important;
-                    border-right: 1px solid #000 !important;
-                    word-wrap: break-word !important;
-                    overflow-wrap: break-word !important;
-                    hyphens: auto !important;
-                    line-height: 1.2 !important;
-                    vertical-align: top !important;
-                    page-break-inside: avoid !important;
-                    break-inside: avoid !important;
-                    display: table-cell !important;
-                    position: relative !important;
-                    /* Prevent cell content from breaking layout */
-                    overflow: visible !important;
-                    text-overflow: clip !important;
-                    /* Ensure cells respect fixed width */
-                    box-sizing: border-box !important;
-                    max-width: 100% !important;
-                    /* Allow text to wrap naturally */
-                    white-space: normal !important;
-                  }
-                  .print-table th:first-child,
-                  .print-table td:first-child {
-                    border-left: 1px solid #000 !important;
-                  }
-                  .print-table th:last-child,
-                  .print-table td:last-child {
-                    border-right: 1px solid #000 !important;
-                  }
-                  .print-table th {
-                    background-color: #e5e5e5 !important;
-                    font-weight: bold !important;
-                    font-size: 11px !important;
-                    text-align: left !important;
-                    position: relative !important;
-                  }
-                  .print-table td {
-                    font-weight: bold !important;
-                    font-size: 11px !important;
-                  }
-                  .print-table .col-particulars {
-                    word-break: break-word !important;
-                    overflow-wrap: break-word !important;
-                    white-space: normal !important;
-                    line-height: 1.3 !important;
-                    /* Ensure long text wraps properly */
-                    min-width: 0 !important;
-                    max-width: 100% !important;
-                  }
-                  .print-table .col-company,
-                  .print-table .col-account,
-                  .print-table .col-subaccount,
-                  .print-table .col-staff,
-                  .print-table .col-user,
-                  .print-table .col-payment {
-                    white-space: normal !important;
-                    word-break: break-word !important;
-                    overflow-wrap: break-word !important;
-                    /* Prevent column shifting */
-                    min-width: 0 !important;
-                    max-width: 100% !important;
-                  }
-                  /* Ensure numeric columns don't wrap */
-                  .print-table .col-sno,
-                  .print-table .col-credit,
-                  .print-table .col-debit,
-                  .print-table .col-saleqty,
-                  .print-table .col-purchaseqty {
-                    white-space: nowrap !important;
-                    overflow: hidden !important;
-                    text-overflow: ellipsis !important;
-                  }
-                  /* Fixed column widths - prevent shifting */
-                  .print-table .col-sno { 
-                    width: 3% !important; 
-                    min-width: 3% !important;
-                    max-width: 3% !important;
-                    text-align: center !important; 
-                  }
-                  .print-table .col-date { 
-                    width: 8% !important; 
-                    min-width: 8% !important;
-                    max-width: 8% !important;
-                  }
-                  .print-table .col-company { 
-                    width: 15% !important; 
-                    min-width: 15% !important;
-                    max-width: 15% !important;
-                  }
-                  .print-table .col-account { 
-                    width: 15% !important; 
-                    min-width: 15% !important;
-                    max-width: 15% !important;
-                  }
-                  .print-table .col-subaccount { 
-                    width: 12% !important; 
-                    min-width: 12% !important;
-                    max-width: 12% !important;
-                  }
-                  .print-table .col-particulars { 
-                    width: 27% !important; 
-                    min-width: 27% !important;
-                    max-width: 27% !important;
-                  }
-                  .print-table .col-purchaseqty { 
-                    width: 5% !important; 
-                    min-width: 5% !important;
-                    max-width: 5% !important;
-                    text-align: center !important; 
-                  }
-                  .print-table .col-saleqty { 
-                    width: 5% !important; 
-                    min-width: 5% !important;
-                    max-width: 5% !important;
-                    text-align: center !important; 
-                  }
-                  .print-table .col-credit { 
-                    width: 5% !important; 
-                    min-width: 5% !important;
-                    max-width: 5% !important;
-                    text-align: right !important; 
-                  }
-                  .print-table .col-debit { 
-                    width: 5% !important; 
-                    min-width: 5% !important;
-                    max-width: 5% !important;
-                    text-align: right !important; 
-                  }
-                }
-                @media screen {
-                  .print-content {
-                    display: block;
-                    margin: 0;
-                    padding: 0;
-                  }
-                  .print-table {
-                    width: 100%;
-                    font-size: 12px;
-                  }
-                  .print-table th,
-                  .print-table td {
-                    font-weight: bold !important;
-                    font-size: 12px !important;
-                  }
-                  .print-page {
-                    margin-bottom: 20px;
-                    border: 1px dashed #ccc;
-                    padding: 10px;
-                  }
-                  .print-page-header {
-                    margin-bottom: 5px;
-                    margin-top: 0;
-                    padding-bottom: 3px;
-                    padding-top: 0;
-                  }
-                  .print-page:first-child .print-page-header:first-child {
-                    margin-top: 0;
-                    padding-top: 0;
-                  }
-                  
-                  /* FINAL OVERRIDE: Force visibility on ALL modal and print-content elements */
-                  .fixed.inset-0,
-                  .fixed.inset-0 *,
-                  .fixed.inset-0 * *,
-                  .fixed.inset-0 * * *,
-                  .fixed.inset-0 * * * *,
-                  .fixed.inset-0 * * * * *,
-                  .fixed.inset-0 * * * * * * {
-                    visibility: visible !important;
-                  }
-                  .print-content,
-                  .print-content *,
-                  .print-content * *,
-                  .print-content * * *,
-                  .print-content * * * *,
-                  .print-content * * * * * {
-                    visibility: visible !important;
-                  }
-                  /* Explicit display values for all print-content elements */
-                  .print-content {
-                    display: block !important;
-                  }
-                  .print-content div {
-                    display: block !important;
-                  }
-                  .print-content table {
-                    display: table !important;
-                  }
-                  .print-content thead {
-                    display: table-header-group !important;
-                  }
-                  .print-content tbody {
-                    display: table-row-group !important;
-                  }
-                  .print-content tr {
-                    display: table-row !important;
-                  }
-                  .print-content td,
-                  .print-content th {
-                    display: table-cell !important;
-                  }
-                  .print-content h1,
-                  .print-content h2,
-                  .print-content h3,
-                  .print-content h4 {
-                    display: block !important;
-                  }
-                  .print-content p {
-                    display: block !important;
-                  }
-                  .print-content span {
-                    display: inline !important;
-                  }
-                }
-              `}</style>
-
-              {/* Print Content */}
-              <div className='print-content print:block'>
-                {/* Transactions Table - Split into pages of 25 rows */}
-                {(() => {
-                  // Use all entries if printAllEntries is true, otherwise use filtered entries
-                  const entriesToPrint = printAllEntries ? ledgerEntries : filteredEntries;
-                  
-                  // Calculate totals for print preview
-                  const totalCredit = entriesToPrint.reduce((s, e) => s + (e.credit || 0), 0);
-                  const totalDebit = entriesToPrint.reduce((s, e) => s + (e.debit || 0), 0);
-                  const totalSaleQty = entriesToPrint.reduce((s, e) => s + (e.saleQuantity || 0), 0);
-                  const totalPurchaseQty = entriesToPrint.reduce((s, e) => s + (e.purchaseQuantity || 0), 0);
-                  const printTotals = {
-                    totalCredit,
-                    totalDebit,
-                    totalSaleQty,
-                    totalPurchaseQty,
-                    balance: totalCredit - totalDebit,
-                    quantityBalance: totalPurchaseQty - totalSaleQty,
-                  };
-                  
-                  const rowsPerPage = 50;
-                  const totalPages = Math.ceil(entriesToPrint.length / rowsPerPage);
-                  const pages = [];
-                  
-                  for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
-                    const startIndex = pageIndex * rowsPerPage;
-                    const endIndex = Math.min(startIndex + rowsPerPage, entriesToPrint.length);
-                    const pageEntries = entriesToPrint.slice(startIndex, endIndex);
-                    const isLastPage = pageIndex === totalPages - 1;
-                    
-                    pages.push(
-                      <div key={pageIndex} className={!isLastPage ? 'print-page' : ''} data-page-index={pageIndex}>
-                        {/* Main Header - Only on first page */}
-                        {pageIndex === 0 && (
-                          <>
-                            <div className='print-page-header' style={{ marginBottom: '4px', marginTop: '0', paddingTop: '0', textAlign: 'center' }}>
-                              <h1 style={{ fontSize: '20px', margin: '0 0 1px 0', paddingTop: '0', fontWeight: 'bold', lineHeight: '1.1' }}>
-                                Thirumala Group
-                              </h1>
-                              <h2 style={{ fontSize: '18px', margin: '1px 0', fontWeight: 'bold', lineHeight: '1.1' }}>
-                                Detailed Ledger Report {printAllEntries ? '(All Records)' : ''}
-                              </h2>
-                              <p style={{ fontSize: '13px', margin: '1px 0', lineHeight: '1.2', fontWeight: 'bold' }}>
-                                {printAllEntries ? 'All Records' : `From ${format(new Date(filters.fromDate), 'dd/MM/yyyy')} to ${format(new Date(filters.toDate), 'dd/MM/yyyy')}`}
-                              </p>
-                              {!printAllEntries && (
-                                <div style={{ fontSize: '12px', marginTop: '3px', fontWeight: 'bold' }}>
-                                  {filters.companyName && (
-                                    <span style={{ marginRight: '15px' }}>
-                                      Company: <strong>{filters.companyName}</strong>
-                                    </span>
-                                  )}
-                                  {filters.mainAccount && (
-                                    <span>
-                                      Account: <strong>{filters.mainAccount}</strong>
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-
-
-                            {/* Additional Filter Info - Only on first page */}
-                            {!printAllEntries && (filters.subAccount || filters.staffwise || filters.user || filters.paymentMode) && (
-                              <div className='print-page-header' style={{ marginBottom: '5px', fontSize: '10px', padding: '5px', backgroundColor: '#f5f5f5' }}>
-                                {filters.subAccount && <span style={{ marginRight: '15px' }}>Sub Account: <strong>{filters.subAccount}</strong></span>}
-                                {filters.staffwise && <span style={{ marginRight: '15px' }}>Staff: <strong>{filters.staffwise}</strong></span>}
-                                {filters.user && <span style={{ marginRight: '15px' }}>User: <strong>{filters.user}</strong></span>}
-                                {filters.paymentMode && <span>Payment Mode: <strong>{filters.paymentMode}</strong></span>}
-                              </div>
-                            )}
-                          </>
-                        )}
-
-                        {/* Page Header for continuation pages - minimal */}
-                        {pageIndex > 0 && (
-                          <div className='print-page-header continuation-header' style={{ marginBottom: '3px', marginTop: '0', paddingTop: '0', fontSize: '11px', textAlign: 'center', color: '#666', fontWeight: 'bold' }}>
-                            <div style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '2px' }}>Thirumala Group - Detailed Ledger Report (Continued)</div>
-                            <div style={{ fontSize: '11px', fontWeight: 'bold' }}>Page {pageIndex + 1} of {totalPages}</div>
-                          </div>
-                        )}
-                        {pageIndex === 0 ? (
-                          <table className='print-table'>
-                            <thead>
-                              <tr className='bg-gray-100'>
-                                <th className='col-sno text-left font-bold text-sm'>S.No</th>
-                                <th className='col-date text-left font-bold text-sm'>Date</th>
-                                <th className='col-company text-left font-bold text-sm'>Company</th>
-                                <th className='col-account text-left font-bold text-sm'>Account</th>
-                                <th className='col-subaccount text-left font-bold text-sm'>Sub Account</th>
-                                <th className='col-particulars text-left font-bold text-sm'>Particulars</th>
-                                <th className='col-purchaseqty text-center font-bold text-sm'>Purchase Qty</th>
-                                <th className='col-saleqty text-center font-bold text-sm'>Sale Qty</th>
-                                <th className='col-credit text-right font-bold text-sm'>Credit</th>
-                                <th className='col-debit text-right font-bold text-sm'>Debit</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {pageEntries.map((entry, localIndex) => {
-                                const globalIndex = startIndex + localIndex;
-                                return (
-                                  <tr key={entry.id}>
-                                    <td className='col-sno font-bold text-sm'>{globalIndex + 1}</td>
-                                    <td className='col-date font-bold text-sm'>{format(new Date(entry.date), 'dd/MM/yyyy')}</td>
-                                    <td className='col-company font-bold text-sm'>{entry.companyName}</td>
-                                    <td className='col-account font-bold text-sm'>{entry.accountName}</td>
-                                    <td className='col-subaccount font-bold text-sm'>{entry.subAccount || '-'}</td>
-                                    <td className='col-particulars font-bold text-sm' title={entry.particulars}>{entry.particulars}</td>
-                                    <td className='col-purchaseqty text-center font-bold text-sm'>
-                                      {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
-                                    </td>
-                                    <td className='col-saleqty text-center font-bold text-sm'>
-                                      {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
-                                    </td>
-                                    <td className='col-credit text-right font-bold text-sm'>
-                                      {entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}
-                                    </td>
-                                    <td className='col-debit text-right font-bold text-sm'>
-                                      {entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                              {isLastPage && (
-                                <>
-                                  <tr className='bg-gray-200 font-bold'>
-                                    <td colSpan={6} className='text-right font-bold text-sm' style={{ padding: '4px' }}>TOTAL:</td>
-                                    <td className='text-center font-bold text-sm' style={{ padding: '4px' }}>
-                                      {printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}
-                                    </td>
-                                    <td className='text-center font-bold text-sm' style={{ padding: '4px' }}>
-                                      {printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}
-                                    </td>
-                                    <td className='text-right font-bold text-sm' style={{ padding: '4px' }}>
-{printTotals.totalCredit.toLocaleString()}
-                                    </td>
-                                    <td className='text-right font-bold text-sm' style={{ padding: '4px' }}>
-{printTotals.totalDebit.toLocaleString()}
-                                    </td>
-                                  </tr>
-                                  <tr className='bg-gray-300'>
-                                    <td colSpan={6} className='text-right font-bold text-sm' style={{ padding: '4px' }}>QUANTITY BALANCE:</td>
-                                    <td colSpan={1} className='text-center font-bold text-sm' style={{ padding: '4px', color: printTotals.quantityBalance >= 0 ? '#059669' : '#dc2626' }}>
-                                      {printTotals.quantityBalance > 0 ? printTotals.quantityBalance.toLocaleString() : printTotals.quantityBalance < 0 ? Math.abs(printTotals.quantityBalance).toLocaleString() : '-'} {printTotals.quantityBalance >= 0 ? 'CR' : printTotals.quantityBalance < 0 ? 'DR' : ''}
-                                    </td>
-                                    <td colSpan={1} className='text-right font-bold text-sm' style={{ padding: '4px' }}>BALANCE:</td>
-                                    <td colSpan={2} className='text-center font-bold text-sm' style={{ padding: '4px', color: printTotals.balance >= 0 ? '#059669' : '#dc2626' }}>
-{Math.abs(printTotals.balance).toLocaleString()} {printTotals.balance >= 0 ? 'CR' : 'DR'}
-                                    </td>
-                                  </tr>
-                                </>
-                              )}
-                            </tbody>
-                          </table>
-                        ) : (
-                          <table className='print-table no-header-table'>
-                            <tbody>
-                              {pageEntries.map((entry, localIndex) => {
-                                const globalIndex = startIndex + localIndex;
-                                return (
-                                  <tr key={entry.id}>
-                                    <td className='col-sno font-bold text-sm'>{globalIndex + 1}</td>
-                                    <td className='col-date font-bold text-sm'>{format(new Date(entry.date), 'dd/MM/yyyy')}</td>
-                                    <td className='col-company font-bold text-sm'>{entry.companyName}</td>
-                                    <td className='col-account font-bold text-sm'>{entry.accountName}</td>
-                                    <td className='col-subaccount font-bold text-sm'>{entry.subAccount || '-'}</td>
-                                    <td className='col-particulars font-bold text-sm' title={entry.particulars}>{entry.particulars}</td>
-                                    <td className='col-purchaseqty text-center font-bold text-sm'>
-                                      {entry.purchaseQuantity > 0 ? entry.purchaseQuantity.toLocaleString() : '-'}
-                                    </td>
-                                    <td className='col-saleqty text-center font-bold text-sm'>
-                                      {entry.saleQuantity > 0 ? entry.saleQuantity.toLocaleString() : '-'}
-                                    </td>
-                                    <td className='col-credit text-right font-bold text-sm'>
-                                      {entry.credit > 0 ? `${entry.credit.toLocaleString()}` : '-'}
-                                    </td>
-                                    <td className='col-debit text-right font-bold text-sm'>
-                                      {entry.debit > 0 ? `${entry.debit.toLocaleString()}` : '-'}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                              {isLastPage && (
-                                <>
-                                  <tr className='bg-gray-200 font-bold'>
-                                    <td colSpan={6} className='text-right font-bold' style={{ padding: '4px' }}>TOTAL:</td>
-                                    <td className='text-center font-bold' style={{ padding: '4px' }}>
-                                      {printTotals.totalPurchaseQty > 0 ? printTotals.totalPurchaseQty.toLocaleString() : '-'}
-                                    </td>
-                                    <td className='text-center font-bold' style={{ padding: '4px' }}>
-                                      {printTotals.totalSaleQty > 0 ? printTotals.totalSaleQty.toLocaleString() : '-'}
-                                    </td>
-                                    <td className='text-right font-bold' style={{ padding: '4px' }}>
-{printTotals.totalCredit.toLocaleString()}
-                                    </td>
-                                    <td className='text-right font-bold' style={{ padding: '4px' }}>
-{printTotals.totalDebit.toLocaleString()}
-                                    </td>
-                                  </tr>
-                                  <tr className='bg-gray-300'>
-                                    <td colSpan={6} className='text-right font-bold' style={{ padding: '4px' }}>QUANTITY BALANCE:</td>
-                                    <td colSpan={1} className='text-center font-bold' style={{ padding: '4px', color: printTotals.quantityBalance >= 0 ? '#059669' : '#dc2626' }}>
-                                      {printTotals.quantityBalance > 0 ? printTotals.quantityBalance.toLocaleString() : printTotals.quantityBalance < 0 ? Math.abs(printTotals.quantityBalance).toLocaleString() : '-'} {printTotals.quantityBalance >= 0 ? 'CR' : printTotals.quantityBalance < 0 ? 'DR' : ''}
-                                    </td>
-                                    <td colSpan={1} className='text-right font-bold' style={{ padding: '4px' }}>BALANCE:</td>
-                                    <td colSpan={2} className='text-center font-bold' style={{ padding: '4px', color: printTotals.balance >= 0 ? '#059669' : '#dc2626' }}>
-{Math.abs(printTotals.balance).toLocaleString()} {printTotals.balance >= 0 ? 'CR' : 'DR'}
-                                    </td>
-                                  </tr>
-                                </>
-                              )}
-                            </tbody>
-                          </table>
-                        )}
-                        {/* Page Footer */}
-                        <div className='print-page-footer' style={{ textAlign: 'center', fontSize: '11px', marginTop: '8px', color: '#666', fontWeight: 'bold' }}>
-                          Page {pageIndex + 1} of {totalPages}
-                          {isLastPage && (
-                            <div style={{ marginTop: '5px', paddingTop: '5px', borderTop: '1px solid #ccc', fontWeight: 'bold' }}>
-                              Generated on {format(new Date(), 'dd/MM/yyyy HH:mm')} by {user?.username} | Total Records: {entriesToPrint.length}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  }
-                  
-                  return pages;
-                })()}
+                  }}
+                >
+                  Print
+                </Button>
+                <Button
+                  size='sm'
+                  variant='secondary'
+                  onClick={() => setShowPrintPreview(false)}
+                >
+                  Close
+                </Button>
               </div>
             </div>
+            <iframe
+              ref={previewFrameRef}
+              title='Detailed Ledger print preview'
+              srcDoc={generatePrintContent(printAllEntries ? ledgerEntries : filteredEntries, printAllEntries)}
+              className='flex-1 w-full rounded-b-lg'
+            />
           </div>
         </div>
       )}

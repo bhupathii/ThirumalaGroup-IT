@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import SearchableSelect from '../components/UI/SearchableSelect';
@@ -9,7 +9,7 @@ import ModeLabel from '../components/UI/ModeLabel';
 import { format } from 'date-fns';
 import { Calendar, Search, AlertTriangle } from 'lucide-react';
 import CustomCalendar from '../components/UI/CustomCalendar';
-import { getSharedPrintStyles } from '../utils/print';
+import { getSharedPrintStyles, printPreviewFrame, toDisplayCase } from '../utils/print';
 import { useBook } from '../contexts/BookContext';
 
 interface LedgerSummaryFilters {
@@ -73,6 +73,7 @@ const LedgerSummary: React.FC = () => {
   >([]);
   const [loading, setLoading] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const previewFrameRef = useRef<HTMLIFrameElement>(null);
   const [activeTab, setActiveTab] = useState<
     'company' | 'mainAccount' | 'subAccount'
   >('company');
@@ -477,220 +478,130 @@ const LedgerSummary: React.FC = () => {
 
 
 
+  // One print document for both the preview and the printer, so they always match.
+  const buildPrintHtml = () => {
+    const fromFormatted = filters.fromDate ? format(new Date(filters.fromDate), 'dd/MM/yyyy') : '';
+    const toFormatted = filters.toDate ? format(new Date(filters.toDate), 'dd/MM/yyyy') : '';
+
+    const currentData: any[] = getCurrentData();
+
+    // Text columns depend on the active tab; Company is shown when no company filter is set
+    type TextColumn = { label: string; cls: string; get: (item: any) => string };
+    const companyCol: TextColumn = { label: 'Company Name', cls: 'col-company', get: item => item.companyName };
+    const textColumns: TextColumn[] =
+      activeTab === 'company'
+        ? [companyCol]
+        : activeTab === 'subAccount'
+          ? [
+              ...(filters.companyName ? [] : [companyCol]),
+              { label: 'Main Account', cls: 'col-account', get: item => item.mainAccount },
+              { label: 'Sub Account', cls: 'col-sub-account', get: item => item.subAccount },
+            ]
+          : [
+              ...(filters.companyName ? [] : [companyCol]),
+              { label: 'Main Account', cls: 'col-account', get: item => item.accountName },
+            ];
+
+    const getCredit = (item: any): number => (activeTab === 'company' ? item.totalCredit : item.credit) || 0;
+    const getDebit = (item: any): number => (activeTab === 'company' ? item.totalDebit : item.debit) || 0;
+    const crDr = (amount: number) => `${Math.abs(amount).toLocaleString()} ${amount >= 0 ? 'CR' : 'DR'}`;
+
+    const totals = currentData.reduce(
+      (acc, item) => {
+        acc.totalCredit += getCredit(item);
+        acc.totalDebit += getDebit(item);
+        acc.totalBalance += item.balance || 0;
+        return acc;
+      },
+      { totalCredit: 0, totalDebit: 0, totalBalance: 0 }
+    );
+
+    const rowsHtml = currentData
+      .map(item => {
+        const balance = item.balance || 0;
+        return `
+          <tr>
+            ${textColumns.map(col => `<td class="${col.cls}">${toDisplayCase(col.get(item)) || '-'}</td>`).join('')}
+            <td class="col-credit text-green">${getCredit(item).toLocaleString()}</td>
+            <td class="col-debit text-red">${getDebit(item).toLocaleString()}</td>
+            <td class="col-balance ${balance >= 0 ? 'text-green' : 'text-red'}">${crDr(balance)}</td>
+          </tr>`;
+      })
+      .join('');
+
+    return `<!DOCTYPE html>
+<html>
+  <head>
+    <title>Ledger Summary Report</title>
+    <meta charset="utf-8">
+    <style>
+      ${getSharedPrintStyles({ isLandscape: false, fontSizePt: 9 })}
+      body { background: #f3f4f6; padding: 16px; }
+      .page { background: #fff; max-width: 210mm; margin: 0 auto; padding: 10mm 8mm; border: 1px solid #d1d5db; box-sizing: border-box; }
+      .header { text-align: center; border-bottom: 1.5px solid #111; padding-bottom: 6px; margin-bottom: 8px; }
+      .header h1 { margin: 0; font-size: 14pt; }
+      .header h2 { margin: 2px 0 0; font-size: 11pt; font-weight: 600; }
+      .header .meta { margin-top: 3px; font-size: 9pt; }
+      table.summary td { text-align: center; width: 25%; }
+      table.summary .label { color: #555; font-size: 7.5pt; }
+      table.summary .value { font-weight: bold; font-size: 10pt; white-space: nowrap; }
+      .text-green { color: #047857; }
+      .text-red { color: #b91c1c; }
+      .footer { margin-top: 10px; text-align: center; font-size: 7.5pt; color: #555; border-top: 1px solid #d1d5db; padding-top: 4px; }
+      @media print {
+        body { background: #fff !important; padding: 0 !important; }
+        .page { max-width: none; border: none; padding: 0; margin: 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="header">
+        <h1>Thirumala Group</h1>
+        <h2>Ledger Summary Report</h2>
+        <div class="meta">${filters.companyName ? toDisplayCase(filters.companyName) : 'All Companies'}</div>
+        <div class="meta">Period: <strong>${fromFormatted}</strong> to <strong>${toFormatted}</strong></div>
+      </div>
+
+      <table class="summary">
+        <tr>
+          <td><div class="label">Total Credit</div><div class="value text-green">${totals.totalCredit.toLocaleString()}</div></td>
+          <td><div class="label">Total Debit</div><div class="value text-red">${totals.totalDebit.toLocaleString()}</div></td>
+          <td><div class="label">Net Balance</div><div class="value">${crDr(totals.totalBalance)}</div></td>
+          <td><div class="label">Total Records</div><div class="value">${currentData.length}</div></td>
+        </tr>
+      </table>
+
+      <table>
+        <thead>
+          <tr>
+            ${textColumns.map(col => `<th class="${col.cls}">${col.label}</th>`).join('')}
+            <th class="col-credit">Credit</th>
+            <th class="col-debit">Debit</th>
+            <th class="col-balance">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+          <tr class="totals">
+            <td colspan="${textColumns.length}" class="text-right">Total</td>
+            <td class="col-credit">${totals.totalCredit.toLocaleString()}</td>
+            <td class="col-debit">${totals.totalDebit.toLocaleString()}</td>
+            <td class="col-balance">${crDr(totals.totalBalance)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="footer">Generated on ${format(new Date(), 'dd/MM/yyyy HH:mm')} &middot; Thirumala Group Business Management System</div>
+    </div>
+  </body>
+</html>`;
+  };
+
   const handleRealPrint = () => {
-    // Create a print-friendly version
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Please allow popups to print');
-      return;
+    if (!printPreviewFrame(previewFrameRef.current)) {
+      toast.error('Print failed. Please try again.');
     }
-
-    const fromFormatted = format(new Date(filters.fromDate), 'dd/MM/yyyy');
-    const toFormatted = format(new Date(filters.toDate), 'dd/MM/yyyy');
-
-    const currentData = getCurrentData();
-
-    // Calculate totals for the current data
-    const totals = currentData.reduce((acc, item) => {
-      const credit = activeTab === 'company' ? (item as CompanySummary).totalCredit : 
-                    (item as AccountSummary | SubAccountSummary).credit;
-      const debit = activeTab === 'company' ? (item as CompanySummary).totalDebit : 
-                   (item as AccountSummary | SubAccountSummary).debit;
-      const balance = item.balance;
-      
-      acc.totalCredit += credit;
-      acc.totalDebit += debit;
-      acc.totalBalance += balance;
-      acc.recordCount += 1;
-      
-      return acc;
-    }, { totalCredit: 0, totalDebit: 0, totalBalance: 0, recordCount: 0 });
-
-    const printContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title></title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .header { text-align: center; margin-bottom: 30px; }
-            .header h1 { margin: 0; color: #1f2937; font-size: 28px; font-weight: bold; }
-            .header h2 { margin: 10px 0; color: #374151; font-size: 20px; font-weight: 600; }
-            .header .company-name { margin: 5px 0; color: #1f2937; font-size: 18px; font-weight: bold; }
-            .header .date-time { margin: 10px 0; color: #6b7280; font-size: 16px; font-weight: 500; }
-            .header .period { margin: 5px 0; color: #374151; font-size: 14px; }
-            .header .from-date { font-weight: bold; font-size: 16px; color: #1f2937; }
-            .totals-section { margin: 20px 0; padding: 15px; background-color: #f8fafc; border: 2px solid #e5e7eb; border-radius: 8px; }
-            .totals-title { font-size: 18px; font-weight: bold; color: #1f2937; margin-bottom: 10px; text-align: center; }
-            .totals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
-            .total-item { text-align: center; padding: 10px; background-color: white; border-radius: 6px; border: 1px solid #d1d5db; }
-            .total-label { font-size: 14px; color: #6b7280; margin-bottom: 5px; }
-            .total-value { font-size: 18px; font-weight: bold; color: #1f2937; }
-            .total-value.credit { color: #059669; }
-            .total-value.debit { color: #dc2626; }
-            .total-value.balance { color: #1f2937; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
-            th { background-color: #f9fafb; font-weight: bold; }
-            .text-right { text-align: right; }
-            .text-green { color: #059669; }
-            .text-red { color: #dc2626; }
-            .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #6b7280; }
-            @media print {
-              body { margin: 0; }
-              .no-print { display: none; }
-              @page {
-                size: portrait;
-                margin: 8mm;
-              }
-            }
-            ${getSharedPrintStyles({ isLandscape: false })}
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>Thirumala Group</h1>
-            <h2>Ledger Summary Report</h2>
-            <div class="company-name">${filters.companyName || 'All Companies'}</div>
-            <div class="period">Period: <strong>${fromFormatted}</strong> to <strong>${toFormatted}</strong></div>
-          </div>
-
-          <div class="totals-section">
-            <div class="totals-title">Summary Totals</div>
-            <div class="totals-grid">
-              <div class="total-item">
-                <div class="total-label">Total Credit</div>
-                <div class="total-value credit">${totals.totalCredit.toLocaleString()}</div>
-              </div>
-              <div class="total-item">
-                <div class="total-label">Total Debit</div>
-                <div class="total-value debit">${totals.totalDebit.toLocaleString()}</div>
-              </div>
-              <div class="total-item">
-                <div class="total-label">Net Balance</div>
-                <div class="total-value balance">${Math.abs(totals.totalBalance).toLocaleString()} ${totals.totalBalance >= 0 ? 'CR' : 'DR'}</div>
-              </div>
-              <div class="total-item">
-                <div class="total-label">Total Records</div>
-                <div class="total-value">${totals.recordCount}</div>
-              </div>
-            </div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                ${activeTab === 'subAccount' ? 
-                  (!filters.companyName ? 
-                    '<th class="col-company">Company Name</th><th class="col-account">Main Account</th><th class="col-sub-account">Sub Account</th>' :
-                    '<th class="col-account">Main Account</th><th class="col-sub-account">Sub Account</th>') : 
-                  activeTab === 'company' ? 
-                    '<th class="col-company">Company Name</th>' :
-                    !filters.companyName ? 
-                      '<th class="col-company">Company Name</th><th class="col-account">Main Account</th>' :
-                      '<th class="col-account">Main Account</th>'
-                }
-                <th class="col-credit text-right">Credit</th>
-                <th class="col-debit text-right">Debit</th>
-                <th class="col-balance text-right">Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${currentData
-                .map(
-                  item => {
-                    const credit = activeTab === 'company' ? (item as CompanySummary).totalCredit : 
-                                  (item as AccountSummary | SubAccountSummary).credit;
-                    const debit = activeTab === 'company' ? (item as CompanySummary).totalDebit : 
-                                 (item as AccountSummary | SubAccountSummary).debit;
-                    const balance = item.balance;
-                    
-                    if (activeTab === 'subAccount') {
-                      const subAccount = item as SubAccountSummary;
-                      const companyCell = !filters.companyName && subAccount.companyName ? 
-                        `<td class="col-company">${subAccount.companyName}</td>` : '';
-                      return `
-                <tr>
-                  ${companyCell}
-                  <td class="col-account">${subAccount.mainAccount || '-'}</td>
-                  <td class="col-sub-account">${subAccount.subAccount}</td>
-                  <td class="col-credit text-right text-green">${credit.toLocaleString()}</td>
-                  <td class="col-debit text-right text-red">${debit.toLocaleString()}</td>
-                  <td class="col-balance text-right ${balance >= 0 ? 'text-green' : 'text-red'}">
-${Math.abs(balance).toLocaleString()}
-                    ${balance >= 0 ? ' CR' : ' DR'}
-                  </td>
-                </tr>
-              `;
-                    } else {
-                      if (activeTab === 'company') {
-                        const company = item as CompanySummary;
-                        return `
-                  <tr>
-                    <td class="col-company">${company.companyName}</td>
-                    <td class="col-credit text-right text-green">${credit.toLocaleString()}</td>
-                    <td class="col-debit text-right text-red">${debit.toLocaleString()}</td>
-                    <td class="col-balance text-right ${balance >= 0 ? 'text-green' : 'text-red'}">
-${Math.abs(balance).toLocaleString()}
-                      ${balance >= 0 ? ' CR' : ' DR'}
-                    </td>
-                  </tr>
-                `;
-                      } else {
-                        const account = item as AccountSummary;
-                        if (!filters.companyName && (account as any).companyName) {
-                          return `
-                    <tr>
-                      <td class="col-company">${(account as any).companyName}</td>
-                      <td class="col-account">${account.accountName}</td>
-                      <td class="col-credit text-right text-green">${credit.toLocaleString()}</td>
-                      <td class="col-debit text-right text-red">${debit.toLocaleString()}</td>
-                      <td class="col-balance text-right ${balance >= 0 ? 'text-green' : 'text-red'}">
-${Math.abs(balance).toLocaleString()}
-                        ${balance >= 0 ? ' CR' : ' DR'}
-                      </td>
-                    </tr>
-                  `;
-                        } else {
-                          return `
-                    <tr>
-                      <td class="col-account">${account.accountName}</td>
-                      <td class="col-credit text-right text-green">${credit.toLocaleString()}</td>
-                      <td class="col-debit text-right text-red">${debit.toLocaleString()}</td>
-                      <td class="col-balance text-right ${balance >= 0 ? 'text-green' : 'text-red'}">
-${Math.abs(balance).toLocaleString()}
-                        ${balance >= 0 ? ' CR' : ' DR'}
-                      </td>
-                    </tr>
-                  `;
-                        }
-                      }
-                    }
-                  }
-                )
-                .join('')}
-            </tbody>
-          </table>
-
-          <div class="footer">
-            <p>Generated by Thirumala Group Business Management System</p>
-            <p style="margin-top: 5px; font-weight: 500;">Generated on: ${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}</p>
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.focus();
-
-    // Wait for content to load then print
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 500);
-
-    toast.success('Print dialog opened');
   };
 
   const printSummary = () => {
@@ -950,27 +861,6 @@ ${Math.abs(balance).toLocaleString()}
 
     return null;
   };
-
-  const currentDataForPreview = getCurrentData();
-  const fromFormattedForPreview = filters.fromDate ? format(new Date(filters.fromDate), 'dd/MM/yyyy') : '';
-  const toFormattedForPreview = filters.toDate ? format(new Date(filters.toDate), 'dd/MM/yyyy') : '';
-  
-  const previewTotals = useMemo(() => {
-    return currentDataForPreview.reduce((acc, item) => {
-      const credit = activeTab === 'company' ? (item as CompanySummary).totalCredit : 
-                    (item as AccountSummary | SubAccountSummary).credit;
-      const debit = activeTab === 'company' ? (item as CompanySummary).totalDebit : 
-                   (item as AccountSummary | SubAccountSummary).debit;
-      const balance = item.balance;
-      
-      acc.totalCredit += credit;
-      acc.totalDebit += debit;
-      acc.totalBalance += balance;
-      acc.recordCount += 1;
-      
-      return acc;
-    }, { totalCredit: 0, totalDebit: 0, totalBalance: 0, recordCount: 0 });
-  }, [currentDataForPreview, activeTab]);
 
   return (
     <div className='space-y-6'>
@@ -1350,147 +1240,33 @@ ${Math.abs(balance).toLocaleString()}
         </div>
       </Card>
 
-      {/* Print Preview Modal */}
+      {/* Print Preview Modal: shows the exact document that gets printed */}
       {showPrintPreview && (
         <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50'>
-          <div className='bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto'>
-            <div className='p-6'>
-              <div className='flex items-center justify-between mb-6 no-print'>
-                <h3 className='text-lg font-semibold'>
-                  Print Preview - Ledger Summary
-                </h3>
-                <div className='flex items-center gap-2'>
-                  <Button 
-                    size='sm' 
-                    onClick={handleRealPrint}
-                  >
-                    Print
-                  </Button>
-                  <Button
-                    size='sm'
-                    variant='secondary'
-                    onClick={() => setShowPrintPreview(false)}
-                  >
-                    Close
-                  </Button>
-                </div>
-              </div>
-
-              {/* On-screen preview container */}
-              <div className='border p-8 bg-white max-w-4xl mx-auto shadow-sm text-gray-800' style={{ fontFamily: 'Arial, sans-serif' }}>
-                {/* Header */}
-                <div className='text-center border-b-2 border-black pb-4 mb-6'>
-                  <h1 className='text-2xl font-bold uppercase'>Thirumala Group</h1>
-                  <h2 className='text-lg font-semibold mt-1'>Ledger Summary Report</h2>
-                  <div className='text-md font-bold mt-1'>{filters.companyName || 'All Companies'}</div>
-                  <div className='text-sm mt-1'>Period: <strong>{fromFormattedForPreview}</strong> to <strong>{toFormattedForPreview}</strong></div>
-                </div>
-
-                {/* Summary Totals Section */}
-                <div className='border-2 border-gray-200 bg-gray-50 rounded-lg p-4 mb-6'>
-                  <div className='text-md font-bold text-center mb-3'>Summary Totals</div>
-                  <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
-                    <div className='bg-white p-3 rounded border text-center'>
-                      <div className='text-xs text-gray-500 mb-1'>Total Credit</div>
-                      <div className='text-lg font-bold text-green-600'>{previewTotals.totalCredit.toLocaleString()}</div>
-                    </div>
-                    <div className='bg-white p-3 rounded border text-center'>
-                      <div className='text-xs text-gray-500 mb-1'>Total Debit</div>
-                      <div className='text-lg font-bold text-red-600'>{previewTotals.totalDebit.toLocaleString()}</div>
-                    </div>
-                    <div className='bg-white p-3 rounded border text-center'>
-                      <div className='text-xs text-gray-500 mb-1'>Net Balance</div>
-                      <div className='text-lg font-bold'>{Math.abs(previewTotals.totalBalance).toLocaleString()} {previewTotals.totalBalance >= 0 ? 'CR' : 'DR'}</div>
-                    </div>
-                    <div className='bg-white p-3 rounded border text-center'>
-                      <div className='text-xs text-gray-500 mb-1'>Total Records</div>
-                      <div className='text-lg font-bold'>{previewTotals.recordCount}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Table */}
-                <table className='w-full border-collapse border border-black text-sm mb-6'>
-                  <thead>
-                    <tr className='bg-gray-100 border border-black'>
-                      {activeTab === 'subAccount' ? (
-                        <>
-                          {!filters.companyName && <th className='border border-black p-2 text-left font-bold'>Company Name</th>}
-                          <th className='border border-black p-2 text-left font-bold'>Main Account</th>
-                          <th className='border border-black p-2 text-left font-bold'>Sub Account</th>
-                        </>
-                      ) : activeTab === 'company' ? (
-                        <th className='border border-black p-2 text-left font-bold'>Company Name</th>
-                      ) : (
-                        <>
-                          {!filters.companyName && <th className='border border-black p-2 text-left font-bold'>Company Name</th>}
-                          <th className='border border-black p-2 text-left font-bold'>Main Account</th>
-                        </>
-                      )}
-                      <th className='border border-black p-2 text-right font-bold'>Credit</th>
-                      <th className='border border-black p-2 text-right font-bold'>Debit</th>
-                      <th className='border border-black p-2 text-right font-bold'>Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentDataForPreview.map((item, idx) => {
-                      const credit = activeTab === 'company' ? (item as CompanySummary).totalCredit : 
-                                    (item as AccountSummary | SubAccountSummary).credit;
-                      const debit = activeTab === 'company' ? (item as CompanySummary).totalDebit : 
-                                   (item as AccountSummary | SubAccountSummary).debit;
-                      const balance = item.balance;
-
-                      if (activeTab === 'subAccount') {
-                        const subAccount = item as SubAccountSummary;
-                        return (
-                          <tr key={idx} className='border border-black'>
-                            {!filters.companyName && <td className='border border-black p-2'>{subAccount.companyName}</td>}
-                            <td className='border border-black p-2'>{subAccount.mainAccount || '-'}</td>
-                            <td className='border border-black p-2'>{subAccount.subAccount}</td>
-                            <td className='border border-black p-2 text-right text-green-700 font-medium'>{credit.toLocaleString()}</td>
-                            <td className='border border-black p-2 text-right text-red-700 font-medium'>{debit.toLocaleString()}</td>
-                            <td className={`border border-black p-2 text-right font-semibold ${balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                              {Math.abs(balance).toLocaleString()} {balance >= 0 ? 'CR' : 'DR'}
-                            </td>
-                          </tr>
-                        );
-                      } else if (activeTab === 'company') {
-                        const company = item as CompanySummary;
-                        return (
-                          <tr key={idx} className='border border-black'>
-                            <td className='border border-black p-2'>{company.companyName}</td>
-                            <td className='border border-black p-2 text-right text-green-700 font-medium'>{credit.toLocaleString()}</td>
-                            <td className='border border-black p-2 text-right text-red-700 font-medium'>{debit.toLocaleString()}</td>
-                            <td className={`border border-black p-2 text-right font-semibold ${balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                              {Math.abs(balance).toLocaleString()} {balance >= 0 ? 'CR' : 'DR'}
-                            </td>
-                          </tr>
-                        );
-                      } else {
-                        const account = item as AccountSummary;
-                        return (
-                          <tr key={idx} className='border border-black'>
-                            {!filters.companyName && <td className='border border-black p-2'>{(account as any).companyName || ''}</td>}
-                            <td className='border border-black p-2'>{account.accountName}</td>
-                            <td className='border border-black p-2 text-right text-green-700 font-medium'>{credit.toLocaleString()}</td>
-                            <td className='border border-black p-2 text-right text-red-700 font-medium'>{debit.toLocaleString()}</td>
-                            <td className={`border border-black p-2 text-right font-semibold ${balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                              {Math.abs(balance).toLocaleString()} {balance >= 0 ? 'CR' : 'DR'}
-                            </td>
-                          </tr>
-                        );
-                      }
-                    })}
-                  </tbody>
-                </table>
-
-                {/* Footer */}
-                <div className='text-center border-t border-black pt-4 mt-6 text-xs text-gray-500'>
-                  <p>Generated by Thirumala Group Business Management System</p>
-                  <p className='mt-1 font-semibold'>Generated on: {format(new Date(), 'dd/MM/yyyy HH:mm:ss')}</p>
-                </div>
+          <div className='bg-white rounded-lg max-w-5xl w-full h-[90vh] flex flex-col'>
+            <div className='flex items-center justify-between px-6 py-4 border-b no-print'>
+              <h3 className='text-lg font-semibold'>
+                Print Preview - Ledger Summary
+              </h3>
+              <div className='flex items-center gap-2'>
+                <Button size='sm' onClick={handleRealPrint}>
+                  Print
+                </Button>
+                <Button
+                  size='sm'
+                  variant='secondary'
+                  onClick={() => setShowPrintPreview(false)}
+                >
+                  Close
+                </Button>
               </div>
             </div>
+            <iframe
+              ref={previewFrameRef}
+              title='Ledger Summary print preview'
+              srcDoc={buildPrintHtml()}
+              className='flex-1 w-full rounded-b-lg'
+            />
           </div>
         </div>
       )}

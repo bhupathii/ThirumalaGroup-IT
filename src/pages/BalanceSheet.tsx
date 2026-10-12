@@ -9,14 +9,7 @@ import ModeLabel from '../components/UI/ModeLabel';
 import { format, parseISO } from 'date-fns';
 import CustomCalendar from '../components/UI/CustomCalendar';
 import { Calendar, AlertTriangle } from 'lucide-react';
-import { getSharedPrintStyles } from '../utils/print';
-
-// Balance sheet prints larger digits than the other reports. Amount cells stay
-// on one line (see getSharedPrintStyles) and the account name takes the rest.
-const BALANCE_SHEET_PRINT_OVERRIDES = `
-  th, td { font-size: 11pt; padding: 3px 5px; }
-  td.col-credit, td.col-debit, td.col-balance { font-size: 12pt; }
-`;
+import { getSharedPrintStyles, toDisplayCase } from '../utils/print';
 import { useBook } from '../contexts/BookContext';
 
 interface BalanceSheetFilters {
@@ -352,318 +345,124 @@ const BalanceSheet: React.FC = () => {
 
   const printReport = () => {
     const allAccounts = [...balanceSheetData, ...customRows];
-    let printContent = '';
-    const dateRangeStr = filters.betweenDates 
-      ? `${format(parseISO(filters.fromDate), 'dd/MM/yyyy')} to ${format(parseISO(filters.toDate), 'dd/MM/yyyy')}`
+    const plAccounts = allAccounts.filter(acc => acc.plYesNo === 'YES');
+    const bsAccounts = allAccounts.filter(acc => acc.plYesNo === 'NO');
+    const periodHtml = filters.betweenDates
+      ? `<strong>${format(parseISO(filters.fromDate), 'dd/MM/yyyy')}</strong> to <strong>${format(parseISO(filters.toDate), 'dd/MM/yyyy')}</strong>`
       : 'All Time';
 
+    const amount = (n: number) => (n > 0 ? n.toLocaleString() : '-');
+
+    // One account table (used for the Balance Sheet, P&L, or both)
+    const accountTable = (heading: string, accounts: typeof allAccounts, totalsLabel: string) => {
+      const totalCredit = accounts.reduce((sum, acc) => sum + acc.credit, 0);
+      const totalDebit = accounts.reduce((sum, acc) => sum + acc.debit, 0);
+      const balance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
+      return `
+        <div class="section">
+          ${heading ? `<div class="section-title">${heading}</div>` : ''}
+          <table>
+            <thead>
+              <tr>
+                <th class="col-account">Account Name</th>
+                <th class="col-credit">Credit</th>
+                <th class="col-debit">Debit</th>
+                <th class="col-balance">Balance</th>
+                <th class="col-status">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${accounts.map(acc => `
+                <tr>
+                  <td class="col-account">${toDisplayCase(acc.accountName)}</td>
+                  <td class="col-credit text-green">${amount(acc.credit)}</td>
+                  <td class="col-debit text-red">${amount(acc.debit)}</td>
+                  <td class="col-balance">${amount(acc.balance)}</td>
+                  <td class="col-status">${toDisplayCase(acc.result)}</td>
+                </tr>`).join('')}
+              <tr class="totals">
+                <td class="col-account">${totalsLabel}</td>
+                <td class="col-credit text-green">${totalCredit.toLocaleString()}</td>
+                <td class="col-debit text-red">${totalDebit.toLocaleString()}</td>
+                <td class="col-balance">${balance.toLocaleString()}</td>
+                <td class="col-status">${balance >= 0 ? 'Credit' : 'Debit'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>`;
+    };
+
+    let title: string;
+    let body: string;
     if (reportFilter === 'BALANCE_SHEET') {
-      const bsAccounts = allAccounts.filter(acc => acc.plYesNo === 'NO');
-      const totals = {
-        totalCredit: bsAccounts.reduce((sum, acc) => sum + acc.credit, 0),
-        totalDebit: bsAccounts.reduce((sum, acc) => sum + acc.debit, 0),
-        balance: bsAccounts.reduce((sum, acc) => sum + acc.balance, 0),
-      };
-
-      printContent = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Balance Sheet Report</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 0; padding: 15px; background-color: white; font-size: 12px; line-height: 1.2; }
-              .header { text-align: center; margin-bottom: 15px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-              .header h1 { margin: 0; font-size: 18px; font-weight: bold; }
-              .header h2 { margin: 3px 0; font-size: 12px; }
-              .header h3 { margin: 2px 0; font-size: 14px; }
-              .header p { margin: 2px 0; font-size: 11px; }
-              table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 11px; }
-              th, td { border: 1px solid #000; padding: 4px 6px; text-align: left; }
-              th { background-color: #f0f0f0; font-weight: bold; }
-              .text-right { text-align: right; }
-              .text-center { text-align: center; }
-              .totals { background-color: #f0f0f0; font-weight: bold; }
-              .footer { margin-top: 15px; text-align: center; font-size: 10px; border-top: 1px solid #000; padding-top: 5px; }
-              @media print { @page { size: portrait; margin: 8mm; } body { margin: 0; padding: 10px; } }
-              ${getSharedPrintStyles({ isLandscape: false })}
-              ${BALANCE_SHEET_PRINT_OVERRIDES}
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <h1>Balance Sheet Report</h1>
-              <h2>Generated on ${format(new Date(), 'dd/MM/yyyy HH:mm')}</h2>
-              <h3>Company: ${filters.companyName || 'All Companies'}</h3>
-              <p>Period: ${dateRangeStr}</p>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th class="col-account">Account Name</th>
-                  <th class="col-credit text-right">Credit</th>
-                  <th class="col-debit text-right">Debit</th>
-                  <th class="col-balance text-right">Balance</th>
-                  <th class="col-status text-center">Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${bsAccounts.map(acc => `
-                  <tr>
-                    <td class="col-account">${acc.accountName}</td>
-                    <td class="col-credit text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
-                    <td class="col-debit text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
-                    <td class="col-balance text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
-                    <td class="col-status text-center">${acc.result}</td>
-                  </tr>
-                `).join('')}
-                <tr class="totals">
-                  <td class="col-account"><strong>TOTALS</strong></td>
-                  <td class="col-credit text-right text-green"><strong>${totals.totalCredit.toLocaleString()}</strong></td>
-                  <td class="col-debit text-right text-red"><strong>${totals.totalDebit.toLocaleString()}</strong></td>
-                  <td class="col-balance text-right"><strong>${totals.balance.toLocaleString()}</strong></td>
-                  <td class="col-status text-center"><strong>${totals.balance >= 0 ? 'CREDIT' : 'DEBIT'}</strong></td>
-                </tr>
-              </tbody>
-            </table>
-            <div class="footer">
-              <p>Generated by Thirumala Group Business Management System</p>
-            </div>
-          </body>
-        </html>
-      `;
+      title = 'Balance Sheet Report';
+      body = accountTable('', bsAccounts, 'Totals');
     } else if (reportFilter === 'PROFIT_LOSS') {
-      const plAccounts = allAccounts.filter(acc => acc.plYesNo === 'YES');
-      const totals = {
-        totalCredit: plAccounts.reduce((sum, acc) => sum + acc.credit, 0),
-        totalDebit: plAccounts.reduce((sum, acc) => sum + acc.debit, 0),
-        balance: plAccounts.reduce((sum, acc) => sum + acc.balance, 0),
-      };
-
-      printContent = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Profit & Loss Statement</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 0; padding: 15px; background-color: white; font-size: 12px; line-height: 1.2; }
-              .header { text-align: center; margin-bottom: 15px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-              .header h1 { margin: 0; font-size: 18px; font-weight: bold; }
-              .header h2 { margin: 3px 0; font-size: 12px; }
-              .header h3 { margin: 2px 0; font-size: 14px; }
-              .header p { margin: 2px 0; font-size: 11px; }
-              table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 11px; }
-              th, td { border: 1px solid #000; padding: 4px 6px; text-align: left; }
-              th { background-color: #f0f0f0; font-weight: bold; }
-              .text-right { text-align: right; }
-              .text-center { text-align: center; }
-              .totals { background-color: #f0f0f0; font-weight: bold; }
-              .footer { margin-top: 15px; text-align: center; font-size: 10px; border-top: 1px solid #000; padding-top: 5px; }
-              @media print { @page { size: portrait; margin: 8mm; } body { margin: 0; padding: 10px; } }
-              ${getSharedPrintStyles({ isLandscape: false })}
-              ${BALANCE_SHEET_PRINT_OVERRIDES}
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <h1>Profit & Loss Statement</h1>
-              <h2>Generated on ${format(new Date(), 'dd/MM/yyyy HH:mm')}</h2>
-              <h3>Company: ${filters.companyName || 'All Companies'}</h3>
-              <p>Period: ${dateRangeStr}</p>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th class="col-account">Account Name</th>
-                  <th class="col-credit text-right">Credit</th>
-                  <th class="col-debit text-right">Debit</th>
-                  <th class="col-balance text-right">Balance</th>
-                  <th class="col-status text-center">Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${plAccounts.map(acc => `
-                  <tr>
-                    <td class="col-account">${acc.accountName}</td>
-                    <td class="col-credit text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
-                    <td class="col-debit text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
-                    <td class="col-balance text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
-                    <td class="col-status text-center">${acc.result}</td>
-                  </tr>
-                `).join('')}
-                <tr class="totals">
-                  <td class="col-account"><strong>TOTALS</strong></td>
-                  <td class="col-credit text-right text-green"><strong>${totals.totalCredit.toLocaleString()}</strong></td>
-                  <td class="col-debit text-right text-red"><strong>${totals.totalDebit.toLocaleString()}</strong></td>
-                  <td class="col-balance text-right"><strong>${totals.balance.toLocaleString()}</strong></td>
-                  <td class="col-status text-center"><strong>${totals.balance >= 0 ? 'CREDIT' : 'DEBIT'}</strong></td>
-                </tr>
-              </tbody>
-            </table>
-            <div class="footer">
-              <p>Generated by Thirumala Group Business Management System</p>
-            </div>
-          </body>
-        </html>
-      `;
+      title = 'Profit & Loss Statement';
+      body = accountTable('', plAccounts, 'Totals');
     } else {
-      const plAccounts = allAccounts.filter(acc => acc.plYesNo === 'YES');
-      const bsAccounts = allAccounts.filter(acc => acc.plYesNo === 'NO');
-
-      const plTotals = {
-        totalCredit: plAccounts.reduce((sum, acc) => sum + acc.credit, 0),
-        totalDebit: plAccounts.reduce((sum, acc) => sum + acc.debit, 0),
-        balance: plAccounts.reduce((sum, acc) => sum + acc.balance, 0),
-      };
-
-      const bsTotals = {
-        totalCredit: bsAccounts.reduce((sum, acc) => sum + acc.credit, 0),
-        totalDebit: bsAccounts.reduce((sum, acc) => sum + acc.debit, 0),
-        balance: bsAccounts.reduce((sum, acc) => sum + acc.balance, 0),
-      };
-
-      printContent = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Balance Sheet & Profit & Loss Report</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 0; padding: 15px; background-color: white; font-size: 12px; line-height: 1.2; }
-              .header { text-align: center; margin-bottom: 15px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-              .header h1 { margin: 0; font-size: 18px; font-weight: bold; }
-              .header h2 { margin: 3px 0; font-size: 12px; }
-              .header h3 { margin: 2px 0; font-size: 14px; }
-              .header p { margin: 2px 0; font-size: 11px; }
-              .section { margin-bottom: 15px; }
-              .section h3 { background-color: #f0f0f0; color: #000; padding: 5px 8px; margin: 0 auto 8px auto; font-size: 14px; font-weight: bold; border: 1px solid #000; text-align: center; width: fit-content; }
-              table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 11px; }
-              th, td { border: 1px solid #000; padding: 4px 6px; text-align: left; }
-              th { background-color: #f0f0f0; font-weight: bold; }
-              .text-right { text-align: right; }
-              .text-center { text-align: center; }
-              .totals { background-color: #f0f0f0; font-weight: bold; }
-              .footer { margin-top: 15px; text-align: center; font-size: 10px; border-top: 1px solid #000; padding-top: 5px; }
-              @media print { @page { size: portrait; margin: 8mm; } body { margin: 0; padding: 10px; } .section { page-break-inside: avoid; } }
-              ${getSharedPrintStyles({ isLandscape: false })}
-              ${BALANCE_SHEET_PRINT_OVERRIDES}
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <h1>Trial Balance Sheet & Profit & Loss Report</h1>
-              <h2>Generated on ${format(new Date(), 'dd/MM/yyyy HH:mm')}</h2>
-              <h3>Company: ${filters.companyName || 'All Companies'}</h3>
-              <p>Period: ${dateRangeStr}</p>
-            </div>
-
-            <div class="section">
-              <h3>PROFIT & LOSS</h3>
-              <table>
-                <thead>
-                  <tr>
-                    <th class="col-account">Account Name</th>
-                    <th class="col-credit text-right">Credit</th>
-                    <th class="col-debit text-right">Debit</th>
-                    <th class="col-balance text-right">Balance</th>
-                    <th class="col-status text-center">Result</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${plAccounts.map(acc => `
-                    <tr>
-                      <td class="col-account">${acc.accountName}</td>
-                      <td class="col-credit text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
-                      <td class="col-debit text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
-                      <td class="col-balance text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
-                      <td class="col-status text-center">${acc.result}</td>
-                    </tr>
-                  `).join('')}
-                  <tr class="totals">
-                    <td class="col-account"><strong>P&L TOTALS</strong></td>
-                    <td class="col-credit text-right text-green"><strong>${plTotals.totalCredit.toLocaleString()}</strong></td>
-                    <td class="col-debit text-right text-red"><strong>${plTotals.totalDebit.toLocaleString()}</strong></td>
-                    <td class="col-balance text-right"><strong>${plTotals.balance.toLocaleString()}</strong></td>
-                    <td class="col-status text-center"><strong>${plTotals.balance >= 0 ? 'CREDIT' : 'DEBIT'}</strong></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="section">
-              <h3>BALANCE SHEET</h3>
-              <table>
-                <thead>
-                  <tr>
-                    <th class="col-account">Account Name</th>
-                    <th class="col-credit text-right">Credit</th>
-                    <th class="col-debit text-right">Debit</th>
-                    <th class="col-balance text-right">Balance</th>
-                    <th class="col-status text-center">Result</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${bsAccounts.map(acc => `
-                    <tr>
-                      <td class="col-account">${acc.accountName}</td>
-                      <td class="col-credit text-right text-green">${acc.credit > 0 ? `${acc.credit.toLocaleString()}` : '-'}</td>
-                      <td class="col-debit text-right text-red">${acc.debit > 0 ? `${acc.debit.toLocaleString()}` : '-'}</td>
-                      <td class="col-balance text-right">${acc.balance > 0 ? `${acc.balance.toLocaleString()}` : '-'}</td>
-                      <td class="col-status text-center">${acc.result}</td>
-                    </tr>
-                  `).join('')}
-                  <tr class="totals">
-                    <td class="col-account"><strong>BALANCE SHEET TOTALS</strong></td>
-                    <td class="col-credit text-right text-green"><strong>${bsTotals.totalCredit.toLocaleString()}</strong></td>
-                    <td class="col-debit text-right text-red"><strong>${bsTotals.totalDebit.toLocaleString()}</strong></td>
-                    <td class="col-balance text-right"><strong>${bsTotals.balance.toLocaleString()}</strong></td>
-                    <td class="col-status text-center"><strong>${bsTotals.balance >= 0 ? 'CREDIT' : 'DEBIT'}</strong></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="footer">
-              <p>Generated by Thirumala Group Business Management System</p>
-            </div>
-          </body>
-        </html>
-      `;
+      title = 'Trial Balance Sheet & Profit & Loss Report';
+      body =
+        accountTable('Profit & Loss', plAccounts, 'P&L Totals') +
+        accountTable('Balance Sheet', bsAccounts, 'Balance Sheet Totals');
     }
 
-    const previewWindow = window.open('', '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
-    if (previewWindow) {
-      previewWindow.document.write(printContent);
-      previewWindow.document.close();
-      previewWindow.focus();
-      
-      const printButton = `
-        <div style="position: fixed; top: 20px; right: 20px; z-index: 9999; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 8px; border: 1px solid #ccc; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" class="no-print">
-          <button onclick="window.print()" style="
-            background-color: #3b82f6;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-          ">🖨️ Print Report</button>
-          <button onclick="window.close()" style="
-            background-color: #6b7280;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            margin-left: 10px;
-          ">❌ Close</button>
-        </div>
-      `;
-      previewWindow.document.body.insertAdjacentHTML('afterbegin', printButton);
+    const printContent = `<!DOCTYPE html>
+<html>
+  <head>
+    <title>${title}</title>
+    <meta charset="utf-8">
+    <style>
+      ${getSharedPrintStyles({ isLandscape: false, fontSizePt: 9 })}
+      body { background: #f3f4f6; padding: 16px; }
+      .page { background: #fff; max-width: 210mm; margin: 0 auto; padding: 10mm 8mm; border: 1px solid #d1d5db; box-sizing: border-box; }
+      .header { text-align: center; border-bottom: 1.5px solid #111; padding-bottom: 6px; margin-bottom: 8px; }
+      .header h1 { margin: 0; font-size: 13pt; }
+      .header .meta { margin-top: 2px; font-size: 9pt; }
+      .header .generated { margin-top: 2px; font-size: 7.5pt; color: #555; }
+      .section { margin-bottom: 10px; }
+      .section-title { font-size: 10pt; font-weight: bold; margin: 4px 0; }
+      /* Same amount-column widths in every table so the sections line up */
+      table th.col-credit, table th.col-debit, table th.col-balance { width: 17% !important; }
+      table th.col-status { width: 8% !important; }
+      .text-green { color: #047857; }
+      .text-red { color: #b91c1c; }
+      .footer { margin-top: 10px; text-align: center; font-size: 7.5pt; color: #555; border-top: 1px solid #d1d5db; padding-top: 4px; }
+      .toolbar { position: fixed; top: 12px; right: 12px; display: flex; gap: 8px; }
+      .toolbar button { border: none; color: #fff; padding: 8px 18px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; }
+      @media print {
+        body { background: #fff !important; padding: 0 !important; }
+        .page { max-width: none; border: none; padding: 0; margin: 0; }
+        .toolbar { display: none !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar no-print">
+      <button style="background:#2563eb" onclick="window.print()">Print</button>
+      <button style="background:#6b7280" onclick="window.close()">Close</button>
+    </div>
+    <div class="page">
+      <div class="header">
+        <h1>${title}</h1>
+        <div class="meta">Company: <strong>${filters.companyName ? toDisplayCase(filters.companyName) : 'All Companies'}</strong></div>
+        <div class="meta">Period: ${periodHtml}</div>
+        <div class="generated">Generated on ${format(new Date(), 'dd/MM/yyyy HH:mm')}</div>
+      </div>
+      ${body}
+      <div class="footer">Thirumala Group Business Management System</div>
+    </div>
+  </body>
+</html>`;
+
+    const previewWindow = window.open('', '_blank', 'width=1000,height=800,scrollbars=yes,resizable=yes');
+    if (!previewWindow) {
+      toast.error('Please allow popups to print');
+      return;
     }
+    previewWindow.document.write(printContent);
+    previewWindow.document.close();
+    previewWindow.focus();
     toast.success('Report preview opened! Use the Print button in the preview window to print.');
   };
 
