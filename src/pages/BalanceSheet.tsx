@@ -10,6 +10,13 @@ import { format, parseISO } from 'date-fns';
 import CustomCalendar from '../components/UI/CustomCalendar';
 import { Calendar, AlertTriangle } from 'lucide-react';
 import { getSharedPrintStyles } from '../utils/print';
+
+// Balance sheet prints larger digits than the other reports. Amount cells stay
+// on one line (see getSharedPrintStyles) and the account name takes the rest.
+const BALANCE_SHEET_PRINT_OVERRIDES = `
+  th, td { font-size: 11pt; padding: 3px 5px; }
+  td.col-credit, td.col-debit, td.col-balance { font-size: 12pt; }
+`;
 import { useBook } from '../contexts/BookContext';
 
 interface BalanceSheetFilters {
@@ -379,6 +386,7 @@ const BalanceSheet: React.FC = () => {
               .footer { margin-top: 15px; text-align: center; font-size: 10px; border-top: 1px solid #000; padding-top: 5px; }
               @media print { @page { size: portrait; margin: 8mm; } body { margin: 0; padding: 10px; } }
               ${getSharedPrintStyles({ isLandscape: false })}
+              ${BALANCE_SHEET_PRINT_OVERRIDES}
             </style>
           </head>
           <body>
@@ -452,6 +460,7 @@ const BalanceSheet: React.FC = () => {
               .footer { margin-top: 15px; text-align: center; font-size: 10px; border-top: 1px solid #000; padding-top: 5px; }
               @media print { @page { size: portrait; margin: 8mm; } body { margin: 0; padding: 10px; } }
               ${getSharedPrintStyles({ isLandscape: false })}
+              ${BALANCE_SHEET_PRINT_OVERRIDES}
             </style>
           </head>
           <body>
@@ -535,6 +544,7 @@ const BalanceSheet: React.FC = () => {
               .footer { margin-top: 15px; text-align: center; font-size: 10px; border-top: 1px solid #000; padding-top: 5px; }
               @media print { @page { size: portrait; margin: 8mm; } body { margin: 0; padding: 10px; } .section { page-break-inside: avoid; } }
               ${getSharedPrintStyles({ isLandscape: false })}
+              ${BALANCE_SHEET_PRINT_OVERRIDES}
             </style>
           </head>
           <body>

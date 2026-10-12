@@ -27,114 +27,80 @@ export interface SharedPrintStyleOptions {
 
 export const getSharedPrintStyles = (options?: SharedPrintStyleOptions) => {
   const isLandscape = options?.isLandscape ?? false;
+  const fontSize = isLandscape ? '9pt' : '8pt';
   return `
     body {
       font-family: Arial, sans-serif;
-      font-size: ${isLandscape ? '12pt' : '11pt'};
-      line-height: 1.4;
+      font-size: ${fontSize};
+      line-height: 1.25;
       margin: 0;
-      padding: ${isLandscape ? '15px' : '8px'};
+      padding: ${isLandscape ? '12px' : '6px'};
       background-color: #fff;
       color: #000;
     }
-    
+
+    /*
+     * Layout rule: columns size to their content (table-layout: auto).
+     * Numbers, dates and quantities never wrap or break mid-figure; only the
+     * free-text columns (company, account, particulars...) wrap, and only at
+     * spaces (never mid-word). Smaller font + thin borders keep everything on the A4 sheet.
+     */
     table {
       width: 100%;
-      table-layout: fixed;
+      table-layout: auto;
       border-collapse: collapse;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
-    
+
     th, td {
-      border: 1.5px solid #000;
-      padding: ${isLandscape ? '5px 4px' : '4px 3px'};
-      font-size: ${isLandscape ? '12pt' : '11pt'};
-      line-height: 1.3;
+      border: 1px solid #444;
+      padding: 2px 4px;
+      font-size: ${fontSize};
+      line-height: 1.25;
       box-sizing: border-box;
-      word-wrap: break-word;
-      overflow: hidden;
+      word-break: normal;
+      overflow-wrap: normal;
+      overflow: visible !important;
       font-weight: bold;
+      font-variant-numeric: tabular-nums;
     }
-    
+
     th {
       background-color: #f3f4f6;
       font-weight: bold;
       text-align: left;
+      white-space: normal;
     }
-    
-    /* Column widths and wrapping behaviors adjusted for portrait compatibility */
-    .col-sno {
-      width: ${isLandscape ? '45px' : '30px'} !important;
-    }
-    .col-date {
-      width: ${isLandscape ? '90px' : '65px'} !important;
-    }
-    .col-qty, .col-purchase-qty, .col-sale-qty {
-      width: ${isLandscape ? '80px' : '55px'} !important;
-      white-space: normal !important;
-      text-align: center !important;
-    }
-    .col-credit {
-      width: ${isLandscape ? '110px' : '75px'} !important;
-      min-width: ${isLandscape ? '110px' : 'unset'} !important;
-      white-space: normal !important;
-      text-align: right !important;
-    }
-    .col-debit {
-      width: ${isLandscape ? '110px' : '75px'} !important;
-      min-width: ${isLandscape ? '110px' : 'unset'} !important;
-      white-space: normal !important;
-      text-align: right !important;
-    }
-    .col-balance {
-      width: ${isLandscape ? '130px' : '85px'} !important;
-      min-width: ${isLandscape ? '130px' : 'unset'} !important;
-      white-space: normal !important;
-      text-align: right !important;
-    }
-    .col-amount {
-      width: ${isLandscape ? '130px' : '85px'} !important;
-      min-width: ${isLandscape ? '130px' : 'unset'} !important;
-      white-space: normal !important;
-      text-align: right !important;
-    }
-    .col-opening-balance, .col-opening {
-      width: ${isLandscape ? '130px' : '85px'} !important;
-      min-width: ${isLandscape ? '130px' : 'unset'} !important;
-      white-space: normal !important;
-      text-align: right !important;
-    }
-    .col-closing-balance, .col-closing {
-      width: ${isLandscape ? '130px' : '85px'} !important;
-      min-width: ${isLandscape ? '130px' : 'unset'} !important;
-      white-space: normal !important;
-      text-align: right !important;
-    }
-    
-    .col-particulars {
-      width: auto !important;
-      white-space: normal !important;
-      word-wrap: break-word !important;
-    }
-    .col-company {
-      width: auto !important;
-      white-space: normal !important;
-      word-wrap: break-word !important;
-    }
-    .col-account {
-      width: auto !important;
-      white-space: normal !important;
-      word-wrap: break-word !important;
-    }
-    .col-sub-account {
-      width: auto !important;
-      white-space: normal !important;
-      word-wrap: break-word !important;
-    }
+
+    /* Fixed-content columns: shrink to fit the content, never wrap */
+    .col-sno, .col-date, .col-qty, .col-purchase-qty, .col-sale-qty,
+    .col-credit, .col-debit, .col-balance, .col-amount,
+    .col-opening-balance, .col-opening, .col-closing-balance, .col-closing,
     .col-status {
-      width: ${isLandscape ? '90px' : '65px'} !important;
-      white-space: normal !important;
+      width: 1% !important;
+      min-width: 0 !important;
+    }
+    td.col-sno, td.col-date, td.col-qty, td.col-purchase-qty, td.col-sale-qty,
+    td.col-credit, td.col-debit, td.col-balance, td.col-amount,
+    td.col-opening-balance, td.col-opening, td.col-closing-balance, td.col-closing,
+    td.col-status {
+      white-space: nowrap !important;
+      word-break: keep-all !important;
+    }
+    .col-qty, .col-purchase-qty, .col-sale-qty, .col-status {
       text-align: center !important;
+    }
+    .col-credit, .col-debit, .col-balance, .col-amount,
+    .col-opening-balance, .col-opening, .col-closing-balance, .col-closing {
+      text-align: right !important;
+    }
+
+    /* Free-text columns: take the remaining width, wrap at spaces only */
+    .col-particulars, .col-company, .col-account, .col-sub-account {
+      width: auto !important;
+      white-space: normal !important;
+      word-break: normal !important;
+      overflow-wrap: normal !important;
     }
 
     .text-right {
@@ -156,13 +122,16 @@ export const getSharedPrintStyles = (options?: SharedPrintStyleOptions) => {
     @media print {
       @page {
         size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-        margin: ${isLandscape ? '8mm' : '5mm'};
+        margin: ${isLandscape ? '8mm' : '6mm'};
       }
       body {
         margin: 0 !important;
         padding: 0 !important;
         background: white !important;
-        font-size: ${isLandscape ? '12pt' : '11pt'} !important;
+        font-size: ${fontSize} !important;
+      }
+      tr {
+        page-break-inside: avoid;
       }
       th {
         background-color: #f3f4f6 !important;
@@ -637,7 +606,6 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     { key: 'particulars', label: 'Particulars', width: '22%' },
     { key: 'credit', label: 'Credit', width: '11%' },
     { key: 'debit', label: 'Debit', width: '11%' },
-    { key: 'approved', label: 'Status', width: '11%' },
   ];
 
   const filteredColumns = columns.filter(col => {
@@ -711,35 +679,31 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
   const grandTotalCredit = creditTotal + openingBalanceValue;
   const grandTotalDebit = debitTotal + closingBalanceValue;
 
-  // Trailing summary rows in main table (aligned under Particulars, Credit, Debit, Status)
+  // Trailing summary rows in main table (aligned under Particulars, Credit, Debit)
   const summaryRowsHTML = `
     <tr style="border-top: 2px solid #000; font-weight: bold;">
       <td colspan="4" style="border: 1px solid #000; padding: 5px 4px;"></td>
       <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">Total</td>
       <td class="col-credit" style="color: #059669;">${formatCurrency(creditTotal)}</td>
       <td class="col-debit" style="color: #dc2626;">${formatCurrency(debitTotal)}</td>
-      <td class="col-status"></td>
     </tr>
     <tr style="font-weight: bold;">
       <td colspan="4" style="border: 1px solid #000; padding: 5px 4px;"></td>
       <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">Opening Balance</td>
       <td class="col-credit" style="color: #059669;">${formatCurrency(openingBalanceValue)}</td>
       <td class="col-debit">-</td>
-      <td class="col-status"></td>
     </tr>
     <tr style="font-weight: bold;">
       <td colspan="4" style="border: 1px solid #000; padding: 5px 4px;"></td>
       <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">Closing Balance</td>
       <td class="col-credit">-</td>
       <td class="col-debit" style="color: #dc2626;">${formatCurrency(closingBalanceValue)}</td>
-      <td class="col-status"></td>
     </tr>
     <tr style="background: #f3f4f6; font-weight: bold; border-bottom: 2px solid #000;">
       <td colspan="4" style="border: 1px solid #000; padding: 5px 4px;"></td>
       <td style="border: 1px solid #000; padding: 5px 4px; text-align: right;">Grand Total</td>
       <td class="col-credit" style="color: #059669;">${formatCurrency(grandTotalCredit)}</td>
       <td class="col-debit" style="color: #dc2626;">${formatCurrency(grandTotalDebit)}</td>
-      <td class="col-status"></td>
     </tr>
   `;
 
@@ -825,8 +789,7 @@ export const printDailyReport = (data: any[], options: PrintOptions = {}) => {
     .print-container {
       background: white;
       padding: 16px;
-      border: 2px solid #333;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      border: 1px solid #ccc;
       box-sizing: border-box;
     }
 

@@ -1477,7 +1477,7 @@ const upsertUserAccess = async (
               </div>
               {/* Expanded Details (on click) */}
               <div
-                className={`transition-all duration-200 ${editingUserId === u.id ? 'overflow-visible' : 'overflow-hidden'} ${expandedUserId === u.id ? (editingUserId === u.id ? 'max-h-none opacity-100 py-3 px-0' : 'max-h-96 opacity-100 py-3 px-0') : 'max-h-0 opacity-0 py-0 px-0'} w-full bg-gray-50 rounded-b-2xl border-t border-gray-100`}
+                className={`transition-all duration-200 ${editingUserId === u.id ? 'overflow-visible' : 'overflow-hidden'} ${expandedUserId === u.id ? 'max-h-none opacity-100 py-3 px-0' : 'max-h-0 opacity-0 py-0 px-0'} w-full bg-gray-50 rounded-b-2xl border-t border-gray-100`}
                 style={{
                   pointerEvents: expandedUserId === u.id ? 'auto' : 'none',
                 }}
@@ -1979,7 +1979,7 @@ const upsertUserAccess = async (
               </div>
               {/* Expanded Details (on click) */}
               <div
-                className={`transition-all duration-200 ${editingUserId === u.id ? 'overflow-visible' : 'overflow-hidden'} ${expandedUserId === u.id ? (editingUserId === u.id ? 'max-h-none opacity-100 py-3 px-0' : 'max-h-96 opacity-100 py-3 px-0') : 'max-h-0 opacity-0 py-0 px-0'} w-full bg-gray-50 rounded-b-2xl border-t border-gray-100`}
+                className={`transition-all duration-200 ${editingUserId === u.id ? 'overflow-visible' : 'overflow-hidden'} ${expandedUserId === u.id ? 'max-h-none opacity-100 py-3 px-0' : 'max-h-0 opacity-0 py-0 px-0'} w-full bg-gray-50 rounded-b-2xl border-t border-gray-100`}
                 style={{
                   pointerEvents: expandedUserId === u.id ? 'auto' : 'none',
                 }}

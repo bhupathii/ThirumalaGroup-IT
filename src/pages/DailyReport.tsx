@@ -1124,7 +1124,6 @@ const DailyReport: React.FC = () => {
                         <th className='border border-black p-1 text-left w-[22%]'>Particulars</th>
                         <th className='border border-black p-1 text-right w-[11%]'>Credit</th>
                         <th className='border border-black p-1 text-right w-[11%]'>Debit</th>
-                        <th className='border border-black p-1 text-left w-[11%]'>Status</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1141,7 +1140,6 @@ const DailyReport: React.FC = () => {
                           <td className='border border-black p-1 text-right text-red-700'>
                             {entry.debit > 0 ? entry.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}
                           </td>
-                          <td className='border border-black p-1'>{entry.approved ? 'Approved' : 'Pending'}</td>
                         </tr>
                       ))}
 
@@ -1155,7 +1153,6 @@ const DailyReport: React.FC = () => {
                         <td className='border border-black p-1 text-right text-red-700'>
                           {reportData.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className='border border-black p-1'></td>
                       </tr>
                       <tr className='font-bold'>
                         <td colSpan={4} className='border border-black p-1'></td>
@@ -1164,7 +1161,6 @@ const DailyReport: React.FC = () => {
                           {openingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
                         <td className='border border-black p-1 text-right'>-</td>
-                        <td className='border border-black p-1'></td>
                       </tr>
                       <tr className='font-bold'>
                         <td colSpan={4} className='border border-black p-1'></td>
@@ -1173,7 +1169,6 @@ const DailyReport: React.FC = () => {
                         <td className='border border-black p-1 text-right text-red-700'>
                           {closingBalanceValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className='border border-black p-1'></td>
                       </tr>
                       <tr className='bg-gray-100 font-bold border-b-2 border-black'>
                         <td colSpan={4} className='border border-black p-1'></td>
@@ -1184,7 +1179,6 @@ const DailyReport: React.FC = () => {
                         <td className='border border-black p-1 text-right text-red-700'>
                           {grandTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className='border border-black p-1'></td>
                       </tr>
                     </tbody>
                   </table>

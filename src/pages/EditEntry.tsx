@@ -1170,7 +1170,7 @@ const EditEntry: React.FC = () => {
           localStorage.setItem('dashboard-refresh', Date.now().toString());
           window.dispatchEvent(new CustomEvent('dashboard-refresh'));
         } else {
-          toast.error('Failed to delete entry - check console for details');
+          toast.error('Entry NOT deleted - it could not be saved to Deleted Records. Please try again.');
           console.error('Delete operation returned false - check supabaseDatabase.ts logs');
         }
       } catch (error) {

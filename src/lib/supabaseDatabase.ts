@@ -5,6 +5,16 @@ import { db, QueuedOperation } from './offlineQueueDB';
 import { getCachedMasterData } from './offlineMasterData';
 import { toast } from 'react-hot-toast';
 
+// Columns deleted_cash_book has always had (original table + book_id).
+// Used as a fallback when a newer cash_book column is missing there.
+const DELETED_CASH_BOOK_CORE_COLUMNS = [
+  'id', 'sno', 'acc_name', 'sub_acc_name', 'particulars', 'c_date',
+  'credit', 'debit', 'credit_online', 'credit_offline', 'debit_online', 'debit_offline',
+  'lock_record', 'company_name', 'address', 'staff', 'users', 'entry_time',
+  'sale_qty', 'purchase_qty', 'approved', 'edited', 'e_count', 'cb', 'payment_mode',
+  'created_at', 'updated_at', 'deleted_by', 'deleted_at', 'book_id',
+];
+
 // Types
 export interface Company {
   id: string;
@@ -2598,24 +2608,31 @@ class SupabaseDatabase {
 
       console.log('📝 DELETED ENTRY DATA:', deletedEntry);
 
-      const { error: insertError } = await supabase
+      let { error: insertError } = await supabase
         .from(getTableName('deleted_cash_book'))
         .insert(deletedEntry);
 
-      if (insertError) {
-        console.error('❌ INSERT INTO deleted_cash_book FAILED:', insertError);
-        console.error('❌ Insert error code:', insertError.code);
-        console.error('❌ Insert error message:', insertError.message);
-        console.error('❌ Insert error details:', insertError.details);
-        console.error('❌ Insert error hint:', insertError.hint);
-        console.log('📝 deleted_cash_book table not available, proceeding with direct deletion...');
-        
-        // Since deleted_cash_book table doesn't exist or has issues,
-        // we'll proceed with direct deletion from cash_book
-        console.log('📝 Proceeding with direct deletion from cash_book...');
-      } else {
-        console.log('✅ Successfully inserted into deleted_cash_book');
+      // A column that exists in cash_book but not yet in deleted_cash_book
+      // (PostgREST PGRST204 / Postgres 42703): retry with the core columns only.
+      if (insertError && (insertError.code === 'PGRST204' || insertError.code === '42703')) {
+        console.warn('⚠️ deleted_cash_book is missing a column, retrying with core columns:', insertError.message);
+        const coreEntry: Record<string, any> = {};
+        for (const key of DELETED_CASH_BOOK_CORE_COLUMNS) {
+          if (key in deletedEntry) coreEntry[key] = (deletedEntry as Record<string, any>)[key];
+        }
+        ({ error: insertError } = await supabase
+          .from(getTableName('deleted_cash_book'))
+          .insert(coreEntry));
       }
+
+      // Never remove the entry unless its copy is safely in Deleted Records,
+      // otherwise the record would disappear without any trace.
+      if (insertError) {
+        console.error('❌ INSERT INTO deleted_cash_book FAILED, entry NOT deleted:', insertError);
+        console.log('❌ ===== DELETE OPERATION ABORTED =====');
+        return false;
+      }
+      console.log('✅ Successfully inserted into deleted_cash_book');
 
       // Step 3: Store deleted record info in localStorage for tracking
       console.log('📝 Step 3: Storing deleted record info for tracking...');

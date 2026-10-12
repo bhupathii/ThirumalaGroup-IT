@@ -1,652 +1,497 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import Card from '../components/UI/Card';
+import Button from '../components/UI/Button';
+import Select from '../components/UI/Select';
 import { supabaseDB, User } from '../lib/supabaseDatabase';
-import { supabaseFinance, FinanceEditedLog, FinanceDeletedLog } from '../lib/supabaseFinance';
 import { useTableMode } from '../contexts/TableModeContext';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { RefreshCw, Search, Printer, FileSpreadsheet, ChevronDown, ChevronRight } from 'lucide-react';
+import ModeLabel from '../components/UI/ModeLabel';
+import { useBook } from '../contexts/BookContext';
+import { RefreshCw, AlertTriangle } from 'lucide-react';
+import { getSharedPrintStyles } from '../utils/print';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-export interface AuditRow {
+type AuditLogEntry = {
   id: string;
-  eventType: 'EDIT' | 'DELETE';
-  dateStr: string;   // YYYY-MM-DD
-  timeStr: string;   // hh:mm AM/PM
-  rawTimestamp: string;
-  operator: string;
-  module: string;
-  tableName: string;
-  loanNo: string;
-  customer: string;
-  fieldChanges: Array<{ field: string; before: string; after: string }>;
-  deletedSnapshot?: Record<string, any>;
-}
+  cash_book_id: string;
+  old_values: string | Record<string, any> | null;
+  new_values: string | Record<string, any> | null;
+  edited_by: string;
+  edited_at: string;
+  action?: string;
+};
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+const FIELDS = [
+  { key: 'c_date', label: 'Date' },
+  { key: 'company_name', label: 'Company' },
+  { key: 'acc_name', label: 'Main A/c' },
+  { key: 'sub_acc_name', label: 'SubAccount' },
+  { key: 'particulars', label: 'Particulars' },
+  { key: 'purchase_qty', label: 'Purchase Qty' },
+  { key: 'sale_qty', label: 'Sale Qty' },
+  { key: 'credit', label: 'Credit' },
+  { key: 'debit', label: 'Debit' },
+  { key: 'staff', label: 'Staff' },
+  { key: 'users', label: 'User' },
+  { key: 'entry_time', label: 'Entry Time' },
+] as const;
 
-const IGNORED_KEYS = new Set([
-  'id', 'created_at', 'updated_at', 'deleted_at',
-  'fingerprint_url', 'fingerprint_template', 'fingerprint_added',
-  'customer_fingerprint_template', 'customer_fingerprint_image_url',
-  'customer_fingerprint_added', 'surety_fingerprint_template',
-  'surety_fingerprint_image_url', 'surety_fingerprint_added',
-  'photo_url', 'customer_photo_url', 'surety_photo_url',
-  'fingerprint_status', 'fingerprint_id',
+type FieldKey = (typeof FIELDS)[number]['key'];
+
+type CashBookPartial = Partial<Record<FieldKey, any>>;
+
+const PAGE_SIZE = 20;
+
+// Changed cells: yellow on the After row, light red on the Before row
+const highlightAfterClass = 'bg-yellow-100';
+const highlightBeforeClass = 'bg-red-50';
+
+// Amount / quantity / date / time columns stay on one line
+const NOWRAP_FIELDS = new Set<FieldKey>([
+  'c_date',
+  'purchase_qty',
+  'sale_qty',
+  'credit',
+  'debit',
+  'entry_time',
 ]);
 
-function diffObjects(
-  oldObj: Record<string, any>,
-  newObj: Record<string, any>
-): Array<{ field: string; before: string; after: string }> {
-  const diffs: Array<{ field: string; before: string; after: string }> = [];
-  const keys = Array.from(new Set([...Object.keys(oldObj), ...Object.keys(newObj)]));
-  for (const k of keys) {
-    if (IGNORED_KEYS.has(k)) continue;
-    const before = oldObj[k] != null ? String(oldObj[k]).trim() : '';
-    const after  = newObj[k] != null ? String(newObj[k]).trim() : '';
-    if (before !== after) {
-      diffs.push({ field: k, before: before || '—', after: after || '—' });
+// Print column classes (see getSharedPrintStyles)
+const PRINT_COL_CLASS: Partial<Record<FieldKey, string>> = {
+  c_date: 'col-date',
+  company_name: 'col-company',
+  acc_name: 'col-account',
+  sub_acc_name: 'col-sub-account',
+  particulars: 'col-particulars',
+  purchase_qty: 'col-purchase-qty',
+  sale_qty: 'col-sale-qty',
+  credit: 'col-credit',
+  debit: 'col-debit',
+  entry_time: 'col-date',
+};
+
+// edit_cash_book stores old/new values as a JSON string or as jsonb
+const parseValues = (raw: AuditLogEntry['old_values']): CashBookPartial => {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw as CashBookPartial;
+  try {
+    return JSON.parse(raw) || {};
+  } catch {
+    return {};
+  }
+};
+
+const getFieldDisplay = (field: FieldKey, value: any) => {
+  if (field === 'credit' || field === 'debit') {
+    return value ? `${Number(value).toLocaleString()}` : '-';
+  }
+  if (field === 'sale_qty' || field === 'purchase_qty') {
+    return value !== null && value !== undefined && value !== ''
+      ? `${Number(value).toLocaleString()}`
+      : '-';
+  }
+  if (field === 'c_date' && value) {
+    return !isNaN(new Date(value).getTime())
+      ? format(new Date(value), 'dd/MM/yyyy')
+      : value;
+  }
+  if (field === 'entry_time' && value) {
+    return !isNaN(new Date(value).getTime())
+      ? format(new Date(value), 'HH:mm:ss')
+      : value;
+  }
+  return value || '-';
+};
+
+const getChangedFields = (oldObj: CashBookPartial, newObj: CashBookPartial) => {
+  const changed: Record<FieldKey, boolean> = {} as Record<FieldKey, boolean>;
+  for (const { key } of FIELDS) {
+    if ((oldObj?.[key] ?? '') !== (newObj?.[key] ?? '')) {
+      changed[key] = true;
     }
   }
-  return diffs;
-}
+  return changed;
+};
 
-function parseJson(v: any): Record<string, any> {
-  if (!v) return {};
-  if (typeof v === 'string') {
-    try { return JSON.parse(v); } catch { return {}; }
-  }
-  return v;
-}
+const formatEditedAt = (editedAt: string) =>
+  editedAt && !isNaN(new Date(editedAt).getTime())
+    ? format(new Date(editedAt), 'dd/MM/yyyy HH:mm')
+    : '';
 
-function toTimeParts(iso: string): { dateStr: string; timeStr: string } {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return { dateStr: '', timeStr: '' };
-  return {
-    dateStr: format(d, 'yyyy-MM-dd'),
-    timeStr: format(d, 'hh:mm a'),
-  };
-}
+const escapeHtml = (value: unknown) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 
-// ─── Component ───────────────────────────────────────────────────────────────
-
-const EditedRecords: React.FC = () => {
+const EditedRecords = () => {
   const { mode: tableMode } = useTableMode();
+  const { currentBook } = useBook();
+  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [userFilter, setUserFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [editedDates, setEditedDates] = useState<string[]>([]);
 
-  const [loading, setLoading]       = useState(false);
-  const [rows, setRows]             = useState<AuditRow[]>([]);
-  const [expanded, setExpanded]     = useState<Set<string>>(new Set());
+  // Reload data when mode or book changes
+  useEffect(() => {
+    loadData();
+  }, [tableMode, currentBook?.id]);
 
-  // Applied filter state
-  const [search, setSearch]     = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate]     = useState('');
-  const [tableF, setTableF]     = useState('');
-  const [opF, setOpF]           = useState('');
-  const [actionF, setActionF]   = useState('');
+  // Reload when other screens signal a change (edit / delete / approve)
+  useEffect(() => {
+    const onRefresh = () => loadData();
+    window.addEventListener('dashboard-refresh', onRefresh);
+    return () => window.removeEventListener('dashboard-refresh', onRefresh);
+  }, []);
 
-  // Temp (pre-Apply) state
-  const [tSearch, setTSearch]     = useState('');
-  const [tFrom, setTFrom]         = useState('');
-  const [tTo, setTTo]             = useState('');
-  const [tTable, setTTable]       = useState('');
-  const [tOp, setTOp]             = useState('');
-  const [tAction, setTAction]     = useState('');
+  // Back to the first page whenever the filters change
+  useEffect(() => {
+    setPage(1);
+  }, [selectedDate, userFilter]);
 
-  useEffect(() => { load(); }, [tableMode]);
-
-  // ── Data Loading ─────────────────────────────────────────────────────────
-
-  const load = async () => {
+  const loadData = async () => {
     setLoading(true);
     try {
-      const [cbEdits, userList, finEdits, finDels] = await Promise.all([
-        supabaseDB.getEditAuditLog().catch(() => []),
-        supabaseDB.getUsers().catch(() => []),
-        supabaseFinance.getEditedLogs().catch(() => []),
-        supabaseFinance.getDeletedLogs().catch(() => []),
+      const [log, userList, distinctDates] = await Promise.all([
+        supabaseDB.getEditAuditLog(),
+        supabaseDB.getUsers(),
+        supabaseDB.getDistinctEditedDates(),
       ]);
-
-      // Build user map
-      const userMap: Record<string, string> = {};
-      (userList as User[]).forEach(u => {
-        if (u.id)       userMap[u.id]       = u.username;
-        if (u.username) userMap[u.username] = u.username;
-      });
-
-      const out: AuditRow[] = [];
-
-      // ── 1. Cash Book Edits (from edit_cash_book) ─────────────────────────
-      for (const item of (cbEdits as any[])) {
-        if (!item) continue;
-
-        const oldObj = parseJson(item.old_values);
-        const newObj = parseJson(item.new_values);
-
-        // Strict: skip if action is CREATE or old_values empty
-        if (item.action === 'CREATE') continue;
-        if (Object.keys(oldObj).length === 0) continue;
-
-        const isDelete = item.action === 'DELETE' || (!item.new_values && item.old_values);
-        const ts = item.edited_at || new Date().toISOString();
-        const { dateStr, timeStr } = toTimeParts(ts);
-
-        out.push({
-          id: `cb_${item.id}`,
-          eventType: isDelete ? 'DELETE' : 'EDIT',
-          dateStr,
-          timeStr,
-          rawTimestamp: ts,
-          operator: userMap[item.edited_by] || item.edited_by || 'SYSTEM',
-          module: 'Cash Book',
-          tableName: 'cash_book',
-          loanNo: oldObj.acc_name || newObj.acc_name || oldObj.sub_acc_name || '—',
-          customer: oldObj.particulars || newObj.particulars || oldObj.acc_name || '—',
-          fieldChanges: isDelete ? [] : diffObjects(oldObj, newObj),
-          deletedSnapshot: isDelete ? oldObj : undefined,
-        });
-      }
-
-      // ── 2. Finance Edits ─────────────────────────────────────────────────
-      for (const log of (finEdits as FinanceEditedLog[])) {
-        if (!log) continue;
-        const oldObj = log.old_values || {};
-        const newObj = log.new_values || {};
-
-        // Strict: skip anything that looks like a create event
-        if (Object.keys(oldObj).length === 0) continue;
-        if ((newObj as any).source === 'RECORD CREATED') continue;
-
-        const ts = log.edited_at || new Date().toISOString();
-        const { dateStr, timeStr } = toTimeParts(ts);
-
-        out.push({
-          id: `fin_edit_${log.id}`,
-          eventType: 'EDIT',
-          dateStr,
-          timeStr,
-          rawTimestamp: ts,
-          operator: userMap[log.edited_by] || log.edited_by || 'SYSTEM',
-          module: 'Finance',
-          tableName: log.table_name || 'finance_loans',
-          loanNo: oldObj.loan_no || newObj.loan_no || oldObj.loan_id || newObj.loan_id || '—',
-          customer: oldObj.customer_name || newObj.customer_name || oldObj.customer || '—',
-          fieldChanges: diffObjects(oldObj, newObj),
-        });
-      }
-
-      // ── 3. Finance Deletes ───────────────────────────────────────────────
-      for (const log of (finDels as FinanceDeletedLog[])) {
-        if (!log) continue;
-        const oldObj = log.old_values || {};
-        const ts = log.deleted_at || new Date().toISOString();
-        const { dateStr, timeStr } = toTimeParts(ts);
-
-        out.push({
-          id: `fin_del_${log.id}`,
-          eventType: 'DELETE',
-          dateStr,
-          timeStr,
-          rawTimestamp: ts,
-          operator: userMap[log.deleted_by] || log.deleted_by || 'SYSTEM',
-          module: 'Finance',
-          tableName: log.table_name || 'finance_loans',
-          loanNo: oldObj.loan_no || oldObj.loan_id || '—',
-          customer: oldObj.customer_name || oldObj.customer || '—',
-          fieldChanges: [],
-          deletedSnapshot: oldObj,
-        });
-      }
-
-      out.sort((a, b) => new Date(b.rawTimestamp).getTime() - new Date(a.rawTimestamp).getTime());
-      setRows(out);
-    } catch (e) {
-      console.error(e);
-      toast.error('Failed to load audit trail');
+      setEditedDates(distinctDates);
+      setAuditLog((log || []) as AuditLogEntry[]);
+      setUsers((userList || []) as User[]);
+    } catch (error) {
+      console.error('Error loading Edited Records data:', error);
+      setAuditLog([]);
+      setUsers([]);
+      toast.error('Failed to load Edited Records data. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Filters ──────────────────────────────────────────────────────────────
-
-  const apply = () => {
-    setSearch(tSearch); setFromDate(tFrom); setToDate(tTo);
-    setTableF(tTable); setOpF(tOp); setActionF(tAction);
-  };
-
-  const reset = () => {
-    setTSearch(''); setSearch('');
-    setTFrom('');   setFromDate('');
-    setTTo('');     setToDate('');
-    setTTable('');  setTableF('');
-    setTOp('');     setOpF('');
-    setTAction(''); setActionF('');
-  };
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    return rows.filter(r => {
-      if (fromDate  && r.dateStr < fromDate)  return false;
-      if (toDate    && r.dateStr > toDate)    return false;
-      if (tableF    && r.tableName !== tableF) return false;
-      if (opF       && r.operator.toLowerCase() !== opF.toLowerCase()) return false;
-      if (actionF   && r.eventType !== actionF) return false;
-      if (q) {
-        const hit =
-          r.loanNo.toLowerCase().includes(q) ||
-          r.customer.toLowerCase().includes(q) ||
-          r.operator.toLowerCase().includes(q) ||
-          r.tableName.toLowerCase().includes(q) ||
-          r.fieldChanges.some(f =>
-            f.field.toLowerCase().includes(q) ||
-            f.before.toLowerCase().includes(q) ||
-            f.after.toLowerCase().includes(q)
-          ) ||
-          (r.deletedSnapshot && Object.entries(r.deletedSnapshot).some(
-            ([k, v]) => k.toLowerCase().includes(q) || String(v).toLowerCase().includes(q)
-          ));
-        if (!hit) return false;
-      }
-      return true;
+  // Map userId to username
+  const userMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    users.forEach(u => {
+      map[u.id] = u.username;
     });
-  }, [rows, search, fromDate, toDate, tableF, opF, actionF]);
+    return map;
+  }, [users]);
 
-  // ── Derived counts ───────────────────────────────────────────────────────
-
-  const editCount   = rows.filter(r => r.eventType === 'EDIT').length;
-  const deleteCount = rows.filter(r => r.eventType === 'DELETE').length;
-
-  const uniqueTables  = Array.from(new Set(rows.map(r => r.tableName))).sort();
-  const uniqueOps     = Array.from(new Set(rows.map(r => r.operator))).sort();
-
-  const toggle = (id: string) =>
-    setExpanded(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-
-  // ── Excel export ─────────────────────────────────────────────────────────
-
-  const exportExcel = () => {
-    const headers = ['Date','Time','Operator','Module','Table','Loan','Customer','Action','Changes'];
-    const csvRows = [
-      headers.join(','),
-      ...filtered.map(r => [
-        r.dateStr, r.timeStr, r.operator, r.module, r.tableName,
-        r.loanNo, `"${r.customer}"`,
-        r.eventType,
-        r.eventType === 'EDIT' ? `${r.fieldChanges.length} Fields Changed` : 'DELETED'
-      ].join(','))
+  // Dropdown of distinct edited dates (YYYY-MM-DD), newest first
+  const editedDateOptions = useMemo(() => {
+    const sortedDates = [...editedDates].sort((a, b) => (a < b ? 1 : -1));
+    return [
+      { value: '', label: 'All Dates' },
+      ...sortedDates.map(d => ({
+        value: d,
+        label: format(new Date(d), 'dd/MM/yyyy'),
+      })),
     ];
-    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url;
-    a.download = `audit_log_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    a.click(); URL.revokeObjectURL(url);
-  };
+  }, [editedDates]);
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // Parsed + filtered log: real edits only (deletes live in Deleted Records)
+  const filteredLog = useMemo(() => {
+    return auditLog
+      .map(log => {
+        const oldObj = parseValues(log.old_values);
+        const newObj = parseValues(log.new_values);
+        return { log, oldObj, newObj, changed: getChangedFields(oldObj, newObj) };
+      })
+      .filter(({ log, changed }) => {
+        const hasAnyChange = Object.values(changed).some(Boolean);
+        const editedDate = log.edited_at ? String(log.edited_at).slice(0, 10) : '';
+        const matchesDate = selectedDate === '' || editedDate === selectedDate;
+        const matchesUser = userFilter === '' || log.edited_by === userFilter;
+        const isDelete =
+          log.action === 'DELETE' || (log.new_values == null && log.old_values != null);
+        return matchesDate && matchesUser && !isDelete && hasAnyChange;
+      });
+  }, [auditLog, selectedDate, userFilter]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredLog.length / PAGE_SIZE);
+  const paginatedLog = filteredLog.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // Print: same Before / After layout as the screen, A4 portrait, preview first
+  const handlePrint = () => {
+    if (filteredLog.length === 0) {
+      toast.error('No edited records to print');
+      return;
+    }
+    const printWindow = window.open('', '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+    if (!printWindow) {
+      toast.error('Please allow popups to print');
+      return;
+    }
+
+    const headerCells = [
+      '<th class="col-sno">S.No</th>',
+      '<th class="col-status">Type</th>',
+      ...FIELDS.map(f => `<th class="${PRINT_COL_CLASS[f.key] || ''}">${f.label}</th>`),
+      '<th>Edited By</th>',
+      '<th class="col-date">Edited At</th>',
+    ].join('');
+
+    const bodyRows = filteredLog
+      .map(({ log, oldObj, newObj, changed }, idx) => {
+        const editedBy = escapeHtml(userMap[log.edited_by] || log.edited_by);
+        const editedAt = formatEditedAt(log.edited_at);
+        const cells = (obj: CashBookPartial, isAfter: boolean) =>
+          FIELDS.map(f => {
+            const cls = PRINT_COL_CLASS[f.key] || '';
+            const mark = changed[f.key] ? (isAfter ? 'changed-after' : 'changed-before') : '';
+            return `<td class="${cls} ${mark}">${escapeHtml(getFieldDisplay(f.key, obj[f.key]))}</td>`;
+          }).join('');
+        return `
+          <tr class="row-before">
+            <td class="col-sno" rowspan="2">${idx + 1}</td>
+            <td class="col-status type-before">Before</td>
+            ${cells(oldObj, false)}
+            <td rowspan="2">${editedBy}</td>
+            <td class="col-date" rowspan="2">${editedAt}</td>
+          </tr>
+          <tr class="row-after">
+            <td class="col-status type-after">After</td>
+            ${cells(newObj, true)}
+          </tr>`;
+      })
+      .join('');
+
+    const modeLabel = tableMode === 'itr' ? 'ITR Mode' : 'Regular Mode';
+    const filterLabel = [
+      selectedDate ? `Edited Date: ${format(new Date(selectedDate), 'dd/MM/yyyy')}` : '',
+      userFilter ? `Edited By: ${escapeHtml(userFilter)}` : '',
+    ]
+      .filter(Boolean)
+      .join(' | ');
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Edited Records</title>
+  <style>
+    ${getSharedPrintStyles({ isLandscape: false })}
+    .header { text-align: center; margin-bottom: 6px; }
+    .header h1 { margin: 0; font-size: 14pt; }
+    .header p { margin: 2px 0; font-size: 9pt; }
+    .type-before { color: #dc2626; }
+    .type-after { color: #15803d; }
+    .row-after td { border-bottom: 1.5px solid #000; }
+    .changed-after { background-color: #fef9c3 !important; }
+    .changed-before { background-color: #fee2e2 !important; }
+    @media print {
+      .changed-after, .changed-before {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+    .toolbar { position: fixed; top: 12px; right: 12px; }
+    .toolbar button {
+      background: #2563eb; color: #fff; border: none; padding: 8px 18px;
+      border-radius: 6px; font-weight: bold; cursor: pointer; margin-left: 6px;
+    }
+    .toolbar button.close { background: #6b7280; }
+  </style>
+</head>
+<body>
+  <div class="toolbar no-print">
+    <button onclick="window.print()">Print</button>
+    <button class="close" onclick="window.close()">Close</button>
+  </div>
+  <div class="header">
+    <h1>Edited Records</h1>
+    <p>${modeLabel} | ${escapeHtml(currentBook?.book_code || 'No Book')} | Edits: ${filteredLog.length}</p>
+    ${filterLabel ? `<p>${filterLabel}</p>` : ''}
+    <p>Generated on ${format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
+  </div>
+  <table>
+    <thead><tr>${headerCells}</tr></thead>
+    <tbody>${bodyRows}</tbody>
+  </table>
+</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+  };
 
   return (
-    <div className="space-y-3">
-
-      {/* ═══ HEADER ══════════════════════════════════════════════════════════ */}
-      <div className="flex items-center justify-between no-print pb-2 border-b border-gray-200">
-        <div className="flex items-center gap-4">
-          <h1 className="text-base font-extrabold text-gray-900 uppercase tracking-widest">
-            AUDIT LOGS
-          </h1>
-          <span className="text-xs font-semibold text-yellow-700 bg-yellow-50 border border-yellow-200 px-2 py-0.5 rounded-full">
-            Edited: {editCount}
-          </span>
-          <span className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
-            Deleted: {deleteCount}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
-          >
-            <Printer className="w-3.5 h-3.5" /> Print
-          </button>
-          <button
-            onClick={exportExcel}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
-          </button>
-          <button
-            onClick={load}
-            disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      {/* ═══ FILTER BAR — ONE ROW ════════════════════════════════════════════ */}
-      <div className="no-print flex items-end gap-2 flex-wrap">
-
-        {/* Search */}
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Search</label>
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              value={tSearch}
-              onChange={e => setTSearch(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && apply()}
-              placeholder="Loan, customer, field..."
-              className="pl-7 pr-2 py-1.5 border border-gray-300 rounded text-xs w-44 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
-            />
+    <div className='space-y-6'>
+      {/* Locked Book Banner */}
+      {currentBook?.is_locked && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl shadow-sm flex items-center gap-3 no-print">
+          <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 animate-pulse" />
+          <div>
+            <h3 className="text-sm font-bold text-red-800">This Book Is Locked (Read Only)</h3>
+            <p className="text-xs text-red-700">Writing, editing, and deletion operations are disabled for this accounting period.</p>
           </div>
         </div>
+      )}
 
-        {/* Date From */}
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Date</label>
-          <input
-            type="date" value={tFrom} onChange={e => setTFrom(e.target.value)}
-            className="px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
-          />
-        </div>
-
-        {/* Date To */}
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">To</label>
-          <input
-            type="date" value={tTo} onChange={e => setTTo(e.target.value)}
-            className="px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
-          />
-        </div>
-
-        {/* Table */}
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Table</label>
-          <select
-            value={tTable} onChange={e => setTTable(e.target.value)}
-            className="px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 min-w-[110px]"
-          >
-            <option value="">All Tables</option>
-            {uniqueTables.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-
-        {/* Operator */}
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Operator</label>
-          <select
-            value={tOp} onChange={e => setTOp(e.target.value)}
-            className="px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 min-w-[110px]"
-          >
-            <option value="">All Operators</option>
-            {uniqueOps.map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-
-        {/* Action Type */}
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Action Type</label>
-          <select
-            value={tAction} onChange={e => setTAction(e.target.value)}
-            className="px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
-          >
-            <option value="">All</option>
-            <option value="EDIT">Edited</option>
-            <option value="DELETE">Deleted</option>
-          </select>
-        </div>
-
-        {/* Apply */}
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[10px] invisible">x</label>
-          <button
-            onClick={apply}
-            className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
-          >
-            Apply
-          </button>
-        </div>
-
-        {/* Reset */}
-        <div className="flex flex-col gap-0.5">
-          <label className="text-[10px] invisible">x</label>
-          <button
-            onClick={reset}
-            className="px-4 py-1.5 text-xs font-semibold text-gray-600 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 transition-colors"
-          >
-            Reset
-          </button>
-        </div>
-
-        {/* Result count */}
-        <div className="flex flex-col gap-0.5 ml-auto">
-          <label className="text-[10px] invisible">x</label>
-          <span className="text-xs text-gray-500 py-1.5">
-            {filtered.length} record{filtered.length !== 1 ? 's' : ''}
-          </span>
+      {/* Header */}
+      <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-4'>
+        <div>
+          <h1 className='text-2xl font-bold text-gray-900 flex items-center gap-2.5'>
+            Edited Records
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+              currentBook?.is_locked
+                ? 'bg-red-100 text-red-700'
+                : tableMode === 'itr'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-blue-100 text-blue-700'
+            }`}>
+              {tableMode === 'itr' ? 'ITR Mode' : 'Regular Mode'} | {currentBook?.book_code || 'No Book'}
+            </span>
+          </h1>
+          <p className='text-gray-600 mt-1'>Edits: {filteredLog.length}</p>
         </div>
       </div>
 
-      {/* ═══ TABLE ═══════════════════════════════════════════════════════════ */}
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left border-collapse">
-            <thead className="bg-gray-100 text-gray-600 font-bold uppercase tracking-wider text-[10px] border-b border-gray-200">
-              <tr>
-                <th className="px-3 py-2.5 border-r border-gray-200 w-[90px]">Date</th>
-                <th className="px-3 py-2.5 border-r border-gray-200 w-[72px]">Time</th>
-                <th className="px-3 py-2.5 border-r border-gray-200 w-[90px]">Operator</th>
-                <th className="px-3 py-2.5 border-r border-gray-200 w-[100px]">Module</th>
-                <th className="px-3 py-2.5 border-r border-gray-200 w-[80px]">Loan</th>
-                <th className="px-3 py-2.5 border-r border-gray-200 w-[140px]">Customer</th>
-                <th className="px-3 py-2.5 border-r border-gray-200 w-[72px] text-center">Action</th>
-                <th className="px-3 py-2.5 border-r border-gray-200 w-[110px] text-center">Changes</th>
-                <th className="px-3 py-2.5">Preview</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={9} className="py-10 text-center text-gray-400">
-                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-1.5 text-blue-400" />
-                    Loading audit trail…
-                  </td>
+      <ModeLabel />
+      <Card>
+        <div className='flex flex-wrap gap-3 mb-4 items-end'>
+          <Select
+            label='Edited Date'
+            value={selectedDate}
+            onChange={setSelectedDate}
+            options={editedDateOptions}
+            className='w-48'
+          />
+          <Select
+            label='Edited By'
+            value={userFilter}
+            onChange={setUserFilter}
+            options={[
+              { value: '', label: 'All Users' },
+              ...users.map(u => ({ value: u.username, label: u.username })),
+            ]}
+            className='w-48'
+          />
+          <Button
+            onClick={loadData}
+            variant='secondary'
+            size='sm'
+            disabled={loading}
+            className='flex items-center gap-2'
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Loading...' : 'Refresh'}
+          </Button>
+          <Button onClick={handlePrint} variant='secondary' size='sm'>
+            Print
+          </Button>
+        </div>
+        {loading ? (
+          <div className='text-center py-8 text-blue-600 font-semibold'>
+            Loading edit history...
+          </div>
+        ) : filteredLog.length === 0 ? (
+          <div className='text-center py-8'>
+            <div className='text-gray-500 mb-2'>No edit history found.</div>
+            <div className='text-sm text-gray-400'>
+              This is normal if no records have been edited yet.
+            </div>
+          </div>
+        ) : (
+          <div className='overflow-x-auto'>
+            <table className='w-full text-xs border border-gray-200'>
+              <thead className='sticky top-0 bg-gray-50 z-10'>
+                <tr className='border-b border-gray-200'>
+                  <th className='px-1.5 py-1.5 text-left font-semibold text-gray-700 whitespace-nowrap'>S.No</th>
+                  <th className='px-1.5 py-1.5 text-left font-semibold text-gray-700 whitespace-nowrap'>Type</th>
+                  {FIELDS.map(f => (
+                    <th
+                      key={f.key}
+                      className={`px-1.5 py-1.5 font-semibold text-gray-700 ${
+                        f.key === 'credit' || f.key === 'debit' ? 'text-right' : 'text-left'
+                      }`}
+                    >
+                      {f.label}
+                    </th>
+                  ))}
+                  <th className='px-1.5 py-1.5 text-left font-semibold text-gray-700'>Edited By</th>
+                  <th className='px-1.5 py-1.5 text-left font-semibold text-gray-700'>Edited At</th>
                 </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="py-10 text-center text-gray-400">
-                    No audit records found.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map(row => {
-                  const isExpanded = expanded.has(row.id);
-                  const isDelete   = row.eventType === 'DELETE';
-
+              </thead>
+              <tbody>
+                {paginatedLog.map(({ log, oldObj, newObj, changed }, idx) => {
+                  const editedBy = userMap[log.edited_by] || log.edited_by;
+                  const editedAt = formatEditedAt(log.edited_at);
+                  const cellClass = (key: FieldKey) =>
+                    `px-1.5 py-1 text-sm font-bold align-top ${
+                      NOWRAP_FIELDS.has(key) ? 'whitespace-nowrap' : 'break-words'
+                    } ${key === 'credit' || key === 'debit' ? 'text-right' : ''}`;
                   return (
-                    <React.Fragment key={row.id}>
-                      {/* ── MAIN ROW ─────────────────────────────────────── */}
-                      <tr
-                        className={`cursor-pointer transition-colors ${
-                          isExpanded ? 'bg-blue-50/60' : 'hover:bg-gray-50/80'
-                        }`}
-                        onClick={() => toggle(row.id)}
-                      >
-                        {/* Date */}
-                        <td className="px-3 py-2 font-medium text-gray-800 border-r border-gray-100 whitespace-nowrap">
-                          {row.dateStr}
+                    <React.Fragment key={log.id}>
+                      {/* Before Edit Row */}
+                      <tr className='border-b border-gray-100 hover:bg-gray-50'>
+                        <td className='px-1.5 py-1 text-center text-sm font-bold align-top'>
+                          {(page - 1) * PAGE_SIZE + idx + 1}
                         </td>
-
-                        {/* Time */}
-                        <td className="px-3 py-2 text-gray-500 border-r border-gray-100 whitespace-nowrap">
-                          {row.timeStr}
-                        </td>
-
-                        {/* Operator */}
-                        <td className="px-3 py-2 font-semibold text-gray-800 border-r border-gray-100 whitespace-nowrap">
-                          {row.operator}
-                        </td>
-
-                        {/* Module (table name) */}
-                        <td className="px-3 py-2 border-r border-gray-100">
-                          <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">
-                            {row.tableName}
-                          </span>
-                        </td>
-
-                        {/* Loan */}
-                        <td className="px-3 py-2 font-medium text-gray-800 border-r border-gray-100 whitespace-nowrap">
-                          {row.loanNo}
-                        </td>
-
-                        {/* Customer */}
-                        <td className="px-3 py-2 text-gray-700 border-r border-gray-100 max-w-[140px] truncate">
-                          {row.customer}
-                        </td>
-
-                        {/* Action badge */}
-                        <td className="px-3 py-2 border-r border-gray-100 text-center">
-                          {isDelete ? (
-                            <span className="text-[10px] font-bold text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                              Deleted
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold text-yellow-700 bg-yellow-100 border border-yellow-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                              Edited
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Changes */}
-                        <td className="px-3 py-2 border-r border-gray-100 text-center text-gray-600 font-medium whitespace-nowrap">
-                          {isDelete
-                            ? <span className="text-red-500 font-semibold">DELETED</span>
-                            : row.fieldChanges.length === 0
-                              ? <span className="text-gray-400 italic">No diff</span>
-                              : `${row.fieldChanges.length} Field${row.fieldChanges.length !== 1 ? 's' : ''} Changed`
-                          }
-                        </td>
-
-                        {/* Preview — inline diff, first 3 changes */}
-                        <td className="px-3 py-2">
-                          <div className="flex items-start gap-1">
-                            <span className="text-gray-400 mt-0.5 flex-shrink-0">
-                              {isExpanded
-                                ? <ChevronDown className="w-3.5 h-3.5" />
-                                : <ChevronRight className="w-3.5 h-3.5" />}
-                            </span>
-                            {!isExpanded && (
-                              <div className="flex flex-col gap-0.5 min-w-0">
-                                {isDelete ? (
-                                  <span className="text-red-400 italic text-[11px]">Entire record removed</span>
-                                ) : (
-                                  <>
-                                    {row.fieldChanges.slice(0, 3).map((f, i) => (
-                                      <div key={i} className="flex items-center gap-1 truncate max-w-[260px]">
-                                        <span className="font-semibold text-gray-500 flex-shrink-0">{f.field}:</span>
-                                        <span className="text-red-500 line-through truncate">{f.before}</span>
-                                        <span className="text-gray-400 flex-shrink-0">→</span>
-                                        <span className="text-green-600 font-semibold truncate">{f.after}</span>
-                                      </div>
-                                    ))}
-                                    {row.fieldChanges.length > 3 && (
-                                      <span className="text-blue-500 text-[11px] font-medium">
-                                        +{row.fieldChanges.length - 3} More
-                                      </span>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-
-                      {/* ── EXPANDED ROW ─────────────────────────────────── */}
-                      {isExpanded && (
-                        <tr className="bg-gray-50/80">
-                          <td colSpan={9} className="px-4 py-3">
-                            {isDelete ? (
-                              // Deleted snapshot
-                              <div className="bg-white border border-red-200 rounded-lg p-3">
-                                <div className="text-[11px] font-bold uppercase text-red-700 mb-2 pb-1.5 border-b border-red-100 tracking-wider">
-                                  Deleted Snapshot
-                                </div>
-                                {row.deletedSnapshot && Object.keys(row.deletedSnapshot).length > 0 ? (
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-2">
-                                    {Object.entries(row.deletedSnapshot).map(([k, v]) => {
-                                      if (IGNORED_KEYS.has(k)) return null;
-                                      return (
-                                        <div key={k} className="flex flex-col gap-0.5">
-                                          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">{k}</span>
-                                          <span className="text-[11px] text-gray-800 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded truncate" title={String(v)}>
-                                            {v != null && v !== '' ? String(v) : '—'}
-                                          </span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                ) : (
-                                  <span className="text-[11px] text-gray-400 italic">No snapshot data available.</span>
-                                )}
-                              </div>
-                            ) : (
-                              // Edit diff table
-                              <div className="bg-white border border-gray-200 rounded-lg p-3">
-                                <div className="text-[11px] font-bold uppercase text-gray-600 mb-2 pb-1.5 border-b border-gray-100 tracking-wider">
-                                  Field Changes — {row.fieldChanges.length} field{row.fieldChanges.length !== 1 ? 's' : ''}
-                                </div>
-                                {row.fieldChanges.length > 0 ? (
-                                  <table className="w-full border-collapse text-[11px]">
-                                    <thead>
-                                      <tr className="text-[10px] uppercase tracking-wider text-gray-500">
-                                        <th className="py-1 px-2 border border-gray-200 bg-gray-50 font-bold text-left w-[25%]">Field</th>
-                                        <th className="py-1 px-2 border border-gray-200 bg-red-50 text-red-700 font-bold text-left w-[37.5%]">Before</th>
-                                        <th className="py-1 px-2 border border-gray-200 bg-green-50 text-green-700 font-bold text-left w-[37.5%]">After</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {row.fieldChanges.map((f, i) => (
-                                        <tr key={i} className="hover:bg-gray-50/80">
-                                          <td className="py-1.5 px-2 border border-gray-200 font-semibold text-gray-700 break-words">{f.field}</td>
-                                          <td className="py-1.5 px-2 border border-gray-200 text-red-600 break-words bg-red-50/40">{f.before}</td>
-                                          <td className="py-1.5 px-2 border border-gray-200 text-green-700 font-semibold break-words bg-green-50/40">{f.after}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                ) : (
-                                  <span className="text-[11px] text-gray-400 italic">No field differences detected.</span>
-                                )}
-                              </div>
-                            )}
+                        <td className='px-1.5 py-1 text-red-600 text-sm font-bold align-top'>Before</td>
+                        {FIELDS.map(f => (
+                          <td
+                            key={f.key + '-before'}
+                            className={`${cellClass(f.key)} ${changed[f.key] ? highlightBeforeClass : ''}`}
+                          >
+                            {getFieldDisplay(f.key, oldObj[f.key])}
                           </td>
-                        </tr>
-                      )}
+                        ))}
+                        <td className='px-1.5 py-1 text-sm font-bold align-top'>{editedBy}</td>
+                        <td className='px-1.5 py-1 text-sm font-bold align-top whitespace-nowrap'>{editedAt}</td>
+                      </tr>
+                      {/* After Edit Row */}
+                      <tr className='border-b-2 border-gray-200 hover:bg-gray-50'>
+                        <td className='px-1.5 py-1'></td>
+                        <td className='px-1.5 py-1 text-green-700 text-sm font-bold align-top'>After</td>
+                        {FIELDS.map(f => (
+                          <td
+                            key={f.key + '-after'}
+                            className={`${cellClass(f.key)} ${changed[f.key] ? highlightAfterClass : ''}`}
+                          >
+                            {getFieldDisplay(f.key, newObj[f.key])}
+                          </td>
+                        ))}
+                        <td className='px-1.5 py-1 text-sm font-bold align-top'>{editedBy}</td>
+                        <td className='px-1.5 py-1 text-sm font-bold align-top whitespace-nowrap'>{editedAt}</td>
+                      </tr>
                     </React.Fragment>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ═══ PRINT STYLES ════════════════════════════════════════════════════ */}
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          body { font-size: 11px; }
-        }
-      `}</style>
+                })}
+              </tbody>
+            </table>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className='flex justify-center items-center gap-2 mt-4'>
+                <Button
+                  size='sm'
+                  variant='secondary'
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  Prev
+                </Button>
+                <span className='text-sm'>
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  size='sm'
+                  variant='secondary'
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
     </div>
   );
 };
