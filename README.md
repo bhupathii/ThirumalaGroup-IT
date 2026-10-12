@@ -2,6 +2,8 @@
 
 > A comprehensive financial and asset management solution built with modern web technologies
 
+**🌐 Live app:** [https://thirumala-groups.vercel.app](https://thirumala-groups.vercel.app) (deployed by Vercel from the `thirumala` branch)
+
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB.svg)](https://reactjs.org/)
 [![Vite](https://img.shields.io/badge/Vite-7.1-646CFF.svg)](https://vitejs.dev/)
